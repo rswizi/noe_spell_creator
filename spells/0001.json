@@ -1,0 +1,9 @@
+{
+    "id": "0001",
+    "name": "Test01",
+    "mp_cost": 10,
+    "en_cost": 14,
+    "range": 1,
+    "aoe": "Square",
+    "duration": 0
+}
