@@ -2,6 +2,8 @@ import json
 import os
 from dataclasses import dataclass, asdict, field
 
+from src.objects.effects import Effect, load_effect
+
 
 @dataclass
 class Spell:
@@ -13,16 +15,20 @@ class Spell:
     mp_cost: int = 0
     en_cost: int = 0
     duration: int = 0
-    effects: list = field(default_factory=list)
-    schools: list = field(default_factory=list)
+    effects: list[Effect] = field(default_factory=list)
     category: str = "Novice"
     spell_type: str = "Simple"
 
     def __str__(self):
         return f"Name: {self.name} | MP Cost: {self.mp_cost}"
-
+    
     def to_dict(self):
-        return asdict(self)
+        effect_ids = []
+        for effect in self.effects:
+            effect_ids.append(effect.id)
+        data = asdict(self)
+        data["effects"] = effect_ids
+        return data
 
     @classmethod
     def from_dict(cls, data):
@@ -37,9 +43,14 @@ class Spell:
 
 
 def load_spell(id, dir="spells"):
+
     path = os.path.join("data", dir, f"{id}.json")
     with open(path, "r") as f:
         data = json.load(f)
+    effect_list = []
+    for id in data["effects"]:
+        effect_list.append(load_effect(id))
+    data["effects"] = effect_list
 
     return Spell.from_dict(data)
 
@@ -47,7 +58,7 @@ def load_spell(id, dir="spells"):
 def main():
     """"""
     spell = load_spell("0000")
-    print(spell)
+    print(spell.effects)
 
 
 if __name__ == "__main__":

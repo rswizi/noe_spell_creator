@@ -1,7 +1,15 @@
 {
   "id": "0000",
-  "name": "Test",
-  "activation": "test",
-  "range": 1,
-  "aoe": "Square"
+  "name": "Test1",
+  "activation": "Action",
+  "range": 5,
+  "aoe": "Circle (3)",
+  "mp_cost": 0,
+  "en_cost": 0,
+  "duration": 0,
+  "effects": [
+    "0000"
+  ],
+  "category": "Novice",
+  "spell_type": "Simple"
 }
