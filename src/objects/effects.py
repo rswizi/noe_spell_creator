@@ -29,27 +29,19 @@ class Effect:
             json.dump(self.to_dict(), f, indent=2)
 
 
-def load_effect(name, dir="effects"):
-    safe_name = name.replace(" ", "_").lower()
-    path = os.path.join("data", dir, f"{safe_name}.json")
+def load_effect(id, dir="effects"):
+    path = os.path.join("data", dir, f"{id}.json")
     with open(path, "r") as f:
         data = json.load(f)
+    data["school"] = load_school(data["school"])
+
     return Effect.from_dict(data)
 
 
 def main():
     """"""
-    school = load_school("0000")
-    effect = Effect(
-        id = "0000",
-        name = "Test",
-        school = school,
-        description = "test",
-        en_cost = 5,
-        mp_cost = 6,
-    )
+    effect = load_effect("0000")
     print(effect)
-    effect.save()
 
 
 if __name__ == "__main__":
