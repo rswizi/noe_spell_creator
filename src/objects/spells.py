@@ -30,14 +30,14 @@ class Spell:
 
     def save(self, dir="spells"):
         data = self.to_dict()
-        path = os.path.join(dir, f"{self.id}.json")
+        path = os.path.join("data", dir, f"{self.id}.json")
 
         with open(path, "w") as f:
             json.dump(data, f, indent=2)
 
 
 def load_spell(id, dir="spells"):
-    path = os.path.join(dir, f"{id}.json")
+    path = os.path.join("data", dir, f"{id}.json")
     with open(path, "r") as f:
         data = json.load(f)
 
