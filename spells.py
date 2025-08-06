@@ -11,27 +11,37 @@ def read( id):
        
 
 class Spell:
-    def __init__(self, id, name, en_cost, mp_cost, range, aoe, duration=0):
+    def __init__(self, id, name, en_cost, mp_cost, activation, range, aoe, duration, effects, schools, category, type):
         self.id = id
         self.name = name
+        self.activation = activation
         self.mp_cost = mp_cost
         self.en_cost = en_cost
         self.range = range
         self.aoe = aoe
         self.duration = duration
+        self.effects = effects
+        self.schools = schools
+        self.categoru = category
+        self.type = type
 
     def __str__(self):
         return f"Name: {self.name} | MP Cost: {self.mp_cost}"
     
     def save(self):
         data = {
-            "id" : self.id,
-            "name" : self.name,
-            "mp_cost" : self.mp_cost,
-            "en_cost" : self.en_cost,
-            "range" : self.range,
-            "aoe" : self.aoe,
-            "duration" : self.duration
+            "id": self.id,
+            "name": self.name,
+            "activation": self.activation,
+            "mp_cost": self.mp_cost,
+            "en_cost": self.en_cost,
+            "range": self.range,
+            "aoe": self.aoe,
+            "duration": self.duration,
+            "effects": self.effects,
+            "schools": self.schools,
+            "category": self.category,
+            "type": self.type
         }
 
         path = os.path.join("spells", f"{self.id}.json")
