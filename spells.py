@@ -10,8 +10,8 @@ class Spell:
     activation: str
     range: int
     aoe: str
-    mp_cost: int = None
-    en_cost: int = None
+    mp_cost: int = 0
+    en_cost: int = 0
     duration: int = 0
     effects: list = field(default_factory=list)
     schools: list = field(default_factory=list)
