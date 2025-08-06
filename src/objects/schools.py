@@ -30,3 +30,18 @@ def load_school(id, dir="schools"):
     with open(path, "r") as f:
         data = json.load(f)
     return School.from_dict(data)
+
+
+def main():
+    school = School(
+        id = "0000",
+        name = "School Test",
+        school_type = "Simple",
+        upgrade = False,
+        range_type = "A",
+        aoe_type = "A",
+        )
+    school.save()
+    
+if __name__ == "__main__":
+    main()

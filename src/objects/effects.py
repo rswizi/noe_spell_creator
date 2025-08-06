@@ -2,7 +2,7 @@ import json
 import os
 from dataclasses import dataclass, asdict
 
-from src.objects.schools import School
+from src.objects.schools import School, load_school
 
 
 @dataclass
@@ -39,14 +39,7 @@ def load_effect(name, dir="effects"):
 
 def main():
     """"""
-    school = School(
-        id = "0000",
-        name = "School Test",
-        school_type = "Simple",
-        upgrade = False,
-        range_type = "A",
-        aoe_type = "A",
-        )
+    school = load_school("0000")
     effect = Effect(
         id = "0000",
         name = "Test",
