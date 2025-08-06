@@ -1,14 +1,34 @@
-import os
 import json
+import os
+from dataclasses import dataclass, asdict
 
+
+@dataclass
 class Effect:
-    def __init__(self, name, school, description, en_cost, mp_cost, school_type, upgrade, range_type, aoe_type):
-        self.name = name
-        self.school = school
-        self.description = description
-        self.en_cost = en_cost
-        self.mp_cost = mp_cost
-        self.school_type = school_type
-        self.upgrade = upgrade
-        self.range_type = range_type
-        self.aoe_type = aoe_type
+    id: str
+    name: str
+    school: str
+    description: str
+    en_cost: int = 0
+    mp_cost: int = 0
+
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+    def save(self, dir="effects"):
+        safe_name = self.name.replace(" ", "_").lower()
+        path = os.path.join("data", dir, f"{safe_name}.json")
+        with open(path, "w") as f:
+            json.dump(self.to_dict(), f, indent=2)
+
+
+def load_effect(name, dir="effects"):
+    safe_name = name.replace(" ", "_").lower()
+    path = os.path.join("data", dir, f"{safe_name}.json")
+    with open(path, "r") as f:
+        data = json.load(f)
+    return Effect.from_dict(data)
