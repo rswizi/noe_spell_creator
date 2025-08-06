@@ -19,6 +19,37 @@ class Spell:
     category: str = "Novice"
     spell_type: str = "Simple"
 
+    def __post_init__(self):
+        # Costs
+        self.en_cost = sum(effects.en_cost for effects in self.effects)
+        self.mp_cost = sum(effects.mp_cost for effects in self.effects)
+
+        # Catergory
+        if self.mp_cost <= 12:
+            self.category = "Novice"
+        elif self.mp_cost <= 17:
+            self.category = "Apprentice"
+        elif self.mp_cost <= 22:
+            self.category = "Disciple"
+        elif self.mp_cost <= 27:
+            self.category = "Adept"
+        elif self.mp_cost <= 32:
+            self.category = "Mage"
+        elif self.mp_cost <= 37:
+            self.category = "Magister"
+        elif self.mp_cost <= 42:
+            self.category = "High Mage"
+        elif self.mp_cost <= 52:
+            self.category = "Master"
+        elif self.mp_cost <= 62:
+            self.category = "Grand Master"
+        elif self.mp_cost <= 75:
+            self.category = "Archmage"
+        elif self.mp_cost <= 85:
+            self.category = "Supreme Archmage"
+        else:
+            self.category = "Avant-garde" 
+
     def __str__(self):
         return f"Name: {self.name} | MP Cost: {self.mp_cost}"
     
@@ -57,9 +88,17 @@ def load_spell(id, dir="spells"):
 
 def main():
     """"""
-    spell = load_spell("0000")
-    print(spell.effects)
-
+    spell = Spell(
+        id = "0000",
+        name = "Test 1",
+        activation = "Action",
+        range = "5",
+        aoe = "Circle 5",
+        effects = [Effect("0000", "Test 1", "0000", "Do some shit", 4, 45), Effect("0000", "Test 1", "0000", "Do some shit", 16, 4)]
+    )
+    print(spell.en_cost)
+    print(spell.mp_cost)
+    print(spell.category)
 
 if __name__ == "__main__":
     main()
