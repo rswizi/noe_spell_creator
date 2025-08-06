@@ -1,9 +1,7 @@
 {
-    "id": "0000",
-    "name": "Test",
-    "mp_cost": 10,
-    "en_cost": 12,
-    "range": 1,
-    "aoe": "Square",
-    "duration": 0
+  "id": "0000",
+  "name": "Test",
+  "activation": "test",
+  "range": 1,
+  "aoe": "Square"
 }
