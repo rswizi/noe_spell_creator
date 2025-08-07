@@ -23,7 +23,7 @@ class Spell:
     category: str = "Novice"
     spell_type: str = "Simple"
 
-    def spell_category(self):
+    def set_spell_category(self):
         if self.mp_cost <= 12:
             self.category = "Novice"
         elif self.mp_cost <= 17:
@@ -49,23 +49,23 @@ class Spell:
         else:
             self.category = "Avant-garde"
         
-    def school_type(self):
+    def set_spell_type(self):
         for effect in self.effects:
-            school = load_school(effect.school)
-            if getattr(school, "school_type", "").lower() == "complex":
+            school = load_school(effect.school.id)
+            if school.school_type.lower() == "complex":
                 self.spell_type = "Complex"
                 return
         self.spell_type = "Simple"
 
-    def school_nbr(self):
+    def set_school_nbr(self):
         filtered_ids = []
         for effect in self.effects:
-            school = load_school(effect.school)
-            if not getattr(school, "upgrade", False):
-                filtered_ids.append(effect.school)
+            school = load_school(effect.school.id)
+            if not school.upgrade:
+                filtered_ids.append(effect.school.id)
         return max(len(dict(Counter(filtered_ids))),1)
 
-    def range_cost(self):
+    def set_range_cost(self):
         range_type ="A"
         for effect in self.effects:
             rt = getattr(effect, "range_type", "A")
@@ -82,7 +82,7 @@ class Spell:
             raise ValueError(f"Invalid Range valyue '{self.range}' for range type '{range_type}'")
         return mp_cost, en_cost
     
-    def aoe_cost(self):
+    def set_aoe_cost(self):
         aoe_type = "A"
         for effect in self.effects:
             at= getattr(effect, "aoe_type", "A")
@@ -99,22 +99,22 @@ class Spell:
             raise ValueError(f"Invalid AoE value '{self.aoe}' for range type '{aoe_type}'")
         return mp_cost, en_cost
     
-    def duration_cost(self):
+    def set_duration_cost(self):
         duration_table = DURATION_COSTS
         mp_cost, en_cost = duration_table[self.duration]
         return mp_cost, en_cost
     
-    def activation_cost(self):
+    def set_activation_cost(self):
         activation_tale = ACTIVATION_COSTS
         mp_cost, en_cost = activation_tale[self.activation]
         return mp_cost, en_cost
     
     def update_cost(self):
-        mp_range_cost, en_range_cost = self.range_cost()
-        mp_aoe_cost, en_aoe_cost = self.aoe_cost()
-        mp_duration_cost, en_duration_cost = self.duration_cost()
-        mp_school_nbr_cost, en_school_nbr_cost = self.school_nbr()-1, 5*(self.school_nbr()-1)
-        mp_activation_cost, en_activation_cost = self.activation_cost()
+        mp_range_cost, en_range_cost = self.set_range_cost()
+        mp_aoe_cost, en_aoe_cost = self.set_aoe_cost()
+        mp_duration_cost, en_duration_cost = self.set_duration_cost()
+        mp_school_nbr_cost, en_school_nbr_cost = self.set_school_nbr()-1, 5*(self.set_school_nbr()-1)
+        mp_activation_cost, en_activation_cost = self.set_activation_cost()
 
         self.mp_cost = sum(effects.mp_cost for effects in self.effects) + mp_school_nbr_cost + mp_range_cost + mp_aoe_cost + mp_duration_cost + mp_activation_cost
         self.en_cost = sum(effects.en_cost for effects in self.effects) + en_school_nbr_cost + en_range_cost + en_aoe_cost + en_duration_cost + en_activation_cost
@@ -155,8 +155,8 @@ class Spell:
             json.dump(data, f, indent=2)
 
     def __post_init__(self):
-        self.spell_category()
-        self.school_type()
+        self.set_spell_category()
+        self.set_spell_type()
         self.update_cost()
 
 
@@ -175,15 +175,19 @@ def load_spell(id, dir="spells"):
 
 def main():
     """"""
+
     spell = Spell(
         id = "0000",
         name = "Test 1",
         activation = "Action",
         range = 5,
         aoe = "Circle (5)",
-        effects = [Effect("0000", "Test 1", "0000", "Do some shit", 4, 45), Effect("0000", "Test 1", "0001", "Do some shit", 16, 4)]
+        effects = [load_effect("0001"), load_effect("0000")]
     )
+    
     print(spell)
+
+    spell.save()
 
 if __name__ == "__main__":
     main()
