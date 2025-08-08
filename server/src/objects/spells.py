@@ -22,6 +22,7 @@ class Spell:
     effects: list[Effect] = field(default_factory=list)
     category: str = "Novice"
     spell_type: str = "Simple"
+    description: str = "None"
 
     def set_spell_category(self):
         if self.mp_cost <= 12:
@@ -133,6 +134,7 @@ class Spell:
             f"Spell Type: {self.spell_type}\n"
             f"Number of Effects: {len(self.effects)}\n"
             f"Effect IDs: {[effect.id for effect in self.effects]}"
+            f"Description: {self.description}"
         )
     
     def to_dict(self):

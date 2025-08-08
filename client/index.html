@@ -1,9 +1,158 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head></head>
-
+<head>
+  <meta charset="UTF-8">
+  <title>Create a Spell</title>
+  <link rel="stylesheet" href="style.css">
+</head>
 <body>
-</body>
+  <h1>Create a Spell</h1>
 
+<!-- Live Cost Preview -->
+<div id="preview">
+  <h3>Live Spell Preview</h3>
+  <p><strong>MP Cost:</strong> <span id="mp_cost">--</span></p>
+  <p><strong>EN Cost:</strong> <span id="en_cost">--</span></p>
+  <p><strong>Category:</strong> <span id="category">--</span></p>
+</div>
+
+  <form action="/submit_spell" method="POST">
+    <!-- Spell Name -->
+    <label for="school_name">Spell Name:</label>
+    <input type="text" id="school_name" name="school_name" required><br><br>
+
+    <!-- Activation -->
+    <label for="activation">Activation:</label>
+    <select id="activation" name="activation" required>
+      <option value="Action">Action</option>
+      <option value="Special Action">Special Action</option>
+      <option value="Ritual">Ritual</option>
+    </select><br><br>
+
+    <!-- Range -->
+    <label for="range">Range:</label>
+    <select id="range" name="range" required>
+      <option value="0">0</option>
+      <option value="1">1</option>
+      <option value="3">3</option>
+      <option value="5">5</option>
+      <option value="7">7</option>
+      <option value="9">9</option>
+      <option value="13">13</option>
+      <option value="15">15</option>
+    </select><br><br>
+
+    <!-- AoE -->
+    <label for="aoe">Area of Effect (AoE):</label>
+    <select id="aoe" name="aoe" required>
+      <option value="A Square">A Square</option>
+      <option value="Line (3)">Line (3)</option>
+      <option value="Line (5)">Line (5)</option>
+      <option value="Line (7)">Line (7)</option>
+      <option value="Line (9)">Line (9)</option>
+      <option value="Cross (3)">Cross (3)</option>
+      <option value="Cross (5)">Cross (5)</option>
+      <option value="Cross (9)">Cross (9)</option>
+      <option value="Cone (3)">Cone (3)</option>
+      <option value="Cone (5)">Cone (5)</option>
+      <option value="Cone (7)">Cone (7)</option>
+      <option value="Cone (9)">Cone (9)</option>
+      <option value="Circle (3)">Circle (3)</option>
+      <option value="Circle (5)">Circle (5)</option>
+      <option value="Circle (7)">Circle (7)</option>
+      <option value="Circle (9)">Circle (9)</option>
+    </select><br><br>
+
+    <!-- Duration -->
+    <label for="duration">Duration:</label>
+    <select id="duration" name="duration" required>
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="4">4</option>
+      <option value="6">6</option>
+      <option value="8">8</option>
+      <option value="10">10</option>
+      <option value="12">12</option>
+    </select><br><br>
+
+    <!-- Effects Section -->
+    <label>Effects:</label>
+    <div id="effects-container">
+      <!-- Dynamically added effect fields will appear here -->
+    </div>
+    <button type="button" onclick="addEffect()">➕ Add Effect</button><br><br>
+
+    <input type="submit" value="Submit Spell">
+  </form>
+
+<script>
+  let effectCount = 0;
+
+  function addEffect() {
+    const container = document.getElementById('effects-container');
+    const entry = document.createElement('div');
+    entry.className = 'effect-entry';
+    entry.id = `effect-${effectCount}`;
+
+    entry.innerHTML = `
+      <select name="effects[]" required onchange="updatePreview()">
+        <option value="">-- Select Effect --</option>
+        <option value="0000">[0000] Fireball</option>
+        <option value="0001">[0001] Healing Light</option>
+        <option value="0002">[0002] Ice Shard</option>
+        <option value="0003">[0003] Darkness Veil</option>
+      </select>
+      <button type="button" onclick="removeEffect(${effectCount})">❌</button>
+    `;
+    container.appendChild(entry);
+    effectCount++;
+    updatePreview();
+  }
+
+  function removeEffect(id) {
+    const entry = document.getElementById(`effect-${id}`);
+    if (entry) entry.remove();
+    updatePreview();
+  }
+
+  function updatePreview() {
+    const form = document.getElementById("spell-form");
+
+    // Gather form data
+    const formData = new FormData(form);
+    const data = {
+      activation: formData.get("activation"),
+      range: parseInt(formData.get("range")),
+      aoe: formData.get("aoe"),
+      duration: parseInt(formData.get("duration")),
+      effects: formData.getAll("effects[]")
+    };
+
+    // GET to backend
+    fetch("/placeholder")
+    .then((res) => {
+      if (!res.ok) throw new Error("Error fetching spell cost");
+      return res.json();
+    })
+    .then((result) => {
+      document.getElementById("mp_cost").innerText = result.mp_cost;
+      document.getElementById("en_cost").innerText = result.en_cost;
+      document.getElementById("category").innerText = result.category;
+    })
+    .catch((err) => {
+      console.error("Spell preview error:", err);
+      document.getElementById("mp_cost").innerText = "--";
+      document.getElementById("en_cost").innerText = "--";
+      document.getElementById("category").innerText = "--";
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("select, input").forEach(el => {
+      el.addEventListener("change", updatePreview);
+    });
+  });
+</script>
+
+</body>
 </html>
