@@ -88,26 +88,53 @@
 <script>
   let effectCount = 0;
 
-  function addEffect() {
-    const container = document.getElementById('effects-container');
-    const entry = document.createElement('div');
-    entry.className = 'effect-entry';
-    entry.id = `effect-${effectCount}`;
+function addEffect() {
+  const container = document.getElementById('effects-container');
+  const entry = document.createElement('div');
+  entry.className = 'effect-entry';
+  entry.id = `effect-${effectCount}`;
 
-    entry.innerHTML = `
-      <select name="effects[]" required onchange="updatePreview()">
-        <option value="">-- Select Effect --</option>
-        <option value="0000">[0000] Fireball</option>
-        <option value="0001">[0001] Healing Light</option>
-        <option value="0002">[0002] Ice Shard</option>
-        <option value="0003">[0003] Darkness Veil</option>
-      </select>
-      <button type="button" onclick="removeEffect(${effectCount})">❌</button>
-    `;
-    container.appendChild(entry);
-    effectCount++;
+  // Create select element
+  const select = document.createElement('select');
+  select.name = "effects[]";
+  select.required = true;
+  select.onchange = updatePreview;
+
+  // Placeholder option
+  const loadingOption = document.createElement("option");
+  loadingOption.value = "";
+  loadingOption.textContent = "-- Loading Effects... --";
+  select.appendChild(loadingOption);
+
+  // Fetch effects and populate options
+  fetch("/effects")
+    .then(res => res.json())
+    .then(data => {
+      select.innerHTML = `<option value="">-- Select Effect --</option>`;
+      data.effects.forEach(effect => {
+        const option = document.createElement("option");
+        option.value = effect.id;
+        option.textContent = `[${effect.id}] ${effect.name}`;
+        select.appendChild(option);
+      });
+    });
+
+  // Create remove button
+  const button = document.createElement("button");
+  button.type = "button";
+  button.innerText = "❌";
+  button.onclick = () => {
+    entry.remove();
     updatePreview();
-  }
+  };
+
+  entry.appendChild(select);
+  entry.appendChild(button);
+  container.appendChild(entry);
+
+  effectCount++;
+  updatePreview();
+}
 
   function removeEffect(id) {
     const entry = document.getElementById(`effect-${id}`);
@@ -128,8 +155,7 @@
       effects: formData.getAll("effects[]")
     };
 
-    // GET to backend
-    fetch("/placeholder")
+    fetch("/costs")
     .then((res) => {
       if (!res.ok) throw new Error("Error fetching spell cost");
       return res.json();
@@ -151,6 +177,7 @@
     document.querySelectorAll("select, input").forEach(el => {
       el.addEventListener("change", updatePreview);
     });
+    addEffect();
   });
 </script>
 
