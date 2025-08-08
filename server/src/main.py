@@ -56,5 +56,4 @@ async def get_costs(request: Request):
         return {"error": str(e)}
 
 if __name__ == "__main__":
-    # Run this file directly → dynamically use this file's app
     uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)

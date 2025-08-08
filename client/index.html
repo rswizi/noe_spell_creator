@@ -16,7 +16,7 @@
   <p><strong>Category:</strong> <span id="category">--</span></p>
 </div>
 
-  <form action="/submit_spell" method="POST">
+  <form id="spell-form" action="/submit_spell" method="POST">
     <!-- Spell Name -->
     <label for="school_name">Spell Name:</label>
     <input type="text" id="school_name" name="school_name" required><br><br>
@@ -94,19 +94,16 @@ function addEffect() {
   entry.className = 'effect-entry';
   entry.id = `effect-${effectCount}`;
 
-  // Create select element
   const select = document.createElement('select');
   select.name = "effects[]";
   select.required = true;
   select.onchange = updatePreview;
 
-  // Placeholder option
   const loadingOption = document.createElement("option");
   loadingOption.value = "";
   loadingOption.textContent = "-- Loading Effects... --";
   select.appendChild(loadingOption);
 
-  // Fetch effects and populate options
   fetch("/effects")
     .then(res => res.json())
     .then(data => {
@@ -142,20 +139,25 @@ function addEffect() {
     updatePreview();
   }
 
-  function updatePreview() {
-    const form = document.getElementById("spell-form");
+function updatePreview() {
+  const form = document.getElementById("spell-form");
 
-    // Gather form data
-    const formData = new FormData(form);
-    const data = {
-      activation: formData.get("activation"),
-      range: parseInt(formData.get("range")),
-      aoe: formData.get("aoe"),
-      duration: parseInt(formData.get("duration")),
-      effects: formData.getAll("effects[]")
-    };
+  const formData = new FormData(form);
+  const data = {
+    activation: formData.get("activation"),
+    range: parseInt(formData.get("range")),
+    aoe: formData.get("aoe"),
+    duration: parseInt(formData.get("duration")),
+    effects: formData.getAll("effects[]")
+  };
 
-    fetch("/costs")
+  fetch("/costs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(data)
+  })
     .then((res) => {
       if (!res.ok) throw new Error("Error fetching spell cost");
       return res.json();
@@ -163,7 +165,8 @@ function addEffect() {
     .then((result) => {
       document.getElementById("mp_cost").innerText = result.mp_cost;
       document.getElementById("en_cost").innerText = result.en_cost;
-      document.getElementById("category").innerText = result.category;
+      // Optional: if you want to return category from the backend later
+      document.getElementById("category").innerText = result.category || "--";
     })
     .catch((err) => {
       console.error("Spell preview error:", err);
@@ -171,7 +174,8 @@ function addEffect() {
       document.getElementById("en_cost").innerText = "--";
       document.getElementById("category").innerText = "--";
     });
-  }
+}
+
 
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("select, input").forEach(el => {
