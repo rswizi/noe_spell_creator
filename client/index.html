@@ -148,7 +148,7 @@ function updatePreview() {
     range: parseInt(formData.get("range")),
     aoe: formData.get("aoe"),
     duration: parseInt(formData.get("duration")),
-    effects: formData.getAll("effects[]")
+    effects: formData.getAll("effects[]") || []
   };
 
   fetch("/costs", {
@@ -163,8 +163,8 @@ function updatePreview() {
       return res.json();
     })
     .then((result) => {
-      document.getElementById("mp_cost").innerText = result.mp_cost;
-      document.getElementById("en_cost").innerText = result.en_cost;
+      document.getElementById("mp_cost").innerText = result.mp_cost ?? 0;
+      document.getElementById("en_cost").innerText = result.en_cost ?? 0;
       // Optional: if you want to return category from the backend later
       document.getElementById("category").innerText = result.category || "--";
     })

@@ -99,20 +99,22 @@ class Spell:
         )
 
     @staticmethod
-    def compute_cost(range_val, aoe_val, duration_val, activation_val, effects, school_loader=load_school):
-        mp_range, en_range = get_range_cost(range_val, effects)
-        mp_aoe, en_aoe = get_aoe_cost(aoe_val, effects)
-        mp_duration, en_duration = get_duration_cost(duration_val)
-        mp_activation, en_activation = get_activation_cost(activation_val)
-        mp_school, en_school = get_school_cost(effects, school_loader)
+    def compute_cost(range_val, aoe_val, duration_val, activation_val, effects):
+        mp_cost = 0
+        en_cost = 0
 
-        mp_base = sum(e.mp_cost for e in effects)
-        en_base = sum(e.en_cost for e in effects)
+        # Example cost tables (replace with real ones)
+        mp_cost += get_range_cost(range_val)
+        mp_cost += get_aoe_cost(aoe_val)
+        mp_cost += get_duration_cost(duration_val)
+        mp_cost += get_activation_cost(activation_val)
 
-        mp_total = mp_base + mp_range + mp_aoe + mp_duration + mp_activation + mp_school
-        en_total = en_base + en_range + en_aoe + en_duration + en_activation + en_school
+        # If effects are provided, add their cost
+        for effect in effects:
+            mp_cost += effect.mp_cost
+            en_cost += effect.en_cost
 
-        return mp_total, en_total
+        return mp_cost, en_cost
 
     def __str__(self):
         return (
