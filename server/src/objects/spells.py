@@ -28,6 +28,16 @@ class Spell:
     spell_type: str = "Simple"
     description: str = "None"
 
+    def save(self, dir="spells"):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        data_dir = os.path.join(base_dir, "..", "..", "data", dir)
+        os.makedirs(data_dir, exist_ok=True)
+
+        path = os.path.join(data_dir, f"{self.id}.json")
+        data = self.to_dict()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
     def set_spell_category(self):
         if self.mp_cost <= 12:
             self.category = "Novice"
@@ -64,7 +74,7 @@ class Spell:
 
     def set_school_nbr(self):
         mp_school, _ = get_school_cost(self.effects, load_school)
-        return mp_school + 1  # +1 to return the actual number of unique schools
+        return mp_school + 1
 
     def set_range_cost(self):
         return get_range_cost(self.range, self.effects)
@@ -130,12 +140,6 @@ class Spell:
     def from_dict(cls, data):
         return cls(**data)
 
-    def save(self, dir="spells"):
-        data = self.to_dict()
-        path = os.path.join("data", dir, f"{self.id}.json")
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
-
     def __post_init__(self):
         self.set_spell_type()
         self.update_cost()
@@ -143,13 +147,16 @@ class Spell:
 
 
 def load_spell(id, dir="spells"):
-    path = os.path.join("data", dir, f"{id}.json")
-    with open(path, "r") as f:
+    base_dir = os.path.dirname(os.path.abspath(__file__))  # src/objects
+    data_dir = os.path.join(base_dir, "..", "..", "data", dir)
+    path = os.path.join(data_dir, f"{id}.json")
+
+    with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
+
     effect_list = [load_effect(eid) for eid in data["effects"]]
     data["effects"] = effect_list
     return Spell.from_dict(data)
-
 
 def main():
     """"""

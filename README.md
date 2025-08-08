@@ -7,5 +7,6 @@
 
 # 2. Run the dev server
 ```
-fastapi dev server/src/main.py
+cd server
+python -m  src.main
 ```
