@@ -3,11 +3,15 @@ import os
 from dataclasses import dataclass, asdict, field
 from collections import Counter
 
-
 from src.objects.effects import Effect, load_effect
 from src.objects.schools import load_school
-from src.modules.cost_tables import RANGE_COSTS, AOE_COSTS, DURATION_COSTS, ACTIVATION_COSTS
-
+from src.modules.cost_utils import (
+    get_range_cost,
+    get_aoe_cost,
+    get_duration_cost,
+    get_activation_cost,
+    get_school_cost
+)
 
 @dataclass
 class Spell:
@@ -59,66 +63,46 @@ class Spell:
         self.spell_type = "Simple"
 
     def set_school_nbr(self):
-        filtered_ids = []
-        for effect in self.effects:
-            school = load_school(effect.school.id)
-            if not school.upgrade:
-                filtered_ids.append(effect.school.id)
-        return max(len(dict(Counter(filtered_ids))),1)
+        mp_school, _ = get_school_cost(self.effects, load_school)
+        return mp_school + 1  # +1 to return the actual number of unique schools
 
     def set_range_cost(self):
-        range_type ="A"
-        for effect in self.effects:
-            rt = getattr(effect, "range_type", "A")
-            if rt == "C":
-                range_type = "C"
-                break
-            elif rt == "B":
-                range_type = "B"
-        range_table = RANGE_COSTS
-        
-        try:
-            mp_cost, en_cost = range_table[range_type][self.range]
-        except KeyError:
-            raise ValueError(f"Invalid Range valyue '{self.range}' for range type '{range_type}'")
-        return mp_cost, en_cost
-    
+        return get_range_cost(self.range, self.effects)
+
     def set_aoe_cost(self):
-        aoe_type = "A"
-        for effect in self.effects:
-            at= getattr(effect, "aoe_type", "A")
-            if at == "C":
-                aoe_type = "C"
-                break
-            elif at == "B":
-                aoe_type = "B"
-        aoe_table = AOE_COSTS
+        return get_aoe_cost(self.aoe, self.effects)
 
-        try:
-            mp_cost, en_cost = aoe_table[aoe_type][self.aoe]
-        except KeyError:
-            raise ValueError(f"Invalid AoE value '{self.aoe}' for range type '{aoe_type}'")
-        return mp_cost, en_cost
-    
     def set_duration_cost(self):
-        duration_table = DURATION_COSTS
-        mp_cost, en_cost = duration_table[self.duration]
-        return mp_cost, en_cost
-    
-    def set_activation_cost(self):
-        activation_tale = ACTIVATION_COSTS
-        mp_cost, en_cost = activation_tale[self.activation]
-        return mp_cost, en_cost
-    
-    def update_cost(self):
-        mp_range_cost, en_range_cost = self.set_range_cost()
-        mp_aoe_cost, en_aoe_cost = self.set_aoe_cost()
-        mp_duration_cost, en_duration_cost = self.set_duration_cost()
-        mp_school_nbr_cost, en_school_nbr_cost = self.set_school_nbr()-1, 5*(self.set_school_nbr()-1)
-        mp_activation_cost, en_activation_cost = self.set_activation_cost()
+        return get_duration_cost(self.duration)
 
-        self.mp_cost = sum(effects.mp_cost for effects in self.effects) + mp_school_nbr_cost + mp_range_cost + mp_aoe_cost + mp_duration_cost + mp_activation_cost
-        self.en_cost = sum(effects.en_cost for effects in self.effects) + en_school_nbr_cost + en_range_cost + en_aoe_cost + en_duration_cost + en_activation_cost
+    def set_activation_cost(self):
+        return get_activation_cost(self.activation)
+
+    def update_cost(self):
+        self.mp_cost, self.en_cost = Spell.compute_cost(
+            self.range,
+            self.aoe,
+            self.duration,
+            self.activation,
+            self.effects,
+            load_school
+        )
+
+    @staticmethod
+    def compute_cost(range_val, aoe_val, duration_val, activation_val, effects, school_loader=load_school):
+        mp_range, en_range = get_range_cost(range_val, effects)
+        mp_aoe, en_aoe = get_aoe_cost(aoe_val, effects)
+        mp_duration, en_duration = get_duration_cost(duration_val)
+        mp_activation, en_activation = get_activation_cost(activation_val)
+        mp_school, en_school = get_school_cost(effects, school_loader)
+
+        mp_base = sum(e.mp_cost for e in effects)
+        en_base = sum(e.en_cost for e in effects)
+
+        mp_total = mp_base + mp_range + mp_aoe + mp_duration + mp_activation + mp_school
+        en_total = en_base + en_range + en_aoe + en_duration + en_activation + en_school
+
+        return mp_total, en_total
 
     def __str__(self):
         return (
@@ -133,16 +117,13 @@ class Spell:
             f"Category: {self.category}\n"
             f"Spell Type: {self.spell_type}\n"
             f"Number of Effects: {len(self.effects)}\n"
-            f"Effect IDs: {[effect.id for effect in self.effects]}"
+            f"Effect IDs: {[effect.id for effect in self.effects]}\n"
             f"Description: {self.description}"
         )
-    
+
     def to_dict(self):
-        effect_ids = []
-        for effect in self.effects:
-            effect_ids.append(effect.id)
         data = asdict(self)
-        data["effects"] = effect_ids
+        data["effects"] = [effect.id for effect in self.effects]
         return data
 
     @classmethod
@@ -152,26 +133,21 @@ class Spell:
     def save(self, dir="spells"):
         data = self.to_dict()
         path = os.path.join("data", dir, f"{self.id}.json")
-
         with open(path, "w") as f:
             json.dump(data, f, indent=2)
 
     def __post_init__(self):
-        self.set_spell_category()
         self.set_spell_type()
         self.update_cost()
+        self.set_spell_category()
 
 
 def load_spell(id, dir="spells"):
-
     path = os.path.join("data", dir, f"{id}.json")
     with open(path, "r") as f:
         data = json.load(f)
-    effect_list = []
-    for id in data["effects"]:
-        effect_list.append(load_effect(id))
+    effect_list = [load_effect(eid) for eid in data["effects"]]
     data["effects"] = effect_list
-
     return Spell.from_dict(data)
 
 

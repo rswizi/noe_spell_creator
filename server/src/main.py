@@ -1,10 +1,15 @@
 import os
 import json
+import uvicorn
+import sys
+
 from fastapi import FastAPI
+from src.objects.effects import load_effect
+from src.objects.spells import Spell
 
 app = FastAPI()
 
-EFFECTS_DIR = os.path.join("server", "data", "effects")
+EFFECTS_DIR = os.path.join("data", "effects")
 
 @app.get("/")
 def read_root():
@@ -26,3 +31,35 @@ def get_effects():
                 print(f"Error reading {file_path}: {e}")
 
     return {"effects": effects}
+
+@app.post("/costs")
+async def get_costs(request):
+    try:
+        body = await request.json()
+
+        # Parse the incoming spell fields
+        range_val = body.get("range")
+        aoe_val = body.get("aoe")
+        duration_val = body.get("duration")
+        activation_val = body.get("activation")
+        effect_ids = body.get("effects", [])
+
+        # Load all effect objects by ID
+        effects = [load_effect(eid) for eid in effect_ids]
+
+        # Use static method to compute cost
+        mp_cost, en_cost = Spell.compute_cost(
+            range_val=range_val,
+            aoe_val=aoe_val,
+            duration_val=duration_val,
+            activation_val=activation_val,
+            effects=effects
+        )
+
+        return {"mp_cost": mp_cost, "en_cost": en_cost}
+
+    except Exception as e:
+        return {"error": str(e)}
+    
+if __name__ == "__main__":
+    uvicorn.run("src.main:app", host="127.0.0.1", port=8000, reload=True)
