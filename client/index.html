@@ -225,6 +225,26 @@ function updatePreview() {
       console.error("Submit error:", err);
       alert("Submit failed");
     });
+    const params = new URLSearchParams(window.location.search);
+  const spellId = params.get("spell_id"); // from templates
+  const editId = params.get("edit_id");   // from admin edit
+
+  if (spellId) prefillFromSpell(spellId);
+  if (editId) {
+    prefillFromSpell(editId);
+    // Change submit button text and add a warning banner
+    const submitBtn = document.querySelector('input[type="submit"]');
+    if (submitBtn) submitBtn.value = "💾 Save Changes";
+    // optional: flag the page
+    const header = document.getElementById("preview");
+    if (header) {
+      const warn = document.createElement("p");
+      warn.style.marginTop = "10px";
+      warn.style.color = "#ffb84a";
+      warn.textContent = "Edit mode: saving will override this spell.";
+      header.appendChild(warn);
+    }
+  }
 });
 
 async function prefillFromSpell(id) {
@@ -322,6 +342,50 @@ function confirmHome(e) {
     window.location.href = "home.html";
   }
 }
+
+document.getElementById("spell-form").addEventListener("submit", function (e) {
+  e.preventDefault();
+
+  const params = new URLSearchParams(window.location.search);
+  const editId = params.get("edit_id");
+  const token = localStorage.getItem("auth_token") || "";
+
+  const form = document.getElementById("spell-form");
+  const formData = new FormData(form);
+  const rawEffects = formData.getAll("effects[]") || [];
+  const effects = rawEffects.filter(id => id && id.trim() !== "");
+
+  const data = {
+    name: formData.get("school_name"),
+    activation: formData.get("activation"),
+    range: parseInt(formData.get("range")),
+    aoe: formData.get("aoe"),
+    duration: parseInt(formData.get("duration")),
+    effects
+  };
+
+  // PUT when editing, POST when creating
+  const url = editId ? `${API_BASE}/spells/${encodeURIComponent(editId)}` : `${API_BASE}/submit_spell`;
+  const method = editId ? "PUT" : "POST";
+  const headers = { "Content-Type": "application/json" };
+  if (editId) headers["Authorization"] = `Bearer ${token}`;
+
+  fetch(url, { method, headers, body: JSON.stringify(data) })
+    .then(res => res.json())
+    .then(result => {
+      console.log("Submit result:", result);
+      if (result.status === "success" || result.saved) {
+        alert(editId ? `Spell ${editId} updated.` : `Spell saved! ID: ${result.id}`);
+        if (editId) window.location.href = "admin.html"; // go back to admin list
+      } else {
+        alert("Error saving spell: " + (result.message || "Unknown error"));
+      }
+    })
+    .catch(err => {
+      console.error("Submit error:", err);
+      alert("Submit failed");
+    });
+});
 
 </script>
 

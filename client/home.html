@@ -24,7 +24,7 @@
     <div class="home-card center-stack" id="actions-card">
       <a class="btn btn-full" href="index.html">✨ Create New Spell</a>
       <a class="btn btn-full" href="templates.html">📜 Load From Template</a>
-      <a class="btn btn-secondary btn-full" href="#" onclick="alert('Settings coming soon'); return false;">⚙️ Settings</a>
+      <a id="btn-admin" class="btn btn-secondary btn-full" href="admin.html" style="display:none;">🛠️ Modify Database</a>
     </div>
   </div>
 
@@ -74,6 +74,8 @@
       chipName.textContent = `${username} (${role})`;
       chip.style.display = "flex";
       openBtn.style.display = "none";
+      const adminBtn = document.getElementById("btn-admin");
+      adminBtn.style.display = (role === "admin" || role === "moderator") ? "inline-block" : "none";
     }
     function setLoggedOutUI(msg = "") {
       const chip = document.getElementById("user-chip");
@@ -81,6 +83,8 @@
       document.getElementById("login-status").textContent = msg;
       chip.style.display = "none";
       openBtn.style.display = "inline-block";
+      const adminBtn = document.getElementById("btn-admin");
+      adminBtn.style.display = "none";
     }
 
     async function login() {

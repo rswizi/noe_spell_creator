@@ -3,6 +3,10 @@ import json
 import uvicorn
 import sys
 import secrets
+import datetime
+import json
+import os
+from typing import Optional, Tuple
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Query
@@ -32,6 +36,9 @@ SCHOOLS_DIR = os.path.join(BASE_DIR, "..", "data", "schools")
 os.makedirs(SCHOOLS_DIR, exist_ok=True)
 USERS_FILE = os.path.join(BASE_DIR, "..", "data", "users.txt")
 SESSIONS: Dict[str, Tuple[str, str]] = {}  # token -> (username, role)
+LOGS_DIR = os.path.join(BASE_DIR, "..", "data", "logs")
+os.makedirs(LOGS_DIR, exist_ok=True)
+AUDIT_LOG = os.path.join(LOGS_DIR, "db_audit.log")
 
 def load_users():
     users = {}
@@ -75,14 +82,29 @@ def get_next_spell_id() -> str:
     next_id = (max(existing_ids) + 1) if existing_ids else 0
     return f"{next_id:04d}"
 
-def require_auth(request: Request, required_roles: list[str] | None = None):
-    token = get_auth_token(request)
+def require_auth(request: Request, roles: Optional[list[str]] = None) -> Tuple[str, str]:
+    """Return (username, role) or raise Exception."""
+    token = request.headers.get("Authorization", "")
+    if token.lower().startswith("bearer "):
+        token = token.split(" ", 1)[1].strip()
     if not token or token not in SESSIONS:
         raise Exception("Not authenticated")
     username, role = SESSIONS[token]
-    if required_roles and role not in required_roles:
+    if roles and role not in roles:
         raise Exception("Forbidden")
     return username, role
+
+def write_audit(action: str, username: str, spell_id: str, before: dict | None, after: dict | None):
+    entry = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "user": username,
+        "action": action,          # "create", "update", "delete"
+        "spell_id": spell_id,
+        "before": before,
+        "after": after,
+    }
+    with open(AUDIT_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 @app.get("/")
 def read_root():
@@ -312,6 +334,58 @@ async def auth_logout(request: Request):
         del SESSIONS[token]
     return {"status": "success"}
 
+@app.delete("/spells/{spell_id}")
+def delete_spell(spell_id: str, request: Request):
+    try:
+        username, role = require_auth(request, ["admin", "moderator"])
+        path = os.path.join(SPELLS_DIR, f"{spell_id}.json")
+        if not os.path.exists(path):
+            return {"status": "error", "message": f"Spell {spell_id} not found"}
+
+        with open(path, "r", encoding="utf-8") as f:
+            before = json.load(f)
+
+        os.remove(path)
+        write_audit("delete", username, spell_id, before, None)
+        return {"status": "success", "deleted": spell_id}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.put("/spells/{spell_id}")
+async def update_spell(spell_id: str, request: Request):
+    try:
+        username, role = require_auth(request, ["admin", "moderator"])
+        path = os.path.join(SPELLS_DIR, f"{spell_id}.json")
+        if not os.path.exists(path):
+            return {"status": "error", "message": f"Spell {spell_id} not found"}
+
+        body = await request.json()
+        # expected keys: name, activation, range, aoe, duration, effects (ids)
+        effect_ids = [eid for eid in body.get("effects", []) if eid and str(eid).strip()]
+        effects = [load_effect(eid) for eid in effect_ids]
+
+        with open(path, "r", encoding="utf-8") as f:
+            before = json.load(f)
+
+        # Rebuild spell using SAME id
+        spell = Spell(
+            id=spell_id,
+            name=body.get("name") or before.get("name"),
+            activation=body.get("activation") or before.get("activation"),
+            range=body.get("range") if body.get("range") is not None else before.get("range"),
+            aoe=body.get("aoe") or before.get("aoe"),
+            duration=body.get("duration") if body.get("duration") is not None else before.get("duration"),
+            effects=effects if effect_ids else [load_effect(eid) for eid in before.get("effects", [])],
+        )
+        spell.update_cost()
+        spell.set_spell_category()
+        spell.save(dir="spells")
+
+        after = spell.to_dict()
+        write_audit("update", username, spell_id, before, after)
+        return {"status": "success", "id": spell_id, "saved": True}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
