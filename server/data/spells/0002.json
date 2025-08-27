@@ -1,0 +1,17 @@
+{
+  "id": "0002",
+  "name": "Test Spell Index 1",
+  "activation": "Action",
+  "range": 3,
+  "aoe": "Circle (7)",
+  "mp_cost": 19,
+  "en_cost": 19,
+  "duration": 1,
+  "effects": [
+    "0000",
+    "0001"
+  ],
+  "category": "Disciple",
+  "spell_type": "Complex",
+  "description": "None"
+}

@@ -95,7 +95,6 @@ class Spell:
             self.duration,
             self.activation,
             self.effects,
-            load_school
         )
 
     @staticmethod
@@ -103,18 +102,36 @@ class Spell:
         mp_cost = 0
         en_cost = 0
 
-        # Example cost tables (replace with real ones)
-        mp_cost += get_range_cost(range_val)
-        mp_cost += get_aoe_cost(aoe_val)
-        mp_cost += get_duration_cost(duration_val)
-        mp_cost += get_activation_cost(activation_val)
+        def norm(x):
+            """Return a (mp, en) tuple no matter what x is."""
+            if isinstance(x, tuple):
+                if len(x) == 2:
+                    return x
+                if len(x) == 1:
+                    return (x[0], 0)
+                # unexpected tuple shapes → sum mp, ignore rest
+                return (x[0], x[1] if len(x) > 1 else 0)
+            # plain int/float → mp only
+            return (x or 0, 0)
 
-        # If effects are provided, add their cost
+        # If your utils expect (value, effects), pass effects. Otherwise remove it.
+        r_mp, r_en = norm(get_range_cost(range_val, effects))
+        a_mp, a_en = norm(get_aoe_cost(aoe_val, effects))
+        d_mp, d_en = norm(get_duration_cost(duration_val))
+        act_mp, act_en = norm(get_activation_cost(activation_val))
+
+        mp_cost += r_mp + a_mp + d_mp + act_mp
+        en_cost += r_en + a_en + d_en + act_en
+
+        # Add intrinsic effect costs
         for effect in effects:
-            mp_cost += effect.mp_cost
-            en_cost += effect.en_cost
+            # effect.mp_cost / effect.en_cost should be numbers
+            mp_cost += getattr(effect, "mp_cost", 0) or 0
+            en_cost += getattr(effect, "en_cost", 0) or 0
 
         return mp_cost, en_cost
+
+
 
     def __str__(self):
         return (

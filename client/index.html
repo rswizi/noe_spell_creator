@@ -98,14 +98,13 @@ function addEffect() {
   const select = document.createElement('select');
   select.name = "effects[]";
   select.required = true;
-  select.onchange = updatePreview;
 
   const loadingOption = document.createElement("option");
   loadingOption.value = "";
   loadingOption.textContent = "-- Loading Effects... --";
   select.appendChild(loadingOption);
 
-  fetch("${API_BASE}/effects")
+  fetch(`${API_BASE}/effects`)
     .then(res => res.json())
     .then(data => {
       select.innerHTML = `<option value="">-- Select Effect --</option>`;
@@ -115,9 +114,14 @@ function addEffect() {
         option.textContent = `[${effect.id}] ${effect.name}`;
         select.appendChild(option);
       });
+
+      // now that it's populated, update on change
+      select.addEventListener('change', updatePreview);
+    })
+    .catch(err => {
+      console.error("Error loading effects:", err);
     });
 
-  // Create remove button
   const button = document.createElement("button");
   button.type = "button";
   button.innerText = "❌";
@@ -131,9 +135,7 @@ function addEffect() {
   container.appendChild(entry);
 
   effectCount++;
-  updatePreview();
 }
-
   function removeEffect(id) {
     const entry = document.getElementById(`effect-${id}`);
     if (entry) entry.remove();
@@ -142,31 +144,31 @@ function addEffect() {
 
 function updatePreview() {
   const form = document.getElementById("spell-form");
-
   const formData = new FormData(form);
+
+  const rawEffects = formData.getAll("effects[]") || [];
+  const effects = rawEffects.filter(id => id && id.trim() !== "");
+
   const data = {
     activation: formData.get("activation"),
     range: parseInt(formData.get("range")),
     aoe: formData.get("aoe"),
     duration: parseInt(formData.get("duration")),
-    effects: formData.getAll("effects[]") || []
+    effects
   };
 
-  fetch("${API_BASE}/costs", {
+  fetch(`${API_BASE}/costs`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   })
-    .then((res) => {
-      if (!res.ok) throw new Error("Error fetching spell cost");
-      return res.json();
-    })
+    .then((res) => res.json())
     .then((result) => {
+      console.log("Cost result:", result); // <-- See what backend returns
+      if (result.error) throw new Error(result.error);
+
       document.getElementById("mp_cost").innerText = result.mp_cost ?? 0;
       document.getElementById("en_cost").innerText = result.en_cost ?? 0;
-      // Optional: if you want to return category from the backend later
       document.getElementById("category").innerText = result.category || "--";
     })
     .catch((err) => {
@@ -175,15 +177,53 @@ function updatePreview() {
       document.getElementById("en_cost").innerText = "--";
       document.getElementById("category").innerText = "--";
     });
+
 }
-
-
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("select, input").forEach(el => {
       el.addEventListener("change", updatePreview);
     });
-    addEffect();
+    addEffect(); // user must pick something; preview will update on change
   });
+
+  document.getElementById("spell-form").addEventListener("submit", function (e) {
+  e.preventDefault(); // stop normal form reload
+
+  const form = document.getElementById("spell-form");
+  const formData = new FormData(form);
+
+  const rawEffects = formData.getAll("effects[]") || [];
+  const effects = rawEffects.filter(id => id && id.trim() !== "");
+
+  const data = {
+    name: formData.get("school_name"),   // spell name
+    activation: formData.get("activation"),
+    range: parseInt(formData.get("range")),
+    aoe: formData.get("aoe"),
+    duration: parseInt(formData.get("duration")),
+    effects
+  };
+
+  fetch(`${API_BASE}/submit_spell`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  })
+    .then(res => res.json())
+    .then(result => {
+      console.log("Submit result:", result);
+      if (result.status === "success") {
+        alert(`Spell saved! ID: ${result.id}`);
+      } else {
+        alert("Error saving spell: " + result.message);
+      }
+    })
+    .catch(err => {
+      console.error("Submit error:", err);
+      alert("Submit failed");
+    });
+});
+
 </script>
 
 </body>
