@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Spell Creator — Templates</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Load From Template</h1>
+
+    <div class="home-card" style="margin-bottom:18px;">
+    <div class="filter-bar">
+        <input id="filter-name" type="text" placeholder="Filter by name..." />
+        <select id="filter-category">
+        <option value="">All Categories</option>
+        <option>Novice</option>
+        <option>Apprentice</option>
+        <option>Disciple</option>
+        <option>Adept</option>
+        <option>Mage</option>
+        <option>Magister</option>
+        <option>High Mage</option>
+        <option>Master</option>
+        <option>Grand Master</option>
+        <option>Archmage</option>
+        <option>Supreme Archmage</option>
+        <option>Avant-garde</option>
+        </select>
+        <select id="filter-school">
+        <option value="">All Schools</option>
+        </select>
+        <button id="clear-filters">Reset</button>
+    </div>
+    </div>
+
+
+    <div class="home-card">
+      <div id="results"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+const $ = (sel) => document.querySelector(sel);
+const resultsEl = $("#results");
+const nameEl = $("#filter-name");
+const categoryEl = $("#filter-category");
+const schoolEl = $("#filter-school");
+
+function spellRow(s) {
+  const schoolNames = (s.schools || []).map(sc => sc.name).join(", ") || "—";
+  return `
+    <div class="effect-entry" style="justify-content:space-between;">
+      <div style="flex:1;">
+        <div style="font-weight:bold">${s.name} <span style="opacity:.7">[${s.id}]</span></div>
+        <div style="opacity:.8;font-size:.95rem">
+          ${s.category || "—"} · ${s.activation} · ${s.range} · ${s.aoe} · dur ${s.duration}
+        </div>
+        <div style="opacity:.7;font-size:.9rem">Schools: ${schoolNames}</div>
+      </div>
+      <div>
+        <button onclick="loadIntoBuilder('${s.id}')">Load</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderList(list) {
+  if (!list.length) {
+    resultsEl.innerHTML = `<p>No spells found.</p>`;
+    return;
+  }
+  resultsEl.innerHTML = list.map(spellRow).join("");
+}
+
+function buildQuery() {
+  const params = new URLSearchParams();
+  const name = nameEl.value.trim();
+  const cat = categoryEl.value;
+  const sch = schoolEl.value;
+  if (name) params.set("name", name);
+  if (cat) params.set("category", cat);
+  if (sch) params.set("school", sch);
+  return params.toString();
+}
+
+async function fetchSpells() {
+  const q = buildQuery();
+  const url = q ? `${API_BASE}/spells?${q}` : `${API_BASE}/spells`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.error) {
+    resultsEl.innerHTML = `<p style="color:#ff4a4a">Error: ${data.error}</p>`;
+    return;
+  }
+  renderList(data.spells || []);
+}
+
+async function loadSchools() {
+  const res = await fetch(`${API_BASE}/schools`);
+  const data = await res.json();
+  if (data.schools) {
+    data.schools.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = `${s.name} [${s.id}]`;
+      schoolEl.appendChild(opt);
+    });
+  }
+}
+
+function debounce(fn, ms=300) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function loadIntoBuilder(id) {
+  // Go to index with spell_id param; index will autofill
+  window.location.href = `index.html?spell_id=${encodeURIComponent(id)}`;
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadSchools();
+  await fetchSpells();
+
+  const run = debounce(fetchSpells, 300);
+  nameEl.addEventListener("input", run);
+  categoryEl.addEventListener("change", run);
+  schoolEl.addEventListener("change", run);
+
+  document.getElementById("clear-filters").addEventListener("click", () => {
+    nameEl.value = "";
+    categoryEl.value = "";
+    schoolEl.value = "";
+    fetchSpells();
+  });
+});
+</script>
+</body>
+</html>

@@ -1,9 +1,16 @@
 {
-    "id": "0001",
-    "name": "Test01",
-    "mp_cost": 10,
-    "en_cost": 14,
-    "range": 1,
-    "aoe": "Square",
-    "duration": 0
+  "id": "0000",
+  "name": "Test 2",
+  "activation": "Action",
+  "range": 5,
+  "aoe": "Circle (3)",
+  "mp_cost": 17,
+  "en_cost": 26,
+  "duration": 1,
+  "effects": [
+    "0001"
+  ],
+  "category": "Apprentice",
+  "spell_type": "Simple",
+  "description": "None"
 }
