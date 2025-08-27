@@ -111,17 +111,38 @@ def read_root():
     return {"Hello": "World"}
 
 @app.get("/effects")
-def get_effects():
+def get_effects(name: str | None = Query(default=None), school: str | None = Query(default=None)):
     effects = []
     for filename in os.listdir(EFFECTS_DIR):
-        if filename.endswith(".json"):
-            file_path = os.path.join(EFFECTS_DIR, filename)
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    effect = json.load(f)
-                    effects.append(effect)
-            except Exception as e:
-                print(f"Error reading {file_path}: {e}")
+        if not filename.endswith(".json"):
+            continue
+        file_path = os.path.join(EFFECTS_DIR, filename)
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                eff = json.load(f)
+                # normalize school shape if needed
+                sch = eff.get("school")
+                # lazy augment: attach school name if you like
+                if isinstance(sch, dict) and "id" in sch and "name" not in sch:
+                    try:
+                        s = load_school(sch["id"])
+                        eff["school"]["name"] = getattr(s, "name", sch["id"])
+                    except Exception:
+                        pass
+
+                # filters
+                ok = True
+                if name:
+                    ok = name.lower() in (eff.get("name","").lower())
+                if ok and school:
+                    sid = (eff.get("school", {}) or {}).get("id", "")
+                    sname = (eff.get("school", {}) or {}).get("name", "")
+                    sch_low = school.lower()
+                    ok = sch_low in (sid.lower() if sid else "") or sch_low in (sname.lower() if sname else "")
+                if ok:
+                    effects.append(eff)
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
     return {"effects": effects}
 
 @app.post("/costs")
@@ -158,40 +179,6 @@ async def get_costs(request: Request):
     except Exception as e:
         # Keep 200 for now, but return an error key so the UI can show it
         return {"error": str(e)}
-
-
-@app.post("/submit_spell")
-async def submit_spell(request: Request):
-    try:
-        body = await request.json()
-        name = body.get("name") or "Unnamed Spell"
-        activation = body.get("activation")
-        range_val = body.get("range")
-        aoe_val = body.get("aoe")
-        duration_val = body.get("duration")
-        effect_ids = [eid for eid in body.get("effects", []) if eid and str(eid).strip()]
-
-        effects = [load_effect(eid) for eid in effect_ids]
-
-        # Auto-generate numeric ID
-        spell_id = get_next_spell_id()
-
-        spell = Spell(
-            id=spell_id,
-            name=name,
-            activation=activation,
-            range=range_val,
-            aoe=aoe_val,
-            duration=duration_val,
-            effects=effects,
-        )
-        spell.update_cost()
-        spell.set_spell_category()
-        spell.save()
-
-        return {"status": "success", "id": spell.id, "saved": True}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
 
 
 @app.get("/schools")
@@ -384,6 +371,44 @@ async def update_spell(spell_id: str, request: Request):
         after = spell.to_dict()
         write_audit("update", username, spell_id, before, after)
         return {"status": "success", "id": spell_id, "saved": True}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/submit_spell")
+async def submit_spell(request: Request):
+    try:
+        body = await request.json()
+        name = body.get("name") or "Unnamed Spell"
+        activation = body.get("activation")
+        range_val = body.get("range")
+        aoe_val = body.get("aoe")
+        duration_val = body.get("duration")
+        effect_ids = [eid for eid in body.get("effects", []) if eid and str(eid).strip()]
+
+        effects = [load_effect(eid) for eid in effect_ids]
+
+        # Auto-generate numeric ID
+        spell_id = get_next_spell_id()
+
+        spell = Spell(
+            id=spell_id,
+            name=name,
+            activation=activation,
+            range=range_val,
+            aoe=aoe_val,
+            duration=duration_val,
+            effects=effects,
+        )
+        spell.update_cost()
+        spell.set_spell_category()
+        spell.save()
+
+        # --- NEW: audit log for creation (works for any user) ---
+        token = get_auth_token(request)               # reads 'Authorization: Bearer <token>'
+        username = SESSIONS.get(token, ("anonymous", ""))[0] if token else "anonymous"
+        write_audit("create", username, spell.id, before=None, after=spell.to_dict())
+
+        return {"status": "success", "id": spell.id, "saved": True}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

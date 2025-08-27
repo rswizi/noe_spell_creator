@@ -1,0 +1,16 @@
+{
+  "id": "0004",
+  "name": "Test 2 Spell Index",
+  "activation": "Action",
+  "range": 3,
+  "aoe": "Circle (9)",
+  "mp_cost": 41,
+  "en_cost": 13,
+  "duration": 10,
+  "effects": [
+    "0000"
+  ],
+  "category": "High Mage",
+  "spell_type": "Complex",
+  "description": "None"
+}

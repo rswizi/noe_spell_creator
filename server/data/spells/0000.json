@@ -3,15 +3,14 @@
   "name": "Test 1",
   "activation": "Action",
   "range": 5,
-  "aoe": "Circle (5)",
-  "mp_cost": 17,
-  "en_cost": 26,
-  "duration": 1,
+  "aoe": "Circle (7)",
+  "mp_cost": 25,
+  "en_cost": 18,
+  "duration": 6,
   "effects": [
-    "0001",
-    "0000"
+    "0001"
   ],
-  "category": "Apprentice",
-  "spell_type": "Complex",
+  "category": "Adept",
+  "spell_type": "Simple",
   "description": "None"
 }

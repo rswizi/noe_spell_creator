@@ -4,22 +4,25 @@
   <meta charset="UTF-8">
   <title>Create a Spell</title>
   <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
-<div style="max-width:700px;margin:16px auto 0;">
-  <a class="btn btn-secondary" href="#" onclick="confirmHome(event)">← Back Home</a>
-</div>
 <body>
+  <div style="max-width:700px;margin:16px auto 0;">
+    <a class="btn btn-secondary" href="#" onclick="confirmHome(event)">← Back Home</a>
+  </div>
+
   <h1>Create a Spell</h1>
 
-<!-- Live Cost Preview -->
-<div id="preview">
-  <h3>Live Spell Preview</h3>
-  <p><strong>MP Cost:</strong> <span id="mp_cost">--</span></p>
-  <p><strong>EN Cost:</strong> <span id="en_cost">--</span></p>
-  <p><strong>Category:</strong> <span id="category">--</span></p>
-</div>
+  <!-- Live Cost Preview -->
+  <div id="preview">
+    <h3>Live Spell Preview</h3>
+    <p><strong>MP Cost:</strong> <span id="mp_cost">--</span></p>
+    <p><strong>EN Cost:</strong> <span id="en_cost">--</span></p>
+    <p><strong>Category:</strong> <span id="category">--</span></p>
+  </div>
 
-  <form id="spell-form" action="/submit_spell" method="POST">
+  <!-- No action/method; we submit via JS -->
+  <form id="spell-form">
     <!-- Spell Name -->
     <label for="school_name">Spell Name:</label>
     <input type="text" id="school_name" name="school_name" required><br><br>
@@ -78,209 +81,179 @@
       <option value="12">12</option>
     </select><br><br>
 
+    <!-- Effect Filters -->
+    <div class="filter-bar" style="max-width:700px;margin:0 auto 10px;">
+      <input id="eff-filter-name" type="text" placeholder="Filter effects by name…" />
+      <select id="eff-filter-school">
+        <option value="">All Schools</option>
+      </select>
+      <button type="button" id="eff-filter-clear">Reset</button>
+    </div>
+
     <!-- Effects Section -->
     <label>Effects:</label>
-    <div id="effects-container">
-      <!-- Dynamically added effect fields will appear here -->
-    </div>
+    <div id="effects-container"></div>
     <button type="button" onclick="addEffect()">➕ Add Effect</button><br><br>
 
     <input type="submit" value="Submit Spell">
   </form>
 
 <script>
+
+function normalize(s) { return (s || "").toString().toLowerCase().trim(); }
+
+function currentEffectFilters() {
+  return {
+    name: normalize(effFilterNameEl?.value),
+    school: normalize(effFilterSchoolEl?.value) // this will be an ID or ""
+  };
+}
+
+function effectMatchesFilters(effect, filters) {
+  const n = normalize(effect.name);
+  const sid = normalize(effect.school?.id);
+  const sname = normalize(effect.school?.name);
+  const nameOk = !filters.name || n.includes(filters.name);
+  const schoolOk = !filters.school || sid === filters.school || sname === filters.school;
+  return nameOk && schoolOk;
+}
+
   let effectCount = 0;
   const API_BASE = "http://127.0.0.1:8000";
 
-function addEffect() {
-  const container = document.getElementById('effects-container');
-  const entry = document.createElement('div');
-  entry.className = 'effect-entry';
-  entry.id = `effect-${effectCount}`;
+  // caches
+  let ALL_EFFECTS = [];
+  let ALL_SCHOOLS = [];
+  let SCHOOL_BY_ID = {};
 
-  const select = document.createElement('select');
-  select.name = "effects[]";
-  select.required = true;
+  let effFilterNameEl, effFilterSchoolEl;
 
-  const loadingOption = document.createElement("option");
-  loadingOption.value = "";
-  loadingOption.textContent = "-- Loading Effects... --";
-  select.appendChild(loadingOption);
-
-  fetch(`${API_BASE}/effects`)
-    .then(res => res.json())
-    .then(data => {
-      select.innerHTML = `<option value="">-- Select Effect --</option>`;
-      data.effects.forEach(effect => {
-        const option = document.createElement("option");
-        option.value = effect.id;
-        option.textContent = `[${effect.id}] ${effect.name}`;
-        select.appendChild(option);
-      });
-
-      // now that it's populated, update on change
-      select.addEventListener('change', updatePreview);
-    })
-    .catch(err => {
-      console.error("Error loading effects:", err);
-    });
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.innerText = "✖";
-  button.onclick = () => {
-    entry.remove();
-    updatePreview();
-  };
-
-  entry.appendChild(select);
-  entry.appendChild(button);
-  container.appendChild(entry);
-
-  effectCount++;
-}
-  function removeEffect(id) {
-    const entry = document.getElementById(`effect-${id}`);
-    if (entry) entry.remove();
-    updatePreview();
+  // ---------- utilities ----------
+  function normalize(str) {
+    return (str || "").toString().toLowerCase().trim();
   }
 
-function updatePreview() {
-  const form = document.getElementById("spell-form");
-  const formData = new FormData(form);
+  function currentEffectFilters() {
+    return {
+      name: normalize(effFilterNameEl?.value || ""),
+      school: normalize(effFilterSchoolEl?.value || "")
+    };
+  }
 
-  const rawEffects = formData.getAll("effects[]") || [];
-  const effects = rawEffects.filter(id => id && id.trim() !== "");
+  function effectMatchesFilters(effect, filters) {
+    const n = normalize(effect?.name);
+    const sid = normalize(effect?.school?.id || effect?.school_id);
+    const sname = normalize(effect?.school?.name);
 
-  const data = {
-    activation: formData.get("activation"),
-    range: parseInt(formData.get("range")),
-    aoe: formData.get("aoe"),
-    duration: parseInt(formData.get("duration")),
-    effects
-  };
+    const nameOk   = !filters.name   || n.includes(filters.name);
+    const schoolOk = !filters.school || sid === filters.school || sname === filters.school;
+    return nameOk && schoolOk;
+  }
 
-  fetch(`${API_BASE}/costs`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  })
-    .then((res) => res.json())
-    .then((result) => {
-      console.log("Cost result:", result); // <-- See what backend returns
-      if (result.error) throw new Error(result.error);
+  function getFilteredEffects() {
+    const f = currentEffectFilters();
+    return ALL_EFFECTS.filter(e => effectMatchesFilters(e, f));
+  }
 
-      document.getElementById("mp_cost").innerText = result.mp_cost ?? 0;
-      document.getElementById("en_cost").innerText = result.en_cost ?? 0;
-      document.getElementById("category").innerText = result.category || "--";
-    })
-    .catch((err) => {
-      console.error("Spell preview error:", err);
-      document.getElementById("mp_cost").innerText = "--";
-      document.getElementById("en_cost").innerText = "--";
-      document.getElementById("category").innerText = "--";
+  // builds options for a single <select>, preserving existing selected value if possible
+  function populateEffectSelect(selectEl, effects, keepValue = true) {
+    const prevVal = keepValue ? selectEl.value : "";
+    // header
+    selectEl.innerHTML = `<option value="">-- Select Effect --</option>`;
+    effects.forEach(effect => {
+      const opt = document.createElement("option");
+      opt.value = effect.id;
+      const schoolBadge = effect?.school?.name
+        ? ` — ${effect.school.name}`
+        : (effect?.school?.id ? ` — ${effect.school.id}` : "");
+      opt.textContent = `[${effect.id}] ${effect.name}${schoolBadge}`;
+      selectEl.appendChild(opt);
     });
-
-}
-  document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll("select, input").forEach(el => {
-      el.addEventListener("change", updatePreview);
-    });
-    addEffect(); // user must pick something; preview will update on change
-  });
-
-  document.getElementById("spell-form").addEventListener("submit", function (e) {
-  e.preventDefault(); // stop normal form reload
-
-  const form = document.getElementById("spell-form");
-  const formData = new FormData(form);
-
-  const rawEffects = formData.getAll("effects[]") || [];
-  const effects = rawEffects.filter(id => id && id.trim() !== "");
-
-  const data = {
-    name: formData.get("school_name"),   // spell name
-    activation: formData.get("activation"),
-    range: parseInt(formData.get("range")),
-    aoe: formData.get("aoe"),
-    duration: parseInt(formData.get("duration")),
-    effects
-  };
-
-  fetch(`${API_BASE}/submit_spell`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  })
-    .then(res => res.json())
-    .then(result => {
-      console.log("Submit result:", result);
-      if (result.status === "success") {
-        alert(`Spell saved! ID: ${result.id}`);
-      } else {
-        alert("Error saving spell: " + result.message);
-      }
-    })
-    .catch(err => {
-      console.error("Submit error:", err);
-      alert("Submit failed");
-    });
-    const params = new URLSearchParams(window.location.search);
-  const spellId = params.get("spell_id"); // from templates
-  const editId = params.get("edit_id");   // from admin edit
-
-  if (spellId) prefillFromSpell(spellId);
-  if (editId) {
-    prefillFromSpell(editId);
-    // Change submit button text and add a warning banner
-    const submitBtn = document.querySelector('input[type="submit"]');
-    if (submitBtn) submitBtn.value = "💾 Save Changes";
-    // optional: flag the page
-    const header = document.getElementById("preview");
-    if (header) {
-      const warn = document.createElement("p");
-      warn.style.marginTop = "10px";
-      warn.style.color = "#ffb84a";
-      warn.textContent = "Edit mode: saving will override this spell.";
-      header.appendChild(warn);
+    if (keepValue && prevVal) {
+      // if old value still exists in the new list, keep it selected
+      const hasPrev = effects.some(e => String(e.id) === String(prevVal));
+      selectEl.value = hasPrev ? prevVal : "";
     }
   }
-});
 
-async function prefillFromSpell(id) {
-  try {
-    const res = await fetch(`${API_BASE}/spells/${encodeURIComponent(id)}`);
+  function refreshAllEffectSelects() {
+    const filtered = getFilteredEffects();
+    document
+      .querySelectorAll('#effects-container select[name="effects[]"]')
+      .forEach(sel => populateEffectSelect(sel, filtered, /*keepValue*/ true));
+  }
+
+  // ---------- fetchers ----------
+  async function loadSchools() {
+    const res = await fetch(`${API_BASE}/schools`);
     const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    const sp = data.spell;
+    ALL_SCHOOLS = data.schools || [];
 
-    // Set fields
-    document.getElementById("school_name").value = sp.name || "";
-    document.getElementById("activation").value = sp.activation || "Action";
-    document.getElementById("range").value = String(sp.range ?? "0");
-    document.getElementById("aoe").value = sp.aoe || "A Square";
-    document.getElementById("duration").value = String(sp.duration ?? "1");
-
-    // Reset effects container, then add preselected ones
-    const cont = document.getElementById("effects-container");
-    cont.innerHTML = "";
-
-    if (Array.isArray(sp.effects)) {
-      for (const eid of sp.effects) {
-        await addEffectPrefilled(eid);
-      }
+    // Build map id -> {id, name}
+    SCHOOL_BY_ID = {};
+    for (const s of ALL_SCHOOLS) {
+      SCHOOL_BY_ID[String(s.id)] = { id: String(s.id), name: s.name || String(s.id) };
     }
 
-    updatePreview();
-  } catch (e) {
-    console.error("Autofill error:", e);
-    alert("Failed to load template: " + e.message);
+    // Populate the effect school filter (values are IDs)
+    const schoolSel = document.getElementById("eff-filter-school");
+    schoolSel.innerHTML = `<option value="">All Schools</option>`;
+    ALL_SCHOOLS.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id; // id like "0003"
+      opt.textContent = `${s.name} [${s.id}]`;
+      schoolSel.appendChild(opt);
+    });
   }
+
+
+  async function loadEffects() {
+    const res = await fetch(`${API_BASE}/effects`);
+    const data = await res.json();
+    const raw = data.effects || [];
+
+    ALL_EFFECTS = raw.map(e => {
+      // e.school is a string id like "0003"
+      const sid = String(e.school || "").trim();
+      const schoolObj = SCHOOL_BY_ID[sid] || { id: sid, name: sid }; // fallback name = id
+      return {
+        ...e,
+        school: { id: schoolObj.id, name: schoolObj.name }
+      };
+    });
+  }
+
+  async function addEffectPrefilled(effectId) {
+    return new Promise((resolve) => {
+      const container = document.getElementById('effects-container');
+      const entry = document.createElement('div');
+      entry.className = 'effect-entry';
+      entry.id = `effect-${effectCount}`;
+
+      const select = document.createElement('select');
+      select.name = "effects[]";
+      select.required = true;
+
+      populateEffectSelect(select, getFilteredEffects(), false);
+      select.value = effectId;
+      select.addEventListener('change', updatePreview);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.innerText = "❌";
+      button.onclick = () => { entry.remove(); updatePreview(); };
+
+      entry.appendChild(select);
+      entry.appendChild(button);
+      container.appendChild(entry);
+
+      effectCount++;
+      resolve();
+    });
 }
 
-// helper: add an effect select and preselect a given id
-async function addEffectPrefilled(effectId) {
-  return new Promise((resolve) => {
+  // ---------- builder bits (your existing logic, with tweaks) ----------
+  function addEffect() {
     const container = document.getElementById('effects-container');
     const entry = document.createElement('div');
     entry.className = 'effect-entry';
@@ -290,33 +263,13 @@ async function addEffectPrefilled(effectId) {
     select.name = "effects[]";
     select.required = true;
 
-    const loadingOption = document.createElement("option");
-    loadingOption.value = "";
-    loadingOption.textContent = "-- Loading Effects... --";
-    select.appendChild(loadingOption);
-
-    fetch(`${API_BASE}/effects`)
-      .then(res => res.json())
-      .then(data => {
-        select.innerHTML = `<option value="">-- Select Effect --</option>`;
-        (data.effects || []).forEach(effect => {
-          const option = document.createElement("option");
-          option.value = effect.id;
-          option.textContent = `[${effect.id}] ${effect.name}`;
-          select.appendChild(option);
-        });
-        select.value = effectId; // preselect
-        select.addEventListener('change', updatePreview);
-        resolve();
-      })
-      .catch(err => {
-        console.error("Error loading effects:", err);
-        resolve();
-      });
+    // initial population with current filters
+    populateEffectSelect(select, getFilteredEffects(), /*keepValue*/ false);
+    select.addEventListener('change', updatePreview);
 
     const button = document.createElement("button");
     button.type = "button";
-    button.innerText = "❌";
+    button.innerText = "✖";
     button.onclick = () => { entry.remove(); updatePreview(); };
 
     entry.appendChild(select);
@@ -324,69 +277,198 @@ async function addEffectPrefilled(effectId) {
     container.appendChild(entry);
 
     effectCount++;
-  });
-}
-
-// On page load, if spell_id=... is present, load it
-document.addEventListener("DOMContentLoaded", () => {
-  const params = new URLSearchParams(window.location.search);
-  const spellId = params.get("spell_id");
-  if (spellId) {
-    prefillFromSpell(spellId);
   }
-});
 
-function confirmHome(e) {
-  e.preventDefault();
-  if (confirm("Are you sure? All unsaved modifications will be lost.")) {
-    window.location.href = "home.html";
-  }
-}
+  function updatePreview() {
+    const form = document.getElementById("spell-form");
+    const formData = new FormData(form);
+    const rawEffects = formData.getAll("effects[]") || [];
+    const effects = rawEffects.filter(id => id && id.trim() !== "");
 
-document.getElementById("spell-form").addEventListener("submit", function (e) {
-  e.preventDefault();
+    const data = {
+      activation: formData.get("activation"),
+      range: parseInt(formData.get("range")),
+      aoe: formData.get("aoe"),
+      duration: parseInt(formData.get("duration")),
+      effects
+    };
 
-  const params = new URLSearchParams(window.location.search);
-  const editId = params.get("edit_id");
-  const token = localStorage.getItem("auth_token") || "";
-
-  const form = document.getElementById("spell-form");
-  const formData = new FormData(form);
-  const rawEffects = formData.getAll("effects[]") || [];
-  const effects = rawEffects.filter(id => id && id.trim() !== "");
-
-  const data = {
-    name: formData.get("school_name"),
-    activation: formData.get("activation"),
-    range: parseInt(formData.get("range")),
-    aoe: formData.get("aoe"),
-    duration: parseInt(formData.get("duration")),
-    effects
-  };
-
-  // PUT when editing, POST when creating
-  const url = editId ? `${API_BASE}/spells/${encodeURIComponent(editId)}` : `${API_BASE}/submit_spell`;
-  const method = editId ? "PUT" : "POST";
-  const headers = { "Content-Type": "application/json" };
-  if (editId) headers["Authorization"] = `Bearer ${token}`;
-
-  fetch(url, { method, headers, body: JSON.stringify(data) })
-    .then(res => res.json())
-    .then(result => {
-      console.log("Submit result:", result);
-      if (result.status === "success" || result.saved) {
-        alert(editId ? `Spell ${editId} updated.` : `Spell saved! ID: ${result.id}`);
-        if (editId) window.location.href = "admin.html"; // go back to admin list
-      } else {
-        alert("Error saving spell: " + (result.message || "Unknown error"));
-      }
+    fetch(`${API_BASE}/costs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
     })
-    .catch(err => {
-      console.error("Submit error:", err);
-      alert("Submit failed");
-    });
-});
+      .then(res => res.json())
+      .then(result => {
+        if (result.error) throw new Error(result.error);
+        document.getElementById("mp_cost").innerText = result.mp_cost ?? 0;
+        document.getElementById("en_cost").innerText = result.en_cost ?? 0;
+        document.getElementById("category").innerText = result.category || "--";
+      })
+      .catch(err => {
+        console.error("Spell preview error:", err);
+        document.getElementById("mp_cost").innerText = "--";
+        document.getElementById("en_cost").innerText = "--";
+        document.getElementById("category").innerText = "--";
+      });
+  }
 
+  async function prefillFromSpell(id) {
+    try {
+      const res = await fetch(`${API_BASE}/spells/${encodeURIComponent(id)}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const sp = data.spell;
+
+      document.getElementById("school_name").value = sp.name || "";
+      document.getElementById("activation").value = sp.activation || "Action";
+      document.getElementById("range").value = String(sp.range ?? "0");
+      document.getElementById("aoe").value = sp.aoe || "A Square";
+      document.getElementById("duration").value = String(sp.duration ?? "1");
+
+      const cont = document.getElementById("effects-container");
+      cont.innerHTML = "";
+      if (Array.isArray(sp.effects)) {
+        for (const eid of sp.effects) {
+          await addEffectPrefilled(eid);
+        }
+      }
+      updatePreview();
+    } catch (e) {
+      console.error("Autofill error:", e);
+      alert("Failed to load template: " + e.message);
+    }
+  }
+
+  async function addEffectPrefilled(effectId) {
+    return new Promise((resolve) => {
+      const container = document.getElementById('effects-container');
+      const entry = document.createElement('div');
+      entry.className = 'effect-entry';
+      entry.id = `effect-${effectCount}`;
+
+      const select = document.createElement('select');
+      select.name = "effects[]";
+      select.required = true;
+
+      populateEffectSelect(select, getFilteredEffects(), /*keepValue*/ false);
+      select.value = effectId; // set after options
+      select.addEventListener('change', updatePreview);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.innerText = "❌";
+      button.onclick = () => { entry.remove(); updatePreview(); };
+
+      entry.appendChild(select);
+      entry.appendChild(button);
+      container.appendChild(entry);
+
+      effectCount++;
+      resolve();
+    });
+  }
+
+  // ---------- DOM boot ----------
+  document.addEventListener("DOMContentLoaded", async () => {
+    // grab filter inputs
+    effFilterNameEl   = document.getElementById("eff-filter-name");
+    effFilterSchoolEl = document.getElementById("eff-filter-school");
+
+    // load data IN ORDER
+    await loadSchools();
+    await loadEffects();
+
+    // wire filters
+    const run = () => refreshAllEffectSelects();
+    effFilterNameEl.addEventListener("input", run);
+    effFilterSchoolEl.addEventListener("change", run);
+    document.getElementById("eff-filter-clear").addEventListener("click", () => {
+      effFilterNameEl.value = "";
+      effFilterSchoolEl.value = "";
+      refreshAllEffectSelects();
+    });
+
+    // listen for preview changes on other fields
+    document.querySelectorAll("select, input").forEach(el => {
+      el.addEventListener("change", updatePreview);
+    });
+
+    // at least one effect row
+    addEffect();
+
+    // load template OR edit target
+    const params  = new URLSearchParams(window.location.search);
+    const spellId = params.get("spell_id");
+    const editId  = params.get("edit_id");
+
+    if (spellId) prefillFromSpell(spellId);
+    if (editId) {
+      prefillFromSpell(editId).then(() => {
+        const submitBtn = document.querySelector('input[type="submit"]');
+        if (submitBtn) submitBtn.value = "💾 Save Changes";
+        const header = document.getElementById("preview");
+        if (header && !document.getElementById("edit-mode-banner")) {
+          const warn = document.createElement("p");
+          warn.id = "edit-mode-banner";
+          warn.style.marginTop = "10px";
+          warn.style.color = "#ffb84a";
+          warn.textContent = "Edit mode: saving will override this spell.";
+          header.appendChild(warn);
+        }
+      });
+    }
+  });
+
+  function confirmHome(e) {
+    e.preventDefault();
+    if (confirm("Are you sure? All unsaved modifications will be lost.")) {
+      window.location.href = "home.html";
+    }
+  }
+
+  // unified submit handler (unchanged except token on create for logging)
+  document.getElementById("spell-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get("edit_id");
+    const token = localStorage.getItem("auth_token") || "";
+
+    const form = document.getElementById("spell-form");
+    const formData = new FormData(form);
+    const rawEffects = formData.getAll("effects[]") || [];
+    const effects = rawEffects.filter(id => id && id.trim() !== "");
+
+    const data = {
+      name: formData.get("school_name") || "Unnamed Spell",
+      activation: formData.get("activation"),
+      range: parseInt(formData.get("range")),
+      aoe: formData.get("aoe"),
+      duration: parseInt(formData.get("duration")),
+      effects
+    };
+
+    const url = editId ? `${API_BASE}/spells/${encodeURIComponent(editId)}` : `${API_BASE}/submit_spell`;
+    const method = editId ? "PUT" : "POST";
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    fetch(url, { method, headers, body: JSON.stringify(data) })
+      .then(res => res.json())
+      .then(result => {
+        if (result.status === "success" || result.saved) {
+          alert(editId ? `Spell ${editId} updated.` : `Spell saved! ID: ${result.id}`);
+          if (editId) window.location.href = "admin.html";
+        } else {
+          alert("Error saving spell: " + (result.message || "Unknown error"));
+        }
+      })
+      .catch(err => {
+        console.error("Submit error:", err);
+        alert("Submit failed");
+      });
+  });
 </script>
 
 </body>
