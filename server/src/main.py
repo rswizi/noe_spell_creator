@@ -2,9 +2,11 @@ import os
 import json
 import uvicorn
 import sys
+import secrets
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Query
+from typing import Dict, Tuple
 
 from src.objects.effects import load_effect
 from src.objects.spells import Spell, load_spell
@@ -28,7 +30,33 @@ SPELLS_DIR = os.path.join(BASE_DIR, "..", "data", "spells")
 os.makedirs(SPELLS_DIR, exist_ok=True)
 SCHOOLS_DIR = os.path.join(BASE_DIR, "..", "data", "schools")
 os.makedirs(SCHOOLS_DIR, exist_ok=True)
+USERS_FILE = os.path.join(BASE_DIR, "..", "data", "users.txt")
+SESSIONS: Dict[str, Tuple[str, str]] = {}  # token -> (username, role)
 
+def load_users():
+    users = {}
+    if not os.path.exists(USERS_FILE):
+        return users
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) < 3:
+                continue
+            username, password, role = parts[0], parts[1], parts[2]
+            users[username] = {"password": password, "role": role}
+    return users
+
+def make_token() -> str:
+    return secrets.token_hex(16)
+
+def get_auth_token(request: Request) -> str | None:
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1].strip()
+    return None
 
 def serialize_spell(spell: Spell) -> dict:
     """Return a JSON-serializable spell (effects as ids)."""
@@ -46,6 +74,15 @@ def get_next_spell_id() -> str:
                 continue
     next_id = (max(existing_ids) + 1) if existing_ids else 0
     return f"{next_id:04d}"
+
+def require_auth(request: Request, required_roles: list[str] | None = None):
+    token = get_auth_token(request)
+    if not token or token not in SESSIONS:
+        raise Exception("Not authenticated")
+    username, role = SESSIONS[token]
+    if required_roles and role not in required_roles:
+        raise Exception("Forbidden")
+    return username, role
 
 @app.get("/")
 def read_root():
@@ -241,6 +278,39 @@ def get_spell(spell_id: str):
         return {"error": f"Spell {spell_id} not found"}
     except Exception as e:
         return {"error": str(e)}
+
+@app.post("/auth/login")
+async def auth_login(request: Request):
+    try:
+        body = await request.json()
+        username = (body.get("username") or "").strip()
+        password = (body.get("password") or "").strip()
+
+        users = load_users()
+        info = users.get(username)
+        if not info or info["password"] != password:
+            return {"status": "error", "message": "Invalid username or password"}
+
+        token = make_token()
+        SESSIONS[token] = (username, info["role"])
+        return {"status": "success", "token": token, "username": username, "role": info["role"]}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/auth/me")
+async def auth_me(request: Request):
+    token = get_auth_token(request)
+    if not token or token not in SESSIONS:
+        return {"status": "error", "message": "Not authenticated"}
+    username, role = SESSIONS[token]
+    return {"status": "success", "username": username, "role": role}
+
+@app.post("/auth/logout")
+async def auth_logout(request: Request):
+    token = get_auth_token(request)
+    if token and token in SESSIONS:
+        del SESSIONS[token]
+    return {"status": "success"}
 
 
 if __name__ == "__main__":

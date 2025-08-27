@@ -4,16 +4,158 @@
   <meta charset="UTF-8" />
   <title>Spell Creator — Home</title>
   <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
 <body>
-  <div class="container">
+  <!-- Top bar -->
+  <div class="topbar">
     <h1>Spell Creator</h1>
+    <div class="auth-inline">
+      <div id="user-chip" class="user-chip">
+        <span class="chip-name" id="chip-name"></span>
+        <button id="chip-logout" class="btn linklike">Log Out</button>
+      </div>
+      <button id="open-login" class="btn btn-secondary small">Log In</button>
+    </div>
+  </div>
 
-    <div class="home-card center-stack">
+  <!-- Main actions -->
+  <div class="container">
+    <div class="home-card center-stack" id="actions-card">
       <a class="btn btn-full" href="index.html">✨ Create New Spell</a>
       <a class="btn btn-full" href="templates.html">📜 Load From Template</a>
       <a class="btn btn-secondary btn-full" href="#" onclick="alert('Settings coming soon'); return false;">⚙️ Settings</a>
     </div>
   </div>
+
+  <!-- Modal + Backdrop live at body level (not inside topbar) -->
+  <div id="login-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+  <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true">
+    <div class="modal-card">
+      <header>
+        <div class="modal-title" id="login-title">Log In</div>
+        <button class="modal-close" id="close-login" aria-label="Close">✕</button>
+      </header>
+
+      <label for="login-username">Username</label>
+      <input type="text" id="login-username" placeholder="Enter username" />
+
+      <label for="login-password" style="margin-top:10px;">Password</label>
+      <input type="password" id="login-password" placeholder="Enter password" />
+
+      <div id="login-status" style="opacity:.85; margin-top:8px;"></div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="cancel-login">Cancel</button>
+        <button class="btn" id="login-btn">Log In</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    const API_BASE = "http://127.0.0.1:8000";
+
+    function openLogin() {
+      document.getElementById("login-modal").classList.add("open");
+      document.getElementById("login-backdrop").classList.add("open");
+      document.getElementById("login-username").focus();
+    }
+    function closeLogin() {
+      document.getElementById("login-modal").classList.remove("open");
+      document.getElementById("login-backdrop").classList.remove("open");
+      document.getElementById("login-status").textContent = "";
+    }
+
+    function setLoggedInUI(username, role) {
+      const chip = document.getElementById("user-chip");
+      const chipName = document.getElementById("chip-name");
+      const openBtn = document.getElementById("open-login");
+      chipName.textContent = `${username} (${role})`;
+      chip.style.display = "flex";
+      openBtn.style.display = "none";
+    }
+    function setLoggedOutUI(msg = "") {
+      const chip = document.getElementById("user-chip");
+      const openBtn = document.getElementById("open-login");
+      document.getElementById("login-status").textContent = msg;
+      chip.style.display = "none";
+      openBtn.style.display = "inline-block";
+    }
+
+    async function login() {
+      const username = document.getElementById("login-username").value.trim();
+      const password = document.getElementById("login-password").value;
+      const status = document.getElementById("login-status");
+      status.textContent = "";
+
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        localStorage.setItem("auth_token", data.token);
+        localStorage.setItem("auth_username", data.username);
+        localStorage.setItem("auth_role", data.role);
+        setLoggedInUI(data.username, data.role);
+        closeLogin();
+      } else {
+        status.textContent = data.message || "Login failed";
+      }
+    }
+
+    async function logout() {
+      const token = localStorage.getItem("auth_token");
+      if (token) {
+        await fetch(`${API_BASE}/auth/logout`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+      }
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("auth_username");
+      localStorage.removeItem("auth_role");
+      setLoggedOutUI();
+    }
+
+    async function checkMe() {
+      const token = localStorage.getItem("auth_token");
+      if (!token) { setLoggedOutUI(); return; }
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        setLoggedInUI(data.username, data.role);
+      } else {
+        setLoggedOutUI();
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("open-login").addEventListener("click", (e) => {
+        e.preventDefault(); openLogin();
+      });
+      document.getElementById("close-login").addEventListener("click", (e) => {
+        e.preventDefault(); closeLogin();
+      });
+      document.getElementById("cancel-login").addEventListener("click", (e) => {
+        e.preventDefault(); closeLogin();
+      });
+      document.getElementById("login-backdrop").addEventListener("click", closeLogin);
+      document.getElementById("login-btn").addEventListener("click", (e) => {
+        e.preventDefault(); login();
+      });
+      document.getElementById("chip-logout").addEventListener("click", (e) => {
+        e.preventDefault(); logout();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeLogin();
+      });
+      checkMe();
+    });
+  </script>
 </body>
 </html>

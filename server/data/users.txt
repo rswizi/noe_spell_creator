@@ -1,0 +1,3 @@
+wizi,1234,admin
+jawad,1234,ser
+ebo,123,moderator

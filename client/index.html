@@ -5,6 +5,9 @@
   <title>Create a Spell</title>
   <link rel="stylesheet" href="style.css">
 </head>
+<div style="max-width:700px;margin:16px auto 0;">
+  <a class="btn btn-secondary" href="#" onclick="confirmHome(event)">← Back Home</a>
+</div>
 <body>
   <h1>Create a Spell</h1>
 
@@ -312,6 +315,13 @@ document.addEventListener("DOMContentLoaded", () => {
     prefillFromSpell(spellId);
   }
 });
+
+function confirmHome(e) {
+  e.preventDefault();
+  if (confirm("Are you sure? All unsaved modifications will be lost.")) {
+    window.location.href = "home.html";
+  }
+}
 
 </script>
 

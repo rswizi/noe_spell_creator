@@ -246,3 +246,97 @@ input[type="submit"]:hover {
   padding: 10px 16px;
   font-size: 0.95rem;
 }
+
+/* ---------- Top bar with small login button ---------- */
+.topbar {
+  max-width: 900px;
+  margin: 0 auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.topbar h1 {
+  margin: 0;
+}
+.auth-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.btn.small {
+  padding: 8px 12px;
+  font-size: 0.95rem;
+  border-radius: 8px;
+}
+.user-chip {
+  display: none; /* shown when logged in */
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: #1a1a1a;
+  border: 1px solid #c02d2d;
+  border-radius: 999px;
+  box-shadow: 0 0 6px rgba(192,45,45,.25);
+}
+.user-chip .chip-name {
+  opacity: .9;
+  font-size: .95rem;
+}
+.btn.linklike {
+  background: transparent;
+  border: 1px solid #c02d2d;
+  padding: 6px 10px;
+  font-size: .9rem;
+}
+
+/* ---------- Modal ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.65);
+  display: none;
+  z-index: 999;
+}
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal.open, .modal-backdrop.open {
+  display: flex;
+}
+.modal-card {
+  width: 420px;
+  max-width: calc(100% - 32px);
+  background: #1a1a1a;
+  border: 1px solid #c02d2d;
+  border-radius: 12px;
+  box-shadow: 0 0 18px rgba(192,45,45,.35);
+  padding: 20px;
+}
+.modal-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.modal-title {
+  font-size: 1.2rem;
+  color: #ff4a4a;
+}
+.modal-close {
+  background: transparent;
+  border: 1px solid #c02d2d;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: .9rem;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  justify-content: flex-end;
+}
