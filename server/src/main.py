@@ -3,12 +3,20 @@ import json
 import uvicorn
 import sys
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.objects.effects import load_effect
 from src.objects.spells import Spell
 
 # Create app instance
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Absolute path to /data/effects regardless of run location
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

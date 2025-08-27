@@ -87,6 +87,7 @@
 
 <script>
   let effectCount = 0;
+  const API_BASE = "http://127.0.0.1:8000";
 
 function addEffect() {
   const container = document.getElementById('effects-container');
@@ -104,7 +105,7 @@ function addEffect() {
   loadingOption.textContent = "-- Loading Effects... --";
   select.appendChild(loadingOption);
 
-  fetch("/effects")
+  fetch("${API_BASE}/effects")
     .then(res => res.json())
     .then(data => {
       select.innerHTML = `<option value="">-- Select Effect --</option>`;
@@ -151,7 +152,7 @@ function updatePreview() {
     effects: formData.getAll("effects[]") || []
   };
 
-  fetch("/costs", {
+  fetch("${API_BASE}/costs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
