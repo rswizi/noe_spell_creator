@@ -1,0 +1,8 @@
+{
+  "id": "0035",
+  "name": "Immunity VIII",
+  "description": "[Once] Apply Immunity (8) to a target.",
+  "mp_cost": 76,
+  "en_cost": 4,
+  "school": "0003"
+}

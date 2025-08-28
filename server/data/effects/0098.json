@@ -1,0 +1,8 @@
+{
+  "id": "0098",
+  "name": "Shielding",
+  "description": "[Once] Give 1 ID + P(MAG) SP to a target.",
+  "mp_cost": 12,
+  "en_cost": 1,
+  "school": "0004"
+}

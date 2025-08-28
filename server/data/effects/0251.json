@@ -1,0 +1,8 @@
+{
+  "id": "0251",
+  "name": "Double Jump",
+  "description": "[Active] You can jump twice without any platform. For an additional 1 EN, you can jump a third time.",
+  "mp_cost": 3,
+  "en_cost": 1,
+  "school": "0010"
+}

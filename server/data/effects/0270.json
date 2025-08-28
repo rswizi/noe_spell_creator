@@ -1,0 +1,8 @@
+{
+  "id": "0270",
+  "name": "Perfect Magic Clone",
+  "description": "[Active] Your clone is capable of using your spells and abilities by consuming your resources. Your clone allows you to assist in the use of your spells if it is within your Melee Range. Your ET goes up by 5 and your MS for all schools goes up by 5. Your clone is capable of undertaking Secondary Actions thanks to its Action. It can also use items if it has access.",
+  "mp_cost": 36,
+  "en_cost": 6,
+  "school": "0011"
+}

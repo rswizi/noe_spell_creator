@@ -1,0 +1,8 @@
+{
+  "id": "0010",
+  "name": "Booming Spell",
+  "description": "[Large, Unique] You deal 1 ID + P(MAG) magic damage to a target.",
+  "mp_cost": 16,
+  "en_cost": 1,
+  "school": "0002"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0161",
+  "name": "Minor Curse VI",
+  "description": "Your spell will apply to target a negative Minor Condition of level 6.",
+  "mp_cost": 24,
+  "en_cost": 2,
+  "school": "0006"
+}

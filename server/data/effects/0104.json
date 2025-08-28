@@ -1,0 +1,8 @@
+{
+  "id": "0104",
+  "name": "Great Increase",
+  "description": "You increase a target's Resistance to a nature by 3 levels.",
+  "mp_cost": 30,
+  "en_cost": 2,
+  "school": "0004"
+}

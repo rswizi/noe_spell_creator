@@ -1,0 +1,8 @@
+{
+  "id": "0219",
+  "name": "Clairvoyance",
+  "description": "Transcribes everything that is said and done in the area of effect into a mental image in your mind.",
+  "mp_cost": 28,
+  "en_cost": 1,
+  "school": "0008"
+}

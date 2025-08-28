@@ -1,0 +1,8 @@
+{
+  "id": "0280",
+  "name": "Magical Quiver",
+  "description": "[Active] Summon an ammunition pouch that allows you to always have something to reload your weapon.",
+  "mp_cost": 25,
+  "en_cost": 0,
+  "school": "0012"
+}

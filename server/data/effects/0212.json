@@ -1,0 +1,8 @@
+{
+  "id": "0212",
+  "name": "Eagle Vision",
+  "description": "[Large] You can see the presence of all creatures and humanoids of a level equal or lower than yours. Creatures of a higher level must fail a Potential or Stealth Check against your Magic DC to be detected.",
+  "mp_cost": 25,
+  "en_cost": 1,
+  "school": "0008"
+}

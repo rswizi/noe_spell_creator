@@ -1,0 +1,8 @@
+{
+  "id": "0244",
+  "name": "Superior Command",
+  "description": "You influence the targets within the area of your spell to perform a non-lethal and non-dangerous task in a repetitive loop for the duration of the spell. Targets must succeed on a Spirit check with Advantage against your Magic DC to resist the effect.",
+  "mp_cost": 30,
+  "en_cost": 2,
+  "school": "0009"
+}

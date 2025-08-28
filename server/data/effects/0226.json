@@ -1,0 +1,8 @@
+{
+  "id": "0226",
+  "name": "Player's eyes",
+  "description": "For the duration of the spell, the target's senses sharpen, allowing them to become highly attuned to the facial expressions and subtle movements of their interlocutors. If they can see their interlocutors, they gain a +2 bonus to Psychology rolls.",
+  "mp_cost": 10,
+  "en_cost": 1,
+  "school": "0009"
+}

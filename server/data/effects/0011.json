@@ -1,0 +1,8 @@
+{
+  "id": "0011",
+  "name": "Damage Smithing",
+  "description": "[Unique] You deal 1 ID + P(MAG) magic damage to a target. Note : Cannot be a Line.",
+  "mp_cost": 14,
+  "en_cost": 1,
+  "school": "0002"
+}

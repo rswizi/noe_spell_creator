@@ -1,0 +1,8 @@
+{
+  "id": "0211",
+  "name": "Hunter's Vision",
+  "description": "[Large] You can see the presence of beasts in the area of your spell and mark them for 10 minutes in your mind to track them through the walls. Each round that that effect persists, you may move the area of effect.",
+  "mp_cost": 20,
+  "en_cost": 1,
+  "school": "0008"
+}

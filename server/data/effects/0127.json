@@ -1,0 +1,8 @@
+{
+  "id": "0127",
+  "name": "Minor Enhancement III",
+  "description": "Your spell will apply to target a positive Minor Condition of level 3.",
+  "mp_cost": 10,
+  "en_cost": 1,
+  "school": "0005"
+}

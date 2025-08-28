@@ -1,0 +1,8 @@
+{
+  "id": "0254",
+  "name": "Martial",
+  "description": "[Active] To determine the tier of your combo, the lowest score is dropped; only the two others are taken into account.",
+  "mp_cost": 15,
+  "en_cost": 2,
+  "school": "0010"
+}

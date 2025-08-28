@@ -1,0 +1,8 @@
+{
+  "id": "0224",
+  "name": "Voice of the Herald",
+  "description": "For the duration of the spell, you can change the resonance, range, volume, tone, nature, and sound of a consenting target's voice at your discretion. This effect cannot be used to produce painful or harmful sounds.",
+  "mp_cost": 8,
+  "en_cost": 1,
+  "school": "0009"
+}

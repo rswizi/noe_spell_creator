@@ -1,0 +1,8 @@
+{
+  "id": "0188",
+  "name": "Turnstile",
+  "description": "[Cross] Create a Cross Shaped Turnstile that allows movement through it only in clockwise or counter clockwise (chosen when casting).",
+  "mp_cost": 6,
+  "en_cost": 1,
+  "school": "0007"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0241",
+  "name": "Word of power",
+  "description": "By uttering a magically imbued word of power, you compel a creature within range that can hear and understand you to carry out a simple, non-dangerous order on its next turn. The order must consist of a single word, such as 'run,' 'approach,' 'drop,' etc. Upon hearing the command, the target must succeed on a Spirit check against your Magic DC or be compelled to follow the order on its next turn. The spell has no effect if the command is directly harmful to the target. Once the action is completed, the spell’s effect ends.",
+  "mp_cost": 25,
+  "en_cost": 1,
+  "school": "0009"
+}

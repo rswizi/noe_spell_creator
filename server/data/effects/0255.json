@@ -1,0 +1,8 @@
+{
+  "id": "0255",
+  "name": "Defensive Adept",
+  "description": "[Active] Your Base Value of Evasion, Dodge, or Blocking can be used to evade, dodge, block, or absorb an attack with a penalty of 2.",
+  "mp_cost": 18,
+  "en_cost": 4,
+  "school": "0010"
+}

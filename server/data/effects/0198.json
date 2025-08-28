@@ -1,0 +1,8 @@
+{
+  "id": "0198",
+  "name": "Movement of Wall",
+  "description": "[Passive] By using an Action can move walls, domes and platforms that are in the range of that passive and that you (or a consenting ally) have placed on the field by a number of units equal to half your Potential Base Value. If you succeed on a Potential roll against an opponent's defense, you deal Push Damage to them. If two walls hit the target simultaneously, the damage is doubled. You can interact with the wall as long as it remains within your line of sight. If you suffer the Exhaustion status, you may use this effect as an Action (Reaction). The outcome depends on the type of defense the opponent uses: Evasion: The target is placed on top of the wall. Dodge: The target is placed in the first adjacent free square. Blocking: Prevents the wall's movement. Absorption: Destroys the magical wall(s) at the points of impact.",
+  "mp_cost": 35,
+  "en_cost": 0,
+  "school": "0007"
+}

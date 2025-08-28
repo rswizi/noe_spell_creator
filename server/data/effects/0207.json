@@ -1,0 +1,8 @@
+{
+  "id": "0207",
+  "name": "Slipping",
+  "description": "The target of this spell can slip into very tight spaces like cracks.",
+  "mp_cost": 8,
+  "en_cost": 1,
+  "school": "0008"
+}

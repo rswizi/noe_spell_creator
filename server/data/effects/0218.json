@@ -1,0 +1,8 @@
+{
+  "id": "0218",
+  "name": "Magic Mute",
+  "description": "You render the spell's targets completely undetectable by magical means.",
+  "mp_cost": 30,
+  "en_cost": 3,
+  "school": "0008"
+}

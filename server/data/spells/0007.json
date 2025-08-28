@@ -1,0 +1,17 @@
+{
+  "id": "0007",
+  "name": "Beta Test 01",
+  "activation": "Action",
+  "range": 1,
+  "aoe": "Line (9)",
+  "mp_cost": 19,
+  "en_cost": 12,
+  "duration": 1,
+  "effects": [
+    "0000",
+    "0000"
+  ],
+  "category": "Disciple",
+  "spell_type": "Complex",
+  "description": "None"
+}

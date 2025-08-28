@@ -1,0 +1,8 @@
+{
+  "id": "0235",
+  "name": "Short Memory",
+  "description": "You cause the targets of the spell to forget the last 10 seconds of their experiences if they fail an Instinct check against your Potential.",
+  "mp_cost": 20,
+  "en_cost": 1,
+  "school": "0009"
+}

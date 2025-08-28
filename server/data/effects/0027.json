@@ -1,0 +1,8 @@
+{
+  "id": "0027",
+  "name": "Healing Overload",
+  "description": "When applied to a spell from the School of Restoration, you may heal 2 more HP with that spell. This may increase the healing of a spell only once per action.",
+  "mp_cost": 7,
+  "en_cost": 0,
+  "school": "0003"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0090",
+  "name": "Negative Cleanse III",
+  "description": "[Once] Apply Cleanse (15) only to the target’s negative conditions.",
+  "mp_cost": 31,
+  "en_cost": 4,
+  "school": "0003"
+}

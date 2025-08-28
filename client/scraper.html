@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Import Effects (Admin)</title>
+  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <div class="container">
+    <h1>Import Effects</h1>
+
+    <div class="home-card">
+      <div style="display:grid; gap:10px; grid-template-columns: repeat(auto-fit,minmax(180px,1fr));">
+        <div>
+          <label for="school-name">School Name</label>
+          <input id="school-name" type="text" placeholder="e.g. Destruction" />
+        </div>
+        <div>
+          <label for="school-type">School Type</label>
+          <select id="school-type">
+            <option value="Simple">Simple</option>
+            <option value="Complex">Complex</option>
+          </select>
+        </div>
+        <div>
+          <label for="range-type">Range Type</label>
+          <select id="range-type">
+            <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+          </select>
+        </div>
+        <div>
+          <label for="aoe-type">AoE Type</label>
+          <select id="aoe-type">
+            <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:8px;">
+          <input id="is-upgrade" type="checkbox" />
+          <label for="is-upgrade" style="margin:0;">Upgrade?</label>
+        </div>
+      </div>
+
+      <label style="margin-top:14px;">Paste Effects (raw text)</label>
+      <textarea id="raw" rows="14" placeholder="Paste the effects block here..."></textarea>
+
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button class="btn" id="parse-btn">Parse</button>
+        <button class="btn btn-secondary" onclick="location.href='home.html'">← Back Home</button>
+      </div>
+    </div>
+
+    <div id="preview-card" class="home-card" style="display:none;">
+      <h3>Preview & Edit</h3>
+      <p>Review each effect. You can fix names/descriptions/MP/EN before saving.</p>
+      <div id="errors" style="color:#ff6b6b; margin:8px 0;"></div>
+      <div id="table-wrap" style="overflow:auto;">
+        <table class="table" style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left;">Name</th>
+              <th style="text-align:left;">Description</th>
+              <th style="width:100px;">MP</th>
+              <th style="width:100px;">EN</th>
+            </tr>
+          </thead>
+          <tbody id="preview-body"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button class="btn" id="confirm-btn">Confirm & Save</button>
+        <button class="btn btn-secondary" id="reparse-btn">Re-parse</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+const $ = s => document.querySelector(s);
+
+// Inputs (now explicitly referenced)
+const schoolNameInput  = $("#school-name");
+const schoolTypeSelect = $("#school-type");
+const rangeTypeSelect  = $("#range-type");
+const aoeTypeSelect    = $("#aoe-type");
+const upgradeCheckbox  = $("#is-upgrade");
+
+// Table preview model
+let PREVIEW = []; // [{name, description, mp_cost, en_cost}]
+
+// ------------ Parsing helpers ------------
+function isIntLine(s){ return /^[0-9]+$/.test((s||"").trim()); }
+
+/**
+ * Expected block:
+ * Name: Description (can continue on several lines)
+ * MP
+ * EN
+ * [blank line or next entry]
+ */
+function parseRawBlock(text){
+  const lines = text.split(/\r?\n/).map(l => l.trim());
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length){
+    // skip blanks
+    while (i < lines.length && lines[i] === "") i++;
+    if (i >= lines.length) break;
+
+    // header "Name: Description..."
+    const header = lines[i++];
+    if (!header || isIntLine(header)) throw new Error(`Expected "Name: Description" near line ${i}, got "${header}"`);
+
+    const colonIdx = header.indexOf(":");
+    if (colonIdx === -1) throw new Error(`Missing ":" in header near line ${i}: "${header}"`);
+    const name = header.slice(0, colonIdx).trim();
+    let description = header.slice(colonIdx+1).trim();
+
+    // Collect extra description/note lines up to the MP line
+    while (i < lines.length && lines[i] !== "" && !isIntLine(lines[i])) {
+      description += (description ? " " : "") + lines[i];
+      i++;
+    }
+
+    if (i >= lines.length || !isIntLine(lines[i])) {
+      throw new Error(`Missing/invalid MP after "${name}". Found: "${lines[i] || ""}"`);
+    }
+    const mp = parseInt(lines[i++], 10);
+
+    if (i >= lines.length || !isIntLine(lines[i])) {
+      throw new Error(`Missing/invalid EN after "${name}". Found: "${lines[i] || ""}"`);
+    }
+    const en = parseInt(lines[i++], 10);
+
+    out.push({ name, description, mp_cost: mp, en_cost: en });
+
+    // optional separating blanks
+    while (i < lines.length && lines[i] === "") i++;
+  }
+
+  if (!out.length) throw new Error("No effects parsed. Check the text format.");
+  return out;
+}
+
+// ------------ UI rendering ------------
+function renderPreview(){
+  const tbody = $("#preview-body");
+  tbody.innerHTML = PREVIEW.map((e, idx) => `
+    <tr>
+      <td><input data-idx="${idx}" data-key="name" value="${e.name || ""}" /></td>
+      <td><textarea data-idx="${idx}" data-key="description" rows="2">${e.description || ""}</textarea></td>
+      <td><input data-idx="${idx}" data-key="mp_cost" value="${e.mp_cost}" /></td>
+      <td><input data-idx="${idx}" data-key="en_cost" value="${e.en_cost}" /></td>
+    </tr>
+  `).join("");
+
+  // wire edits back into PREVIEW, enforce numeric MP/EN
+  tbody.querySelectorAll("input,textarea").forEach(el=>{
+    el.addEventListener("input", (ev)=>{
+      const idx = parseInt(ev.target.dataset.idx,10);
+      const key = ev.target.dataset.key;
+      let val = ev.target.value;
+      if (key === "mp_cost" || key === "en_cost") {
+        val = val.replace(/\D/g,"");
+        ev.target.value = val;
+        PREVIEW[idx][key] = val ? parseInt(val,10) : 0;
+      } else {
+        PREVIEW[idx][key] = val;
+      }
+    });
+  });
+}
+
+function validatePreview(){
+  const errs = [];
+  PREVIEW.forEach((e,i)=>{
+    if (!e.name) errs.push(`Row ${i+1}: name is empty`);
+    if (e.mp_cost === "" || isNaN(e.mp_cost)) errs.push(`Row ${i+1}: MP is not a number`);
+    if (e.en_cost === "" || isNaN(e.en_cost)) errs.push(`Row ${i+1}: EN is not a number`);
+  });
+  return errs;
+}
+
+// ------------ Events ------------
+$("#parse-btn").addEventListener("click", ()=>{
+  const schoolName = schoolNameInput.value.trim();
+  if (!schoolName) return alert("Please fill School Name first.");
+
+  try{
+    PREVIEW = parseRawBlock($("#raw").value);
+    $("#errors").textContent = "";
+    renderPreview();
+    $("#preview-card").style.display = "block";
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  }catch(e){
+    $("#preview-card").style.display = "none";
+    $("#errors").textContent = e.message;
+  }
+});
+
+$("#reparse-btn").addEventListener("click", ()=>$("#parse-btn").click());
+
+$("#confirm-btn").addEventListener("click", async ()=>{
+  const errs = validatePreview();
+  if (errs.length){ $("#errors").innerHTML = errs.join("<br>"); return; }
+
+  const school_name = schoolNameInput.value.trim();
+  if (!school_name){ alert("School Name is required."); return; }
+
+  // Payload must be FLAT — matches /effects/bulk_create in your backend
+  const payload = {
+    school_name: $("#school-name").value.trim(),
+    school_type: $("#school-type").value,
+    range_type:  $("#range-type").value,
+    aoe_type:    $("#aoe-type").value,
+    upgrade:     $("#is-upgrade").checked,   // <— nouveau nom
+    effects: PREVIEW.map(e => ({
+      name: e.name,
+      description: e.description || "",
+      mp_cost: Number(e.mp_cost),
+      en_cost: Number(e.en_cost)
+    }))
+  };
+
+  const token = localStorage.getItem("auth_token") || "";
+  try{
+    const res = await fetch(`${API_BASE}/effects/bulk_create`, {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    console.log("bulk_create response:", data);
+    if (data.status === "success"){
+      alert(`Created ${data.created.length} effects in ${data.school.name} [${data.school.id}].`);
+      location.href = "home.html";
+    }else{
+      $("#errors").textContent = data.message || "Bulk create failed";
+    }
+  }catch(e){
+    console.error(e);
+    $("#errors").textContent = "Request failed: " + e.message;
+  }
+});
+
+// Optional: gate the page to admins in the UI (still enforced by backend)
+document.addEventListener("DOMContentLoaded", ()=>{
+  const role = localStorage.getItem("auth_role");
+  if (role !== "admin") {
+    alert("Forbidden: admin only.");
+    location.href = "home.html";
+  }
+});
+</script>
+</body>
+</html>

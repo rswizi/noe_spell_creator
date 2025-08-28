@@ -1,0 +1,8 @@
+{
+  "id": "0222",
+  "name": "Colorful Veil",
+  "description": "For the duration of the spell, the target is shrouded in a dynamic, colorful veil that can mimic the surrounding environment to blend in or create a striking display to draw attention. The target gains advantage on Stealth checks in colorful environments.",
+  "mp_cost": 4,
+  "en_cost": 1,
+  "school": "0009"
+}

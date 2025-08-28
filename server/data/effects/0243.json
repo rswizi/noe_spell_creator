@@ -1,0 +1,8 @@
+{
+  "id": "0243",
+  "name": "Polyglot",
+  "description": "The individuals included in the Area of Effect of the spell can understand all the languages spoken to them.",
+  "mp_cost": 30,
+  "en_cost": 2,
+  "school": "0009"
+}

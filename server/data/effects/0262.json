@@ -1,0 +1,8 @@
+{
+  "id": "0262",
+  "name": "Clone Combo",
+  "description": "[Active] Your clone can attack unarmed using its Action. Your clone's attacks are part of your combos.",
+  "mp_cost": 19,
+  "en_cost": 3,
+  "school": "0011"
+}

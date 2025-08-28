@@ -1,0 +1,8 @@
+{
+  "id": "0050",
+  "name": "Vitality III",
+  "description": "[Once] Apply Vitality (3) to a target.",
+  "mp_cost": 15,
+  "en_cost": 1,
+  "school": "0003"
+}

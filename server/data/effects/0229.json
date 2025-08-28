@@ -1,0 +1,8 @@
+{
+  "id": "0229",
+  "name": "Minor Illusory Clone",
+  "description": "[Unique, Case] You create a clone that is inseparably linked to you and can switch places with you at will. The clone can mimic your actions, perform tasks, and has access to all your spells and abilities. However, none of their actions, spells, or abilities have any real effect—they are purely illusory.",
+  "mp_cost": 10,
+  "en_cost": 1,
+  "school": "0009"
+}

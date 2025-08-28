@@ -1,0 +1,19 @@
+{
+  "id": "0009",
+  "name": "Test x4 Effect",
+  "activation": "Action",
+  "range": 0,
+  "aoe": "A Square",
+  "mp_cost": 24,
+  "en_cost": 20,
+  "duration": 1,
+  "effects": [
+    "0000",
+    "0000",
+    "0000",
+    "0000"
+  ],
+  "category": "Adept",
+  "spell_type": "Complex",
+  "description": "None"
+}

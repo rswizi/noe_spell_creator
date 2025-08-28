@@ -1,0 +1,8 @@
+{
+  "id": "0143",
+  "name": "Intermediate Enhancement IX",
+  "description": "Your spell will apply to target a positive Intermediate Condition of level 9.",
+  "mp_cost": 60,
+  "en_cost": 3,
+  "school": "0005"
+}

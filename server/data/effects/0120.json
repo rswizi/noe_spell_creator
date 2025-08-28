@@ -1,0 +1,8 @@
+{
+  "id": "0120",
+  "name": "Robustness VII",
+  "description": "[Once] Apply Robustness (7) to a target.",
+  "mp_cost": 45,
+  "en_cost": 3,
+  "school": "0004"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0190",
+  "name": "Platform",
+  "description": "[Line] The platform occupies a single square on the ground but can extend vertically to a height equal to the spell's AoE value. As a Free Action, the caster can adjust the platform's height within its maximum range, provided it remains intact. The platform fills all spaces from the ground up to its current height. Note: The effect cannot have a duration.",
+  "mp_cost": 6,
+  "en_cost": 1,
+  "school": "0007"
+}

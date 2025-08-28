@@ -1,0 +1,8 @@
+{
+  "id": "0012",
+  "name": "Laser",
+  "description": "[Line, Unique] You deal 1 ID + P(MAG) in a straight line that is always perpendicular to you.",
+  "mp_cost": 14,
+  "en_cost": 1,
+  "school": "0002"
+}

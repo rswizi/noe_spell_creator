@@ -1,0 +1,8 @@
+{
+  "id": "0295",
+  "name": "Object Animation",
+  "description": "[Active] Control the objects in the area to make them perform a simple and repetitive task. Cannot be used to inflict damage.",
+  "mp_cost": 15,
+  "en_cost": 0,
+  "school": "0013"
+}

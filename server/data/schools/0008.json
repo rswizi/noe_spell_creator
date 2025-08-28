@@ -1,0 +1,8 @@
+{
+  "id": "0008",
+  "name": "Shadow",
+  "school_type": "Simple",
+  "range_type": "B",
+  "aoe_type": "B",
+  "upgrade": false
+}

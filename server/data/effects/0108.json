@@ -1,0 +1,8 @@
+{
+  "id": "0108",
+  "name": "Life Parry",
+  "description": "Each time a target takes an act to attack you or inflict a negative condition, it must lose 8 Hit Points (HP).",
+  "mp_cost": 8,
+  "en_cost": 1,
+  "school": "0004"
+}

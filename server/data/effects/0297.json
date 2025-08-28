@@ -1,0 +1,8 @@
+{
+  "id": "0297",
+  "name": "Magical Activation",
+  "description": "[Ritual] You infuse one of your known spells onto a square by paying the cost. Your spell will only activate if the specific conditions stated at the time of the infusion are met. You can only carry one object under Magical activation.",
+  "mp_cost": 30,
+  "en_cost": 2,
+  "school": "0013"
+}

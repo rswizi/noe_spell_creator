@@ -1,0 +1,8 @@
+{
+  "id": "0272",
+  "name": "Clone Shield",
+  "description": "Adds a Shield to the clone that prevents it from disappearing on the first hit it takes.",
+  "mp_cost": 20,
+  "en_cost": 1,
+  "school": "0011"
+}

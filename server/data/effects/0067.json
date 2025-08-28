@@ -1,0 +1,8 @@
+{
+  "id": "0067",
+  "name": "Fluidity X",
+  "description": "[Once] Apply Fluidity (10) to a target.",
+  "mp_cost": 90,
+  "en_cost": 6,
+  "school": "0003"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0022",
+  "name": "Focus Relief IV",
+  "description": "[Once] Restore 8 FO to a target.",
+  "mp_cost": 24,
+  "en_cost": 2,
+  "school": "0003"
+}

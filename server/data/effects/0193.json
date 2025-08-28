@@ -1,0 +1,8 @@
+{
+  "id": "0193",
+  "name": "Swamp",
+  "description": "[Large] The area is impassable terrain. All targets' Mobility (MO) is reduced by 4, with a minimum value of 1. Note: The effect cannot have HP.",
+  "mp_cost": 6,
+  "en_cost": 1,
+  "school": "0007"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0194",
+  "name": "Dopple",
+  "description": "[Square] You create a stationary clone that resembles you but cannot move or take any actions. To deceive an opponent, make a Potential roll against their Investigation. On a success, you may swap positions with the dopple at the moment of the attack. An ally can assist the target by making an Investigation roll on their behalf. Each time you swap positions with the clone, pay again the cost of this spell. Note: The effect cannot have HP.",
+  "mp_cost": 12,
+  "en_cost": 1,
+  "school": "0007"
+}

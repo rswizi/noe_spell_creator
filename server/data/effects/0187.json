@@ -1,0 +1,8 @@
+{
+  "id": "0187",
+  "name": "Dome",
+  "description": "[Large] Creates a dome that prevents movement and blocks vision. Can be used to trap someone or protect them. Note: The effect cannot have a duration.",
+  "mp_cost": 6,
+  "en_cost": 1,
+  "school": "0007"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0215",
+  "name": "Mental Fortress",
+  "description": "It is impossible to magically read your thoughts or force you to tell the truth.",
+  "mp_cost": 30,
+  "en_cost": 2,
+  "school": "0008"
+}

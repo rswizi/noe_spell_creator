@@ -1,0 +1,8 @@
+{
+  "id": "0247",
+  "name": "Good Fortune",
+  "description": "[Unique] Give the target of this spell the chance to reroll an Act during the duration of the spell.",
+  "mp_cost": 35,
+  "en_cost": 2,
+  "school": "0009"
+}

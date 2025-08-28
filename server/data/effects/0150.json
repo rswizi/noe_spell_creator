@@ -1,0 +1,8 @@
+{
+  "id": "0150",
+  "name": "Powerful Enhancement VI",
+  "description": "Your spell will apply to target a positive Powerful Condition of level 6.",
+  "mp_cost": 48,
+  "en_cost": 3,
+  "school": "0005"
+}

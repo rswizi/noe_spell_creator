@@ -1,0 +1,8 @@
+{
+  "id": "0024",
+  "name": "Healing",
+  "description": "[Once] Restore 1 ID + P(MAG) HP to target.",
+  "mp_cost": 12,
+  "en_cost": 1,
+  "school": "0003"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0296",
+  "name": "Magical Eye",
+  "description": "[Active] Summon a magical eye that can move half of your MAG value per round. The summon has 1 HP. Everything this eye sees is relayed to you as a mental image.",
+  "mp_cost": 30,
+  "en_cost": 1,
+  "school": "0013"
+}

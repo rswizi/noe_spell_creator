@@ -1,0 +1,8 @@
+{
+  "id": "0245",
+  "name": "Astral Projection",
+  "description": "You enchant an object with an astral projection resembling you exactly as you were at the time of the recording. The projection delivers a predefined message to anyone who touches or grabs the object.",
+  "mp_cost": 35,
+  "en_cost": 1,
+  "school": "0009"
+}

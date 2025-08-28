@@ -1,0 +1,8 @@
+{
+  "id": "0196",
+  "name": "Tunnel",
+  "description": "Targets of this effect can move underground as if traveling on the surface, leaving behind a tunnel that others can use to follow. However, the movement is noisy, and any creature within 5 squares of the target will automatically detect their presence. Note: The effect cannot have HP.",
+  "mp_cost": 12,
+  "en_cost": 2,
+  "school": "0007"
+}

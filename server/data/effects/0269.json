@@ -1,0 +1,8 @@
+{
+  "id": "0269",
+  "name": "Superior Combat Clone",
+  "description": "[Active] Your clone is capable of attacking using weapons similar to yours. Your clone can engage in unarmed attacks using its Action. When in flanking position you can immediately attack with your clone using a non damaging special attack. If it succeeds, you may consider it as a part of your combo.",
+  "mp_cost": 31,
+  "en_cost": 5,
+  "school": "0011"
+}

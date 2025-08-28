@@ -1,0 +1,8 @@
+{
+  "id": "0201",
+  "name": "Corridor",
+  "description": "[Line] You create walls on both sides of the spell's AoE, forming a corridor with a roof overhead. Both walls are a unit high and wide. Note: The effect cannot have a duration.",
+  "mp_cost": 40,
+  "en_cost": 3,
+  "school": "0007"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0239",
+  "name": "Telepathy",
+  "description": "You can speak in the minds of people included in your area of effect, and they can answer you.",
+  "mp_cost": 25,
+  "en_cost": 1,
+  "school": "0009"
+}

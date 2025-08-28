@@ -1,0 +1,8 @@
+{
+  "id": "0250",
+  "name": "Greater Mind Reading",
+  "description": "You can attempt an Incantation roll with disadvantage against the Spirit or Instinct of a target within range to access its hidden thoughts. The attempt will always be noticed unless you achieve an Overwhelming Success. While you are connected to its spirit, you automatically achieve Overwhelming Success on all Psychology rolls against the target. If you attempt to access information the target is deeply unwilling to reveal, roll again to maintain control.",
+  "mp_cost": 45,
+  "en_cost": 3,
+  "school": "0009"
+}

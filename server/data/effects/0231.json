@@ -1,0 +1,8 @@
+{
+  "id": "0231",
+  "name": "Clothing",
+  "description": "For the duration of the spell, you alter the target's appearance to resemble someone else. This transformation is purely visual and does not affect the target's body structure or voice.",
+  "mp_cost": 15,
+  "en_cost": 1,
+  "school": "0009"
+}

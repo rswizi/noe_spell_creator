@@ -1,0 +1,8 @@
+{
+  "id": "0253",
+  "name": "Provocation",
+  "description": "[Active] All those in the area of your spell are under the effect of the Condition Active Provocation (x) which compels them to attack you rather than another target. x being the range of your spell. This effect is always centered on you.",
+  "mp_cost": 10,
+  "en_cost": 4,
+  "school": "0010"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0174",
+  "name": "Intermediate Curse IX",
+  "description": "Your spell will apply to target a negative Intermediate Condition of level 9.",
+  "mp_cost": 60,
+  "en_cost": 3,
+  "school": "0006"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0257",
+  "name": "Spirit Projection",
+  "description": "[Active, Cooldown (3)] You project your spirit within the range of this spell, allowing it to pass through walls and obstacles. Your spirit can perform any action you are capable of, but it takes no damage. Meanwhile, your original body remains immobile and is shielded by a barrier that can withstand two melee hits before breaking. Once the barrier is destroyed, your body becomes vulnerable to attacks as if affected by Active Lockdown (1).",
+  "mp_cost": 30,
+  "en_cost": 2,
+  "school": "0010"
+}

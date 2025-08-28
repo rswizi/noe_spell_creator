@@ -1,0 +1,8 @@
+{
+  "id": "0237",
+  "name": "Magical Projection",
+  "description": "You can use your magic to project a vivid and fluid sensory experience to those around you. This can include showing them one of your memories, a mental image, or making them hear a sound with remarkable clarity.",
+  "mp_cost": 25,
+  "en_cost": 1,
+  "school": "0009"
+}

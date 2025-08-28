@@ -1,0 +1,8 @@
+{
+  "id": "0259",
+  "name": "Effective",
+  "description": "Reduces the cost of an Active Effect of an effect of the School of the Monk to half when added.",
+  "mp_cost": 20,
+  "en_cost": 0,
+  "school": "0010"
+}

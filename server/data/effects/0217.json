@@ -1,0 +1,8 @@
+{
+  "id": "0217",
+  "name": "Alarm",
+  "description": "[Large] Create an area of magical surveillance. All creatures that you have not authorized in the zone automatically trigger a silent alarm in your mind.",
+  "mp_cost": 25,
+  "en_cost": 1,
+  "school": "0008"
+}

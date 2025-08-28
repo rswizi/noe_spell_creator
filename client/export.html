@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Spell Creator — Export Spell</title>
+  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <div class="container">
+    <h1>Export Spell</h1>
+
+    <!-- Filters -->
+    <div class="home-card" style="margin-bottom:18px;">
+      <div class="filter-bar">
+        <input id="filter-name" type="text" placeholder="Filter by name..." />
+        <select id="filter-category">
+          <option value="">All Categories</option>
+          <option>Novice</option><option>Apprentice</option><option>Disciple</option>
+          <option>Adept</option><option>Mage</option><option>Magister</option>
+          <option>High Mage</option><option>Master</option><option>Grand Master</option>
+          <option>Archmage</option><option>Supreme Archmage</option><option>Avant-garde</option>
+        </select>
+        <select id="filter-school">
+          <option value="">All Schools</option>
+        </select>
+        <button id="clear-filters">Reset</button>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="home-card">
+      <div id="results"></div>
+    </div>
+
+    <!-- Back -->
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+    </div>
+  </div>
+
+  <!-- Flavour modal -->
+  <div id="flavour-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+  <div id="flavour-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="flavour-title" aria-hidden="true">
+    <div class="modal-card" style="max-width:720px;">
+      <header>
+        <div class="modal-title" id="flavour-title">Export Spell — Add Flavour</div>
+        <button class="modal-close" id="flavour-close" aria-label="Close">✕</button>
+      </header>
+
+      <div style="margin-bottom:10px; opacity:.9;">
+        Optional: add flavour text (supports **rich** formatting).
+      </div>
+
+      <!-- simple rich text toolbar -->
+      <div style="display:flex; gap:8px; margin-bottom:6px;">
+        <button class="btn btn-secondary small" onclick="execRT('bold')"><b>B</b></button>
+        <button class="btn btn-secondary small" onclick="execRT('italic')"><i>I</i></button>
+        <button class="btn btn-secondary small" onclick="execRT('underline')"><u>U</u></button>
+        <button class="btn btn-secondary small" onclick="execRT('insertUnorderedList')">• List</button>
+      </div>
+      <div id="flavour-editor" contenteditable="true" style="
+        min-height:140px; padding:12px; background:#101010; border:1px solid #c02d2d; border-radius:8px; ">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="flavour-cancel">Cancel</button>
+        <button class="btn" id="flavour-continue">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export view -->
+  <div class="container" id="export-view" style="display:none; margin-top:24px;">
+    <div class="home-card">
+      <h2 id="exp-title" style="margin-bottom:10px;"></h2>
+
+      <div id="exp-fields" style="display:grid; gap:10px;"></div>
+
+      <div style="margin-top:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;">Description</h3>
+          <button class="btn btn-secondary" id="copy-description">Copy Description</button>
+        </div>
+        <div id="description-preview" style="margin-top:8px; padding:12px; background:#121212; border:1px solid #c02d2d; border-radius:10px;"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="export.html">← New Export</a>
+      <a class="btn btn-secondary" href="home.html">Back Home</a>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+
+const $ = (s)=>document.querySelector(s);
+const resultsEl = $("#results");
+const nameEl = $("#filter-name");
+const categoryEl = $("#filter-category");
+const schoolEl = $("#filter-school");
+
+let ALL_SCHOOLS = [];
+let SCHOOL_BY_ID = {};
+let ALL_EFFECTS = [];   // cache to resolve effect details for description
+
+// ----- UI helpers
+function execRT(cmd) { document.execCommand(cmd, false, null); }
+
+function rowSpell(s) {
+  const schools = (s.schools||[]).map(sc=>sc.name).join(", ") || "—";
+  return `
+    <div class="effect-entry" style="justify-content:space-between;">
+      <div style="flex:1;">
+        <div style="font-weight:bold">${s.name} <span style="opacity:.7">[${s.id}]</span></div>
+        <div style="opacity:.8;font-size:.95rem">
+          ${s.category || "—"} · ${s.activation} · ${s.range} · ${s.aoe} · dur ${s.duration}
+        </div>
+        <div style="opacity:.7;font-size:.9rem">Schools: ${schools}</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" onclick="openFlavour('${s.id}')">Export</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderList(list){
+  if(!list.length){ resultsEl.innerHTML = `<p>No spells found.</p>`; return; }
+  resultsEl.innerHTML = list.map(rowSpell).join("");
+}
+
+function buildQuery(){
+  const p = new URLSearchParams();
+  const n = nameEl.value.trim();
+  const c = categoryEl.value;
+  const sch = schoolEl.value;
+  if(n) p.set("name", n);
+  if(c) p.set("category", c);
+  if(sch) p.set("school", sch);
+  return p.toString();
+}
+
+// ----- data loading
+async function loadSchools(){
+  const res = await fetch(`${API_BASE}/schools`);
+  const data = await res.json();
+  ALL_SCHOOLS = data.schools || [];
+  SCHOOL_BY_ID = {};
+  ALL_SCHOOLS.forEach(s => SCHOOL_BY_ID[String(s.id)] = s);
+
+  // fill filter
+  schoolEl.innerHTML = `<option value="">All Schools</option>`;
+  ALL_SCHOOLS.forEach(s=>{
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.name} [${s.id}]`;
+    schoolEl.appendChild(opt);
+  });
+}
+
+async function loadEffects(){
+  const res = await fetch(`${API_BASE}/effects`);
+  const data = await res.json();
+  // normalize school to {id,name}
+  ALL_EFFECTS = (data.effects || []).map(e=>{
+    const sid = String(e.school || "").trim();
+    const sch = SCHOOL_BY_ID[sid] || { id: sid, name: sid };
+    return { ...e, school: { id: sch.id, name: sch.name }};
+  });
+}
+
+async function fetchSpells(){
+  const q = buildQuery();
+  const url = q ? `${API_BASE}/spells?${q}` : `${API_BASE}/spells`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if(data.error){ resultsEl.innerHTML = `<p style="color:#ff4a4a">Error: ${data.error}</p>`; return; }
+  renderList(data.spells || []);
+}
+
+// ----- export flow
+let EXPORT_TARGET = null;
+
+function openFlavour(spellId){
+  EXPORT_TARGET = spellId;
+  $("#flavour-editor").innerHTML = ""; // reset
+  $("#flavour-modal").classList.add("open");
+  $("#flavour-backdrop").classList.add("open");
+}
+
+function closeFlavour(){
+  $("#flavour-modal").classList.remove("open");
+  $("#flavour-backdrop").classList.remove("open");
+}
+
+async function continueExport(){
+  try{
+    const res = await fetch(`${API_BASE}/spells/${encodeURIComponent(EXPORT_TARGET)}`);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    const sp = data.spell;
+
+    // combine exportable fields
+    const fields = [
+      ["MP Cost", sp.mp_cost],
+      ["EN Cost", sp.en_cost],
+      ["Activation", sp.activation],
+      ["Range", sp.range],
+      ["AoE", sp.aoe],
+      ["Duration", sp.duration],
+      ["Category", sp.category],
+    ];
+
+    // build description HTML
+    const flavourHTML = $("#flavour-editor").innerHTML.trim();
+    const line = `<hr style="border:0;border-top:1px solid #c02d2d;margin:10px 0;">`;
+    const italicOpen = `<div style="font-style:italic">`;
+    const italicClose = `</div>`;
+
+    // resolve effects with names + descriptions
+    const byId = {};
+    ALL_EFFECTS.forEach(e => byId[String(e.id)] = e);
+
+    // count occurrences of each effect
+    const counts = {};
+    (sp.effects || []).forEach(eid => {
+        const key = String(eid);
+        counts[key] = (counts[key] || 0) + 1;
+    });
+
+    // now render unique lines
+    const effectLines = Object.entries(counts).map(([eid, count]) => {
+        const e = byId[eid] || { name: `[${eid}]`, description: "" };
+        const desc = e.description || "";
+        const suffix = count > 1 ? ` [x${count}]` : "";
+        return `<div><b>${e.name}${suffix}</b>: ${desc}</div>`;
+    }).join("");
+
+    const descHTML =
+      (flavourHTML ? `${flavourHTML}${line}` : "") +
+      `${italicOpen}${effectLines}${italicClose}`;
+
+    // fill UI
+    $("#exp-title").textContent = `${sp.name} [${sp.id}]`;
+
+    const fieldsWrap = $("#exp-fields");
+    fieldsWrap.innerHTML = "";
+    fields.forEach(([label, val])=>{
+      const id = `copy-${label.replace(/\s+/g,'-').toLowerCase()}`;
+      fieldsWrap.insertAdjacentHTML("beforeend", `
+        <div style="display:flex; justify-content:space-between; align-items:center; border:1px solid #c02d2d; padding:10px; border-radius:10px;">
+          <div><strong>${label}:</strong> <span id="${id}-val">${val}</span></div>
+          <button class="btn btn-secondary" onclick="copyText('${id}-val')">Copy</button>
+        </div>
+      `);
+    });
+
+    $("#description-preview").innerHTML = descHTML;
+
+    // copy description button (HTML + plain)
+    $("#copy-description").onclick = () => copyRich(descHTML);
+
+    // Show export section
+    closeFlavour();
+    $("#export-view").style.display = "block";
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  }catch(e){
+    alert("Export failed: " + e.message);
+  }
+}
+
+// ----- copy helpers (preserve formatting)
+async function copyRich(html){
+  try{
+    const blobHtml = new Blob([html], { type: "text/html" });
+    // fallback plain text (strip tags)
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    const plain = tmp.innerText;
+
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/html": blobHtml,
+        "text/plain": new Blob([plain], { type: "text/plain" })
+      })
+    ]);
+    alert("Description copied (with formatting).");
+  }catch(err){
+    // fallback: select element content
+    const el = $("#description-preview");
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand("copy");
+    sel.removeAllRanges();
+    alert("Description copied.");
+  }
+}
+
+function copyText(spanId){
+  const text = document.getElementById(spanId).innerText;
+  navigator.clipboard.writeText(String(text)).then(
+    ()=>alert("Copied."),
+    ()=>alert("Copy failed.")
+  );
+}
+
+// ----- init
+function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+document.addEventListener("DOMContentLoaded", async ()=>{
+  // load schools first (needed to map effects)
+  await loadSchools();
+  await loadEffects();
+  await fetchSpells();
+
+  const run = debounce(fetchSpells, 300);
+  nameEl.addEventListener("input", run);
+  categoryEl.addEventListener("change", run);
+  schoolEl.addEventListener("change", run);
+  $("#clear-filters").addEventListener("click", ()=>{
+    nameEl.value=""; categoryEl.value=""; schoolEl.value=""; fetchSpells();
+  });
+
+  $("#flavour-close").addEventListener("click", closeFlavour);
+  $("#flavour-cancel").addEventListener("click", closeFlavour);
+  $("#flavour-continue").addEventListener("click", continueExport);
+  $("#flavour-backdrop").addEventListener("click", closeFlavour);
+
+  // ESC to close modal
+  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeFlavour(); });
+});
+</script>
+</body>
+</html>

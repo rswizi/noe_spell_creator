@@ -1,0 +1,8 @@
+{
+  "id": "0026",
+  "name": "Idol of Healing",
+  "description": "Create a Totem that will gain one charge as long as you cast a spell once a turn. At any given time, as Free Action (Reaction), you may release the power of the Totem upon a target of your choice and heal as much HP as 1 ID per charge accumulated.",
+  "mp_cost": 28,
+  "en_cost": 2,
+  "school": "0003"
+}

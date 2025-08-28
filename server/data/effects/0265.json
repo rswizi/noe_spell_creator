@@ -1,0 +1,8 @@
+{
+  "id": "0265",
+  "name": "Spy Clone",
+  "description": "[Active] Your clone takes on a different appearance from your own. You can see and hear through it.",
+  "mp_cost": 20,
+  "en_cost": 1,
+  "school": "0011"
+}

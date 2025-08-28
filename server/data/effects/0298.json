@@ -1,0 +1,8 @@
+{
+  "id": "0298",
+  "name": "Magical Barrier",
+  "description": "[Active] Create in the AoE of your spell a magical shield that offers all targets a bonus of 2 applicable only for the defense against magical projectiles and spells, as well as the possibility to use your Absorption Base Value to defend against those same attacks.",
+  "mp_cost": 25,
+  "en_cost": 1,
+  "school": "0013"
+}

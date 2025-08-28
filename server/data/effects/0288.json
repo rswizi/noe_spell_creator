@@ -1,0 +1,8 @@
+{
+  "id": "0288",
+  "name": "Magical Lock",
+  "description": "[Square] Place a magical lock on a door. This door is impossible to open by others unless they exceed a potential roll equal to your base value in Potential +10. Each attempt to open the door consumes as much EN as you infused into your spell to cast it. The lock lasts until someone successfully opens it. It is possible to attempt to open it with a Sleight of hand roll if you are in possession of an arcane stone.",
+  "mp_cost": 30,
+  "en_cost": 0,
+  "school": "0013"
+}

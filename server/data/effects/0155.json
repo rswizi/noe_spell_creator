@@ -1,0 +1,8 @@
+{
+  "id": "0155",
+  "name": "Additional Condition",
+  "description": "Your spell may apply one additional condition.",
+  "mp_cost": 2,
+  "en_cost": 0,
+  "school": "0006"
+}

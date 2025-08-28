@@ -1,0 +1,8 @@
+{
+  "id": "0213",
+  "name": "Necrothermy",
+  "description": "Cool your Body to be as cold as an ice cube. You cannot be detected by thermal vision.",
+  "mp_cost": 20,
+  "en_cost": 1,
+  "school": "0008"
+}

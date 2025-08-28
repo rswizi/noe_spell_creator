@@ -1,0 +1,8 @@
+{
+  "id": "0266",
+  "name": "Magic Clone",
+  "description": "[Active] Your clone is capable of using your spells and abilities by consuming your resources.",
+  "mp_cost": 27,
+  "en_cost": 4,
+  "school": "0011"
+}

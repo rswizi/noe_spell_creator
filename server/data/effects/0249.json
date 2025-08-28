@@ -1,0 +1,8 @@
+{
+  "id": "0249",
+  "name": "Bravery",
+  "description": "You immunize a target to the Fear condition. You grant them a +2 Modifier in Instinct and Spirit acts.",
+  "mp_cost": 35,
+  "en_cost": 2,
+  "school": "0009"
+}

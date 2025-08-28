@@ -1,0 +1,8 @@
+{
+  "id": "0260",
+  "name": "Useful Clone",
+  "description": "[Active] Your clone is capable of undertaking Secondary Actions thanks to its Action. It can also use objects if it has access.",
+  "mp_cost": 14,
+  "en_cost": 2,
+  "school": "0011"
+}

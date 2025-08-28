@@ -1,0 +1,8 @@
+{
+  "id": "0197",
+  "name": "Toxic Marsh",
+  "description": "[Large] Targets within this terrain must choose at the start of each Round to either lose 10 HP or 1 EN. If the cost of the effect is paid multiple times, the penalties are cumulative. Note: The effect cannot have HP.",
+  "mp_cost": 11,
+  "en_cost": 1,
+  "school": "0007"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0105",
+  "name": "Great Reduction",
+  "description": "You lower a target's resistance to a nature by 3 levels.",
+  "mp_cost": 30,
+  "en_cost": 2,
+  "school": "0004"
+}

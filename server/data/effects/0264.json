@@ -1,0 +1,8 @@
+{
+  "id": "0264",
+  "name": "Clone of Magical Assistance",
+  "description": "[Active] Your clone is capable of undertaking Secondary Actions thanks to its Action. It can also use items if it has access. Your clone allows you to assist in the use of your spells if it is within your Melee Range. Your ET goes up by 5 and your MS for all schools goes up by 5.",
+  "mp_cost": 20,
+  "en_cost": 3,
+  "school": "0011"
+}

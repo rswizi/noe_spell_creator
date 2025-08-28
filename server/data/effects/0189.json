@@ -1,0 +1,8 @@
+{
+  "id": "0189",
+  "name": "Drill",
+  "description": "Create a hole in any non magical floor as long as it’s dirt, cement, wood on common rocks.",
+  "mp_cost": 8,
+  "en_cost": 1,
+  "school": "0007"
+}

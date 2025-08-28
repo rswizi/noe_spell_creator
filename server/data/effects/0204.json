@@ -1,0 +1,8 @@
+{
+  "id": "0204",
+  "name": "Invisibility",
+  "description": "The target of the spell, granting them True Active Camouflage and making them completely impossible to see. That said, they are still detectable due to their footsteps, noises, or their energy. Attacking a target or casting a non-stealthy spell automatically ends their invisibility.",
+  "mp_cost": 14,
+  "en_cost": 1,
+  "school": "0008"
+}

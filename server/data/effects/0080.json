@@ -1,0 +1,8 @@
+{
+  "id": "0080",
+  "name": "Random Cleanse III",
+  "description": "[Once] Apply Cleanse (15) randomly to the target’s condition.",
+  "mp_cost": 25,
+  "en_cost": 3,
+  "school": "0003"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "0203",
+  "name": "Mist",
+  "description": "[Large] Those who are in the mist are under True Active Blindness and True Active Camouflage. If anything else allows you to see through the mist or sense their presence, the penalties from the True Active Blindness imposed by the mist do not apply. Note: This spell cannot be placed in a targeted effect. Furthermore, these conditions also affect the caster.",
+  "mp_cost": 4,
+  "en_cost": 1,
+  "school": "0008"
+}
