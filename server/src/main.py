@@ -210,7 +210,7 @@ async def bulk_create_effects(request: Request):
             raise HTTPException(status_code=400, detail="effects must be a non-empty list")
 
         # make/find school
-        school = ensure_school(school_name, school_type, range_type, aoe_type, is_upgrade)
+        school = ensure_school(school_name, school_type, range_type, aoe_type, upgrade)
 
         created = []
         for e in effects:

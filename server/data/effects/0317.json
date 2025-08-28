@@ -1,0 +1,8 @@
+{
+  "id": "0317",
+  "name": "Time Travel",
+  "description": "You and the targets of your spell can project your minds into the past or a potential future within a specific area, limited to a radius of 10 units (20m/150ft) from your current location. The spell lasts for 30 seconds, but you may extend its duration by paying its cost again. You exist purely as spectators and cannot interact in any way with what you witness. While in this state, you can speed up or slow down time to skip unimportant periods or move faster. Since you are intangible to the world you observe, you can pass through objects and barriers as if you were mere holograms. All of this happens within your mind—your physical bodies remain tangible and present at the location where you cast the spell, appearing as if in deep meditation. Note : If the time period you attempt to observe was under the effect of a Veil of Time, you cannot travel back to that moment.",
+  "mp_cost": 50,
+  "en_cost": 10,
+  "school": "0015"
+}

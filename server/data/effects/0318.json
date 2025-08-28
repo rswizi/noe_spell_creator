@@ -1,0 +1,8 @@
+{
+  "id": "0318",
+  "name": "Time Stop",
+  "description": "(Joker, Self) Gain immediately 4 actions.",
+  "mp_cost": 60,
+  "en_cost": 10,
+  "school": "0015"
+}

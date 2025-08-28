@@ -1,0 +1,8 @@
+{
+  "id": "0314",
+  "name": "Decay's Whisper",
+  "description": "You physically age a target by 10 years. The target will feel the effects of this magic and their FO decreases by 10. However, you must succeed on an Enchantment check against their Resistance for the effect to take hold.",
+  "mp_cost": 40,
+  "en_cost": 15,
+  "school": "0015"
+}

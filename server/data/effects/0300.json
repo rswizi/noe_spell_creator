@@ -1,0 +1,8 @@
+{
+  "id": "0300",
+  "name": "Alternative Cooldown   (2)",
+  "description": "When the effect of the spell ends, you need to wait at least 2 rounds to use it again. -2 -1 Alternative Cooldown  (5) : When the effect of the spell ends, you need to wait at least 5 rounds to use it again. -5 -2 Targeted Effect : Affects only selected targets.",
+  "mp_cost": 5,
+  "en_cost": 1,
+  "school": "0014"
+}

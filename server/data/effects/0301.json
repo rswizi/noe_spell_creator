@@ -1,0 +1,8 @@
+{
+  "id": "0301",
+  "name": "Trap",
+  "description": "You cast the spell on a square. One must walk over it to activate it. You gain a +2 to hit the targets. If the spell is stealthy the traps become invisible to everyone but you.",
+  "mp_cost": 0,
+  "en_cost": 1,
+  "school": "0014"
+}

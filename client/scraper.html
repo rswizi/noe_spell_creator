@@ -36,8 +36,8 @@
           </select>
         </div>
         <div style="display:flex;align-items:flex-end;gap:8px;">
-          <input id="is-upgrade" type="checkbox" />
-          <label for="is-upgrade" style="margin:0;">Upgrade?</label>
+          <input id="upgrade" type="checkbox" />
+          <label for="upgrade" style="margin:0;">Upgrade?</label>
         </div>
       </div>
 
@@ -83,7 +83,7 @@ const schoolNameInput  = $("#school-name");
 const schoolTypeSelect = $("#school-type");
 const rangeTypeSelect  = $("#range-type");
 const aoeTypeSelect    = $("#aoe-type");
-const upgradeCheckbox  = $("#is-upgrade");
+const upgradeCheckbox  = $("#upgrade");
 
 // Table preview model
 let PREVIEW = []; // [{name, description, mp_cost, en_cost}]
@@ -214,7 +214,7 @@ $("#confirm-btn").addEventListener("click", async ()=>{
     school_type: $("#school-type").value,
     range_type:  $("#range-type").value,
     aoe_type:    $("#aoe-type").value,
-    upgrade:     $("#is-upgrade").checked,   // <— nouveau nom
+    upgrade:     $("#upgrade").checked,   // <— nouveau nom
     effects: PREVIEW.map(e => ({
       name: e.name,
       description: e.description || "",

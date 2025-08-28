@@ -1,0 +1,8 @@
+{
+  "id": "0014",
+  "name": "Simple Upgrade",
+  "school_type": "Simple",
+  "upgrade": true,
+  "range_type": "A",
+  "aoe_type": "A"
+}

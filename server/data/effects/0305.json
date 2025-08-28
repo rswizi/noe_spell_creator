@@ -1,0 +1,8 @@
+{
+  "id": "0305",
+  "name": "Higher Emanation",
+  "description": "Your spell is not considered a projectile. You do not need line of sight to cast your spell.",
+  "mp_cost": 10,
+  "en_cost": 2,
+  "school": "0014"
+}

@@ -100,6 +100,16 @@
 
 <script>
 
+function getEffectById(id) {
+  if (!id) return null;
+  return ALL_EFFECTS.find(e => String(e.id) === String(id)) || null;
+}
+
+function setEntryDescription(descEl, effectId) {
+  const eff = getEffectById(effectId);
+  descEl.textContent = eff ? (eff.description || "(No description)") : "";
+}
+
 function normalize(s) { return (s || "").toString().toLowerCase().trim(); }
 
 function currentEffectFilters() {
@@ -158,7 +168,6 @@ function effectMatchesFilters(effect, filters) {
   // builds options for a single <select>, preserving existing selected value if possible
   function populateEffectSelect(selectEl, effects, keepValue = true) {
     const prevVal = keepValue ? selectEl.value : "";
-    // header
     selectEl.innerHTML = `<option value="">-- Select Effect --</option>`;
     effects.forEach(effect => {
       const opt = document.createElement("option");
@@ -169,10 +178,17 @@ function effectMatchesFilters(effect, filters) {
       opt.textContent = `[${effect.id}] ${effect.name}${schoolBadge}`;
       selectEl.appendChild(opt);
     });
+
     if (keepValue && prevVal) {
-      // if old value still exists in the new list, keep it selected
       const hasPrev = effects.some(e => String(e.id) === String(prevVal));
       selectEl.value = hasPrev ? prevVal : "";
+    }
+
+    // if this select sits in an .effect-entry, refresh its description
+    const entry = selectEl.closest(".effect-entry");
+    if (entry) {
+      const descEl = entry.querySelector(".effect-desc");
+      if (descEl) setEntryDescription(descEl, selectEl.value);
     }
   }
 
@@ -182,6 +198,7 @@ function effectMatchesFilters(effect, filters) {
       .querySelectorAll('#effects-container select[name="effects[]"]')
       .forEach(sel => populateEffectSelect(sel, filtered, /*keepValue*/ true));
   }
+
 
   // ---------- fetchers ----------
   async function loadSchools() {
@@ -226,38 +243,57 @@ function effectMatchesFilters(effect, filters) {
   async function addEffectPrefilled(effectId) {
     return new Promise((resolve) => {
       const container = document.getElementById('effects-container');
+
       const entry = document.createElement('div');
       entry.className = 'effect-entry';
       entry.id = `effect-${effectCount}`;
+
+      const leftCol = document.createElement('div');
+      leftCol.className = 'effect-col';
 
       const select = document.createElement('select');
       select.name = "effects[]";
       select.required = true;
 
-      populateEffectSelect(select, getFilteredEffects(), false);
+      populateEffectSelect(select, getFilteredEffects(), /*keepValue*/ false);
       select.value = effectId;
-      select.addEventListener('change', updatePreview);
+
+      const desc = document.createElement('div');
+      desc.className = 'effect-desc';
+      setEntryDescription(desc, select.value);
+
+      select.addEventListener('change', () => {
+        setEntryDescription(desc, select.value);
+        updatePreview();
+      });
+
+      leftCol.appendChild(select);
+      leftCol.appendChild(desc);
 
       const button = document.createElement("button");
       button.type = "button";
       button.innerText = "❌";
       button.onclick = () => { entry.remove(); updatePreview(); };
 
-      entry.appendChild(select);
+      entry.appendChild(leftCol);
       entry.appendChild(button);
-      container.appendChild(entry);
 
+      container.appendChild(entry);
       effectCount++;
       resolve();
     });
-}
+  }
 
   // ---------- builder bits (your existing logic, with tweaks) ----------
   function addEffect() {
     const container = document.getElementById('effects-container');
+
     const entry = document.createElement('div');
     entry.className = 'effect-entry';
     entry.id = `effect-${effectCount}`;
+
+    const leftCol = document.createElement('div');
+    leftCol.className = 'effect-col';
 
     const select = document.createElement('select');
     select.name = "effects[]";
@@ -265,19 +301,31 @@ function effectMatchesFilters(effect, filters) {
 
     // initial population with current filters
     populateEffectSelect(select, getFilteredEffects(), /*keepValue*/ false);
-    select.addEventListener('change', updatePreview);
+
+    const desc = document.createElement('div');
+    desc.className = 'effect-desc';
+    setEntryDescription(desc, select.value);
+
+    select.addEventListener('change', () => {
+      setEntryDescription(desc, select.value);
+      updatePreview();
+    });
+
+    leftCol.appendChild(select);
+    leftCol.appendChild(desc);
 
     const button = document.createElement("button");
     button.type = "button";
     button.innerText = "✖";
     button.onclick = () => { entry.remove(); updatePreview(); };
 
-    entry.appendChild(select);
+    entry.appendChild(leftCol);
     entry.appendChild(button);
-    container.appendChild(entry);
 
+    container.appendChild(entry);
     effectCount++;
   }
+
 
   function updatePreview() {
     const form = document.getElementById("spell-form");
@@ -338,35 +386,6 @@ function effectMatchesFilters(effect, filters) {
       console.error("Autofill error:", e);
       alert("Failed to load template: " + e.message);
     }
-  }
-
-  async function addEffectPrefilled(effectId) {
-    return new Promise((resolve) => {
-      const container = document.getElementById('effects-container');
-      const entry = document.createElement('div');
-      entry.className = 'effect-entry';
-      entry.id = `effect-${effectCount}`;
-
-      const select = document.createElement('select');
-      select.name = "effects[]";
-      select.required = true;
-
-      populateEffectSelect(select, getFilteredEffects(), /*keepValue*/ false);
-      select.value = effectId; // set after options
-      select.addEventListener('change', updatePreview);
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.innerText = "❌";
-      button.onclick = () => { entry.remove(); updatePreview(); };
-
-      entry.appendChild(select);
-      entry.appendChild(button);
-      container.appendChild(entry);
-
-      effectCount++;
-      resolve();
-    });
   }
 
   // ---------- DOM boot ----------

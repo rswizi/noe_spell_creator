@@ -1,0 +1,8 @@
+{
+  "id": "0304",
+  "name": "Emanation",
+  "description": "Your spell is not considered as a projectile. However, you must be able to see (or sense) the target of your spell. Furthermore, area effects are not blocked by walls.",
+  "mp_cost": 5,
+  "en_cost": 1,
+  "school": "0014"
+}

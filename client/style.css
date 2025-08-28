@@ -33,6 +33,11 @@ form {
   box-shadow: 0 0 12px rgba(192, 45, 45, 0.4);
 }
 
+.effect-entry { display:flex; align-items:flex-start; gap:8px; margin:6px 0; }
+.effect-desc  { font-size:.92rem; opacity:.85; margin:4px 0 0 0; }
+.effect-col   { display:flex; flex-direction:column; flex:1; }
+
+
 label {
   display: block;
   margin-bottom: 8px;
