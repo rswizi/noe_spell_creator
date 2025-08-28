@@ -31,16 +31,18 @@ app.add_middleware(
 
 # Absolute path to /data/effects regardless of run location
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-EFFECTS_DIR = os.path.join(BASE_DIR, "..", "data", "effects")
-SPELLS_DIR = os.path.join(BASE_DIR, "..", "data", "spells")
-os.makedirs(SPELLS_DIR, exist_ok=True)
-SCHOOLS_DIR = os.path.join(BASE_DIR, "..", "data", "schools")
-os.makedirs(SCHOOLS_DIR, exist_ok=True)
-USERS_FILE = os.path.join(BASE_DIR, "..", "data", "users.txt")
+DATA_ROOT = os.getenv("DATA_ROOT", os.path.join(BASE_DIR, "..", "data"))
+
+EFFECTS_DIR = os.path.join(DATA_ROOT, "effects")
+SPELLS_DIR  = os.path.join(DATA_ROOT, "spells")
+SCHOOLS_DIR = os.path.join(DATA_ROOT, "schools")
+LOGS_DIR    = os.path.join(DATA_ROOT, "logs")
+USERS_FILE  = os.path.join(DATA_ROOT, "users.txt")
+
+for d in (EFFECTS_DIR, SPELLS_DIR, SCHOOLS_DIR, LOGS_DIR):
+    os.makedirs(d, exist_ok=True)
+
 SESSIONS: Dict[str, Tuple[str, str]] = {}  # token -> (username, role)
-LOGS_DIR = os.path.join(BASE_DIR, "..", "data", "logs")
-os.makedirs(LOGS_DIR, exist_ok=True)
-AUDIT_LOG = os.path.join(LOGS_DIR, "db_audit.log")
 
 def load_users():
     users = {}
