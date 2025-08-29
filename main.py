@@ -6,18 +6,20 @@ import secrets
 import datetime
 import json
 import os
-from typing import Optional, Tuple
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Query
-from typing import Dict, Tuple
-from fastapi import HTTPException
+from typing import Dict, Tuple, Optional
+from db_mongo import get_col, next_id_str
+from db_mongo import get_db
+from db_mongo import ensure_indexes
 
 
-from src.objects.effects import load_effect
-from src.objects.spells import Spell, load_spell
-from src.objects.schools import load_school
+from server.src.objects.effects import load_effect
+from server.src.objects.spells import Spell, load_spell
+from server.src.objects.schools import load_school
 
+ensure_indexes()
 
 # Create app instance
 app = FastAPI()
@@ -29,15 +31,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Absolute path to /data/effects regardless of run location
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_ROOT = os.getenv("DATA_ROOT", os.path.join(BASE_DIR, "..", "data"))
+BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
+DATA_ROOT = os.getenv("DATA_ROOT", os.path.join(BASE_DIR, "server", "data"))
 
 EFFECTS_DIR = os.path.join(DATA_ROOT, "effects")
 SPELLS_DIR  = os.path.join(DATA_ROOT, "spells")
 SCHOOLS_DIR = os.path.join(DATA_ROOT, "schools")
 LOGS_DIR    = os.path.join(DATA_ROOT, "logs")
 USERS_FILE  = os.path.join(DATA_ROOT, "users.txt")
+AUDIT_LOG   = os.path.join(LOGS_DIR, "audit.log")
 
 for d in (EFFECTS_DIR, SPELLS_DIR, SCHOOLS_DIR, LOGS_DIR):
     os.makedirs(d, exist_ok=True)
@@ -75,16 +77,7 @@ def serialize_spell(spell: Spell) -> dict:
     return d
 
 def get_next_spell_id() -> str:
-    """Find the highest numeric ID in /data/spells and return next one as zero-padded string."""
-    existing_ids = []
-    for fname in os.listdir(SPELLS_DIR):
-        if fname.endswith(".json"):
-            try:
-                existing_ids.append(int(os.path.splitext(fname)[0]))
-            except ValueError:
-                continue
-    next_id = (max(existing_ids) + 1) if existing_ids else 0
-    return f"{next_id:04d}"
+    return next_id_str("spells", padding=4)
 
 def require_auth(request: Request, roles: Optional[list[str]] = None) -> Tuple[str, str]:
     """Return (username, role) or raise Exception."""
@@ -112,26 +105,10 @@ def write_audit(action: str, username: str, spell_id: str, before: dict | None, 
 
 # --- ID helpers ---
 def get_next_effect_id() -> str:
-    existing_ids = []
-    for fname in os.listdir(EFFECTS_DIR):
-        if fname.endswith(".json"):
-            try:
-                existing_ids.append(int(os.path.splitext(fname)[0]))
-            except ValueError:
-                pass
-    next_id = (max(existing_ids) + 1) if existing_ids else 0
-    return f"{next_id:04d}"
+    return next_id_str("effects", padding=4)
 
 def get_next_school_id() -> str:
-    existing_ids = []
-    for fname in os.listdir(SCHOOLS_DIR):
-        if fname.endswith(".json"):
-            try:
-                existing_ids.append(int(os.path.splitext(fname)[0]))
-            except ValueError:
-                pass
-    next_id = (max(existing_ids) + 1) if existing_ids else 0
-    return f"{next_id:04d}"
+    return next_id_str("schools", padding=4)
 
 def find_school_by_name(name: str) -> Optional[dict]:
     # naive scan
@@ -195,7 +172,6 @@ from fastapi import HTTPException
 @app.post("/effects/bulk_create")
 async def bulk_create_effects(request: Request):
     try:
-        # admin only
         username, role = require_auth(request, ["admin"])
         body = await request.json()
 
@@ -205,72 +181,49 @@ async def bulk_create_effects(request: Request):
         aoe_type    = (body.get("aoe_type")    or "A").strip()
         upgrade     = bool(body.get("upgrade", body.get("is_upgrade", False)))
         effects     = body.get("effects") or []
-
         if not school_name:
             raise HTTPException(status_code=400, detail="school_name is required")
-        if not effects or not isinstance(effects, list):
+        if not effects:
             raise HTTPException(status_code=400, detail="effects must be a non-empty list")
 
-        # make/find school
-        school = ensure_school(school_name, school_type, range_type, aoe_type, upgrade)
+        sch_col = get_col("schools")
+        eff_col = get_col("effects")
+
+        # ensure / upsert school by name
+        existing = sch_col.find_one({"name": {"$regex": f"^{school_name}$", "$options": "i"}})
+        if existing:
+            sid = existing["id"]
+            sch_col.update_one(
+                {"id": sid},
+                {"$set": {"school_type": school_type, "range_type": range_type, "aoe_type": aoe_type, "upgrade": bool(upgrade)}}
+            )
+            school = sch_col.find_one({"id": sid}, {"_id": 0})
+        else:
+            sid = get_next_school_id()
+            school = {
+                "id": sid, "name": school_name, "school_type": school_type,
+                "upgrade": bool(upgrade), "range_type": range_type, "aoe_type": aoe_type
+            }
+            sch_col.insert_one(school)
 
         created = []
         for e in effects:
             name = (e.get("name") or "").strip()
             desc = (e.get("description") or "").strip()
-            mp   = e.get("mp_cost")
-            en   = e.get("en_cost")
-
-            if not name:
-                raise HTTPException(status_code=400, detail="Effect name missing")
-            # numeric guard
             try:
-                mp = int(mp)
-                en = int(en)
+                mp   = int(e.get("mp_cost"))
+                en   = int(e.get("en_cost"))
             except Exception:
                 raise HTTPException(status_code=400, detail=f"Non-numeric MP/EN in effect '{name}'")
 
             eff_id = get_next_effect_id()
-            rec = {
-                "id": eff_id,
-                "name": name,
-                "description": desc,
-                "mp_cost": mp,
-                "en_cost": en,
-                "school": school["id"]
-            }
-            with open(os.path.join(EFFECTS_DIR, f"{eff_id}.json"), "w", encoding="utf-8") as f:
-                json.dump(rec, f, ensure_ascii=False, indent=2)
-            created.append(rec["id"])
+            rec = {"id": eff_id, "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school["id"]}
+            eff_col.insert_one(rec)
+            created.append(eff_id)
 
-        # audit
-        write_audit(
-            "bulk_create_effects",
-            username,
-            spell_id="—", 
-            before=None,
-            after={
-                "school": school,
-                "range_type": range_type,
-                "aoe_type": aoe_type,
-                "upgrade": upgrade,
-                "created": created
-            }
-        )
-
-        return {
-            "status": "success",
-            "school": {
-                "id": school["id"],
-                "name": school["name"],
-                "school_type": school["school_type"],
-                "upgrade": school.get("upgrade", False),
-                "range_type": school.get("range_type"),
-                "aoe_type": school.get("aoe_type")
-            },
-            "created": created
-        }
-
+        write_audit("bulk_create_effects", username, spell_id="—", before=None,
+                    after={"school": school, "range_type": range_type, "aoe_type": aoe_type, "upgrade": upgrade, "created": created})
+        return {"status": "success", "school": school, "created": created}
     except HTTPException as he:
         return {"status": "error", "message": he.detail}
     except Exception as e:
@@ -282,48 +235,30 @@ def read_root():
 
 @app.get("/effects")
 def get_effects(name: str | None = Query(default=None), school: str | None = Query(default=None)):
-    effects = []
-    for filename in os.listdir(EFFECTS_DIR):
-        if not filename.endswith(".json"):
-            continue
-        file_path = os.path.join(EFFECTS_DIR, filename)
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                eff = json.load(f)
+    col = get_col("effects")
+    sch_col = get_col("schools")
 
-            # --- normalize school shape to string id for response ---
-            # old: {"school":{"id":"0002"}}  -> new: {"school":"0002"}
-            sch = eff.get("school")
-            if isinstance(sch, dict) and "id" in sch:
-                eff["school"] = sch["id"]
+    q = {}
+    if name:
+        # case-insensitive substring match
+        q["name"] = {"$regex": name, "$options": "i"}
+    if school:
+        # accept id or school name via lookup
+        # try by id first
+        or_terms = [{"school": {"$regex": school, "$options": "i"}}]
+        # also match by school name → find matching school ids
+        ids = [s["id"] for s in sch_col.find({"name": {"$regex": school, "$options": "i"}}, {"id": 1})]
+        if ids:
+            or_terms.append({"school": {"$in": ids}})
+        q["$or"] = or_terms
 
-            # --- attach school_name (convenience for UI) ---
-            school_id = eff.get("school")
-            school_name = ""
-            if isinstance(school_id, str) and school_id:
-                try:
-                    s = load_school(school_id)
-                    school_name = getattr(s, "name", school_id)
-                except Exception:
-                    school_name = school_id
-            eff["school_name"] = school_name
-
-            # --- filters ---
-            ok = True
-            if name:
-                ok = name.lower() in (eff.get("name", "").lower())
-            if ok and school:
-                sch_low = school.lower()
-                sid = (eff.get("school") or "").lower()
-                sname = (eff.get("school_name") or "").lower()
-                ok = (sch_low in sid) or (sch_low in sname)
-
-            if ok:
-                effects.append(eff)
-
-        except Exception as e:
-            print(f"Error reading {file_path}: {e}")
-    return {"effects": effects}
+    docs = list(col.find(q, {"_id": 0}))
+    # Attach school_name to match your UI convenience
+    school_map = {s["id"]: s.get("name", s["id"]) for s in sch_col.find({}, {"_id": 0, "id": 1, "name": 1})}
+    for e in docs:
+        sid = str(e.get("school") or "")
+        e["school_name"] = school_map.get(sid, sid)
+    return {"effects": docs}
 
 @app.post("/costs")
 async def get_costs(request: Request):
@@ -362,29 +297,21 @@ async def get_costs(request: Request):
 
 
 @app.get("/schools")
+@app.get("/schools")
 def list_schools():
     try:
+        sch_col = get_col("schools")
         out = []
-        for fname in os.listdir(SCHOOLS_DIR):
-            if not fname.endswith(".json"):
-                continue
-            sid = os.path.splitext(fname)[0]
-            try:
-                s = load_school(sid)
-                # rétro-compat
-                upg = getattr(s, "upgrade", None)
-                if upg is None:
-                    upg = getattr(s, "is_upgrade", False)
-                out.append({
-                    "id": s.id,
-                    "name": getattr(s, "name", s.id),
-                    "school_type": getattr(s, "school_type", "simple"),
-                    "upgrade": bool(upg),
-                    "range_type": getattr(s, "range_type", None),
-                    "aoe_type": getattr(s, "aoe_type", None),
-                })
-            except Exception:
-                out.append({"id": sid, "name": sid, "school_type": "unknown", "upgrade": False})
+        for s in sch_col.find({}, {"_id": 0}):
+            upg = s.get("upgrade", s.get("is_upgrade", False))
+            out.append({
+                "id": s["id"],
+                "name": s.get("name", s["id"]),
+                "school_type": s.get("school_type", "simple"),
+                "upgrade": bool(upg),
+                "range_type": s.get("range_type"),
+                "aoe_type": s.get("aoe_type"),
+            })
         out.sort(key=lambda x: x["name"].lower())
         return {"schools": out}
     except Exception as e:
@@ -394,91 +321,61 @@ def list_schools():
 def list_spells(
     name: str | None = Query(default=None),
     category: str | None = Query(default=None),
-    school: str | None = Query(default=None),   # school id or name
+    school: str | None = Query(default=None),
 ):
+    sp_col = get_col("spells")
+    eff_col = get_col("effects")
+    sch_col = get_col("schools")
+
+    q = {}
+    if name:
+        q["name"] = {"$regex": name, "$options": "i"}
+    if category:
+        q["category"] = category
+
+    spells = list(sp_col.find(q, {"_id": 0}))
+    # Build school information per spell from its effect ids
+    school_map = {s["id"]: s.get("name", s["id"]) for s in sch_col.find({}, {"_id": 0, "id": 1, "name": 1})}
+
     rows = []
-    for fname in os.listdir(SPELLS_DIR):
-        if not fname.endswith(".json"):
-            continue
-        path = os.path.join(SPELLS_DIR, fname)
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)  # effects are ids
-        except Exception:
-            continue
+    for sp in spells:
+        eff_ids = [str(e) for e in (sp.get("effects") or [])]
+        # fetch distinct schools for those effects
+        sch_ids = set()
+        if eff_ids:
+            for e in eff_col.find({"id": {"$in": eff_ids}}, {"_id": 0, "school": 1}):
+                sid = str(e.get("school") or "")
+                if sid:
+                    sch_ids.add(sid)
 
-        # Basic filters
-        if name and name.lower() not in (data.get("name", "").lower()):
-            continue
-        if category and category != data.get("category"):
-            continue
-
-        # Collect schools from effects
-        effect_ids = data.get("effects", [])
-        school_ids = set()
-        school_list = []
-        try:
-            effect_objs = [load_effect(eid) for eid in effect_ids]
-            for eff in effect_objs:
-                sid = None
-                sch_attr = getattr(eff, "school", None)
-                if isinstance(sch_attr, str):
-                    sid = sch_attr
-                elif hasattr(sch_attr, "id"):
-                    sid = getattr(sch_attr, "id", None)
-
-                if not sid or sid in school_ids:
-                    continue
-
-                school_ids.add(sid)
-                try:
-                    s = load_school(sid)
-                    school_list.append({"id": sid, "name": getattr(s, "name", sid)})
-                except Exception:
-                    school_list.append({"id": sid, "name": sid})
-
-        except Exception:
-            pass
-
-        # School filter (accept id or name)
+        school_list = [{"id": sid, "name": school_map.get(sid, sid)} for sid in sorted(sch_ids)]
+        # school filter (accept id or name)
         if school:
-            sch_lower = school.lower()
-            ids_lower = {sid.lower() for sid in school_ids}
-            names_lower = {sl["name"].lower() for sl in school_list}
-            if sch_lower not in ids_lower and sch_lower not in names_lower:
+            low = school.lower()
+            if (low not in {s["id"].lower() for s in school_list}) and (low not in {s["name"].lower() for s in school_list}):
                 continue
 
         rows.append({
-            "id": data.get("id"),
-            "name": data.get("name"),
-            "category": data.get("category"),
-            "mp_cost": data.get("mp_cost", 0),
-            "en_cost": data.get("en_cost", 0),
-            "activation": data.get("activation"),
-            "range": data.get("range"),
-            "aoe": data.get("aoe"),
-            "duration": data.get("duration"),
-            "effects": data.get("effects", []),
-            "spell_type": data.get("spell_type", "Simple"),
-            "schools": school_list,  # <-- include id + name for display
+            "id": sp.get("id"),
+            "name": sp.get("name"),
+            "activation": sp.get("activation"),
+            "range": sp.get("range"),
+            "aoe": sp.get("aoe"),
+            "duration": sp.get("duration"),
+            "mp_cost": sp.get("mp_cost"),
+            "en_cost": sp.get("en_cost"),
+            "category": sp.get("category"),
+            "schools": school_list,
+            "effects": sp.get("effects", []),
         })
-
-    rows.sort(key=lambda r: (r["id"] is None, r["id"]))
     return {"spells": rows}
 
 @app.get("/spells/{spell_id}")
 def get_spell(spell_id: str):
-    try:
-        # using loader ensures computed props are consistent
-        spell = load_spell(spell_id)
-        # ensure costs/category are current
-        spell.update_cost()
-        spell.set_spell_category()
-        return {"spell": serialize_spell(spell)}
-    except FileNotFoundError:
+    sp = get_col("spells").find_one({"id": spell_id}, {"_id": 0})
+    if not sp:
         return {"error": f"Spell {spell_id} not found"}
-    except Exception as e:
-        return {"error": str(e)}
+    return {"spell": sp}
 
 @app.post("/auth/login")
 async def auth_login(request: Request):
@@ -603,6 +500,16 @@ async def submit_spell(request: Request):
         return {"status": "success", "id": spell.id, "saved": True}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/health")
+def health():
+    try:
+        db = get_db()
+        # a cheap call that touches the DB
+        db.list_collection_names()
+        return {"status": "ok", "mongo": "connected"}
+    except Exception as e:
+        return {"status": "degraded", "error": str(e)}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)

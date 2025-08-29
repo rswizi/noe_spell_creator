@@ -1,8 +1,8 @@
 import json
 import os
 from dataclasses import dataclass, asdict
-
-from src.objects.schools import School, load_school
+from db_mongo import get_col
+from server.src.objects.schools import load_school, School
 
 
 @dataclass
@@ -15,27 +15,19 @@ class Effect:
     mp_cost: int = 0
 
     def to_dict(self):
-        data = asdict(self)
-        data["school"] = self.school.id
-        return data
+        d = asdict(self)
+        d["school"] = self.school.id
+        return d
 
     @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
+    def from_dict(cls, data): return cls(**data)
 
-    def save(self, dir="effects"):
-        path = os.path.join("data", dir, f"{self.id}.json")
-        with open(path, "w") as f:
-            json.dump(self.to_dict(), f, indent=2)
-
-
-def load_effect(id, dir="effects"):
-    path = os.path.join("data", dir, f"{id}.json")
-    with open(path, "r") as f:
-        data = json.load(f)
-    data["school"] = load_school(data["school"])
-
-    return Effect.from_dict(data)
+def load_effect(id: str):
+    doc = get_col("effects").find_one({"id": str(id)}, {"_id": 0})
+    if not doc:
+        raise FileNotFoundError(f"Effect {id} not found")
+    doc["school"] = load_school(doc["school"])
+    return Effect.from_dict(doc)
 
 
 def main():

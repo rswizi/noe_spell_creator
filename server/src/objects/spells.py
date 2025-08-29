@@ -3,9 +3,9 @@ import os
 from dataclasses import dataclass, asdict, field
 from collections import Counter
 
-from src.objects.effects import Effect, load_effect
-from src.objects.schools import load_school
-from src.modules.cost_utils import (
+from server.src.objects.effects import Effect, load_effect
+from server.src.objects.schools import load_school
+from server.src.modules.cost_utils import (
     get_range_cost,
     get_aoe_cost,
     get_duration_cost,

@@ -1,5 +1,5 @@
 from collections import Counter
-from src.modules.cost_tables import (
+from server.src.modules.cost_tables import (
     RANGE_COSTS,
     AOE_COSTS,
     DURATION_COSTS,
