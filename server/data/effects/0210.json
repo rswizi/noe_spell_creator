@@ -1,8 +1,0 @@
-{
-  "id": "0210",
-  "name": "Feather Fall",
-  "description": "The target of this spell can land from a very high place without making a sound and without taking any Fall Damage.",
-  "mp_cost": 15,
-  "en_cost": 1,
-  "school": "0008"
-}

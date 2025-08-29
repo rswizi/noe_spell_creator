@@ -1,8 +1,0 @@
-{
-  "id": "0299",
-  "name": "Magic Joker",
-  "description": "[Ritual, Unique] You infuse one of your known spells into an object which will allow you to use it once as a Free Action (Reaction).",
-  "mp_cost": 40,
-  "en_cost": 6,
-  "school": "0013"
-}

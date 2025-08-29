@@ -1,8 +1,0 @@
-{
-  "id": "0292",
-  "name": "Levitation",
-  "description": "[Passive] You float slightly above the ground. You take half the damage from falls if your movement is not forced. Additionally, you are Magic Deprived to the effects of difficult terrain. Finally, if you touch the ground, your effect ends.",
-  "mp_cost": 40,
-  "en_cost": 0,
-  "school": "0013"
-}

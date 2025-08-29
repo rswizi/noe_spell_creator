@@ -1,8 +1,0 @@
-{
-  "id": "0099",
-  "name": "Shielding Overload",
-  "description": "When applied to a spell from the School of Resistance, you may give 1 more SP with that spell. This may increase the shielding of a spell only once per action.",
-  "mp_cost": 6,
-  "en_cost": 0,
-  "school": "0004"
-}

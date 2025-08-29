@@ -1,8 +1,0 @@
-{
-  "id": "0306",
-  "name": "Stealthy Spell",
-  "description": "This spell does not require you to move your hands or utter powerful words.",
-  "mp_cost": 10,
-  "en_cost": 1,
-  "school": "0014"
-}

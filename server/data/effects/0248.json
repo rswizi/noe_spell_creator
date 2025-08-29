@@ -1,8 +1,0 @@
-{
-  "id": "0248",
-  "name": "Circle of Truth",
-  "description": "Targets within the area must succeed on a Spirit check against your Aura or be compelled to speak the truth. If a target achieves an Overwhelming Success, they can feign being affected by the spell.",
-  "mp_cost": 35,
-  "en_cost": 2,
-  "school": "0009"
-}

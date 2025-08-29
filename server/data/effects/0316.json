@@ -1,8 +1,0 @@
-{
-  "id": "0316",
-  "name": "About Time",
-  "description": "(Active, Large) Within the AoE of your spell, create a giant clock with two hands pointing at 12. Every turn, the big hand moves forward by a quarter of the clock, sweeping through everything in its path and dealing 6 ID + P(MAG) damage. Each time the big hand completes a full cycle back to 12, the small hand advances by a quarter of the circle, triggering a powerful burst that deals 6 ID + P(MAG) damage as well.",
-  "mp_cost": 45,
-  "en_cost": 5,
-  "school": "0015"
-}

@@ -1,8 +1,0 @@
-{
-  "id": "0199",
-  "name": "Sculptor",
-  "description": "[Large] You can shape the terrain in the area of your spell to create anything you want that is completely inert and solid, like furniture, walls, and statues.",
-  "mp_cost": 20,
-  "en_cost": 2,
-  "school": "0007"
-}

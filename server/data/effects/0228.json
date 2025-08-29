@@ -1,8 +1,0 @@
-{
-  "id": "0228",
-  "name": "Message",
-  "description": "For the duration of the spell, you can project your voice directly into the mind of a target within the spell's range. The target cannot respond telepathically.",
-  "mp_cost": 10,
-  "en_cost": 1,
-  "school": "0009"
-}

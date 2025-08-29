@@ -1,8 +1,0 @@
-{
-  "id": "0267",
-  "name": "Combat Clone",
-  "description": "[Active] Your clone is capable of attacking using weapons similar to yours.",
-  "mp_cost": 27,
-  "en_cost": 4,
-  "school": "0011"
-}

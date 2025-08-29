@@ -1,8 +1,0 @@
-{
-  "id": "0137",
-  "name": "Intermediate Enhancement III",
-  "description": "Your spell will apply to target a positive Intermediate Condition of level 3.",
-  "mp_cost": 15,
-  "en_cost": 1,
-  "school": "0005"
-}

@@ -1,8 +1,0 @@
-{
-  "id": "0291",
-  "name": "Spectral Servant",
-  "description": "[Square] You summon a spectral servant that can handle simple tasks (cleaning, tidying up, laundry...) for 24 hours.",
-  "mp_cost": 25,
-  "en_cost": 2,
-  "school": "0013"
-}

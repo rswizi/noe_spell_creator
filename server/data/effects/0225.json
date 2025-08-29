@@ -1,8 +1,0 @@
-{
-  "id": "0225",
-  "name": "Small Illusion",
-  "description": "[Square] You create a small, static illusion with a maximum volume of 1m³ (35 cubic feet). The illusion can include both visual and sound components, but it cannot replicate sensory elements like touch or smell. If the illusion disappears while a target is attempting to interact with it, the target loses 1 Focus (FO).",
-  "mp_cost": 8,
-  "en_cost": 1,
-  "school": "0009"
-}

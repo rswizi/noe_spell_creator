@@ -1,8 +1,0 @@
-{
-  "id": "0268",
-  "name": "Superior Mage Clone",
-  "description": "[Active] Your clone is capable of using your spells and your abilities by consuming your resources. Your clone allows you to assist in the use of your spells if it is within your Melee Range. Your ET goes up by 5 and your MS for all schools goes up by 5.",
-  "mp_cost": 33,
-  "en_cost": 5,
-  "school": "0011"
-}

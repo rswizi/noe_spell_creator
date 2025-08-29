@@ -1,8 +1,0 @@
-{
-  "id": "0302",
-  "name": "Upon Impact",
-  "description": "The spell activates on the next Special Attack with a weapon that deals a single attack. If the hit lands, the effect is centered on one of the targets of the attack and the effect is applied without an additional roll. If it misses, the spell is consumed.",
-  "mp_cost": 2,
-  "en_cost": 1,
-  "school": "0014"
-}

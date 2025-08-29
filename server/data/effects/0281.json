@@ -1,8 +1,0 @@
-{
-  "id": "0281",
-  "name": "Effective",
-  "description": "Reduces the cost of an Active effect of a spell to half of what it is when added.",
-  "mp_cost": 20,
-  "en_cost": 0,
-  "school": "0012"
-}

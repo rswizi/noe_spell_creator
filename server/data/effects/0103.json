@@ -1,8 +1,0 @@
-{
-  "id": "0103",
-  "name": "Reduction",
-  "description": "You decrease a target's Resistance to a nature by 2 levels.",
-  "mp_cost": 24,
-  "en_cost": 2,
-  "school": "0004"
-}

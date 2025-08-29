@@ -1,8 +1,0 @@
-{
-  "id": "0061",
-  "name": "Fluidity IV",
-  "description": "[Once] Apply Fluidity (4) to a target.",
-  "mp_cost": 32,
-  "en_cost": 2,
-  "school": "0003"
-}

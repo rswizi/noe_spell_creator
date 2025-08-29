@@ -1,8 +1,0 @@
-{
-  "id": "0178",
-  "name": "Powerful Curse III",
-  "description": "Your spell will apply to target a negative Powerful Condition of level 3.",
-  "mp_cost": 20,
-  "en_cost": 1,
-  "school": "0006"
-}

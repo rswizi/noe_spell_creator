@@ -1,8 +1,0 @@
-{
-  "id": "0242",
-  "name": "False Death",
-  "description": "The targets of this spell appear as dead during any medical or magical inspection, unless they succeed on a Potential or Medicine Check vs your Magic DC +2.",
-  "mp_cost": 25,
-  "en_cost": 1,
-  "school": "0009"
-}

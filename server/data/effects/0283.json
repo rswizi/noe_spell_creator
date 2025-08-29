@@ -1,8 +1,0 @@
-{
-  "id": "0283",
-  "name": "Spyglass",
-  "description": "Add 1 to the Range of your weapon.",
-  "mp_cost": 20,
-  "en_cost": 2,
-  "school": "0012"
-}

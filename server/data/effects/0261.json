@@ -1,8 +1,0 @@
-{
-  "id": "0261",
-  "name": "Attacker Clone",
-  "description": "[Active] Your clone can make an unarmed Attack with its Action.",
-  "mp_cost": 15,
-  "en_cost": 2,
-  "school": "0011"
-}

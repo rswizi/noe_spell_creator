@@ -1,8 +1,0 @@
-{
-  "id": "0200",
-  "name": "Mole",
-  "description": "Targets affected by this ability can move underground as if traveling on the surface, gaining a +2 bonus to Mobility. While underground, they are considered Stealthy, but their presence can be revealed with a Perception against your Magic DC if they move within 5 units of another target. Note: The effect cannot have HP.",
-  "mp_cost": 36,
-  "en_cost": 3,
-  "school": "0007"
-}

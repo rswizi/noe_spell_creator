@@ -1,8 +1,0 @@
-{
-  "id": "0233",
-  "name": "Major Illusory Clone",
-  "description": "[Unique, Case] You create two identical clones that you can swap places with at will. The clones can mimic your actions and have access to all your spells and abilities. However, none of their actions, spells, or abilities have any real effect—they are purely illusory. If a clone is attacked, the attacker FO drops by 3. Once per round, by using an Action, you can swap places with one of your clones again.",
-  "mp_cost": 18,
-  "en_cost": 1,
-  "school": "0009"
-}

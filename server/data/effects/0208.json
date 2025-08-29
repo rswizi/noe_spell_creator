@@ -1,8 +1,0 @@
-{
-  "id": "0208",
-  "name": "Magical Lockpick",
-  "description": "You use magic hooks to open a lock. Use your Potential skill rather than Sleight of hand to perform this task. The Range corresponds to the distance at which you can perform this task.",
-  "mp_cost": 10,
-  "en_cost": 1,
-  "school": "0008"
-}

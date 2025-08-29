@@ -1,8 +1,0 @@
-{
-  "id": "0014",
-  "name": "Wall of Eclipse",
-  "description": "[Terrain, Line, Unique] Whenever a target enters the wall for the first time, it takes 1 ID + P(MAG) magic damage. Whenever a target finds itself against the wall at the end of its turn, it may suffer the damage again.",
-  "mp_cost": 18,
-  "en_cost": 2,
-  "school": "0002"
-}

@@ -1,8 +1,0 @@
-{
-  "id": "0293",
-  "name": "Magical Compass",
-  "description": "[Active] You summon a magical compass that points north by default. If you intend to head to a known location, a second needle will point in the direction of that location.",
-  "mp_cost": 25,
-  "en_cost": 0,
-  "school": "0013"
-}

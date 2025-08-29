@@ -1,8 +1,0 @@
-{
-  "id": "0128",
-  "name": "Minor Enhancement VI",
-  "description": "Your spell will apply to target a positive Minor Condition of level 4.",
-  "mp_cost": 16,
-  "en_cost": 1,
-  "school": "0005"
-}

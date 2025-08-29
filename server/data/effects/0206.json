@@ -1,8 +1,0 @@
-{
-  "id": "0206",
-  "name": "Veil of Shadows",
-  "description": "The target of this spell loses all color, appearing entirely in shades of gray. This muted appearance makes them less noticeable, granting the target advantage on all Stealth rolls in non-colorful environments.",
-  "mp_cost": 4,
-  "en_cost": 1,
-  "school": "0008"
-}

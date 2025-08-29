@@ -1,8 +1,0 @@
-{
-  "id": "0289",
-  "name": "Magical Grapple",
-  "description": "[Active, Square] You can use it to snag surfaces at twice the Range of the spell. By using an Action, you can pull yourself to the object, or pull the object to you if it is movable.",
-  "mp_cost": 30,
-  "en_cost": 1,
-  "school": "0013"
-}

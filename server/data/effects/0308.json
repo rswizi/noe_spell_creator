@@ -1,8 +1,0 @@
-{
-  "id": "0308",
-  "name": "Great Leap",
-  "description": "You jump 3 squares before casting the spell.",
-  "mp_cost": 10,
-  "en_cost": 1,
-  "school": "0014"
-}

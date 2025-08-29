@@ -1,8 +1,0 @@
-{
-  "id": "0290",
-  "name": "Spectral Hand",
-  "description": "[Square, Self] You summon a spectral hand for 10 minutes. This hand allows you to manipulate objects at a distance and can carry up to 2.2kg (5lbs) before disappearing. It cannot manipulate weapons and does not count as a Free Hand for casting spells.",
-  "mp_cost": 25,
-  "en_cost": 1,
-  "school": "0013"
-}

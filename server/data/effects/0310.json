@@ -1,8 +1,0 @@
-{
-  "id": "0310",
-  "name": "Veil of Time",
-  "description": "(Active) You create a shield over a tile or an area. Everyone within its bounds is protected from the effects of time magic and temporal influences. All effects with a duration are sustained as long as they are included in the AoE.",
-  "mp_cost": 22,
-  "en_cost": 5,
-  "school": "0015"
-}

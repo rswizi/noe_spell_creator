@@ -1,8 +1,0 @@
-{
-  "id": "0205",
-  "name": "Tiptoe",
-  "description": "While the spell is active, the target's steps are completely silent. However, they may still leave physical traces behind.",
-  "mp_cost": 3,
-  "en_cost": 1,
-  "school": "0008"
-}

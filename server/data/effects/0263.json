@@ -1,8 +1,0 @@
-{
-  "id": "0263",
-  "name": "Clone of Martial Assistance",
-  "description": "[Active] Your clone is capable of undertaking Secondary Actions thanks to its Action. It can also use items if there is access. Your clone is capable of preparing Special Actions and using them for you.",
-  "mp_cost": 20,
-  "en_cost": 3,
-  "school": "0011"
-}

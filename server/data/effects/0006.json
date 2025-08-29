@@ -1,8 +1,0 @@
-{
-  "id": "0006",
-  "name": "Damage Overheat III",
-  "description": "The Spell applies Burn (4).",
-  "mp_cost": 24,
-  "en_cost": 2,
-  "school": "0002"
-}

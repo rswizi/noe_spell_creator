@@ -1,8 +1,0 @@
-{
-  "id": "0051",
-  "name": "Vitality IV",
-  "description": "[Once] Apply Vitality (4) to a target.",
-  "mp_cost": 24,
-  "en_cost": 2,
-  "school": "0003"
-}

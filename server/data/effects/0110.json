@@ -1,8 +1,0 @@
-{
-  "id": "0110",
-  "name": "Focus Parry",
-  "description": "Each time a target undertakes an act to attack you or inflict a negative Condition, it must lose 1 Focus (FO).",
-  "mp_cost": 8,
-  "en_cost": 1,
-  "school": "0004"
-}

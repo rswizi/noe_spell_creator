@@ -1,8 +1,0 @@
-{
-  "id": "0276",
-  "name": "Heavy Spiritual Ranged Weapon",
-  "description": "[Active; Square] You summon a two-handed weapon that deals 1 ID + P(MAG) +2 of magical damage within a 24 range. You can use this weapon thanks to your Aura.",
-  "mp_cost": 18,
-  "en_cost": 3,
-  "school": "0012"
-}

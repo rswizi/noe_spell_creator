@@ -1,8 +1,0 @@
-{
-  "id": "0186",
-  "name": "Wall",
-  "description": "[Line] Creates a wall that blocks vision and movement. The wall is always 1 unit wide and as high as it is long. Note: The effect cannot have a duration.",
-  "mp_cost": 4,
-  "en_cost": 1,
-  "school": "0007"
-}

@@ -1,8 +1,0 @@
-{
-  "id": "0309",
-  "name": "Slowdown Zone",
-  "description": "You create a Slowdown Zone within the area of effect of your spell, where all targets have their  MO halved. At the start of their turn inside the zone, they gain one Slowdown Marker. If they accumulate a second Slowdown Marker, their turn is skipped, and all markers are removed. Note : Markers expire at the end of a combat. Slowdown Zones do not stack.",
-  "mp_cost": 20,
-  "en_cost": 5,
-  "school": "0015"
-}

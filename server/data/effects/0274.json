@@ -1,8 +1,0 @@
-{
-  "id": "0274",
-  "name": "Heavy Spiritual Melee Weapon",
-  "description": "[Active; Square] You summon a two-handed weapon that deals 1 ID + P(MAG) +2  of magical damage. You can use this weapon thanks to your Aura.",
-  "mp_cost": 14,
-  "en_cost": 1,
-  "school": "0012"
-}

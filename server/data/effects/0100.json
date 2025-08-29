@@ -1,8 +1,0 @@
-{
-  "id": "0100",
-  "name": "Small Increase",
-  "description": "You increase a target's Resistance to a nature by one level.",
-  "mp_cost": 8,
-  "en_cost": 1,
-  "school": "0004"
-}

@@ -1,8 +1,0 @@
-{
-  "id": "0221",
-  "name": "Nyctalopia",
-  "description": "Gives the targets of this effect the ability to see perfectly in the dark.",
-  "mp_cost": 18,
-  "en_cost": 1,
-  "school": "0008"
-}

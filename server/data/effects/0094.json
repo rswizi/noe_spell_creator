@@ -1,8 +1,0 @@
-{
-  "id": "0094",
-  "name": "Selective Cleanse II",
-  "description": "[Once] Apply Cleanse (10) only to the target’s chosen conditions.",
-  "mp_cost": 30,
-  "en_cost": 4,
-  "school": "0003"
-}

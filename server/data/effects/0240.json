@@ -1,8 +1,0 @@
-{
-  "id": "0240",
-  "name": "Knowledge Crypt",
-  "description": "Search for information in your deeply buried memories. Targets of this spell gain +2 to Education acts.",
-  "mp_cost": 25,
-  "en_cost": 1,
-  "school": "0009"
-}

@@ -1,8 +1,0 @@
-{
-  "id": "0246",
-  "name": "Mind Reading",
-  "description": "You can attempt an Incantation roll against the Spirit of a target within range to access its surface thoughts. Unless you suffer an Overwhelming Failure, your attempt remains undetected. While connected to its spirit, you automatically succeed on all Psychology rolls against the target.",
-  "mp_cost": 35,
-  "en_cost": 2,
-  "school": "0009"
-}

@@ -1,8 +1,0 @@
-{
-  "id": "0294",
-  "name": "Magical Inscription",
-  "description": "Mark on an object magically words that will only appear if a specific condition is met.",
-  "mp_cost": 15,
-  "en_cost": 1,
-  "school": "0013"
-}

@@ -1,8 +1,0 @@
-{
-  "id": "0025",
-  "name": "Fountain of Healing",
-  "description": "Create a Totem that will heal 1 ID + P(MAG) to a target.",
-  "mp_cost": 23,
-  "en_cost": 2,
-  "school": "0003"
-}

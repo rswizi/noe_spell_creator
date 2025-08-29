@@ -1,8 +1,0 @@
-{
-  "id": "0279",
-  "name": "Spiritual Weapon of Conjuration",
-  "description": "[Active, Square] Summon a weapon in an unoccupied slot within range. This weapon can move up to half your Magic (MAG) value, has as many Hit Points (HP) as 2 times your MAG, and deals 1 ID + P(MAG) +2 damage. It is placed before you in the initiative order. It attacks with a skill equal to your Aura.",
-  "mp_cost": 25,
-  "en_cost": 5,
-  "school": "0012"
-}

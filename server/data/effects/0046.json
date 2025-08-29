@@ -1,8 +1,0 @@
-{
-  "id": "0046",
-  "name": "Suppression IX",
-  "description": "[Once] Apply Suppression (9) to a target.",
-  "mp_cost": 80,
-  "en_cost": 5,
-  "school": "0003"
-}

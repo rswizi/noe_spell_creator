@@ -1,8 +1,0 @@
-{
-  "id": "0119",
-  "name": "Robustness VI",
-  "description": "[Once] Apply Robustness (6) to a target.",
-  "mp_cost": 36,
-  "en_cost": 2,
-  "school": "0004"
-}

@@ -1,8 +1,0 @@
-{
-  "id": "0223",
-  "name": "Bluffer",
-  "description": "For the duration of the spell, your words resonate directly in the minds of others, granting you a +2 bonus to Persuasion, Charisma and Charm rolls",
-  "mp_cost": 5,
-  "en_cost": 1,
-  "school": "0009"
-}

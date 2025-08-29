@@ -1,8 +1,0 @@
-{
-  "id": "0016",
-  "name": "Magic Missile",
-  "description": "[Square] Your spell creates a magic missile that deals 12 magic damage. Each projectile has to be resolved separately. Note: This effect may not benefit from damage overload.",
-  "mp_cost": 18,
-  "en_cost": 0,
-  "school": "0002"
-}

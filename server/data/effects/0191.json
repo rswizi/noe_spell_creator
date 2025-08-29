@@ -1,8 +1,0 @@
-{
-  "id": "0191",
-  "name": "Catapult",
-  "description": "[Trap, Cone] Triggering this trap by moving into it sends you back in the direction of the wider end of the Cone in a distance equal to twice the distance that separates you from the narrowest end.",
-  "mp_cost": 12,
-  "en_cost": 2,
-  "school": "0007"
-}

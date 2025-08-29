@@ -1,8 +1,0 @@
-{
-  "id": "0258",
-  "name": "Physical Barrier",
-  "description": "[Active] Share your SPs with all targets within the area of your spell. For each target benefiting from this effect, gain 2 SP.",
-  "mp_cost": 25,
-  "en_cost": 2,
-  "school": "0010"
-}

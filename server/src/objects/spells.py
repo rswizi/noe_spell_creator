@@ -1,17 +1,11 @@
-import json
-import os
-from dataclasses import dataclass, asdict, field
-from collections import Counter
-
-from server.src.objects.effects import Effect, load_effect
-from server.src.objects.schools import load_school
+from dataclasses import dataclass, asdict
+from typing import List, Union
+from db_mongo import get_col
+from server.src.modules.category_table import category_for_mp
 from server.src.modules.cost_utils import (
-    get_range_cost,
-    get_aoe_cost,
-    get_duration_cost,
-    get_activation_cost,
-    get_school_cost
+    get_range_cost, get_aoe_cost, get_duration_cost, get_activation_cost, get_school_cost
 )
+from .effects import Effect
 
 @dataclass
 class Spell:
@@ -20,178 +14,80 @@ class Spell:
     activation: str
     range: int
     aoe: str
-    mp_cost: int = 0
-    en_cost: int = 0
-    duration: int = 1
-    effects: list[Effect] = field(default_factory=list)
-    category: str = "Novice"
-    spell_type: str = "Simple"
-    description: str = "None"
+    duration: int
+    category: str
+    effects: List[Union[str, Effect]]
+    spell_type: str
+    mp_cost: int
+    en_cost: int
+    description: str = ""
 
-    def save(self, dir="spells"):
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        data_dir = os.path.join(base_dir, "..", "..", "data", dir)
-        os.makedirs(data_dir, exist_ok=True)
+    def to_dict(self):
+        d = asdict(self)
+        d["effects"] = [e.id if isinstance(e, Effect) else str(e) for e in (self.effects or [])]
+        d["mp_cost"]  = int(d.get("mp_cost", 0))
+        d["en_cost"]  = int(d.get("en_cost", 0))
+        d["range"]    = int(d.get("range", 0))
+        d["duration"] = int(d.get("duration", 0))
+        return d
 
-        path = os.path.join(data_dir, f"{self.id}.json")
-        data = self.to_dict()
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+    def save(self):
+        get_col("spells").update_one({"id": self.id}, {"$set": self.to_dict()}, upsert=True)
 
     def set_spell_category(self):
-        if self.mp_cost <= 12:
-            self.category = "Novice"
-        elif self.mp_cost <= 17:
-            self.category = "Apprentice"
-        elif self.mp_cost <= 22:
-            self.category = "Disciple"
-        elif self.mp_cost <= 27:
-            self.category = "Adept"
-        elif self.mp_cost <= 32:
-            self.category = "Mage"
-        elif self.mp_cost <= 37:
-            self.category = "Magister"
-        elif self.mp_cost <= 42:
-            self.category = "High Mage"
-        elif self.mp_cost <= 52:
-            self.category = "Master"
-        elif self.mp_cost <= 62:
-            self.category = "Grand Master"
-        elif self.mp_cost <= 75:
-            self.category = "Archmage"
-        elif self.mp_cost <= 85:
-            self.category = "Supreme Archmage"
-        else:
-            self.category = "Avant-garde"
-        
+        self.category = category_for_mp(self.mp_cost)
+
     def set_spell_type(self):
-        for effect in self.effects:
-            school = load_school(effect.school.id)
-            if school.school_type.lower() == "complex":
+        # If any effect’s school is Complex → Complex, else Simple
+        for e in self.effects:
+            if isinstance(e, Effect) and getattr(e.school, "school_type", "").lower() == "complex":
                 self.spell_type = "Complex"
                 return
         self.spell_type = "Simple"
 
     def set_school_nbr(self):
-        mp_school, _ = get_school_cost(self.effects, load_school)
+        mp_school, _ = get_school_cost(self.effects, None)  # second arg unused by your util
         return mp_school + 1
 
-    def set_range_cost(self):
-        return get_range_cost(self.range, self.effects)
+    def set_range_cost(self):    return self.norm(get_range_cost(self.range, self.effects))[0]
+    def set_aoe_cost(self):      return self.norm(get_aoe_cost(self.aoe, self.effects))[0]
+    def set_duration_cost(self): return self.norm(get_duration_cost(self.duration))[0]
+    def set_activation_cost(self): return self.norm(get_activation_cost(self.activation))[0]
 
-    def set_aoe_cost(self):
-        return get_aoe_cost(self.aoe, self.effects)
-
-    def set_duration_cost(self):
-        return get_duration_cost(self.duration)
-
-    def set_activation_cost(self):
-        return get_activation_cost(self.activation)
+    @staticmethod
+    def norm(x):
+        if isinstance(x, tuple):
+            if len(x) == 2: return x
+            if len(x) == 1: return (x[0], 0)
+            return (x[0], x[1] if len(x) > 1 else 0)
+        return (x or 0, 0)
 
     def update_cost(self):
         self.mp_cost, self.en_cost = Spell.compute_cost(
-            self.range,
-            self.aoe,
-            self.duration,
-            self.activation,
-            self.effects,
+            self.range, self.aoe, self.duration, self.activation, self.effects
         )
 
     @staticmethod
     def compute_cost(range_val, aoe_val, duration_val, activation_val, effects):
-        mp_cost = 0
-        en_cost = 0
-
-        def norm(x):
-            """Return a (mp, en) tuple no matter what x is."""
-            if isinstance(x, tuple):
-                if len(x) == 2:
-                    return x
-                if len(x) == 1:
-                    return (x[0], 0)
-                # unexpected tuple shapes → sum mp, ignore rest
-                return (x[0], x[1] if len(x) > 1 else 0)
-            # plain int/float → mp only
-            return (x or 0, 0)
-
-        # If your utils expect (value, effects), pass effects. Otherwise remove it.
-        r_mp, r_en = norm(get_range_cost(range_val, effects))
-        a_mp, a_en = norm(get_aoe_cost(aoe_val, effects))
-        d_mp, d_en = norm(get_duration_cost(duration_val))
-        act_mp, act_en = norm(get_activation_cost(activation_val))
-
+        mp_cost = en_cost = 0
+        r_mp, r_en = Spell.norm(get_range_cost(range_val, effects))
+        a_mp, a_en = Spell.norm(get_aoe_cost(aoe_val, effects))
+        d_mp, d_en = Spell.norm(get_duration_cost(duration_val))
+        act_mp, act_en = Spell.norm(get_activation_cost(activation_val))
         mp_cost += r_mp + a_mp + d_mp + act_mp
         en_cost += r_en + a_en + d_en + act_en
-
-        # Add intrinsic effect costs
-        for effect in effects:
-            # effect.mp_cost / effect.en_cost should be numbers
-            mp_cost += getattr(effect, "mp_cost", 0) or 0
-            en_cost += getattr(effect, "en_cost", 0) or 0
-
+        for eff in effects:
+            mp_cost += getattr(eff, "mp_cost", 0) or 0
+            en_cost += getattr(eff, "en_cost", 0) or 0
         return mp_cost, en_cost
-
-
-
-    def __str__(self):
-        return (
-            f"Spell ID: {self.id}\n"
-            f"Name: {self.name}\n"
-            f"Activation: {self.activation}\n"
-            f"Range: {self.range}\n"
-            f"AoE: {self.aoe}\n"
-            f"Duration: {self.duration}\n"
-            f"MP Cost: {self.mp_cost}\n"
-            f"EN Cost: {self.en_cost}\n"
-            f"Category: {self.category}\n"
-            f"Spell Type: {self.spell_type}\n"
-            f"Number of Effects: {len(self.effects)}\n"
-            f"Effect IDs: {[effect.id for effect in self.effects]}\n"
-            f"Description: {self.description}"
-        )
-
-    def to_dict(self):
-        data = asdict(self)
-        data["effects"] = [effect.id for effect in self.effects]
-        return data
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
 
     def __post_init__(self):
         self.set_spell_type()
         self.update_cost()
         self.set_spell_category()
 
-
-def load_spell(id, dir="spells"):
-    base_dir = os.path.dirname(os.path.abspath(__file__))  # src/objects
-    data_dir = os.path.join(base_dir, "..", "..", "data", dir)
-    path = os.path.join(data_dir, f"{id}.json")
-
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    effect_list = [load_effect(eid) for eid in data["effects"]]
-    data["effects"] = effect_list
-    return Spell.from_dict(data)
-
-def main():
-    """"""
-
-    spell = Spell(
-        id = "0000",
-        name = "Test 1",
-        activation = "Action",
-        range = 5,
-        aoe = "Circle (5)",
-        effects = [load_effect("0001"), load_effect("0000")]
-    )
-    
-    print(spell)
-
-    spell.save()
-
-if __name__ == "__main__":
-    main()
+def load_spell(id: str) -> Spell:
+    doc = get_col("spells").find_one({"id": str(id)}, {"_id": 0})
+    if not doc:
+        raise FileNotFoundError(f"Spell {id} not found in MongoDB")
+    return Spell(**doc)

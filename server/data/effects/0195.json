@@ -1,8 +1,0 @@
-{
-  "id": "0195",
-  "name": "Communication Plate",
-  "description": "[Square] This effect allows you to communicate with someone using an intermediary element for its duration. To establish communication, you must know their name and exact location. If you use Water elements, communication occurs through a reflective surface, conveying both sound and image. If you use Earth element, communication happens telepathically via a plant. If you use Fire Element, communication happens through a fire that takes the shape of your interlocutor. For other types of elements, the intermediary surface must correspond to the element of that mana.",
-  "mp_cost": 10,
-  "en_cost": 1,
-  "school": "0007"
-}

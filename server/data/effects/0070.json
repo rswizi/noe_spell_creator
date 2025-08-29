@@ -1,8 +1,0 @@
-{
-  "id": "0070",
-  "name": "Relaxation III",
-  "description": "[Once] Apply Relaxation (3) to a target.",
-  "mp_cost": 15,
-  "en_cost": 1,
-  "school": "0003"
-}

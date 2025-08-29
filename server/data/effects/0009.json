@@ -1,8 +1,0 @@
-{
-  "id": "0009",
-  "name": "Harming Cantrip",
-  "description": "[Square, Unique] You deal 1 ID + P(MAG) magic damage to a target.",
-  "mp_cost": 12,
-  "en_cost": 0,
-  "school": "0002"
-}

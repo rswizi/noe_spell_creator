@@ -1,8 +1,0 @@
-{
-  "id": "0234",
-  "name": "Transmutation",
-  "description": "For the duration of the spell, you can transform one material into another, provided both belong to the same elemental category.",
-  "mp_cost": 20,
-  "en_cost": 1,
-  "school": "0009"
-}

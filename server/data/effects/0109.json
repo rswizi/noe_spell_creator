@@ -1,8 +1,0 @@
-{
-  "id": "0109",
-  "name": "Energy Parry",
-  "description": "Whenever a target takes an action to attack you or inflict a negative Condition, it must lose 1 Energy (EN).",
-  "mp_cost": 8,
-  "en_cost": 1,
-  "school": "0004"
-}

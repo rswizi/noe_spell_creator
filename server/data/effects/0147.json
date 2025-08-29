@@ -1,8 +1,0 @@
-{
-  "id": "0147",
-  "name": "Powerful Enhancement III",
-  "description": "Your spell will apply to target a positive Powerful Condition of level 3.",
-  "mp_cost": 20,
-  "en_cost": 1,
-  "school": "0005"
-}

@@ -10,7 +10,7 @@ class Effect:
     id: str
     name: str
     school: School
-    description: str
+    description: str = ""
     en_cost: int = 0
     mp_cost: int = 0
 
@@ -20,15 +20,21 @@ class Effect:
         return d
 
     @classmethod
-    def from_dict(cls, data): return cls(**data)
+    def from_dict(cls, d: dict):
+        return cls(**d)
 
-def load_effect(id: str):
+def load_effect(id: str) -> Effect:
     doc = get_col("effects").find_one({"id": str(id)}, {"_id": 0})
     if not doc:
-        raise FileNotFoundError(f"Effect {id} not found")
-    doc["school"] = load_school(doc["school"])
+        raise FileNotFoundError(f"Effect {id} not found in MongoDB")
+    # normalize + coerce
+    doc["school"] = load_school(str(doc.get("school")))
+    for k in ("mp_cost", "en_cost"):
+        try:
+            doc[k] = int(doc.get(k, 0))
+        except Exception:
+            doc[k] = 0
     return Effect.from_dict(doc)
-
 
 def main():
     """"""

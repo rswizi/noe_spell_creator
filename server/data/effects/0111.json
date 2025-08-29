@@ -1,8 +1,0 @@
-{
-  "id": "0111",
-  "name": "Superior Life Parry",
-  "description": "Every time a target undertakes an Act to attack you or inflict a negative Condition, it must lose 16 Hit Points (HP).",
-  "mp_cost": 24,
-  "en_cost": 2,
-  "school": "0004"
-}

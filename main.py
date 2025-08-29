@@ -1,25 +1,35 @@
 import os
 import json
 import uvicorn
-import sys
+import logging
 import secrets
 import datetime
 import json
-import os
-from fastapi import FastAPI, Request, HTTPException
+import re
+import hashlib
+from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Query
+from fastapi.responses import JSONResponse
 from typing import Dict, Tuple, Optional
-from db_mongo import get_col, next_id_str
-from db_mongo import get_db
-from db_mongo import ensure_indexes
+from db_mongo import get_col, next_id_str, get_db, ensure_indexes
+from pathlib import Path
+
 
 
 from server.src.objects.effects import load_effect
 from server.src.objects.spells import Spell, load_spell
 from server.src.objects.schools import load_school
+from server.src.modules.category_table import category_for_mp
 
 ensure_indexes()
+logger = logging.getLogger("noe")
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    handlers=[logging.FileHandler("server.log", encoding="utf-8"), logging.StreamHandler()]
+)
 
 # Create app instance
 app = FastAPI()
@@ -31,18 +41,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-DATA_ROOT = os.getenv("DATA_ROOT", os.path.join(BASE_DIR, "server", "data"))
+USERS_COL = "users"
 
-EFFECTS_DIR = os.path.join(DATA_ROOT, "effects")
-SPELLS_DIR  = os.path.join(DATA_ROOT, "spells")
-SCHOOLS_DIR = os.path.join(DATA_ROOT, "schools")
-LOGS_DIR    = os.path.join(DATA_ROOT, "logs")
-USERS_FILE  = os.path.join(DATA_ROOT, "users.txt")
-AUDIT_LOG   = os.path.join(LOGS_DIR, "audit.log")
+def _sha256(s: str) -> str:
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
-for d in (EFFECTS_DIR, SPELLS_DIR, SCHOOLS_DIR, LOGS_DIR):
-    os.makedirs(d, exist_ok=True)
+def find_user(username: str) -> dict | None:
+    return get_col("users").find_one({"username": username}, {"_id": 0})
+
+def verify_password(input_pw: str, user_doc: dict) -> bool:
+    # accept plaintext ('password') or sha256 hash ('password_hash')
+    return (
+        user_doc.get("password") == input_pw
+        or user_doc.get("password_hash") == _sha256(input_pw)
+    )
+
+# --- cost wrapper used by PUT /spells ---
+def compute_spell_costs(activation: str, range_val: int, aoe: str, duration: int, effect_ids: list[str]) -> dict:
+    effects = [load_effect(str(e)) for e in (effect_ids or [])]
+    mp_cost, en_cost = Spell.compute_cost(range_val, aoe, duration, activation, effects)
+    return {"mp_cost": mp_cost, "en_cost": en_cost, "category": category_for_mp(mp_cost)}
+
+logger = logging.getLogger("noe")
+
+BASE_DIR = Path(__file__).parent
+USERS_FILE = BASE_DIR / "server" / "data" / "users.txt"
+
+def migrate_users_txt_to_mongo():
+    col = get_col("users")
+    try:
+        # unique index (idempotent)
+        get_col("users").create_index("username", unique=True)
+    except Exception:
+        pass
+
+    if not USERS_FILE.exists():
+        logger.info("users.txt not found; skipping import (Mongo users only).")
+        return
+
+    count = 0
+    with USERS_FILE.open("r", encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) < 2:
+                continue
+            username = parts[0]
+            password = parts[1]
+            role = parts[2] if len(parts) > 2 else "user"
+
+            if not col.find_one({"username": username}):
+                col.insert_one({"username": username, "password": password, "role": role})
+                count += 1
+    logger.info("Imported %d user(s) from users.txt into Mongo.", count)
+
+migrate_users_txt_to_mongo()
 
 SESSIONS: Dict[str, Tuple[str, str]] = {}  # token -> (username, role)
 
@@ -91,17 +146,12 @@ def require_auth(request: Request, roles: Optional[list[str]] = None) -> Tuple[s
         raise Exception("Forbidden")
     return username, role
 
-def write_audit(action: str, username: str, spell_id: str, before: dict | None, after: dict | None):
-    entry = {
-        "ts": datetime.datetime.utcnow().isoformat() + "Z",
-        "user": username,
-        "action": action,          # "create", "update", "delete"
-        "spell_id": spell_id,
-        "before": before,
-        "after": after,
-    }
-    with open(AUDIT_LOG, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+def write_audit(action, username, spell_id, before, after):
+    get_col("audit_logs").insert_one({
+        "ts": datetime.datetime.utcnow().isoformat()+"Z",
+        "user": username, "action": action, "spell_id": spell_id,
+        "before": before, "after": after
+    })
 
 # --- ID helpers ---
 def get_next_effect_id() -> str:
@@ -110,61 +160,38 @@ def get_next_effect_id() -> str:
 def get_next_school_id() -> str:
     return next_id_str("schools", padding=4)
 
-def find_school_by_name(name: str) -> Optional[dict]:
-    # naive scan
-    for fname in os.listdir(SCHOOLS_DIR):
-        if not fname.endswith(".json"):
-            continue
-        sid = os.path.splitext(fname)[0]
-        try:
-            with open(os.path.join(SCHOOLS_DIR, fname), "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if (data.get("name") or "").strip().lower() == name.strip().lower():
-                return data
-        except Exception:
-            pass
-    return None
+def find_school_by_name_mongo(name: str) -> dict | None:
+    col = get_col("schools")
+    return col.find_one({"name": {"$regex": f"^{re.escape(name.strip())}$", "$options": "i"}},
+                        {"_id": 0})
 
-def save_school_record(sid: str, name: str, school_type: str,
-                       range_type: str, aoe_type: str, upgrade: bool) -> dict:
-    rec = {
-        "id": sid,
-        "name": name,
-        "school_type": school_type,   # "Simple" | "Complex"
-        "upgrade": bool(upgrade),     # <-- nouveau nom de champ
-        "range_type": range_type,     # "A" | "B" | "C"
-        "aoe_type": aoe_type          # "A" | "B" | "C"
-    }
-    with open(os.path.join(SCHOOLS_DIR, f"{sid}.json"), "w", encoding="utf-8") as f:
-        json.dump(rec, f, ensure_ascii=False, indent=2)
-    return rec
-
-def ensure_school(name: str, school_type: str,
-                  range_type: str, aoe_type: str, upgrade: bool) -> dict:
-    existing = find_school_by_name(name)
+def ensure_school_mongo(name: str, school_type: str,
+                        range_type: str, aoe_type: str, upgrade: bool) -> dict:
+    
+    col = get_col("schools")
+    existing = find_school_by_name_mongo(name)
     if existing:
-        # rétro-compat : 'is_upgrade' -> 'upgrade'
-        if "upgrade" not in existing and "is_upgrade" in existing:
-            existing["upgrade"] = bool(existing.get("is_upgrade"))
-            existing.pop("is_upgrade", None)
-
-        changed = False
-        if existing.get("school_type") != school_type:
-            existing["school_type"] = school_type; changed = True
-        if existing.get("range_type") != range_type:
-            existing["range_type"] = range_type; changed = True
-        if existing.get("aoe_type") != aoe_type:
-            existing["aoe_type"] = aoe_type; changed = True
-        if bool(existing.get("upgrade")) != bool(upgrade):
-            existing["upgrade"] = bool(upgrade); changed = True
-
-        if changed:
-            with open(os.path.join(SCHOOLS_DIR, f'{existing["id"]}.json'), "w", encoding="utf-8") as f:
-                json.dump(existing, f, ensure_ascii=False, indent=2)
+        updates = {
+            "school_type": school_type,
+            "range_type": range_type,
+            "aoe_type": aoe_type,
+            "upgrade": bool(upgrade),
+        }
+        col.update_one({"id": existing["id"]}, {"$set": updates})
+        existing.update(updates)
         return existing
 
-    sid = get_next_school_id()
-    return save_school_record(sid, name, school_type, range_type, aoe_type, upgrade)
+    sid = next_id_str("schools")
+    doc = {
+        "id": sid,
+        "name": name.strip(),
+        "school_type": school_type,
+        "range_type": range_type,
+        "aoe_type": aoe_type,
+        "upgrade": bool(upgrade),
+    }
+    col.insert_one(doc)
+    return doc
 
 # --- BULK CREATE EFFECTS (admin only) ---
 from fastapi import HTTPException
@@ -262,41 +289,18 @@ def get_effects(name: str | None = Query(default=None), school: str | None = Que
 
 @app.post("/costs")
 async def get_costs(request: Request):
-    try:
-        body = await request.json()
-        range_val = body.get("range")
-        aoe_val = body.get("aoe")
-        duration_val = body.get("duration")
-        activation_val = body.get("activation")
-        effect_ids = [eid for eid in body.get("effects", []) if eid and str(eid).strip()]
+    body = await request.json()
+    range_val     = body.get("range")
+    aoe_val       = body.get("aoe")
+    duration_val  = body.get("duration")
+    activation_val= body.get("activation")
+    effect_ids    = [str(e) for e in (body.get("effects") or []) if str(e).strip()]
 
-        effects = [load_effect(eid) for eid in effect_ids]
+    effects = [load_effect(eid) for eid in effect_ids]
+    mp_cost, en_cost = Spell.compute_cost(range_val, aoe_val, duration_val, activation_val, effects)
+    category = category_for_mp(mp_cost)
+    return {"mp_cost": mp_cost, "en_cost": en_cost, "category": category}
 
-        # Build a temp spell so it uses set_* methods and your cost_utils correctly
-        temp = Spell(
-            id="__preview__",
-            name="__preview__",
-            activation=activation_val,
-            range=range_val,
-            aoe=aoe_val,
-            duration=duration_val,
-            effects=effects
-        )
-        # Make sure update + category run (post_init usually does, but be explicit)
-        temp.update_cost()
-        temp.set_spell_category()
-
-        return {
-            "mp_cost": temp.mp_cost,
-            "en_cost": temp.en_cost,
-            "category": temp.category
-        }
-    except Exception as e:
-        # Keep 200 for now, but return an error key so the UI can show it
-        return {"error": str(e)}
-
-
-@app.get("/schools")
 @app.get("/schools")
 def list_schools():
     try:
@@ -317,83 +321,169 @@ def list_schools():
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/spells")
-def list_spells(
-    name: str | None = Query(default=None),
-    category: str | None = Query(default=None),
-    school: str | None = Query(default=None),
-):
-    sp_col = get_col("spells")
+@app.get("/spells", summary="List spells (resilient to funky query params)")
+def list_spells(request: Request):
+    # raw, resilient params (avoid pydantic 422 on empty/undefined strings)
+    qp = request.query_params
+    name = qp.get("name") or None
+    category = qp.get("category") or None
+    school = qp.get("school") or None
+
+    try:
+        page = int(qp.get("page") or 1)
+    except Exception:
+        page = 1
+    try:
+        limit = int(qp.get("limit") or 100)
+    except Exception:
+        limit = 100
+    page = max(1, page)
+    limit = max(1, min(500, limit))
+
+    sp_col  = get_col("spells")
     eff_col = get_col("effects")
     sch_col = get_col("schools")
 
+    # base filter
     q = {}
     if name:
         q["name"] = {"$regex": name, "$options": "i"}
     if category:
         q["category"] = category
 
-    spells = list(sp_col.find(q, {"_id": 0}))
-    # Build school information per spell from its effect ids
+    total = sp_col.count_documents(q)
+    cursor = sp_col.find(q, {"_id": 0}).skip((page - 1) * limit).limit(limit)
+    spells = list(cursor)
+
+    # map school_id -> school_name
     school_map = {s["id"]: s.get("name", s["id"]) for s in sch_col.find({}, {"_id": 0, "id": 1, "name": 1})}
 
-    rows = []
+    # get all effect -> school in one shot
+    all_eff_ids = {str(eid) for sp in spells for eid in (sp.get("effects") or [])}
+    eff_docs = list(eff_col.find({"id": {"$in": list(all_eff_ids)}}, {"_id": 0, "id": 1, "school": 1}))
+    eff_school = {d["id"]: str(d.get("school") or "") for d in eff_docs}
+
+    # attach derived schools to each spell
+    out = []
     for sp in spells:
-        eff_ids = [str(e) for e in (sp.get("effects") or [])]
-        # fetch distinct schools for those effects
-        sch_ids = set()
-        if eff_ids:
-            for e in eff_col.find({"id": {"$in": eff_ids}}, {"_id": 0, "school": 1}):
-                sid = str(e.get("school") or "")
-                if sid:
-                    sch_ids.add(sid)
+        sch_ids = sorted({eff_school.get(str(eid), "") for eid in (sp.get("effects") or []) if eff_school.get(str(eid), "")})
+        sp["schools"] = [{"id": sid, "name": school_map.get(sid, sid)} for sid in sch_ids]
+        out.append(sp)
 
-        school_list = [{"id": sid, "name": school_map.get(sid, sid)} for sid in sorted(sch_ids)]
-        # school filter (accept id or name)
-        if school:
-            low = school.lower()
-            if (low not in {s["id"].lower() for s in school_list}) and (low not in {s["name"].lower() for s in school_list}):
-                continue
+    # post-filter by school (accept id or name, case-insensitive)
+    if school:
+        s_low = school.lower()
+        out = [
+            sp for sp in out
+            if any(s["id"].lower() == s_low or s["name"].lower() == s_low for s in sp["schools"])
+        ]
 
-        rows.append({
-            "id": sp.get("id"),
-            "name": sp.get("name"),
-            "activation": sp.get("activation"),
-            "range": sp.get("range"),
-            "aoe": sp.get("aoe"),
-            "duration": sp.get("duration"),
-            "mp_cost": sp.get("mp_cost"),
-            "en_cost": sp.get("en_cost"),
-            "category": sp.get("category"),
-            "schools": school_list,
-            "effects": sp.get("effects", []),
-        })
-    return {"spells": rows}
+    return {"spells": out, "page": page, "limit": limit, "total": total}
 
+
+# fetch one spell
 @app.get("/spells/{spell_id}")
 def get_spell(spell_id: str):
-    sp = get_col("spells").find_one({"id": spell_id}, {"_id": 0})
-    if not sp:
-        return {"error": f"Spell {spell_id} not found"}
-    return {"spell": sp}
+    doc = get_col("spells").find_one({"id": spell_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, f"Spell {spell_id} not found")
+    return {"spell": doc}
+
+# update/overwrite a spell
+@app.put("/spells/{spell_id}")
+async def update_spell(spell_id: str, request: Request):
+    """
+    Update an existing spell. Returns clear JSON on any error so the UI
+    never shows a generic 'Unknown error'.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"status": "error", "message": "Invalid JSON body"},
+            status_code=400,
+        )
+
+    try:
+        name        = (body.get("name") or "Unnamed Spell").strip()
+        activation  = body.get("activation") or "Action"
+        # coerce types but keep originals for error messages
+        try:
+            range_val = int(body.get("range", 0))
+        except Exception:
+            return JSONResponse({"status":"error","message":"range must be an integer"}, status_code=400)
+
+        aoe_val     = body.get("aoe") or "A Square"
+        try:
+            duration  = int(body.get("duration", 1))
+        except Exception:
+            return JSONResponse({"status":"error","message":"duration must be an integer"}, status_code=400)
+
+        effect_ids_raw = body.get("effects") or []
+        effect_ids     = [str(e).strip() for e in effect_ids_raw if str(e).strip()]
+
+        # make sure all effects exist so we don’t 500 later
+        missing = []
+        for eid in effect_ids:
+            if not get_col("effects").find_one({"id": eid}, {"_id": 0}):
+                missing.append(eid)
+        if missing:
+            return JSONResponse(
+                {"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"},
+                status_code=400,
+            )
+
+        # compute costs/category using your model/utilities
+        cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
+
+        doc = {
+            "name": name,
+            "activation": activation,
+            "range": range_val,
+            "aoe": aoe_val,
+            "duration": duration,
+            "effects": effect_ids,           # IDs only (builder expects this)
+            "mp_cost": cc["mp_cost"],
+            "en_cost": cc["en_cost"],
+            "category": cc["category"],
+        }
+
+        r = get_col("spells").update_one({"id": spell_id}, {"$set": doc}, upsert=False)
+        if r.matched_count == 0:
+            return JSONResponse(
+                {"status": "error", "message": f"Spell {spell_id} not found"},
+                status_code=404,
+            )
+
+        return {"status": "success", "id": spell_id, "spell": doc}
+
+    except Exception as e:
+        # log full stack server-side but return a readable message to UI
+        import traceback, logging
+        logging.getLogger("noe").exception("PUT /spells/%s failed", spell_id)
+        return JSONResponse(
+            {"status": "error", "message": f"{type(e).__name__}: {e}"},
+            status_code=500,
+        )
 
 @app.post("/auth/login")
 async def auth_login(request: Request):
-    try:
-        body = await request.json()
-        username = (body.get("username") or "").strip()
-        password = (body.get("password") or "").strip()
+    body = await request.json()
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    if not username or not password:
+        return {"status": "error", "message": "Missing username or password"}
 
-        users = load_users()
-        info = users.get(username)
-        if not info or info["password"] != password:
-            return {"status": "error", "message": "Invalid username or password"}
+    user = find_user(username)
+    if not user or not verify_password(password, user):
+        logger.info("Login failed for user=%s", username)
+        return {"status": "error", "message": "Login failed"}
 
-        token = make_token()
-        SESSIONS[token] = (username, info["role"])
-        return {"status": "success", "token": token, "username": username, "role": info["role"]}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    token = make_token()
+    role = user.get("role", "user")
+    SESSIONS[token] = (username, role)
+    logger.info("Login ok: %s (%s)", username, role)
+    return {"status": "success", "token": token, "username": username, "role": role}
 
 @app.get("/auth/me")
 async def auth_me(request: Request):
@@ -413,93 +503,35 @@ async def auth_logout(request: Request):
 @app.delete("/spells/{spell_id}")
 def delete_spell(spell_id: str, request: Request):
     try:
-        username, role = require_auth(request, ["admin", "moderator"])
-        path = os.path.join(SPELLS_DIR, f"{spell_id}.json")
-        if not os.path.exists(path):
-            return {"status": "error", "message": f"Spell {spell_id} not found"}
-
-        with open(path, "r", encoding="utf-8") as f:
-            before = json.load(f)
-
-        os.remove(path)
-        write_audit("delete", username, spell_id, before, None)
-        return {"status": "success", "deleted": spell_id}
+        username, role = require_auth(request, ["admin","moderator"])
+        get_col("spells").delete_one({"id": spell_id})
+        return {"status":"success","deleted": spell_id}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.put("/spells/{spell_id}")
-async def update_spell(spell_id: str, request: Request):
-    try:
-        username, role = require_auth(request, ["admin", "moderator"])
-        path = os.path.join(SPELLS_DIR, f"{spell_id}.json")
-        if not os.path.exists(path):
-            return {"status": "error", "message": f"Spell {spell_id} not found"}
-
-        body = await request.json()
-        # expected keys: name, activation, range, aoe, duration, effects (ids)
-        effect_ids = [eid for eid in body.get("effects", []) if eid and str(eid).strip()]
-        effects = [load_effect(eid) for eid in effect_ids]
-
-        with open(path, "r", encoding="utf-8") as f:
-            before = json.load(f)
-
-        # Rebuild spell using SAME id
-        spell = Spell(
-            id=spell_id,
-            name=body.get("name") or before.get("name"),
-            activation=body.get("activation") or before.get("activation"),
-            range=body.get("range") if body.get("range") is not None else before.get("range"),
-            aoe=body.get("aoe") or before.get("aoe"),
-            duration=body.get("duration") if body.get("duration") is not None else before.get("duration"),
-            effects=effects if effect_ids else [load_effect(eid) for eid in before.get("effects", [])],
-        )
-        spell.update_cost()
-        spell.set_spell_category()
-        spell.save(dir="spells")
-
-        after = spell.to_dict()
-        write_audit("update", username, spell_id, before, after)
-        return {"status": "success", "id": spell_id, "saved": True}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status":"error","message": str(e)}
 
 @app.post("/submit_spell")
 async def submit_spell(request: Request):
-    try:
-        body = await request.json()
-        name = body.get("name") or "Unnamed Spell"
-        activation = body.get("activation")
-        range_val = body.get("range")
-        aoe_val = body.get("aoe")
-        duration_val = body.get("duration")
-        effect_ids = [eid for eid in body.get("effects", []) if eid and str(eid).strip()]
+    body = await request.json()
+    name        = (body.get("name") or "Unnamed Spell").strip()
+    activation  = body.get("activation") or "Action"
+    range_val   = int(body.get("range") or 0)
+    aoe_val     = body.get("aoe") or "A Square"
+    duration    = int(body.get("duration") or 1)
+    effect_ids  = [str(e) for e in (body.get("effects") or []) if str(e).strip()]
 
-        effects = [load_effect(eid) for eid in effect_ids]
+    if not effect_ids:
+        raise HTTPException(status_code=400, detail="At least one effect is required.")
 
-        # Auto-generate numeric ID
-        spell_id = get_next_spell_id()
+    effects = [load_effect(eid) for eid in effect_ids]
+    sid = next_id_str("spells")
 
-        spell = Spell(
-            id=spell_id,
-            name=name,
-            activation=activation,
-            range=range_val,
-            aoe=aoe_val,
-            duration=duration_val,
-            effects=effects,
-        )
-        spell.update_cost()
-        spell.set_spell_category()
-        spell.save()
-
-        # --- NEW: audit log for creation (works for any user) ---
-        token = get_auth_token(request)               # reads 'Authorization: Bearer <token>'
-        username = SESSIONS.get(token, ("anonymous", ""))[0] if token else "anonymous"
-        write_audit("create", username, spell.id, before=None, after=spell.to_dict())
-
-        return {"status": "success", "id": spell.id, "saved": True}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    sp = Spell(
+        id=sid, name=name, activation=activation, range=range_val, aoe=aoe_val,
+        duration=duration, category="", effects=effects,
+        spell_type=body.get("spell_type") or "Simple", mp_cost=0, en_cost=0
+    )
+    sp.save()
+    return {"status": "success", "id": sid, "spell": sp.to_dict()}
 
 @app.get("/health")
 def health():

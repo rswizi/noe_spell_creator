@@ -1,0 +1,18 @@
+2025-08-29 17:15:24,952 INFO noe: Imported 1 user(s) from users.txt into Mongo.
+2025-08-29 17:15:46,137 INFO noe: Imported 0 user(s) from users.txt into Mongo.
+2025-08-29 17:47:28,882 INFO noe: Imported 0 user(s) from users.txt into Mongo.
+2025-08-29 17:50:20,786 INFO noe: Imported 0 user(s) from users.txt into Mongo.
+2025-08-29 17:50:21,967 INFO noe: Imported 0 user(s) from users.txt into Mongo.
+2025-08-29 17:50:34,752 INFO noe: Imported 0 user(s) from users.txt into Mongo.
+2025-08-29 17:55:57,581 INFO noe: Imported 0 user(s) from users.txt into Mongo.
+2025-08-29 17:56:24,372 INFO noe: Login failed for user=wizi
+2025-08-29 17:56:30,389 INFO noe: Login failed for user=wizi
+2025-08-29 20:52:58,876 INFO noe: Imported 0 user(s) from users.txt into Mongo.
+2025-08-29 20:53:13,864 INFO noe: Login failed for user=wizi
+2025-08-29 20:55:54,704 INFO noe: Imported 0 user(s) from users.txt into Mongo.
+2025-08-29 20:56:00,856 INFO noe: Login ok: wizi (admin)
+2025-08-29 20:56:35,029 INFO noe: Login ok: wizi (admin)
+2025-08-29 21:06:43,805 INFO noe: Login ok: wizi (admin)
+2025-08-29 21:07:16,046 INFO noe: Login ok: wizi (admin)
+2025-08-29 21:10:50,366 INFO noe: Login ok: wizi (admin)
+2025-08-29 21:20:09,039 INFO noe: Imported 0 user(s) from users.txt into Mongo.

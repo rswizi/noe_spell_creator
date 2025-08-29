@@ -1,8 +1,0 @@
-{
-  "id": "0216",
-  "name": "Whispers of Shadows",
-  "description": "[Large] Create a dimly lit area where targets that fail an Instinct or Spirit check against your Magical DC the beginning of their turn are under Active Fear for one round.",
-  "mp_cost": 35,
-  "en_cost": 2,
-  "school": "0008"
-}

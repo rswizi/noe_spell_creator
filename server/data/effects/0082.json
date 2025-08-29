@@ -1,8 +1,0 @@
-{
-  "id": "0082",
-  "name": "Random Cleanse V",
-  "description": "[Once] Apply Cleanse (25) that will apply randomly to the target’s condition.",
-  "mp_cost": 45,
-  "en_cost": 4,
-  "school": "0003"
-}

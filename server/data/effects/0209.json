@@ -1,8 +1,0 @@
-{
-  "id": "0209",
-  "name": "Spider",
-  "description": "The target of this spell has the ability to climb on smooth surfaces.",
-  "mp_cost": 15,
-  "en_cost": 1,
-  "school": "0008"
-}

@@ -167,7 +167,7 @@ async function loadEffects(){
   ALL_EFFECTS = (data.effects || []).map(e=>{
     const sid = String(e.school || "").trim();
     const sch = SCHOOL_BY_ID[sid] || { id: sid, name: sid };
-    return { ...e, school: { id: sch.id, name: sch.name }};
+    return { ...e, school: { id: sch.id, name: sch.name } };
   });
 }
 

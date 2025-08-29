@@ -1,8 +1,0 @@
-{
-  "id": "0273",
-  "name": "Spiritual Melee Weapon",
-  "description": "[Active, Square] You summon a one-handed weapon that deals 1 ID + P(MAG) in magical damage. You can use this weapon thanks to your Aura.",
-  "mp_cost": 12,
-  "en_cost": 1,
-  "school": "0012"
-}

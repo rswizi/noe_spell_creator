@@ -1,8 +1,0 @@
-{
-  "id": "0312",
-  "name": "Stasis",
-  "description": "(Active) You place everything within the AoE of your spell into stasis. Targets affected by stasis cannot be damaged, moved, or take any actions or movement.",
-  "mp_cost": 34,
-  "en_cost": 8,
-  "school": "0015"
-}

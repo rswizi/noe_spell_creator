@@ -1,8 +1,0 @@
-{
-  "id": "0180",
-  "name": "Powerful Curse V",
-  "description": "Your spell will apply to target a negative Powerful Condition of level 5.",
-  "mp_cost": 40,
-  "en_cost": 3,
-  "school": "0006"
-}

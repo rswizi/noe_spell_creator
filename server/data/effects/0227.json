@@ -1,8 +1,0 @@
-{
-  "id": "0227",
-  "name": "Decor",
-  "description": "For the duration of the spell, you alter the target's appearance to resemble a statue, a frame, or another decorative element large enough to match their size and build. This transformation is purely illusory and does not affect their physical form. The target gains advantage on Stealth rolls when attempting to hide in areas with similar decor.",
-  "mp_cost": 10,
-  "en_cost": 1,
-  "school": "0009"
-}
