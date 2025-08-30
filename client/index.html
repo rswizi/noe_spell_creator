@@ -388,39 +388,6 @@ function effectMatchesFilters(effect, filters) {
     }
   }
 
-  async function submitSpell(ev){
-  ev.preventDefault();
-
-  const payload = {
-    name: document.getElementById('school_name').value.trim(),
-    activation: document.getElementById('activation').value,
-    range: Number(document.getElementById('range').value),
-    aoe: document.getElementById('aoe').value,
-    duration: Number(document.getElementById('duration').value),
-    effects: [...document.querySelectorAll('#selected_effects option')].map(o => o.value) // IDs only
-  };
-
-  const res = await fetch('/submit_spell', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload)
-  });
-
-  const raw = await res.text();
-  let data;
-  try { data = JSON.parse(raw); } catch (e) {
-    alert(`Submit error: ${res.status} ${raw}`);
-    return;
-  }
-
-  if (data.status !== 'success') {
-    alert(data.message || 'Submit failed');
-    return;
-  }
-
-  alert(`Saved! New id: ${data.id}`);
-}
-
   // ---------- DOM boot ----------
   document.addEventListener("DOMContentLoaded", async () => {
     // grab filter inputs
@@ -507,19 +474,22 @@ function effectMatchesFilters(effect, filters) {
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
     fetch(url, { method, headers, body: JSON.stringify(data) })
-      .then(res => res.json())
-      .then(result => {
-        if (result.status === "success" || result.saved) {
-          alert(editId ? `Spell ${editId} updated.` : `Spell saved! ID: ${result.id}`);
-          if (editId) window.location.href = "admin.html";
-        } else {
-          alert("Error saving spell: " + (result.message || "Unknown error"));
+      .then(async res => {
+        const text = await res.text();
+        let data;
+        try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(text || `${res.status} ${res.statusText}`); }
+        if (!res.ok || data.status === "error") {
+          throw new Error(data.message || `${res.status} ${res.statusText}`);
         }
+        return data;
+      })
+      .then(result => {
+        alertModal("Spell saved!");
+        // ... whatever you already do on success
       })
       .catch(err => {
-        console.error("Submit error:", err);
-        alert("Submit failed");
-      });
+        alertModal("Submit error: " + err.message);
+   });
   });
 </script>
 
