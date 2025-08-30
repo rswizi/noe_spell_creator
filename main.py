@@ -9,7 +9,7 @@ import re
 import hashlib
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from typing import Dict, Tuple, Optional
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes
 from pathlib import Path
@@ -542,7 +542,18 @@ def root():
 
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
-app.mount("/", StaticFiles(directory=str(CLIENT_DIR), html=True), name="static")
+app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
+
+def serve_home():
+    return FileResponse(CLIENT_DIR / "home.html")
+
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export"}
+
+@app.get("/{page}.html", include_in_schema=False)
+def serve_page(page: str):
+    if page in ALLOWED_PAGES:
+        return FileResponse(CLIENT_DIR / f"{page}.html")
+    raise HTTPException(404, "Page not found")
 
 @app.get("/health")
 def health():
