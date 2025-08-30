@@ -224,39 +224,51 @@ def on_startup():
 
 @app.post("/effects/bulk_create")
 async def bulk_create_effects(request: Request):
+    sch_col = get_col("schools")
+    eff_col = get_col("effects")
     try:
-        existing = sch_col.find_one({"name": {"$regex": f"^{re.escape(school_name)}$", "$options": "i"}})
-        username, role = require_auth(request, ["admin"])
-        body = await request.json()
+        # auth
+        require_auth(request, ["admin"])
 
+        body = await request.json()
         school_name = (body.get("school_name") or "").strip()
         school_type = (body.get("school_type") or "Simple").strip()
         range_type  = (body.get("range_type")  or "A").strip()
         aoe_type    = (body.get("aoe_type")    or "A").strip()
         upgrade     = bool(body.get("upgrade", body.get("is_upgrade", False)))
         effects     = body.get("effects") or []
+
         if not school_name:
-            raise HTTPException(status_code=400, detail="school_name is required")
+            return JSONResponse({"status":"error","message":"school_name is required"}, status_code=400)
         if not effects:
-            raise HTTPException(status_code=400, detail="effects must be a non-empty list")
+            return JSONResponse({"status":"error","message":"effects must be a non-empty list"}, status_code=400)
 
-        sch_col = get_col("schools")
-        eff_col = get_col("effects")
-
-        # ensure / upsert school by name
-        existing = sch_col.find_one({"name": {"$regex": f"^{school_name}$", "$options": "i"}})
+        # find or create school (case-insensitive exact name)
+        existing = sch_col.find_one(
+            {"name": {"$regex": f"^{re.escape(school_name)}$", "$options": "i"}},
+            {"_id": 0}
+        )
         if existing:
             sid = existing["id"]
             sch_col.update_one(
                 {"id": sid},
-                {"$set": {"school_type": school_type, "range_type": range_type, "aoe_type": aoe_type, "upgrade": bool(upgrade)}}
+                {"$set": {
+                    "school_type": school_type,
+                    "range_type": range_type,
+                    "aoe_type": aoe_type,
+                    "upgrade": bool(upgrade)
+                }}
             )
             school = sch_col.find_one({"id": sid}, {"_id": 0})
         else:
-            sid = get_next_school_id()
+            sid = next_id_str("schools", padding=4)
             school = {
-                "id": sid, "name": school_name, "school_type": school_type,
-                "upgrade": bool(upgrade), "range_type": range_type, "aoe_type": aoe_type
+                "id": sid,
+                "name": school_name,
+                "school_type": school_type,
+                "range_type": range_type,
+                "aoe_type": aoe_type,
+                "upgrade": bool(upgrade),
             }
             sch_col.insert_one(school)
 
@@ -268,20 +280,21 @@ async def bulk_create_effects(request: Request):
                 mp   = int(e.get("mp_cost"))
                 en   = int(e.get("en_cost"))
             except Exception:
-                raise HTTPException(status_code=400, detail=f"Non-numeric MP/EN in effect '{name}'")
+                return JSONResponse({"status":"error","message":f"Non-numeric MP/EN in effect '{name}'"}, status_code=400)
 
-            eff_id = get_next_effect_id()
-            rec = {"id": eff_id, "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school["id"]}
+            eff_id = next_id_str("effects", padding=4)
+            rec = {"id": eff_id, "name": name, "description": desc,
+                   "mp_cost": mp, "en_cost": en, "school": school["id"]}
             eff_col.insert_one(rec)
             created.append(eff_id)
 
-        write_audit("bulk_create_effects", username, spell_id="—", before=None,
-                    after={"school": school, "range_type": range_type, "aoe_type": aoe_type, "upgrade": upgrade, "created": created})
+        write_audit("bulk_create_effects", "ui", "—", None,
+                    {"school": school, "created": created})
         return {"status": "success", "school": school, "created": created}
-    except HTTPException as he:
-        return {"status": "error", "message": he.detail}
+
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logger.exception("bulk_create_effects failed")
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 @app.get("/", include_in_schema=False)
 def serve_home():
@@ -544,26 +557,27 @@ async def submit_spell(request: Request):
         name        = (body.get("name") or "Unnamed Spell").strip()
         activation  = body.get("activation") or "Action"
         aoe_val     = body.get("aoe") or "A Square"
+
         try:
             range_val = int(body.get("range") or 0)
         except:
-            return JSONResponse({"status": "error", "message": "range must be an integer"}, status_code=400)
+            return JSONResponse({"status":"error","message":"range must be an integer"}, status_code=400)
         try:
             duration  = int(body.get("duration") or 1)
         except:
-            return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
+            return JSONResponse({"status":"error","message":"duration must be an integer"}, status_code=400)
 
         effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
         if not effect_ids:
-            return JSONResponse({"status": "error", "message": "At least one effect is required"}, status_code=400)
+            return JSONResponse({"status":"error","message":"At least one effect is required"}, status_code=400)
 
-        # Validate effects exist
+        # validate effects exist
         eff_col = get_col("effects")
         missing = [e for e in effect_ids if not eff_col.find_one({"id": e}, {"_id": 0})]
         if missing:
-            return JSONResponse({"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
+            return JSONResponse({"status":"error","message":f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
 
-        # Compute costs & category
+        # compute costs + category
         cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
 
         sid = next_id_str("spells", padding=4)
@@ -581,17 +595,12 @@ async def submit_spell(request: Request):
             "spell_type": body.get("spell_type") or "Simple",
             "description": body.get("description") or "",
         }
-
         get_col("spells").insert_one(doc)
         return {"status": "success", "id": sid, "spell": doc}
 
     except Exception as e:
         logger.exception("submit_spell failed")
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
-
-@app.get("/", include_in_schema=False)
-def root():
-    return RedirectResponse("/home.html")
+        return JSONResponse({"status":"error","message":str(e)}, status_code=500)
 
 
 BASE_DIR = Path(__file__).resolve().parent

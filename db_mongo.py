@@ -12,6 +12,7 @@ _client = MongoClient(MONGO_URI, tls=True, tlsCAFile=certifi.where())
 _db = _client[DB_NAME]
 
 def get_db(): return _db
+
 def get_col(name: str): return _db[name]
 
 def ensure_indexes():
@@ -30,26 +31,23 @@ def next_id_str(sequence_name: str, padding: int = 4) -> str:
     )
     return str(doc["seq"]).zfill(padding)
 
+# --- keep counters in sync with current max ids to avoid duplicates
 def _max_numeric_id(colname: str) -> int:
-    """Read the highest numeric id currently stored (ids are '0001' strings)."""
-    col = get_col(colname)
-    doc = col.find({}, {"id": 1}).sort("id", -1).limit(1)
+    doc = get_col(colname).find({}, {"id": 1}).sort("id", -1).limit(1)
     doc = next(doc, None)
-    if not doc or "id" not in doc: 
+    if not doc:
         return 0
-    s = str(doc["id"]).lstrip("0") or "0"
+    s = str(doc.get("id", "")).lstrip("0") or "0"
     try:
         return int(s)
     except:
         return 0
 
 def sync_counters():
-    """Ensure counters start at current max for each collection."""
     db = get_db()
     for name in ("schools", "effects", "spells"):
-        max_id = _max_numeric_id(name)
         db.counters.find_one_and_update(
             {"_id": name},
-            {"$set": {"seq": max_id}},
+            {"$set": {"seq": _max_numeric_id(name)}},
             upsert=True
         )
