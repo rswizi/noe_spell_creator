@@ -258,9 +258,9 @@ async def bulk_create_effects(request: Request):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
+@app.get("/", include_in_schema=False)
+def serve_home():
+    return FileResponse(CLIENT_DIR / "home.html")
 
 @app.get("/effects")
 def get_effects(name: str | None = Query(default=None), school: str | None = Query(default=None)):
