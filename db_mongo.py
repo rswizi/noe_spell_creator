@@ -1,20 +1,22 @@
+# db_mongo.py
 import os
-from typing import Any
-from pymongo import MongoClient, ReturnDocument
 from dotenv import load_dotenv
+from pymongo import MongoClient
+import certifi
 
 load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-DB_NAME   = os.getenv("DB_NAME",   "noe_spell_creator")
+DB_NAME   = os.getenv("DB_NAME", "noe_spell_creator")
 
-_client = MongoClient(MONGO_URI)
+_client = MongoClient(MONGO_URI, tls=True, tlsCAFile=certifi.where())
+_db = _client[DB_NAME]
 
 def get_db():
-    return _client[DB_NAME]
+    return _db
 
 def get_col(name: str):
-    return get_db()[name]
+    return _db[name]
 
 def ensure_indexes():
     db = get_db()
