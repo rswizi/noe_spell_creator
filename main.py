@@ -568,59 +568,63 @@ def delete_spell(spell_id: str, request: Request):
 
 @app.post("/submit_spell")
 async def submit_spell(request: Request):
-    # Always return JSON with a clear message
     try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({"status": "error", "message": "Invalid JSON body"}, status_code=400)
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"status": "error", "message": "Invalid JSON body"}, status_code=400)
 
-    name        = (body.get("name") or "Unnamed Spell").strip()
-    activation  = body.get("activation") or "Action"
-    aoe_val     = body.get("aoe") or "A Square"
+        name        = (body.get("name") or "Unnamed Spell").strip()
+        activation  = body.get("activation") or "Action"
+        aoe_val     = body.get("aoe") or "A Square"
 
-    # Coerce numeric fields safely
-    try:
-        range_val = int(body.get("range", 0))
-    except Exception:
-        return JSONResponse({"status": "error", "message": "range must be an integer"}, status_code=400)
-    try:
-        duration  = int(body.get("duration", 1))
-    except Exception:
-        return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
+        # number coercion with clear messages
+        try:
+            range_val = int(body.get("range", 0))
+        except Exception:
+            return JSONResponse({"status": "error", "message": "range must be an integer"}, status_code=400)
+        try:
+            duration  = int(body.get("duration", 1))
+        except Exception:
+            return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
 
-    # Effects must be a list of IDs
-    effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
-    if not effect_ids:
-        return JSONResponse({"status": "error", "message": "At least one effect is required"}, status_code=400)
+        # effects must be a non-empty list of IDs
+        effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
+        if not effect_ids:
+            return JSONResponse({"status": "error", "message": "At least one effect is required"}, status_code=400)
 
-    # Verify effects exist
-    eff_col = get_col("effects")
-    missing = [eid for eid in effect_ids if not eff_col.find_one({"id": eid}, {"_id": 0, "id": 1})]
-    if missing:
-        return JSONResponse({"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
+        # verify effects exist
+        eff_col = get_col("effects")
+        missing = [eid for eid in effect_ids if not eff_col.find_one({"id": eid}, {"_id": 0, "id": 1})]
+        if missing:
+            return JSONResponse({"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
 
-    # Compute costs/category
-    cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
+        # compute costs from DB (falls back to stubs if load_effect fails)
+        cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
 
-    # New ID and document
-    sid = next_id_str("spells")
-    doc = {
-        "id": sid,
-        "name": name,
-        "activation": activation,
-        "range": range_val,
-        "aoe": aoe_val,
-        "duration": duration,
-        "effects": effect_ids,
-        "mp_cost": cc["mp_cost"],
-        "en_cost": cc["en_cost"],
-        "category": cc["category"],
-        "spell_type": body.get("spell_type") or "Simple",
-        "description": body.get("description", "")
-    }
+        # next id and insert
+        sid = next_id_str("spells", padding=4)
+        doc = {
+            "id": sid,
+            "name": name,
+            "activation": activation,
+            "range": range_val,
+            "aoe": aoe_val,
+            "duration": duration,
+            "effects": effect_ids,
+            "mp_cost": cc["mp_cost"],
+            "en_cost": cc["en_cost"],
+            "category": cc["category"],
+            "spell_type": body.get("spell_type") or "Simple",
+            "description": body.get("description", "")
+        }
+        get_col("spells").insert_one(doc)
+        return {"status": "success", "id": sid, "spell": doc}
 
-    get_col("spells").insert_one(doc)
-    return {"status": "success", "id": sid, "spell": doc}
+    except Exception as e:
+        logger.exception("POST /submit_spell failed")
+        # return JSON *not* HTML so the front-end can show the error nicely
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 
 BASE_DIR = Path(__file__).resolve().parent

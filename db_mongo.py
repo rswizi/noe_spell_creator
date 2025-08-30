@@ -12,7 +12,6 @@ _client = MongoClient(MONGO_URI, tls=True, tlsCAFile=certifi.where())
 _db = _client[DB_NAME]
 
 def get_db(): return _db
-
 def get_col(name: str): return _db[name]
 
 def ensure_indexes():
@@ -45,9 +44,11 @@ def _max_numeric_id(colname: str) -> int:
 
 def sync_counters():
     db = get_db()
-    for name in ("schools", "effects", "spells"):
-        db.counters.find_one_and_update(
-            {"_id": name},
-            {"$set": {"seq": _max_numeric_id(name)}},
-            upsert=True
-        )
+    for coll, field in [("effects", "id"), ("schools", "id"), ("spells", "id")]:
+        max_id = 0
+        for d in db[coll].find({}, {field: 1, "_id": 0}):
+            try:
+                max_id = max(max_id, int(str(d.get(field, "0")).lstrip("0") or "0"))
+            except Exception:
+                pass
+        db.counters.update_one({"_id": coll}, {"$max": {"seq": max_id}}, upsert=True)

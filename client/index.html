@@ -99,6 +99,7 @@
   </form>
 
 <script>
+function alertModal(msg) { alert(msg); }
 
 function getEffectById(id) {
   if (!id) return null;
@@ -485,12 +486,30 @@ function effectMatchesFilters(effect, filters) {
       })
       .then(result => {
         alertModal("Spell saved!");
-        // ... whatever you already do on success
+        clearSpellForm(); 
       })
       .catch(err => {
         alertModal("Submit error: " + err.message);
    });
   });
+
+  function clearSpellForm() {
+
+    const form = document.getElementById('spell-form');
+  if (form) form.reset();
+
+  const chosen = document.getElementById('chosen-effects');   // container that holds the added effect selects/rows
+  if (chosen) chosen.innerHTML = '';
+
+  const effectDesc = document.getElementById('effect-description');
+  if (effectDesc) effectDesc.textContent = '';
+
+  const mp = document.getElementById('mp-cost'); if (mp) mp.textContent = '0';
+  const en = document.getElementById('en-cost'); if (en) en.textContent = '0';
+  const cat = document.getElementById('spell-category'); if (cat) cat.textContent = '';
+
+  if (window.selectedEffects) window.selectedEffects = [];
+}
 </script>
 
 </body>
