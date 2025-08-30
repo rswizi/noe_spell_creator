@@ -16,3 +16,6 @@
 2025-08-29 21:07:16,046 INFO noe: Login ok: wizi (admin)
 2025-08-29 21:10:50,366 INFO noe: Login ok: wizi (admin)
 2025-08-29 21:20:09,039 INFO noe: Imported 0 user(s) from users.txt into Mongo.
+2025-08-29 21:20:10,270 INFO noe: Imported 0 user(s) from users.txt into Mongo.
+2025-08-29 21:25:20,602 INFO noe: Login failed for user=wizi
+2025-08-29 21:25:35,972 INFO noe: Login ok: wizi (admin)
