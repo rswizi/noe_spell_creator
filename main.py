@@ -226,8 +226,8 @@ from fastapi import HTTPException
 @app.on_event("startup")
 def on_startup():
     ensure_indexes()
+    sync_counters()
 
-    # one-time seed of admin if missing (using env vars)
     u = os.getenv("ADMIN_USER")
     p = os.getenv("ADMIN_PASSWORD")
     if u and p:
