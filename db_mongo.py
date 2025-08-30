@@ -1,7 +1,7 @@
 # db_mongo.py
 import os
 from dotenv import load_dotenv
-from pymongo import MongoClient
+from pymongo import MongoClient, ReturnDocument
 import certifi
 
 load_dotenv()

@@ -9,10 +9,12 @@ import re
 import hashlib
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from typing import Dict, Tuple, Optional
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes
 from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
 
 
 
@@ -532,6 +534,15 @@ async def submit_spell(request: Request):
     )
     sp.save()
     return {"status": "success", "id": sid, "spell": sp.to_dict()}
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse("/home.html")
+
+
+BASE_DIR = Path(__file__).resolve().parent
+CLIENT_DIR = BASE_DIR / "client"
+app.mount("/", StaticFiles(directory=str(CLIENT_DIR), html=True), name="static")
 
 @app.get("/health")
 def health():
