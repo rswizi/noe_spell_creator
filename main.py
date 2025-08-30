@@ -11,10 +11,11 @@ from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from typing import Dict, Tuple, Optional
-from db_mongo import get_col, next_id_str, get_db, ensure_indexes
+from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+import re
 
 
 
@@ -24,6 +25,7 @@ from server.src.objects.schools import load_school
 from server.src.modules.category_table import category_for_mp
 
 ensure_indexes()
+sync_counters()
 logger = logging.getLogger("noe")
 
 
@@ -223,6 +225,7 @@ def on_startup():
 @app.post("/effects/bulk_create")
 async def bulk_create_effects(request: Request):
     try:
+        existing = sch_col.find_one({"name": {"$regex": f"^{re.escape(school_name)}$", "$options": "i"}})
         username, role = require_auth(request, ["admin"])
         body = await request.json()
 
@@ -535,46 +538,56 @@ def delete_spell(spell_id: str, request: Request):
 
 @app.post("/submit_spell")
 async def submit_spell(request: Request):
-    body = await request.json()
-    name        = (body.get("name") or "Unnamed Spell").strip()
-    activation  = body.get("activation") or "Action"
-    range_val   = int(body.get("range") or 0)
-    aoe_val     = body.get("aoe") or "A Square"
-    duration    = int(body.get("duration") or 1)
-    effect_ids  = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
-    if not effect_ids:
-        raise HTTPException(status_code=400, detail="At least one effect is required.")
+    try:
+        body = await request.json()
 
-    # validate effects exist
-    missing = [eid for eid in effect_ids if not get_col("effects").find_one({"id": eid})]
-    if missing:
-        raise HTTPException(status_code=400, detail=f"Unknown effect id(s): {', '.join(missing)}")
+        name        = (body.get("name") or "Unnamed Spell").strip()
+        activation  = body.get("activation") or "Action"
+        aoe_val     = body.get("aoe") or "A Square"
+        try:
+            range_val = int(body.get("range") or 0)
+        except:
+            return JSONResponse({"status": "error", "message": "range must be an integer"}, status_code=400)
+        try:
+            duration  = int(body.get("duration") or 1)
+        except:
+            return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
 
-    # compute costs/category
-    from server.src.objects.effects import load_effect
-    effects = [load_effect(eid) for eid in effect_ids]
-    from server.src.objects.spells import Spell
-    from server.src.modules.category_table import category_for_mp
-    mp_cost, en_cost = Spell.compute_cost(range_val, aoe_val, duration, activation, effects)
-    category = category_for_mp(mp_cost)
+        effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
+        if not effect_ids:
+            return JSONResponse({"status": "error", "message": "At least one effect is required"}, status_code=400)
 
-    sid = next_id_str("spells")
-    doc = {
-        "id": sid,
-        "name": name,
-        "activation": activation,
-        "range": range_val,
-        "aoe": aoe_val,
-        "duration": duration,
-        "effects": effect_ids,
-        "mp_cost": mp_cost,
-        "en_cost": en_cost,
-        "category": category,
-        "spell_type": body.get("spell_type") or "Simple",
-        "description": body.get("description") or "",
-    }
-    get_col("spells").insert_one(doc)
-    return {"status": "success", "id": sid, "spell": doc}
+        # Validate effects exist
+        eff_col = get_col("effects")
+        missing = [e for e in effect_ids if not eff_col.find_one({"id": e}, {"_id": 0})]
+        if missing:
+            return JSONResponse({"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
+
+        # Compute costs & category
+        cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
+
+        sid = next_id_str("spells", padding=4)
+        doc = {
+            "id": sid,
+            "name": name,
+            "activation": activation,
+            "range": range_val,
+            "aoe": aoe_val,
+            "duration": duration,
+            "effects": effect_ids,
+            "mp_cost": cc["mp_cost"],
+            "en_cost": cc["en_cost"],
+            "category": cc["category"],
+            "spell_type": body.get("spell_type") or "Simple",
+            "description": body.get("description") or "",
+        }
+
+        get_col("spells").insert_one(doc)
+        return {"status": "success", "id": sid, "spell": doc}
+
+    except Exception as e:
+        logger.exception("submit_spell failed")
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 @app.get("/", include_in_schema=False)
 def root():
