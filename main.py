@@ -14,7 +14,7 @@ from typing import Dict, Tuple, Optional
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
-
+from contextlib import asynccontextmanager
 
 
 
@@ -57,6 +57,28 @@ def verify_password(input_pw: str, user_doc: dict) -> bool:
         user_doc.get("password") == input_pw
         or user_doc.get("password_hash") == _sha256(input_pw)
     )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ---- STARTUP ----
+    ensure_indexes()
+
+    # one-time seed of admin (only if missing and env vars provided)
+    u = os.getenv("ADMIN_USER")
+    p = os.getenv("ADMIN_PASSWORD")
+    if u and p:
+        col = get_col("users")
+        if not col.find_one({"username": u}):
+            col.update_one(
+                {"username": u},
+                {"$set": {"username": u, "password_hash": _sha256(p), "role": "admin"}},
+                upsert=True,
+            )
+            logger.info("Seeded admin user '%s' from env", u)
+
+    yield
+
 
 # --- cost wrapper used by PUT /spells ---
 def compute_spell_costs(activation: str, range_val: int, aoe: str, duration: int, effect_ids: list[str]) -> dict:
@@ -102,22 +124,6 @@ def migrate_users_txt_to_mongo():
 migrate_users_txt_to_mongo()
 
 SESSIONS: Dict[str, Tuple[str, str]] = {}  # token -> (username, role)
-
-def load_users():
-    users = {}
-    if not os.path.exists(USERS_FILE):
-        return users
-    with open(USERS_FILE, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) < 3:
-                continue
-            username, password, role = parts[0], parts[1], parts[2]
-            users[username] = {"password": password, "role": role}
-    return users
 
 def make_token() -> str:
     return secrets.token_hex(16)
@@ -197,6 +203,22 @@ def ensure_school_mongo(name: str, school_type: str,
 
 # --- BULK CREATE EFFECTS (admin only) ---
 from fastapi import HTTPException
+
+@app.on_event("startup")
+def on_startup():
+    ensure_indexes()
+
+    # one-time seed of admin if missing (using env vars)
+    u = os.getenv("ADMIN_USER")
+    p = os.getenv("ADMIN_PASSWORD")
+    if u and p:
+        if not get_col("users").find_one({"username": u}):
+            get_col("users").update_one(
+                {"username": u},
+                {"$set": {"username": u, "password_hash": _sha256(p), "role": "admin"}},
+                upsert=True,
+            )
+            logger.info("Seeded admin user '%s' from env", u)
 
 @app.post("/effects/bulk_create")
 async def bulk_create_effects(request: Request):
@@ -519,21 +541,40 @@ async def submit_spell(request: Request):
     range_val   = int(body.get("range") or 0)
     aoe_val     = body.get("aoe") or "A Square"
     duration    = int(body.get("duration") or 1)
-    effect_ids  = [str(e) for e in (body.get("effects") or []) if str(e).strip()]
-
+    effect_ids  = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
     if not effect_ids:
         raise HTTPException(status_code=400, detail="At least one effect is required.")
 
-    effects = [load_effect(eid) for eid in effect_ids]
-    sid = next_id_str("spells")
+    # validate effects exist
+    missing = [eid for eid in effect_ids if not get_col("effects").find_one({"id": eid})]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Unknown effect id(s): {', '.join(missing)}")
 
-    sp = Spell(
-        id=sid, name=name, activation=activation, range=range_val, aoe=aoe_val,
-        duration=duration, category="", effects=effects,
-        spell_type=body.get("spell_type") or "Simple", mp_cost=0, en_cost=0
-    )
-    sp.save()
-    return {"status": "success", "id": sid, "spell": sp.to_dict()}
+    # compute costs/category
+    from server.src.objects.effects import load_effect
+    effects = [load_effect(eid) for eid in effect_ids]
+    from server.src.objects.spells import Spell
+    from server.src.modules.category_table import category_for_mp
+    mp_cost, en_cost = Spell.compute_cost(range_val, aoe_val, duration, activation, effects)
+    category = category_for_mp(mp_cost)
+
+    sid = next_id_str("spells")
+    doc = {
+        "id": sid,
+        "name": name,
+        "activation": activation,
+        "range": range_val,
+        "aoe": aoe_val,
+        "duration": duration,
+        "effects": effect_ids,
+        "mp_cost": mp_cost,
+        "en_cost": en_cost,
+        "category": category,
+        "spell_type": body.get("spell_type") or "Simple",
+        "description": body.get("description") or "",
+    }
+    get_col("spells").insert_one(doc)
+    return {"status": "success", "id": sid, "spell": doc}
 
 @app.get("/", include_in_schema=False)
 def root():
