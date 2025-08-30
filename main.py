@@ -84,7 +84,24 @@ async def lifespan(app: FastAPI):
 
 # --- cost wrapper used by PUT /spells ---
 def compute_spell_costs(activation: str, range_val: int, aoe: str, duration: int, effect_ids: list[str]) -> dict:
-    effects = [load_effect(str(e)) for e in (effect_ids or [])]
+    """
+    Load effects from Mongo (not JSON) and compute MP/EN using Spell.compute_cost.
+    """
+    try:
+        # Prefer full Effect objects (used by Spell.compute_cost)
+        effects = [load_effect(str(eid)) for eid in (effect_ids or [])]
+    except Exception:
+        # Fallback: build light stubs with mp_cost/en_cost only
+        docs = list(get_col("effects").find(
+            {"id": {"$in": [str(eid) for eid in (effect_ids or [])]}},
+            {"_id": 0, "mp_cost": 1, "en_cost": 1}
+        ))
+        class _Eff:  # tiny shim for compute_cost
+            def __init__(self, mp, en):
+                self.mp_cost = int(mp or 0)
+                self.en_cost = int(en or 0)
+        effects = [_Eff(d.get("mp_cost", 0), d.get("en_cost", 0)) for d in docs]
+
     mp_cost, en_cost = Spell.compute_cost(range_val, aoe, duration, activation, effects)
     return {"mp_cost": mp_cost, "en_cost": en_cost, "category": category_for_mp(mp_cost)}
 
@@ -551,35 +568,40 @@ def delete_spell(spell_id: str, request: Request):
 
 @app.post("/submit_spell")
 async def submit_spell(request: Request):
+    # Always return JSON (even on errors) so the client can show a message.
     try:
         body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid JSON body"}, status_code=400)
 
+    try:
         name        = (body.get("name") or "Unnamed Spell").strip()
         activation  = body.get("activation") or "Action"
         aoe_val     = body.get("aoe") or "A Square"
 
         try:
-            range_val = int(body.get("range") or 0)
-        except:
-            return JSONResponse({"status":"error","message":"range must be an integer"}, status_code=400)
+            range_val = int(body.get("range", 0))
+        except Exception:
+            return JSONResponse({"status": "error", "message": "range must be an integer"}, status_code=400)
         try:
-            duration  = int(body.get("duration") or 1)
-        except:
-            return JSONResponse({"status":"error","message":"duration must be an integer"}, status_code=400)
+            duration  = int(body.get("duration", 1))
+        except Exception:
+            return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
 
         effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
-        if not effect_ids:
-            return JSONResponse({"status":"error","message":"At least one effect is required"}, status_code=400)
 
-        # validate effects exist
-        eff_col = get_col("effects")
-        missing = [e for e in effect_ids if not eff_col.find_one({"id": e}, {"_id": 0})]
+        # Validate effects exist (clear 400 instead of 500)
+        missing = [eid for eid in effect_ids if not get_col("effects").find_one({"id": eid}, {"_id": 0})]
         if missing:
-            return JSONResponse({"status":"error","message":f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
+            return JSONResponse(
+                {"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"},
+                status_code=400
+            )
 
-        # compute costs + category
+        # Compute costs/category
         cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
 
+        # Insert straight into Mongo (no JSON files)
         sid = next_id_str("spells", padding=4)
         doc = {
             "id": sid,
@@ -588,19 +610,25 @@ async def submit_spell(request: Request):
             "range": range_val,
             "aoe": aoe_val,
             "duration": duration,
-            "effects": effect_ids,
+            "effects": effect_ids,      # store IDs
             "mp_cost": cc["mp_cost"],
             "en_cost": cc["en_cost"],
             "category": cc["category"],
-            "spell_type": body.get("spell_type") or "Simple",
-            "description": body.get("description") or "",
+            "spell_type": "Simple",     # (can refine later if needed)
         }
         get_col("spells").insert_one(doc)
+
+        # (Optional) audit
+        try:
+            write_audit("create_spell", "anonymous", sid, None, doc)
+        except Exception:
+            pass
+
         return {"status": "success", "id": sid, "spell": doc}
 
     except Exception as e:
-        logger.exception("submit_spell failed")
-        return JSONResponse({"status":"error","message":str(e)}, status_code=500)
+        logger.exception("POST /submit_spell failed")
+        return JSONResponse({"status": "error", "message": f"{type(e).__name__}: {e}"}, status_code=500)
 
 
 BASE_DIR = Path(__file__).resolve().parent
