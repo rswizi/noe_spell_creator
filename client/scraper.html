@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Import Effects (Admin)</title>
+  <title>Import Effects (Admin/Moderator)</title>
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
@@ -42,7 +42,10 @@
       </div>
 
       <label style="margin-top:14px;">Paste Effects (raw text)</label>
-      <textarea id="raw" rows="14" placeholder="Paste the effects block here..."></textarea>
+      <textarea id="raw" rows="14" placeholder="Format each entry as:
+Name: Description (can span multiple lines)
+MP (can be negative, e.g. -2)
+EN (can be negative, e.g. -1)"></textarea>
 
       <div style="display:flex; gap:10px; margin-top:10px;">
         <button class="btn" id="parse-btn">Parse</button>
@@ -52,7 +55,7 @@
 
     <div id="preview-card" class="home-card" style="display:none;">
       <h3>Preview & Edit</h3>
-      <p>Review each effect. You can fix names/descriptions/MP/EN before saving.</p>
+      <p>Review each effect. You can fix names/descriptions/MP/EN (negatives allowed) before saving.</p>
       <div id="errors" style="color:#ff6b6b; margin:8px 0;"></div>
       <div id="table-wrap" style="overflow:auto;">
         <table class="table" style="width:100%; border-collapse:collapse;">
@@ -60,8 +63,8 @@
             <tr>
               <th style="text-align:left;">Name</th>
               <th style="text-align:left;">Description</th>
-              <th style="width:100px;">MP</th>
-              <th style="width:100px;">EN</th>
+              <th style="width:120px;">MP</th>
+              <th style="width:120px;">EN</th>
             </tr>
           </thead>
           <tbody id="preview-body"></tbody>
@@ -78,15 +81,9 @@
 const API_BASE = "";
 const $ = s => document.querySelector(s);
 
-// Inputs (now explicitly referenced)
+// Auth guard (admins & moderators)
 const token = localStorage.getItem("auth_token") || "";
-const role  = localStorage.getItem("auth_role") || "";
-const schoolNameInput  = $("#school-name");
-const schoolTypeSelect = $("#school-type");
-const rangeTypeSelect  = $("#range-type");
-const aoeTypeSelect    = $("#aoe-type");
-const upgradeCheckbox  = $("#upgrade");
-
+const role  = (localStorage.getItem("auth_role") || "").toLowerCase();
 if (!token || (role !== "admin" && role !== "moderator")) {
   alert("Forbidden: moderators/admins only.");
   window.location.href = "home.html";
@@ -96,32 +93,41 @@ function authHeaders(extra = {}) {
   return { "Authorization": `Bearer ${token}`, "Content-Type": "application/json", ...extra };
 }
 
-// Example submit handler:
-async function submitBulkCreate(payload) {
-  const res = await fetch(`${API_BASE}/effects/bulk_create`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json();
-  if (data.status !== "success") {
-    alert(data.message || "Import failed");
-    return;
-  }
-  alert(`Imported ${data.created.length} effect(s) into ${data.school.name}`);
-}
+// Inputs
+const schoolNameInput  = $("#school-name");
+const schoolTypeSelect = $("#school-type");
+const rangeTypeSelect  = $("#range-type");
+const aoeTypeSelect    = $("#aoe-type");
+const upgradeCheckbox  = $("#upgrade");
 
 // Table preview model
 let PREVIEW = []; // [{name, description, mp_cost, en_cost}]
 
-// ------------ Parsing helpers ------------
-function isIntLine(s){ return /^[0-9]+$/.test((s||"").trim()); }
+// ------------ Parsing helpers (accept +/- integers) ------------
+function isSignedIntLine(s){ return /^[+-]?\d+$/.test((s||"").trim()); }
+
+// Sanitize inline numeric edits: keep one leading +/-, digits only.
+function cleanSignedIntInput(val) {
+  val = String(val || "");
+  // Remove invalid chars
+  val = val.replace(/[^\d+-]/g, "");
+  // Keep only first leading sign (if any)
+  val = val.replace(/(?!^)[+-]/g, "");
+  // Collapse multi-leading zeros like "-0003" -> "-3" (optional)
+  const m = val.match(/^([+-]?)(\d*)$/);
+  if (!m) return "";
+  const sign = m[1] || "";
+  let digits = m[2] || "";
+  // allow empty digits during typing; treat as "" (we'll coerce to 0 later)
+  if (digits.length > 1) digits = digits.replace(/^0+(\d)/, "$1");
+  return sign + digits;
+}
 
 /**
  * Expected block:
  * Name: Description (can continue on several lines)
- * MP
- * EN
+ * MP  (signed integer, e.g. -2 or 3)
+ * EN  (signed integer, e.g. -1 or 0)
  * [blank line or next entry]
  */
 function parseRawBlock(text){
@@ -130,38 +136,37 @@ function parseRawBlock(text){
   let i = 0;
 
   while (i < lines.length){
-    // skip blanks
     while (i < lines.length && lines[i] === "") i++;
     if (i >= lines.length) break;
 
-    // header "Name: Description..."
     const header = lines[i++];
-    if (!header || isIntLine(header)) throw new Error(`Expected "Name: Description" near line ${i}, got "${header}"`);
+    if (!header || isSignedIntLine(header))
+      throw new Error(`Expected "Name: Description" near line ${i}, got "${header}"`);
 
     const colonIdx = header.indexOf(":");
-    if (colonIdx === -1) throw new Error(`Missing ":" in header near line ${i}: "${header}"`);
+    if (colonIdx === -1)
+      throw new Error(`Missing ":" in header near line ${i}: "${header}"`);
     const name = header.slice(0, colonIdx).trim();
     let description = header.slice(colonIdx+1).trim();
 
-    // Collect extra description/note lines up to the MP line
-    while (i < lines.length && lines[i] !== "" && !isIntLine(lines[i])) {
+    // Collect extra description lines up to the MP line
+    while (i < lines.length && lines[i] !== "" && !isSignedIntLine(lines[i])) {
       description += (description ? " " : "") + lines[i];
       i++;
     }
 
-    if (i >= lines.length || !isIntLine(lines[i])) {
+    if (i >= lines.length || !isSignedIntLine(lines[i])) {
       throw new Error(`Missing/invalid MP after "${name}". Found: "${lines[i] || ""}"`);
     }
     const mp = parseInt(lines[i++], 10);
 
-    if (i >= lines.length || !isIntLine(lines[i])) {
+    if (i >= lines.length || !isSignedIntLine(lines[i])) {
       throw new Error(`Missing/invalid EN after "${name}". Found: "${lines[i] || ""}"`);
     }
     const en = parseInt(lines[i++], 10);
 
     out.push({ name, description, mp_cost: mp, en_cost: en });
 
-    // optional separating blanks
     while (i < lines.length && lines[i] === "") i++;
   }
 
@@ -174,23 +179,25 @@ function renderPreview(){
   const tbody = $("#preview-body");
   tbody.innerHTML = PREVIEW.map((e, idx) => `
     <tr>
-      <td><input data-idx="${idx}" data-key="name" value="${e.name || ""}" /></td>
+      <td><input data-idx="${idx}" data-key="name" value="${(e.name || "").replace(/"/g,'&quot;')}" /></td>
       <td><textarea data-idx="${idx}" data-key="description" rows="2">${e.description || ""}</textarea></td>
       <td><input data-idx="${idx}" data-key="mp_cost" value="${e.mp_cost}" /></td>
       <td><input data-idx="${idx}" data-key="en_cost" value="${e.en_cost}" /></td>
     </tr>
   `).join("");
 
-  // wire edits back into PREVIEW, enforce numeric MP/EN
+  // Wire edits back into PREVIEW; allow signed ints
   tbody.querySelectorAll("input,textarea").forEach(el=>{
     el.addEventListener("input", (ev)=>{
       const idx = parseInt(ev.target.dataset.idx,10);
       const key = ev.target.dataset.key;
       let val = ev.target.value;
+
       if (key === "mp_cost" || key === "en_cost") {
-        val = val.replace(/\D/g,"");
+        val = cleanSignedIntInput(val);
         ev.target.value = val;
-        PREVIEW[idx][key] = val ? parseInt(val,10) : 0;
+        // Treat empty/sign-only as 0 for the model
+        PREVIEW[idx][key] = (!val || val === "+" || val === "-") ? 0 : parseInt(val, 10);
       } else {
         PREVIEW[idx][key] = val;
       }
@@ -202,8 +209,10 @@ function validatePreview(){
   const errs = [];
   PREVIEW.forEach((e,i)=>{
     if (!e.name) errs.push(`Row ${i+1}: name is empty`);
-    if (e.mp_cost === "" || isNaN(e.mp_cost)) errs.push(`Row ${i+1}: MP is not a number`);
-    if (e.en_cost === "" || isNaN(e.en_cost)) errs.push(`Row ${i+1}: EN is not a number`);
+    if (typeof e.mp_cost !== "number" || Number.isNaN(e.mp_cost))
+      errs.push(`Row ${i+1}: MP is not a valid number`);
+    if (typeof e.en_cost !== "number" || Number.isNaN(e.en_cost))
+      errs.push(`Row ${i+1}: EN is not a valid number`);
   });
   return errs;
 }
@@ -234,13 +243,13 @@ $("#confirm-btn").addEventListener("click", async ()=>{
   const school_name = schoolNameInput.value.trim();
   if (!school_name){ alert("School Name is required."); return; }
 
-  // Payload must be FLAT — matches /effects/bulk_create in your backend
+  // Build payload — negatives are preserved
   const payload = {
-    school_name: $("#school-name").value.trim(),
-    school_type: $("#school-type").value,
-    range_type:  $("#range-type").value,
-    aoe_type:    $("#aoe-type").value,
-    upgrade:     $("#upgrade").checked,   // <— nouveau nom
+    school_name: school_name,
+    school_type: schoolTypeSelect.value,
+    range_type:  rangeTypeSelect.value,
+    aoe_type:    aoeTypeSelect.value,
+    upgrade:     upgradeCheckbox.checked,
     effects: PREVIEW.map(e => ({
       name: e.name,
       description: e.description || "",
@@ -249,20 +258,15 @@ $("#confirm-btn").addEventListener("click", async ()=>{
     }))
   };
 
-  const token = localStorage.getItem("auth_token") || "";
   try{
     const res = await fetch(`${API_BASE}/effects/bulk_create`, {
       method: "POST",
-      headers: {
-        "Content-Type":"application/json",
-        ...(token ? { "Authorization": `Bearer ${token}` } : {})
-      },
+      headers: authHeaders(),
       body: JSON.stringify(payload)
     });
     const data = await res.json();
-    console.log("bulk_create response:", data);
     if (data.status === "success"){
-      alert(`Created ${data.created.length} effects in ${data.school.name} [${data.school.id}].`);
+      alert(`Created ${data.created.length} effect(s) in ${data.school.name} [${data.school.id}].`);
       location.href = "home.html";
     }else{
       $("#errors").textContent = data.message || "Bulk create failed";
