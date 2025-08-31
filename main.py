@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import DuplicateKeyError
 
-from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters
+from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
 
 # Domain imports
 from server.src.objects.effects import load_effect
@@ -431,16 +431,62 @@ def delete_spell(spell_id: str, request: Request):
 @app.post("/costs")
 async def get_costs(request: Request):
     body = await request.json()
-    range_val     = body.get("range")
-    aoe_val       = body.get("aoe")
-    duration_val  = body.get("duration")
-    activation_val= body.get("activation")
-    effect_ids    = [str(e) for e in (body.get("effects") or []) if str(e).strip()]
+    activation   = body.get("activation") or "Action"
+    aoe_val      = body.get("aoe") or "A Square"
+    try:
+        range_val   = int(body.get("range", 0))
+        duration_val= int(body.get("duration", 1))
+    except Exception:
+        return JSONResponse({"status": "error", "message": "range/duration must be integers"}, status_code=400)
 
-    effects = [load_effect(eid) for eid in effect_ids]
-    mp_cost, en_cost = Spell.compute_cost(range_val, aoe_val, duration_val, activation_val, effects)
-    category = category_for_mp(mp_cost)
-    return {"mp_cost": mp_cost, "en_cost": en_cost, "category": category}
+    effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
+
+    def compute(range_, aoe_, duration_, activation_, ids):
+        eff_objs = [load_effect(eid) for eid in ids]
+        return Spell.compute_cost(range_, aoe_, duration_, activation_, eff_objs)
+
+    # Full cost with current knobs + effects
+    full_mp, full_en = compute(range_val, aoe_val, duration_val, activation, effect_ids)
+
+    # Baseline knobs (your app’s defaults)
+    D_ACT, D_RANGE, D_AOE, D_DUR = "Action", 0, "A Square", 1
+    base_mp, base_en = compute(D_RANGE, D_AOE, D_DUR, D_ACT, effect_ids)
+
+    # Individual knob deltas (keep effects the same to capture interactions)
+    r_mp, r_en   = compute(range_val, D_AOE,   D_DUR,   D_ACT, effect_ids)
+    a_mp, a_en   = compute(D_RANGE,   aoe_val, D_DUR,   D_ACT, effect_ids)
+    d_mp, d_en   = compute(D_RANGE,   D_AOE,   duration_val, D_ACT, effect_ids)
+    ac_mp, ac_en = compute(D_RANGE,   D_AOE,   D_DUR,   activation, effect_ids)
+
+    br_range = (r_mp - base_mp, r_en - base_en)
+    br_aoe   = (a_mp - base_mp, a_en - base_en)
+    br_dur   = (d_mp - base_mp, d_en - base_en)
+    br_act   = (ac_mp - base_mp, ac_en - base_en)
+
+    # Per-effect deltas (full vs without that effect)
+    per_effect = []
+    for eid in effect_ids:
+        ids_wo = [x for x in effect_ids if x != eid]
+        wo_mp, wo_en = compute(range_val, aoe_val, duration_val, activation, ids_wo)
+        eff_mp, eff_en = (full_mp - wo_mp), (full_en - wo_en)
+        try:
+            name = load_effect(eid).name
+        except Exception:
+            name = eid
+        per_effect.append({"id": eid, "name": name, "mp": eff_mp, "en": eff_en})
+
+    return {
+        "mp_cost": full_mp,
+        "en_cost": full_en,
+        "category": category_for_mp(full_mp),
+        "breakdown": {
+            "activation": {"value": activation,   "mp": br_act[0],   "en": br_act[1]},
+            "range":      {"value": range_val,    "mp": br_range[0], "en": br_range[1]},
+            "aoe":        {"value": aoe_val,      "mp": br_aoe[0],   "en": br_aoe[1]},
+            "duration":   {"value": duration_val, "mp": br_dur[0],   "en": br_dur[1]},
+            "effects": per_effect,
+        }
+    }
 
 @app.post("/submit_spell")
 async def submit_spell(request: Request):
@@ -466,28 +512,24 @@ async def submit_spell(request: Request):
         if not effect_ids:
             return JSONResponse({"status": "error", "message": "At least one effect is required."}, status_code=400)
 
+        # verify effects exist
         missing = [eid for eid in effect_ids if not get_col("effects").find_one({"id": eid}, {"_id": 1})]
         if missing:
             return JSONResponse({"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
 
-        cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
+        # SIGNATURE over parameters (NOT name)
+        sig = spell_sig(activation, range_val, aoe_val, duration, effect_ids)
+        conflict = get_col("spells").find_one({"sig_v1": sig, "id": {"$ne": spell_id}}, {"_id": 1})
+        if conflict:
+            return JSONResponse(
+                {"status": "error", "message": "Another spell with identical parameters already exists."},
+                status_code=409
+            )
 
-        status = str(body.get("status") or "yellow").lower()
-        if status not in ("red", "yellow", "green"):
-            status = "yellow"
-
-        submitter = "anonymous"
-        try:
-            token = get_auth_token(request)
-            if token and token in SESSIONS:
-                submitter = SESSIONS[token][0]
-        except Exception:
-            pass
-
-        # Build doc
         doc = {
-            "id": next_id_str("spells", padding=4),
             "name": name,
+            "name_key": norm_key(name),
+            "sig_v1": sig,
             "activation": activation,
             "range": range_val,
             "aoe": aoe_val,
@@ -496,21 +538,9 @@ async def submit_spell(request: Request):
             "mp_cost": cc["mp_cost"],
             "en_cost": cc["en_cost"],
             "category": cc["category"],
-            "spell_type": body.get("spell_type") or "Simple",
-
-            "status": status,
-            "created_by": submitter,
-            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         }
 
-        get_col("spells").insert_one(doc)
-
-        # Optional audit
-        try:
-            write_audit("create_spell", submitter, doc["id"], before=None, after=doc)
-        except Exception:
-            pass
-
+        get_col("spells").insert_one(dict(doc))
         return {"status": "success", "id": doc["id"], "spell": doc}
 
     except Exception as e:
@@ -632,6 +662,48 @@ def health():
     except Exception as e:
         return {"status": "degraded", "error": str(e)}
 
+@app.post("/admin/maintenance/backfill_spell_sigs")
+def backfill_spell_sigs(request: Request):
+    require_auth(request, ["admin"])
+    db = get_db()
+    updated = 0
+    for sp in db.spells.find({}, {"_id":1,"activation":1,"range":1,"aoe":1,"duration":1,"effects":1,"sig_v1":1}):
+        if sp.get("sig_v1"):
+            continue
+        sig = spell_sig(sp.get("activation",""), sp.get("range",0), sp.get("aoe",""), sp.get("duration",0),
+                        [str(e) for e in (sp.get("effects") or [])])
+        db.spells.update_one({"_id": sp["_id"]}, {"$set": {"sig_v1": sig}})
+        updated += 1
+    return {"status":"success","updated":updated}
+
+@app.post("/admin/maintenance/dedupe_spells_by_sig")
+async def dedupe_spells_by_sig(request: Request):
+    require_auth(request, ["admin"])
+    body = await request.json() if request.headers.get("content-type","").startswith("application/json") else {}
+    apply = bool(body.get("apply"))
+
+    db = get_db()
+    pipeline = [
+        {"$group": {"_id": "$sig_v1", "ids": {"$addToSet": "$id"}, "count": {"$sum": 1}}},
+        {"$match": {"count": {"$gt": 1}}}
+    ]
+    groups = list(db.spells.aggregate(pipeline))
+
+    plan = []
+    if apply:
+        for g in groups:
+            ids = sorted(g["ids"])
+            keep, dupes = ids[0], ids[1:]
+            plan.append({"sig": g["_id"], "keep": keep, "remove": dupes})
+            for sid in dupes:
+                db.spells.delete_one({"id": sid})
+    else:
+        for g in groups:
+            ids = sorted(g["ids"])
+            plan.append({"sig": g["_id"], "keep": ids[0], "remove": ids[1:]})
+
+    return {"status":"success","applied":apply,"groups":plan}
+
 # ---------- FAVORITES & FILTER HELPERS ----------
 
 def require_user_doc(request: Request):
@@ -676,6 +748,7 @@ def favorites_remove(spell_id: str, request: Request):
         {"$pull": {"favorites": str(spell_id)}}
     )
     return {"status": "success", "id": spell_id, "action": "removed"}
+
 
 
 if __name__ == "__main__":

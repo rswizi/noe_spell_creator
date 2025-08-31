@@ -95,6 +95,7 @@ function buildQuery(){
   if(n) p.set("name", n);
   if(c) p.set("category", c);
   if(sch) p.set("school", sch);
+  p.set("status", "green");
   if(favOnlyEl.checked) p.set("favorite", "1");
   return p.toString();
 }
@@ -122,7 +123,9 @@ async function fetchSpells(){
   const headers = favOnlyEl.checked ? { "Authorization": `Bearer ${token}` } : {};
   const res = await fetch(url, { headers });
   const data = await res.json();
-  renderList(data.spells || []);
+  let list = data.spells || [];
+  if (favOnlyEl.checked) list = list.filter(s => favIds.has(String(s.id)));
+  renderList(list);
 }
 
 async function toggleFav(id){

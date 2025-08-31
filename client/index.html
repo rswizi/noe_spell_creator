@@ -29,6 +29,7 @@
 
     <!-- Activation -->
     <label for="activation">Activation:</label>
+    <small id="cost-activation" class="knob-cost"></small><br><br>
     <select id="activation" name="activation" required>
       <option value="Action">Action</option>
       <option value="Special Action">Special Action</option>
@@ -37,6 +38,7 @@
 
     <!-- Range -->
     <label for="range">Range:</label>
+    <small id="cost-range" class="knob-cost"></small><br><br>
     <select id="range" name="range" required>
       <option value="0">0</option>
       <option value="1">1</option>
@@ -50,6 +52,7 @@
 
     <!-- AoE -->
     <label for="aoe">Area of Effect (AoE):</label>
+    <small id="cost-aoe" class="knob-cost"></small><br><br>
     <select id="aoe" name="aoe" required>
       <option value="A Square">A Square</option>
       <option value="Line (3)">Line (3)</option>
@@ -71,6 +74,7 @@
 
     <!-- Duration -->
     <label for="duration">Duration:</label>
+    <small id="cost-duration" class="knob-cost"></small><br><br>
     <select id="duration" name="duration" required>
       <option value="1">1</option>
       <option value="2">2</option>
@@ -99,6 +103,42 @@
   </form>
 
 <script>
+
+let LAST_BREAKDOWN = null;
+
+function updateKnobChips(b) {
+  if (!b) { 
+    ["activation","range","aoe","duration"].forEach(k => {
+      const el = document.getElementById(`cost-${k}`);
+      if (el) el.textContent = "";
+    });
+    return;
+  }
+  const fmt = (mp,en) => `MP ${mp}, EN ${en}`;
+  const a = b.activation || {}, r = b.range || {}, o = b.aoe || {}, d = b.duration || {};
+  const set = (id, mp, en) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = fmt(mp ?? 0, en ?? 0);
+  };
+  set("cost-activation", a.mp, a.en);
+  set("cost-range",      r.mp, r.en);
+  set("cost-aoe",        o.mp, o.en);
+  set("cost-duration",   d.mp, d.en);
+}
+
+function updateEffectCostChips(b) {
+  const map = {};
+  (b?.effects || []).forEach(e => { map[String(e.id)] = { mp: e.mp, en: e.en }; });
+  // for each selected effect row:
+  document.querySelectorAll(".effect-entry").forEach(entry => {
+    const sel = entry.querySelector('select[name="effects[]"]');
+    const costEl = entry.querySelector('.effect-cost');
+    if (!sel || !costEl) return;
+    const e = map[String(sel.value)];
+    costEl.textContent = e ? `MP ${e.mp}, EN ${e.en}` : "";
+  });
+}
+
 function alertModal(msg) { alert(msg); }
 
 function getEffectById(id) {
@@ -271,6 +311,10 @@ function effectMatchesFilters(effect, filters) {
       leftCol.appendChild(select);
       leftCol.appendChild(desc);
 
+      const costDiv = document.createElement('div');
+      costDiv.className = 'effect-cost';
+      leftCol.appendChild(costDiv);
+
       const button = document.createElement("button");
       button.type = "button";
       button.innerText = "❌";
@@ -315,6 +359,10 @@ function effectMatchesFilters(effect, filters) {
     leftCol.appendChild(select);
     leftCol.appendChild(desc);
 
+    const costDiv = document.createElement('div');
+    costDiv.className = 'effect-cost';
+    leftCol.appendChild(costDiv);
+
     const button = document.createElement("button");
     button.type = "button";
     button.innerText = "✖";
@@ -353,6 +401,9 @@ function effectMatchesFilters(effect, filters) {
         document.getElementById("mp_cost").innerText = result.mp_cost ?? 0;
         document.getElementById("en_cost").innerText = result.en_cost ?? 0;
         document.getElementById("category").innerText = result.category || "--";
+        LAST_BREAKDOWN = result.breakdown || null;
+        updateKnobChips(LAST_BREAKDOWN);
+        updateEffectCostChips(LAST_BREAKDOWN);
       })
       .catch(err => {
         console.error("Spell preview error:", err);
@@ -484,6 +535,15 @@ function effectMatchesFilters(effect, filters) {
         }
         return data;
       })
+     .then(async res => {
+       const text = await res.text();
+       let payload = {};
+       try { payload = text ? JSON.parse(text) : {}; } catch { /* non-JSON on success is fine */ }
+       if (!res.ok || payload.status === "error") {
+         throw new Error(payload.message || `${res.status} ${res.statusText}`);
+       }
+       return payload;
+     })
       .then(result => {
         alertModal("Spell saved!");
         clearSpellForm(); 
