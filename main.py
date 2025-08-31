@@ -82,36 +82,30 @@ def write_audit(action, username, spell_id, before, after):
 def compute_spell_costs(
     activation: str, range_val: int, aoe: str, duration: int, effect_ids: list[str]
 ) -> dict:
-    """
-    Load effects and compute MP/EN using Spell.compute_cost.
-    Returns mp/en, category, and a detailed 'breakdown' dict
-    (activation/range/aoe/duration/effects/schools/total).
-    """
     try:
         effects = [load_effect(str(eid)) for eid in (effect_ids or [])]
     except Exception:
-        # very defensive fallback (no school info, used only if load_effect fails)
         docs = list(
             get_col("effects").find(
                 {"id": {"$in": [str(eid) for eid in (effect_ids or [])]}},
                 {"_id": 0, "mp_cost": 1, "en_cost": 1},
             )
         )
-
         class _E:
             def __init__(self, mp, en):
                 self.mp_cost = int(mp or 0)
                 self.en_cost = int(en or 0)
-
         effects = [_E(d.get("mp_cost", 0), d.get("en_cost", 0)) for d in docs]
 
     mp_cost, en_cost, breakdown = Spell.compute_cost(
         range_val, aoe, duration, activation, effects
     )
+
     return {
         "mp_cost": mp_cost,
         "en_cost": en_cost,
         "category": category_for_mp(mp_cost),
+        "mp_to_next_category": mp_to_next_category_delta(mp_cost),
         "breakdown": breakdown,
     }
 
@@ -485,19 +479,16 @@ async def get_costs(request: Request):
         range_val    = int(body.get("range", 0))
         duration_val = int(body.get("duration", 1))
     except Exception:
-        return JSONResponse(
-            {"status": "error", "message": "range/duration must be integers"},
-            status_code=400,
-        )
+        return JSONResponse({"status": "error", "message": "range/duration must be integers"}, status_code=400)
 
     effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
 
     cc = compute_spell_costs(activation, range_val, aoe_val, duration_val, effect_ids)
-    # Surface exactly what the UI expects (totals + detailed breakdown)
     return {
         "mp_cost": cc["mp_cost"],
         "en_cost": cc["en_cost"],
         "category": cc["category"],
+        "mp_to_next_category": cc["mp_to_next_category"],
         "breakdown": cc["breakdown"],
     }
 
@@ -1044,6 +1035,42 @@ async def admin_effect_duplicates_apply(request: Request):
         "total_groups": len(plan),
         "message": f"Removed {total_deleted} duplicate effects; updated {total_spells_touched} spell(s)."
     }
+
+# --- helper: how many MP until the next category threshold ---
+def mp_to_next_category_delta(current_mp: int) -> int:
+    """
+    Smallest non-negative delta MP so that category_for_mp(current_mp + delta)
+    is strictly higher than category_for_mp(current_mp).
+    Returns 0 if already at the top tier (no higher category).
+    """
+    cur_cat = category_for_mp(int(current_mp or 0))
+
+    # Exponential search to find an upper bound where category changes
+    step = 1
+    base = int(current_mp or 0)
+    MAX_MP = base + 100_000  # sane cap
+    hi = base + step
+    while hi <= MAX_MP and category_for_mp(hi) == cur_cat:
+        step *= 2
+        hi = base + step
+    if hi > MAX_MP:
+        # couldn't find a higher category within cap -> treat as top category
+        return 0
+
+    # Binary search for first MP where category changes
+    lo = max(base, hi - step)
+    ans = None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if category_for_mp(mid) == cur_cat:
+            lo = mid + 1
+        else:
+            ans = mid
+            hi = mid - 1
+
+    if ans is None:
+        return 0
+    return max(0, ans - base)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

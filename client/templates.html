@@ -4,36 +4,59 @@
   <meta charset="UTF-8" />
   <title>Spell Creator — Templates</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .effect-entry { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid #222; }
+    .effect-entry:last-child { border-bottom:0; }
+    .star-btn {
+      border: none; background: transparent; cursor: pointer; font-size: 18px; line-height: 1;
+      color: #888; padding: 2px 6px; border-radius: 6px;
+    }
+    .star-btn.on { color: gold; text-shadow: 0 0 8px rgba(255,215,0,.5); }
+    .star-btn:disabled { cursor: not-allowed; opacity: .5; }
+    .filter-bar .spacer { flex: 1; }
+    .tiny { font-size: .85rem; opacity: .8; }
+  </style>
 </head>
 <body>
   <div class="container">
     <h1>Load From Template</h1>
 
     <div class="home-card" style="margin-bottom:18px;">
-    <div class="filter-bar">
+      <div class="filter-bar">
         <input id="filter-name" type="text" placeholder="Filter by name..." />
         <select id="filter-category">
-        <option value="">All Categories</option>
-        <option>Novice</option>
-        <option>Apprentice</option>
-        <option>Disciple</option>
-        <option>Adept</option>
-        <option>Mage</option>
-        <option>Magister</option>
-        <option>High Mage</option>
-        <option>Master</option>
-        <option>Grand Master</option>
-        <option>Archmage</option>
-        <option>Supreme Archmage</option>
-        <option>Avant-garde</option>
+          <option value="">All Categories</option>
+          <option>Novice</option>
+          <option>Apprentice</option>
+          <option>Disciple</option>
+          <option>Adept</option>
+          <option>Mage</option>
+          <option>Magister</option>
+          <option>High Mage</option>
+          <option>Master</option>
+          <option>Grand Master</option>
+          <option>Archmage</option>
+          <option>Supreme Archmage</option>
+          <option>Avant-Garde</option>
         </select>
         <select id="filter-school">
-        <option value="">All Schools</option>
+          <option value="">All Schools</option>
         </select>
-        <button id="clear-filters">Reset</button>
-    </div>
-    </div>
 
+        <span class="spacer"></span>
+
+        <label style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="sort-favfirst" />
+          <span>Favorites first</span>
+        </label>
+
+        <button id="clear-filters">Reset</button>
+      </div>
+      <div id="fav-hint" class="tiny" style="margin-top:6px; display:none;">
+        Log in to see and sort by your favorites.
+      </div>
+    </div>
 
     <div class="home-card">
       <div id="results"></div>
@@ -45,103 +68,182 @@
   </div>
 
 <script>
-const API_BASE = "";
-const $ = (sel) => document.querySelector(sel);
-const resultsEl = $("#results");
-const nameEl = $("#filter-name");
-const categoryEl = $("#filter-category");
-const schoolEl = $("#filter-school");
+(() => {
+  const API_BASE = "";
+  const $  = (s) => document.querySelector(s);
 
-function spellRow(s) {
-  const schoolNames = (s.schools || []).map(sc => sc.name).join(", ") || "—";
-  return `
-    <div class="effect-entry" style="justify-content:space-between;">
-      <div style="flex:1;">
-        <div style="font-weight:bold">${s.name} <span style="opacity:.7">[${s.id}]</span></div>
-        <div style="opacity:.8;font-size:.95rem">
-          ${s.category || "—"} · ${s.activation} · ${s.range} · ${s.aoe} · dur ${s.duration}
-        </div>
-        <div style="opacity:.7;font-size:.9rem">Schools: ${schoolNames}</div>
-      </div>
-      <div>
-        <button onclick="loadIntoBuilder('${s.id}')">Load</button>
-      </div>
-    </div>
-  `;
-}
+  const resultsEl   = $("#results");
+  const nameEl      = $("#filter-name");
+  const categoryEl  = $("#filter-category");
+  const schoolEl    = $("#filter-school");
+  const favFirstEl  = $("#sort-favfirst");
+  const favHintEl   = $("#fav-hint");
 
-function renderList(list) {
-  if (!list.length) {
-    resultsEl.innerHTML = `<p>No spells found.</p>`;
-    return;
+  const token = localStorage.getItem("auth_token") || "";
+  let favIds = new Set();
+
+  function authHeaders() {
+    return token ? { "Authorization": "Bearer " + token } : {};
   }
-  resultsEl.innerHTML = list.map(spellRow).join("");
-}
 
-function buildQuery() {
-  const params = new URLSearchParams();
-  const name = nameEl.value.trim();
-  const cat = categoryEl.value;
-  const sch = schoolEl.value;
-  if (name) params.set("name", name);
-  if (cat) params.set("category", cat);
-  if (sch) params.set("school", sch);
-  return params.toString();
-}
-
-async function fetchSpells() {
-  const q = buildQuery();
-
-  const url = q ? `${API_BASE}/spells?${q}&status=green` : `${API_BASE}/spells?status=green`;SS
-
-  const res = await fetch(url);
-  const data = await res.json();
-  if (data.error) {
-    resultsEl.innerHTML = `<p style="color:#ff4a4a">Error: ${data.error}</p>`;
-    return;
-  }
-  renderList(data.spells || []);
-}
-
-async function loadSchools() {
-  const res = await fetch(`${API_BASE}/schools`);
-  const data = await res.json();
-  if (data.schools) {
-    data.schools.forEach(s => {
+  async function loadSchools() {
+    const res = await fetch(`${API_BASE}/schools`);
+    const data = await res.json();
+    (data.schools || []).forEach(s => {
       const opt = document.createElement("option");
       opt.value = s.id;
       opt.textContent = `${s.name} [${s.id}]`;
       schoolEl.appendChild(opt);
     });
   }
-}
 
-function debounce(fn, ms=300) {
-  let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-}
+  async function loadFavIds() {
+    if (!token) {
+      favIds = new Set();
+      favFirstEl.checked = false;
+      favFirstEl.disabled = true;
+      favHintEl.style.display = "block";
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/favorites/ids`, { headers: authHeaders() });
+      const data = await res.json();
+      favIds = new Set((data.ids || []).map(String));
+      favFirstEl.disabled = false;
+      favHintEl.style.display = "none";
+    } catch {
+      favIds = new Set();
+      favFirstEl.checked = false;
+      favFirstEl.disabled = true;
+      favHintEl.style.display = "block";
+    }
+  }
 
-function loadIntoBuilder(id) {
-  // Go to index with spell_id param; index will autofill
-  window.location.href = `index.html?spell_id=${encodeURIComponent(id)}`;
-}
+  function buildQuery() {
+    const params = new URLSearchParams();
+    const name = nameEl.value.trim();
+    const cat  = categoryEl.value;
+    const sch  = schoolEl.value;
+    if (name) params.set("name", name);
+    if (cat)  params.set("category", cat);
+    if (sch)  params.set("school", sch);
+    // Only approved (green)
+    params.set("status", "green");
+    return params.toString();
+  }
 
-document.addEventListener("DOMContentLoaded", async () => {
-  await loadSchools();
-  await fetchSpells();
+  function spellRow(s) {
+    const schoolNames = (s.schools || []).map(sc => sc.name).join(", ") || "—";
+    const isFav = favIds.has(String(s.id));
+    const starTitle = token ? (isFav ? "Unfavorite" : "Favorite") : "Log in to favorite";
+    const starDisabled = token ? "" : "disabled";
+    const starClass = "star-btn" + (isFav ? " on" : "");
 
-  const run = debounce(fetchSpells, 300);
-  nameEl.addEventListener("input", run);
-  categoryEl.addEventListener("change", run);
-  schoolEl.addEventListener("change", run);
+    return `
+      <div class="effect-entry">
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="font-weight:bold">${s.name} <span style="opacity:.7">[${s.id}]</span></div>
+            <button class="${starClass}" title="${starTitle}" ${starDisabled} onclick="toggleFav('${s.id}')">★</button>
+          </div>
+          <div style="opacity:.8;font-size:.95rem">
+            ${s.category || "—"} · ${s.activation || "—"} · ${s.range ?? "—"} · ${s.aoe || "—"} · dur ${s.duration ?? "—"}
+          </div>
+          <div style="opacity:.7;font-size:.9rem">Schools: ${schoolNames}</div>
+        </div>
+        <div>
+          <button class="btn" onclick="loadIntoBuilder('${s.id}')">Load</button>
+        </div>
+      </div>
+    `;
+  }
 
-  document.getElementById("clear-filters").addEventListener("click", () => {
-    nameEl.value = "";
-    categoryEl.value = "";
-    schoolEl.value = "";
-    fetchSpells();
+  function renderList(list) {
+    if (!list.length) {
+      resultsEl.innerHTML = `<p>No spells found.</p>`;
+      return;
+    }
+    // Sort favorites first if requested
+    if (favFirstEl.checked) {
+      list = [...list].sort((a, b) => {
+        const af = favIds.has(String(a.id)) ? 1 : 0;
+        const bf = favIds.has(String(b.id)) ? 1 : 0;
+        if (bf !== af) return bf - af; // favs first
+        // tie-breaker by name
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+    }
+    resultsEl.innerHTML = list.map(spellRow).join("");
+  }
+
+  async function fetchSpells() {
+    const q = buildQuery();
+    const url = q ? `${API_BASE}/spells?${q}` : `${API_BASE}/spells?status=green`;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.error) {
+        resultsEl.innerHTML = `<p style="color:#ff4a4a">Error: ${data.error}</p>`;
+        return;
+      }
+      renderList(data.spells || []);
+    } catch (e) {
+      resultsEl.innerHTML = `<p style="color:#ff4a4a">Failed to load spells.</p>`;
+    }
+  }
+
+  // Expose for inline handlers
+  window.loadIntoBuilder = function(id) {
+    window.location.href = `index.html?spell_id=${encodeURIComponent(id)}`;
+  };
+
+  window.toggleFav = async function(id) {
+    if (!token) return;
+    const isFav = favIds.has(String(id));
+    const method = isFav ? "DELETE" : "POST";
+    try {
+      const res = await fetch(`${API_BASE}/favorites/${encodeURIComponent(id)}`, {
+        method,
+        headers: authHeaders()
+      });
+      const j = await res.json();
+      if (j.status !== "success") {
+        alert(j.message || "Failed to update favorite.");
+        return;
+      }
+      // Refresh fav list and re-render to update stars & sorting
+      await loadFavIds();
+      await fetchSpells();
+    } catch {
+      alert("Favorite request failed.");
+    }
+  };
+
+  function debounce(fn, ms=300) {
+    let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  document.addEventListener("DOMContentLoaded", async () => {
+    // Load schools + favorites (if logged in) and initial spells
+    await loadSchools();
+    await loadFavIds();
+    await fetchSpells();
+
+    const run = debounce(fetchSpells, 300);
+    nameEl.addEventListener("input", run);
+    categoryEl.addEventListener("change", run);
+    schoolEl.addEventListener("change", run);
+    favFirstEl.addEventListener("change", fetchSpells);
+
+    $("#clear-filters").addEventListener("click", () => {
+      nameEl.value = "";
+      categoryEl.value = "";
+      schoolEl.value = "";
+      favFirstEl.checked = false;
+      fetchSpells();
+    });
   });
-});
+})();
 </script>
 </body>
 </html>

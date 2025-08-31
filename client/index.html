@@ -28,6 +28,7 @@
     <p><strong>MP Cost:</strong> <span id="mp_cost">--</span></p>
     <p><strong>EN Cost:</strong> <span id="en_cost">--</span></p>
     <p><strong>Category:</strong> <span id="category">--</span></p>
+    <p><strong>MP to Next Category:</strong> <span id="mp_to_next">--</span></p>
   </div>
 
   <!-- Form (submitted via JS) -->
@@ -367,13 +368,14 @@ function updatePreview() {
     $("#mp_cost").textContent = j.mp_cost ?? "--";
     $("#en_cost").textContent = j.en_cost ?? "--";
     $("#category").textContent = j.category || "--";
-    // optional breakdown support (if server adds it later)
+    $("#mp_to_next").textContent = (j.mp_to_next_category ?? "--");
     updateKnobCostChipsFromBreakdown(j.breakdown || null);
   })
   .catch(() => {
     $("#mp_cost").textContent = "--";
     $("#en_cost").textContent = "--";
     $("#category").textContent = "--";
+    $("#mp_to_next").textContent = "--"; 
     updateKnobCostChipsFromBreakdown(null);
   });
 }
