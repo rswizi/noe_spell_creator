@@ -5,90 +5,108 @@
   <title>Create a Spell</title>
   <link rel="stylesheet" href="/static/style.css">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .type-chip{margin-left:8px;padding:2px 6px;border-radius:6px;background:#eef;font-size:.8rem}
+    .knob-cost{margin-left:8px;opacity:.85}
+    .effect-entry{display:flex;align-items:flex-start;gap:10px;margin:8px 0;padding:8px;border:1px solid #ddd;border-radius:8px}
+    .effect-col{flex:1;min-width:0}
+    .effect-desc{opacity:.85;margin-top:6px;font-size:.95rem}
+    .effect-cost{margin-top:6px;font-size:.9rem;opacity:.9}
+    .tiny{font-size:.85rem;opacity:.75}
+  </style>
 </head>
 <body>
   <div style="max-width:700px;margin:16px auto 0;">
-    <a class="btn btn-secondary" href="#" onclick="confirmHome(event)">← Back Home</a>
+    <a class="btn btn-secondary" href="#" id="back-home">← Back Home</a>
   </div>
 
   <h1>Create a Spell</h1>
 
   <!-- Live Cost Preview -->
-  <div id="preview">
+  <div id="preview" class="home-card" style="max-width:700px;margin:0 auto 16px;">
     <h3>Live Spell Preview</h3>
     <p><strong>MP Cost:</strong> <span id="mp_cost">--</span></p>
     <p><strong>EN Cost:</strong> <span id="en_cost">--</span></p>
     <p><strong>Category:</strong> <span id="category">--</span></p>
   </div>
 
-  <!-- No action/method; we submit via JS -->
-  <form id="spell-form">
+  <!-- Form (submitted via JS) -->
+  <form id="spell-form" class="home-card" style="max-width:700px;margin:0 auto;">
     <!-- Spell Name -->
     <label for="school_name">Spell Name:</label>
-    <input type="text" id="school_name" name="school_name" required><br><br>
+    <input type="text" id="school_name" name="school_name" required>
 
     <!-- Activation -->
-    <label for="activation">Activation:</label>
-    <small id="cost-activation" class="knob-cost"></small><br><br>
-    <select id="activation" name="activation" required>
-      <option value="Action">Action</option>
-      <option value="Special Action">Special Action</option>
-      <option value="Ritual">Ritual</option>
-    </select><br><br>
+    <div style="margin-top:14px;">
+      <label for="activation">Activation:</label>
+      <small id="cost-activation" class="knob-cost tiny"></small><br>
+      <select id="activation" name="activation" required>
+        <option value="Action">Action</option>
+        <option value="Special Action">Special Action</option>
+        <option value="Ritual">Ritual</option>
+      </select>
+    </div>
 
     <!-- Range -->
-    <label for="range">Range:</label>
-    <small id="cost-range" class="knob-cost"></small><br><br>
-    <small id="range-type-chip" class="type-chip"></small>
-    <select id="range" name="range" required>
-      <option value="0">0</option>
-      <option value="1">1</option>
-      <option value="3">3</option>
-      <option value="5">5</option>
-      <option value="7">7</option>
-      <option value="9">9</option>
-      <option value="13">13</option>
-      <option value="15">15</option>
-    </select><br><br>
+    <div style="margin-top:14px;">
+      <label for="range">Range:</label>
+      <small id="cost-range" class="knob-cost tiny"></small>
+      <small id="range-type-chip" class="type-chip"></small><br>
+      <select id="range" name="range" required>
+        <option value="0">0</option>
+        <option value="1">1</option>
+        <option value="3">3</option>
+        <option value="5">5</option>
+        <option value="7">7</option>
+        <option value="9">9</option>
+        <option value="13">13</option>
+        <option value="15">15</option>
+      </select>
+    </div>
 
     <!-- AoE -->
-    <label for="aoe">Area of Effect (AoE):</label>
-    <small id="cost-aoe" class="knob-cost"></small><br><br>
-    <small id="aoe-type-chip" class="type-chip"></small>
-    <select id="aoe" name="aoe" required>
-      <option value="A Square">A Square</option>
-      <option value="Line (3)">Line (3)</option>
-      <option value="Line (5)">Line (5)</option>
-      <option value="Line (7)">Line (7)</option>
-      <option value="Line (9)">Line (9)</option>
-      <option value="Cross (3)">Cross (3)</option>
-      <option value="Cross (5)">Cross (5)</option>
-      <option value="Cross (9)">Cross (9)</option>
-      <option value="Cone (3)">Cone (3)</option>
-      <option value="Cone (5)">Cone (5)</option>
-      <option value="Cone (7)">Cone (7)</option>
-      <option value="Cone (9)">Cone (9)</option>
-      <option value="Circle (3)">Circle (3)</option>
-      <option value="Circle (5)">Circle (5)</option>
-      <option value="Circle (7)">Circle (7)</option>
-      <option value="Circle (9)">Circle (9)</option>
-    </select><br><br>
+    <div style="margin-top:14px;">
+      <label for="aoe">Area of Effect (AoE):</label>
+      <small id="cost-aoe" class="knob-cost tiny"></small>
+      <small id="aoe-type-chip" class="type-chip"></small><br>
+      <select id="aoe" name="aoe" required>
+        <!-- Keep your canonical AoE names (backend already understands them) -->
+        <option value="A Square">A Square</option>
+        <option value="Line (3)">Line (3)</option>
+        <option value="Line (5)">Line (5)</option>
+        <option value="Line (7)">Line (7)</option>
+        <option value="Line (9)">Line (9)</option>
+        <option value="Cross (3)">Cross (3)</option>
+        <option value="Cross (5)">Cross (5)</option>
+        <option value="Cross (9)">Cross (9)</option>
+        <option value="Cone (3)">Cone (3)</option>
+        <option value="Cone (5)">Cone (5)</option>
+        <option value="Cone (7)">Cone (7)</option>
+        <option value="Cone (9)">Cone (9)</option>
+        <option value="Circle (3)">Circle (3)</option>
+        <option value="Circle (5)">Circle (5)</option>
+        <option value="Circle (7)">Circle (7)</option>
+        <option value="Circle (9)">Circle (9)</option>
+      </select>
+    </div>
 
     <!-- Duration -->
-    <label for="duration">Duration:</label>
-    <small id="cost-duration" class="knob-cost"></small><br><br>
-    <select id="duration" name="duration" required>
-      <option value="1">1</option>
-      <option value="2">2</option>
-      <option value="4">4</option>
-      <option value="6">6</option>
-      <option value="8">8</option>
-      <option value="10">10</option>
-      <option value="12">12</option>
-    </select><br><br>
+    <div style="margin-top:14px;">
+      <label for="duration">Duration:</label>
+      <small id="cost-duration" class="knob-cost tiny"></small><br>
+      <select id="duration" name="duration" required>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="4">4</option>
+        <option value="6">6</option>
+        <option value="8">8</option>
+        <option value="10">10</option>
+        <option value="12">12</option>
+      </select>
+    </div>
 
     <!-- Effect Filters -->
-    <div class="filter-bar" style="max-width:700px;margin:0 auto 10px;">
+    <div class="filter-bar" style="margin:18px 0 10px;">
       <input id="eff-filter-name" type="text" placeholder="Filter effects by name…" />
       <select id="eff-filter-school">
         <option value="">All Schools</option>
@@ -96,559 +114,386 @@
       <button type="button" id="eff-filter-clear">Reset</button>
     </div>
 
-    <!-- Effects Section -->
+    <!-- Effects -->
     <label>Effects:</label>
     <div id="effects-container"></div>
-    <button type="button" onclick="addEffect()">➕ Add Effect</button><br><br>
+    <button type="button" id="btn-add-effect" style="margin-top:8px;">➕ Add Effect</button>
 
-    <input type="submit" value="Submit Spell">
+    <div style="margin-top:18px;">
+      <input type="submit" value="Submit Spell">
+    </div>
   </form>
 
 <script>
-
-let EFFECTS_BY_ID = {};
-let SCHOOLS_BY_ID = {};
+/* ---------- Config & caches ---------- */
+const API_BASE = "";
 const TYPE_ORDER = { A:1, B:2, C:3 };
+
+let ALL_SCHOOLS = [];          // [{id,name,range_type,aoe_type,...}]
+let SCHOOL_BY_ID = {};         // id -> school
+let ALL_EFFECTS = [];          // [{id,name,description,mp_cost,en_cost,school}]
+let EFFECTS_BY_ID = {};        // id -> effect
+
+/* ---------- Helpers ---------- */
+const $  = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
 
 function maxType(arr) {
   if (!arr || !arr.length) return "A";
   let best = "A";
-  for (const t of arr) {
-    const up = String(t || "A").toUpperCase();
-    if (TYPE_ORDER[up] > TYPE_ORDER[best]) best = up;
+  for (const raw of arr) {
+    const t = String(raw || "A").toUpperCase();
+    if (TYPE_ORDER[t] > TYPE_ORDER[best]) best = t;
   }
   return best;
 }
 
-// Preload effects and schools into maps (id -> doc)
-async function preloadMetadata() {
-  const [er, sr] = await Promise.all([
-    fetch(`${API_BASE}/effects`),
-    fetch(`${API_BASE}/schools`),
-  ]);
-  const ejson = await er.json();
-  const sjson = await sr.json();
-  (ejson.effects || []).forEach(e => { EFFECTS_BY_ID[String(e.id)] = e; });
-  (sjson.schools || []).forEach(s => { SCHOOLS_BY_ID[String(s.id)] = s; });
-}
-
-function recomputeKnobTypes() {
-  // collect selected effect IDs from rows
-  const selectedEids = Array.from(document.querySelectorAll('.effect-entry select[name="effects[]"]'))
-    .map(sel => sel.value)
-    .filter(Boolean);
-
-  // gather range/aoe types from their schools
-  const types = selectedEids.map(eid => {
-    const eff = EFFECTS_BY_ID[String(eid)];
-    const sch = eff ? SCHOOLS_BY_ID[String(eff.school)] : null;
-    return {
-      r: (sch && sch.range_type) || "A",
-      a: (sch && sch.aoe_type)   || "A",
-    };
-  });
-
-  const rangeType = maxType(types.map(t => t.r));
-  const aoeType   = maxType(types.map(t => t.a));
-
-  // show chips
-  const rChip = document.getElementById('range-type-chip');
-  const aChip = document.getElementById('aoe-type-chip');
-  if (rChip) rChip.textContent = `Type ${rangeType}`;
-  if (aChip) aChip.textContent = `Type ${aoeType}`;
-
-  // try to adjust AoE select to same shape but new letter
-  const aoeSel = document.getElementById('aoe');
-  if (aoeSel && aoeSel.value) {
-    const parts = aoeSel.value.split(/\s+/, 2); // e.g. ["A", "Square"]
-    if (parts.length === 2) {
-      const desired = `${aoeType} ${parts[1]}`;
-      for (const opt of aoeSel.options) {
-        if (opt.value === desired) {
-          aoeSel.value = desired;
-          break;
-        }
-      }
-    }
-  }
-
-  // refresh preview so costs reflect new type mix
-  if (typeof updatePreview === "function") {
-    updatePreview();
-  }
-}
-
-let LAST_BREAKDOWN = null;
-
-function updateKnobChips(b) {
-  if (!b) { 
-    ["activation","range","aoe","duration"].forEach(k => {
-      const el = document.getElementById(`cost-${k}`);
-      if (el) el.textContent = "";
-    });
-    return;
-  }
-  const fmt = (mp,en) => `MP ${mp}, EN ${en}`;
-  const a = b.activation || {}, r = b.range || {}, o = b.aoe || {}, d = b.duration || {};
-  const set = (id, mp, en) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = fmt(mp ?? 0, en ?? 0);
-  };
-  set("cost-activation", a.mp, a.en);
-  set("cost-range",      r.mp, r.en);
-  set("cost-aoe",        o.mp, o.en);
-  set("cost-duration",   d.mp, d.en);
-}
-
-function updateEffectCostChips(b) {
-  const map = {};
-  (b?.effects || []).forEach(e => { map[String(e.id)] = { mp: e.mp, en: e.en }; });
-  // for each selected effect row:
-  document.querySelectorAll(".effect-entry").forEach(entry => {
-    const sel = entry.querySelector('select[name="effects[]"]');
-    const costEl = entry.querySelector('.effect-cost');
-    if (!sel || !costEl) return;
-    const e = map[String(sel.value)];
-    costEl.textContent = e ? `MP ${e.mp}, EN ${e.en}` : "";
-  });
-}
-
-function alertModal(msg) { alert(msg); }
-
-function getEffectById(id) {
-  if (!id) return null;
-  return ALL_EFFECTS.find(e => String(e.id) === String(id)) || null;
-}
-
-function setEntryDescription(descEl, effectId) {
-  const eff = getEffectById(effectId);
-  descEl.textContent = eff ? (eff.description || "(No description)") : "";
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
 }
 
 function normalize(s) { return (s || "").toString().toLowerCase().trim(); }
 
+/* ---------- Loaders ---------- */
+async function loadSchools() {
+  const res = await fetch(`${API_BASE}/schools`);
+  const data = await res.json();
+  ALL_SCHOOLS = data.schools || [];
+  SCHOOL_BY_ID = {};
+  for (const s of ALL_SCHOOLS) {
+    SCHOOL_BY_ID[String(s.id)] = s;
+  }
+  // populate school filter for effects
+  const schoolSel = $("#eff-filter-school");
+  schoolSel.innerHTML = `<option value="">All Schools</option>`;
+  for (const s of ALL_SCHOOLS) {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.name} [${s.id}]`;
+    schoolSel.appendChild(opt);
+  }
+}
+
+async function loadEffects() {
+  const res = await fetch(`${API_BASE}/effects`);
+  const data = await res.json();
+  const raw = data.effects || [];
+  // shape each effect with attached school object if available
+  ALL_EFFECTS = raw.map(e => {
+    const sid = String(e.school || "");
+    return { ...e, school_obj: SCHOOL_BY_ID[sid] || null };
+  });
+  EFFECTS_BY_ID = {};
+  for (const e of ALL_EFFECTS) EFFECTS_BY_ID[String(e.id)] = e;
+}
+
+/* ---------- Effect filtering ---------- */
 function currentEffectFilters() {
   return {
-    name: normalize(effFilterNameEl?.value),
-    school: normalize(effFilterSchoolEl?.value) // this will be an ID or ""
+    name:   normalize($("#eff-filter-name")?.value),
+    school: normalize($("#eff-filter-school")?.value)
   };
 }
-
-function effectMatchesFilters(effect, filters) {
-  const n = normalize(effect.name);
-  const sid = normalize(effect.school?.id);
-  const sname = normalize(effect.school?.name);
-  const nameOk = !filters.name || n.includes(filters.name);
-  const schoolOk = !filters.school || sid === filters.school || sname === filters.school;
-  return nameOk && schoolOk;
+function effectMatchesFilters(effect, f) {
+  const nameOk = !f.name || normalize(effect.name).includes(f.name);
+  const sid    = normalize(effect.school || effect.school_id || (effect.school_obj?.id));
+  const sOk    = !f.school || sid === f.school;
+  return nameOk && sOk;
+}
+function filteredEffects() {
+  const f = currentEffectFilters();
+  return ALL_EFFECTS.filter(e => effectMatchesFilters(e, f));
 }
 
-  let effectCount = 0;
-  const API_BASE = "";
-
-  // caches
-  let ALL_EFFECTS = [];
-  let ALL_SCHOOLS = [];
-  let SCHOOL_BY_ID = {};
-
-  let effFilterNameEl, effFilterSchoolEl;
-
-  // ---------- utilities ----------
-  function normalize(str) {
-    return (str || "").toString().toLowerCase().trim();
+/* ---------- Build rows ---------- */
+function populateEffectSelect(selectEl, list, keepValue=true) {
+  const prev = keepValue ? selectEl.value : "";
+  selectEl.innerHTML = `<option value="">-- Select Effect --</option>`;
+  for (const e of list) {
+    const opt = document.createElement("option");
+    opt.value = e.id;
+    const schoolLabel = e.school_obj?.name ? ` — ${e.school_obj.name}` : (e.school ? ` — ${e.school}` : "");
+    opt.textContent = `[${e.id}] ${e.name}${schoolLabel}`;
+    selectEl.appendChild(opt);
   }
-
-  function currentEffectFilters() {
-    return {
-      name: normalize(effFilterNameEl?.value || ""),
-      school: normalize(effFilterSchoolEl?.value || "")
-    };
+  if (keepValue && prev) {
+    const exists = list.some(e => String(e.id) === String(prev));
+    selectEl.value = exists ? prev : "";
   }
+}
 
-  function effectMatchesFilters(effect, filters) {
-    const n = normalize(effect?.name);
-    const sid = normalize(effect?.school?.id || effect?.school_id);
-    const sname = normalize(effect?.school?.name);
+function addEffectRow(prefillId="") {
+  const container = $("#effects-container");
 
-    const nameOk   = !filters.name   || n.includes(filters.name);
-    const schoolOk = !filters.school || sid === filters.school || sname === filters.school;
-    return nameOk && schoolOk;
-  }
+  const entry = document.createElement("div");
+  entry.className = "effect-entry";
 
-  function getFilteredEffects() {
-    const f = currentEffectFilters();
-    return ALL_EFFECTS.filter(e => effectMatchesFilters(e, f));
-  }
+  const left = document.createElement("div");
+  left.className = "effect-col";
 
-  // builds options for a single <select>, preserving existing selected value if possible
-  function populateEffectSelect(selectEl, effects, keepValue = true) {
-    const prevVal = keepValue ? selectEl.value : "";
-    selectEl.innerHTML = `<option value="">-- Select Effect --</option>`;
-    effects.forEach(effect => {
-      const opt = document.createElement("option");
-      opt.value = effect.id;
-      const schoolBadge = effect?.school?.name
-        ? ` — ${effect.school.name}`
-        : (effect?.school?.id ? ` — ${effect.school.id}` : "");
-      opt.textContent = `[${effect.id}] ${effect.name}${schoolBadge}`;
-      selectEl.appendChild(opt);
-    });
+  // select
+  const sel = document.createElement("select");
+  sel.name = "effects[]";
+  sel.required = true;
+  populateEffectSelect(sel, filteredEffects(), false);
+  if (prefillId) sel.value = String(prefillId);
 
-    if (keepValue && prevVal) {
-      const hasPrev = effects.some(e => String(e.id) === String(prevVal));
-      selectEl.value = hasPrev ? prevVal : "";
-    }
+  // description
+  const desc = document.createElement("div");
+  desc.className = "effect-desc";
+  const setDesc = () => {
+    const eff = EFFECTS_BY_ID[String(sel.value)];
+    desc.textContent = eff ? (eff.description || "(No description)") : "";
+  };
+  setDesc();
 
-    // if this select sits in an .effect-entry, refresh its description
-    const entry = selectEl.closest(".effect-entry");
-    if (entry) {
-      const descEl = entry.querySelector(".effect-desc");
-      if (descEl) setEntryDescription(descEl, selectEl.value);
-    }
-  }
+  // per-effect cost chip
+  const costDiv = document.createElement("div");
+  costDiv.className = "effect-cost";
+  const setEffCost = () => {
+    const eff = EFFECTS_BY_ID[String(sel.value)];
+    costDiv.textContent = eff ? `MP ${eff.mp_cost}, EN ${eff.en_cost}` : "";
+  };
+  setEffCost();
 
-  function refreshAllEffectSelects() {
-    const filtered = getFilteredEffects();
-    document
-      .querySelectorAll('#effects-container select[name="effects[]"]')
-      .forEach(sel => populateEffectSelect(sel, filtered, /*keepValue*/ true));
-  }
-
-
-  // ---------- fetchers ----------
-  async function loadSchools() {
-    const res = await fetch(`${API_BASE}/schools`);
-    const data = await res.json();
-    ALL_SCHOOLS = data.schools || [];
-
-    // Build map id -> {id, name}
-    SCHOOL_BY_ID = {};
-    for (const s of ALL_SCHOOLS) {
-      SCHOOL_BY_ID[String(s.id)] = { id: String(s.id), name: s.name || String(s.id) };
-    }
-
-    // Populate the effect school filter (values are IDs)
-    const schoolSel = document.getElementById("eff-filter-school");
-    schoolSel.innerHTML = `<option value="">All Schools</option>`;
-    ALL_SCHOOLS.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s.id; // id like "0003"
-      opt.textContent = `${s.name} [${s.id}]`;
-      schoolSel.appendChild(opt);
-    });
-  }
-
-
-  async function loadEffects() {
-    const res = await fetch(`${API_BASE}/effects`);
-    const data = await res.json();
-    const raw = data.effects || [];
-
-    ALL_EFFECTS = raw.map(e => {
-      // e.school is a string id like "0003"
-      const sid = String(e.school || "").trim();
-      const schoolObj = SCHOOL_BY_ID[sid] || { id: sid, name: sid }; // fallback name = id
-      return {
-        ...e,
-        school: { id: schoolObj.id, name: schoolObj.name }
-      };
-    });
-  }
-
-  async function addEffectPrefilled(effectId) {
-    return new Promise((resolve) => {
-      const container = document.getElementById('effects-container');
-
-      const entry = document.createElement('div');
-      entry.className = 'effect-entry';
-      entry.id = `effect-${effectCount}`;
-
-      const leftCol = document.createElement('div');
-      leftCol.className = 'effect-col';
-
-      const select = document.createElement('select');
-      select.name = "effects[]";
-      effectSelect.addEventListener('change', recomputeKnobTypes);
-      select.required = true;
-
-      populateEffectSelect(select, getFilteredEffects(), /*keepValue*/ false);
-      select.value = effectId;
-
-      const desc = document.createElement('div');
-      desc.className = 'effect-desc';
-      setEntryDescription(desc, select.value);
-
-      select.addEventListener('change', () => {
-        setEntryDescription(desc, select.value);
-        updatePreview();
-      });
-
-      leftCol.appendChild(select);
-      leftCol.appendChild(desc);
-
-      const costDiv = document.createElement('div');
-      costDiv.className = 'effect-cost';
-      leftCol.appendChild(costDiv);
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.innerText = "❌";
-      button.onclick = () => { entry.remove(); updatePreview(); };
-
-      entry.appendChild(leftCol);
-      entry.appendChild(button);
-
-      container.appendChild(entry);
-      effectCount++;
-      resolve();
-    });
-  }
-
-  // ---------- builder bits (your existing logic, with tweaks) ----------
-  function addEffect() {
-    const container = document.getElementById('effects-container');
-
-    const entry = document.createElement('div');
-    entry.className = 'effect-entry';
-    entry.id = `effect-${effectCount}`;
-
-    const leftCol = document.createElement('div');
-    leftCol.className = 'effect-col';
-
-    const select = document.createElement('select');
-    select.name = "effects[]";
-    effectSelect.addEventListener('change', recomputeKnobTypes);
-    select.required = true;
-
-    // initial population with current filters
-    populateEffectSelect(select, getFilteredEffects(), /*keepValue*/ false);
-
-    const desc = document.createElement('div');
-    desc.className = 'effect-desc';
-    setEntryDescription(desc, select.value);
-
-    select.addEventListener('change', () => {
-      setEntryDescription(desc, select.value);
-      updatePreview();
-    });
-
-    leftCol.appendChild(select);
-    leftCol.appendChild(desc);
-
-    const costDiv = document.createElement('div');
-    costDiv.className = 'effect-cost';
-    leftCol.appendChild(costDiv);
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.innerText = "✖";
-    button.onclick = () => { entry.remove(); updatePreview(); recomputeKnobTypes();
-};
-
-    entry.appendChild(leftCol);
-    entry.appendChild(button);
-
-    container.appendChild(entry);
-    effectCount++;
-  }
-
-
-  function updatePreview() {
-    const form = document.getElementById("spell-form");
-    const formData = new FormData(form);
-    const rawEffects = formData.getAll("effects[]") || [];
-    const effects = rawEffects.filter(id => id && id.trim() !== "");
-
-    const data = {
-      activation: formData.get("activation"),
-      range: parseInt(formData.get("range")),
-      aoe: formData.get("aoe"),
-      duration: parseInt(formData.get("duration")),
-      effects
-    };
-
-    fetch(`${API_BASE}/costs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
-    })
-      .then(res => res.json())
-      .then(result => {
-        if (result.error) throw new Error(result.error);
-        document.getElementById("mp_cost").innerText = result.mp_cost ?? 0;
-        document.getElementById("en_cost").innerText = result.en_cost ?? 0;
-        document.getElementById("category").innerText = result.category || "--";
-        LAST_BREAKDOWN = result.breakdown || null;
-        updateKnobChips(LAST_BREAKDOWN);
-        updateEffectCostChips(LAST_BREAKDOWN);
-      })
-      .catch(err => {
-        console.error("Spell preview error:", err);
-        document.getElementById("mp_cost").innerText = "--";
-        document.getElementById("en_cost").innerText = "--";
-        document.getElementById("category").innerText = "--";
-      });
-  }
-
-  async function prefillFromSpell(id) {
-    try {
-      const res = await fetch(`${API_BASE}/spells/${encodeURIComponent(id)}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      const sp = data.spell;
-
-      document.getElementById("school_name").value = sp.name || "";
-      document.getElementById("activation").value = sp.activation || "Action";
-      document.getElementById("range").value = String(sp.range ?? "0");
-      document.getElementById("aoe").value = sp.aoe || "A Square";
-      document.getElementById("duration").value = String(sp.duration ?? "1");
-
-      const cont = document.getElementById("effects-container");
-      cont.innerHTML = "";
-      if (Array.isArray(sp.effects)) {
-        for (const eid of sp.effects) {
-          await addEffectPrefilled(eid);
-        }
-      }
-      updatePreview();
-    } catch (e) {
-      console.error("Autofill error:", e);
-      alert("Failed to load template: " + e.message);
-    }
-  }
-
-  // ---------- DOM boot ----------
-  document.addEventListener("DOMContentLoaded", async () => {
-  await preloadMetadata();
-    effFilterNameEl   = document.getElementById("eff-filter-name");
-    effFilterSchoolEl = document.getElementById("eff-filter-school");
-
-    // load data IN ORDER
-    await loadSchools();
-    await loadEffects();
-
-    // wire filters
-    const run = () => refreshAllEffectSelects();
-    effFilterNameEl.addEventListener("input", run);
-    effFilterSchoolEl.addEventListener("change", run);
-    document.getElementById("eff-filter-clear").addEventListener("click", () => {
-      effFilterNameEl.value = "";
-      effFilterSchoolEl.value = "";
-      refreshAllEffectSelects();
-    });
-
-    // listen for preview changes on other fields
-    document.querySelectorAll("select, input").forEach(el => {
-      el.addEventListener("change", updatePreview);
-    });
-
-    // at least one effect row
-    addEffect();
-
-    // load template OR edit target
-    const params  = new URLSearchParams(window.location.search);
-    const spellId = params.get("spell_id");
-    const editId  = params.get("edit_id");
-
-    if (spellId) prefillFromSpell(spellId);
-    if (editId) {
-      prefillFromSpell(editId).then(() => {
-        const submitBtn = document.querySelector('input[type="submit"]');
-        if (submitBtn) submitBtn.value = "💾 Save Changes";
-        const header = document.getElementById("preview");
-        if (header && !document.getElementById("edit-mode-banner")) {
-          const warn = document.createElement("p");
-          warn.id = "edit-mode-banner";
-          warn.style.marginTop = "10px";
-          warn.style.color = "#ffb84a";
-          warn.textContent = "Edit mode: saving will override this spell.";
-          header.appendChild(warn);
-        }
-      });
-    }
-  recomputeKnobTypes(); // set initial chips & costs
+  // hook changes
+  sel.addEventListener("change", () => {
+    setDesc();
+    setEffCost();
+    recomputeKnobTypes();
+    updatePreview();
   });
 
-  function confirmHome(e) {
+  left.appendChild(sel);
+  left.appendChild(desc);
+  left.appendChild(costDiv);
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.textContent = "✖";
+  removeBtn.onclick = () => {
+    entry.remove();
+    recomputeKnobTypes();
+    updatePreview();
+  };
+
+  entry.appendChild(left);
+  entry.appendChild(removeBtn);
+  container.appendChild(entry);
+}
+
+/* ---------- Type chips & preview ---------- */
+function recomputeKnobTypes() {
+  const selectedIds = $$('#effects-container select[name="effects[]"]').map(s => s.value).filter(Boolean);
+  const types = selectedIds.map(id => {
+    const eff = EFFECTS_BY_ID[String(id)];
+    const sch = eff?.school_obj;
+    return { r: sch?.range_type || "A", a: sch?.aoe_type || "A" };
+  });
+
+  const rType = maxType(types.map(t => t.r));
+  const aType = maxType(types.map(t => t.a));
+
+  const rChip = $("#range-type-chip");
+  const aChip = $("#aoe-type-chip");
+  if (rChip) rChip.textContent = `Type ${rType}`;
+  if (aChip) aChip.textContent = `Type ${aType}`;
+}
+
+function updateKnobCostChipsFromBreakdown(br) {
+  // If backend starts returning knob breakdown, fill them; otherwise clear.
+  const set = (id, mp, en) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = (mp==null && en==null) ? "" : `MP ${mp ?? 0}, EN ${en ?? 0}`;
+  };
+  if (!br) {
+    set("cost-activation"); set("cost-range"); set("cost-aoe"); set("cost-duration");
+    return;
+  }
+  set("cost-activation", br.activation?.mp, br.activation?.en);
+  set("cost-range",      br.range?.mp,      br.range?.en);
+  set("cost-aoe",        br.aoe?.mp,        br.aoe?.en);
+  set("cost-duration",   br.duration?.mp,   br.duration?.en);
+}
+
+function updatePreview() {
+  const fd = new FormData($("#spell-form"));
+  const selected = fd.getAll("effects[]").filter(v => v && v.trim() !== "");
+
+  const payload = {
+    activation: fd.get("activation"),
+    range: parseInt(fd.get("range") || "0", 10),
+    aoe: fd.get("aoe"),
+    duration: parseInt(fd.get("duration") || "1", 10),
+    effects: selected
+  };
+
+  fetch(`${API_BASE}/costs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  })
+  .then(r => r.json())
+  .then(j => {
+    $("#mp_cost").textContent = j.mp_cost ?? "--";
+    $("#en_cost").textContent = j.en_cost ?? "--";
+    $("#category").textContent = j.category || "--";
+    // optional breakdown support (if server adds it later)
+    updateKnobCostChipsFromBreakdown(j.breakdown || null);
+  })
+  .catch(() => {
+    $("#mp_cost").textContent = "--";
+    $("#en_cost").textContent = "--";
+    $("#category").textContent = "--";
+    updateKnobCostChipsFromBreakdown(null);
+  });
+}
+
+/* ---------- Submit (create/update) ---------- */
+function handleSubmit(e) {
+  e.preventDefault();
+  const params = new URLSearchParams(location.search);
+  const editId = params.get("edit_id");
+  const token  = localStorage.getItem("auth_token") || "";
+
+  const fd = new FormData($("#spell-form"));
+  const effects = fd.getAll("effects[]").filter(v => v && v.trim() !== "");
+
+  const body = {
+    name: (fd.get("school_name") || "Unnamed Spell"),
+    activation: fd.get("activation"),
+    range: parseInt(fd.get("range") || "0", 10),
+    aoe: fd.get("aoe"),
+    duration: parseInt(fd.get("duration") || "1", 10),
+    effects
+  };
+
+  const url = editId ? `${API_BASE}/spells/${encodeURIComponent(editId)}` : `${API_BASE}/submit_spell`;
+  const method = editId ? "PUT" : "POST";
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  fetch(url, { method, headers, body: JSON.stringify(body) })
+    .then(async res => {
+      let payload = {};
+      try { payload = await res.json(); } catch { /* ignore non-JSON */ }
+      if (!res.ok || payload.status === "error") {
+        const msg = payload.message || `${res.status} ${res.statusText}`;
+        throw new Error(msg);
+      }
+      return payload;
+    })
+    .then(() => {
+      alert("Spell saved!");
+      clearSpellForm();
+    })
+    .catch(err => {
+      // if server saved but returned non-JSON, user might see error—this keeps message accurate
+      alert("Submit error: " + (err?.message || "Unknown error"));
+    });
+}
+
+/* ---------- Prefill (template/edit) ---------- */
+async function prefillFromSpell(id) {
+  const r = await fetch(`${API_BASE}/spells/${encodeURIComponent(id)}`);
+  const j = await r.json();
+  if (!j || !j.spell) throw new Error("Spell not found");
+  const sp = j.spell;
+
+  $("#school_name").value = sp.name || "";
+  $("#activation").value  = sp.activation || "Action";
+  $("#range").value       = String(sp.range ?? "0");
+  $("#aoe").value         = sp.aoe || "A Square";
+  $("#duration").value    = String(sp.duration ?? "1");
+
+  $("#effects-container").innerHTML = "";
+  if (Array.isArray(sp.effects)) {
+    for (const eid of sp.effects) addEffectRow(String(eid));
+  }
+}
+
+/* ---------- Clear form ---------- */
+function clearSpellForm() {
+  const form = $("#spell-form");
+  if (form) form.reset();
+  $("#effects-container").innerHTML = "";
+  addEffectRow();                       // keep one empty row
+  recomputeKnobTypes();
+  updatePreview();
+}
+
+/* ---------- Boot ---------- */
+document.addEventListener("DOMContentLoaded", async () => {
+  // nav
+  $("#back-home").addEventListener("click", (e) => {
     e.preventDefault();
     if (confirm("Are you sure? All unsaved modifications will be lost.")) {
-      window.location.href = "home.html";
+      location.href = "home.html";
     }
-  }
-
-  // unified submit handler (unchanged except token on create for logging)
-  document.getElementById("spell-form").addEventListener("submit", function (e) {
-    e.preventDefault();
-
-    const params = new URLSearchParams(window.location.search);
-    const editId = params.get("edit_id");
-    const token = localStorage.getItem("auth_token") || "";
-
-    const form = document.getElementById("spell-form");
-    const formData = new FormData(form);
-    const rawEffects = formData.getAll("effects[]") || [];
-    const effects = rawEffects.filter(id => id && id.trim() !== "");
-
-    const data = {
-      name: formData.get("school_name") || "Unnamed Spell",
-      activation: formData.get("activation"),
-      range: parseInt(formData.get("range")),
-      aoe: formData.get("aoe"),
-      duration: parseInt(formData.get("duration")),
-      effects
-    };
-
-    const url = editId ? `${API_BASE}/spells/${encodeURIComponent(editId)}` : `${API_BASE}/submit_spell`;
-    const method = editId ? "PUT" : "POST";
-    const headers = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    fetch(url, { method, headers, body: JSON.stringify(data) })
-      .then(async res => {
-        const text = await res.text();
-        let data;
-        try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(text || `${res.status} ${res.statusText}`); }
-        if (!res.ok || data.status === "error") {
-          throw new Error(data.message || `${res.status} ${res.statusText}`);
-        }
-        return data;
-      })
-     .then(async res => {
-       const text = await res.text();
-       let payload = {};
-       try { payload = text ? JSON.parse(text) : {}; } catch { /* non-JSON on success is fine */ }
-       if (!res.ok || payload.status === "error") {
-         throw new Error(payload.message || `${res.status} ${res.statusText}`);
-       }
-       return payload;
-     })
-      .then(result => {
-        alertModal("Spell saved!");
-        clearSpellForm(); 
-      })
-      .catch(err => {
-        alertModal("Submit error: " + err.message);
-   });
   });
 
-  function clearSpellForm() {
+  // load data
+  await loadSchools();
+  await loadEffects();
 
-    const form = document.getElementById('spell-form');
-  if (form) form.reset();
+  // filters
+  $("#eff-filter-name").addEventListener("input", () => {
+    // repopulate existing selects based on filters
+    $$('#effects-container select[name="effects[]"]').forEach(sel => {
+      populateEffectSelect(sel, filteredEffects(), true);
+    });
+  });
+  $("#eff-filter-school").addEventListener("change", () => {
+    $$('#effects-container select[name="effects[]"]').forEach(sel => {
+      populateEffectSelect(sel, filteredEffects(), true);
+    });
+  });
+  $("#eff-filter-clear").addEventListener("click", () => {
+    $("#eff-filter-name").value = "";
+    $("#eff-filter-school").value = "";
+    $$('#effects-container select[name="effects[]"]').forEach(sel => {
+      populateEffectSelect(sel, filteredEffects(), true);
+    });
+  });
 
-  const chosen = document.getElementById('chosen-effects');   // container that holds the added effect selects/rows
-  if (chosen) chosen.innerHTML = '';
+  // initial row & listeners
+  addEffectRow();
 
-  const effectDesc = document.getElementById('effect-description');
-  if (effectDesc) effectDesc.textContent = '';
+  // recompute & preview on knobs
+  ["activation","range","aoe","duration"].forEach(id => {
+    document.getElementById(id).addEventListener("change", () => {
+      recomputeKnobTypes();
+      updatePreview();
+    });
+  });
 
-  const mp = document.getElementById('mp-cost'); if (mp) mp.textContent = '0';
-  const en = document.getElementById('en-cost'); if (en) en.textContent = '0';
-  const cat = document.getElementById('spell-category'); if (cat) cat.textContent = '';
+  // template/edit mode
+  const qs = new URLSearchParams(location.search);
+  const spellId = qs.get("spell_id");
+  const editId  = qs.get("edit_id");
+  if (spellId) await prefillFromSpell(spellId);
+  if (editId) {
+    await prefillFromSpell(editId);
+    const submitBtn = document.querySelector('input[type="submit"]');
+    if (submitBtn) submitBtn.value = "💾 Save Changes";
+    const banner = document.createElement("p");
+    banner.className = "tiny";
+    banner.style.color = "#ff9300";
+    banner.textContent = "Edit mode: saving will override this spell.";
+    $("#preview").appendChild(banner);
+  }
 
-  if (window.selectedEffects) window.selectedEffects = [];
-}
+  // first compute & preview
+  recomputeKnobTypes();
+  updatePreview();
+
+  // add/remove/submit
+  $("#btn-add-effect").addEventListener("click", () => addEffectRow());
+  $("#spell-form").addEventListener("submit", handleSubmit);
+});
 </script>
-
 </body>
 </html>
