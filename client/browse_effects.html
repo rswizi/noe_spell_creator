@@ -32,6 +32,9 @@
         </select>
         <button id="clear-filters">Reset</button>
       </div>
+      <div>
+        <button id="btn-dedupe" class="btn btn-secondary">🧹 Delete Duplicates…</button>
+      </div>
     </div>
 
     <div class="home-card">
@@ -78,6 +81,18 @@
       </div>
     </div>
   </div>
+
+<div id="dupe-modal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="dupe-title">
+    <button class="modal-close" id="dupe-close" aria-label="Close">&times;</button>
+    <h2 id="dupe-title">Duplicate Effects</h2>
+    <div id="dupe-content" style="max-height:60vh; overflow:auto; margin-top:10px;"></div>
+    <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
+      <button class="btn btn-secondary" id="dupe-cancel">Cancel</button>
+      <button class="btn" id="dupe-confirm">Delete All Duplicates</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const API_BASE = "";
@@ -253,6 +268,92 @@ document.addEventListener("DOMContentLoaded", async () => {
   nameEl.addEventListener("input", run);
   schoolEl.addEventListener("change", run);
 });
+
+const authToken = localStorage.getItem("auth_token") || "";
+function authHeaders() {
+  return authToken ? { "Authorization": `Bearer ${authToken}` } : {};
+}
+
+function openDupeModal() {
+  const m = document.getElementById("dupe-modal");
+  m.classList.remove("hidden");
+  m.setAttribute("aria-hidden", "false");
+}
+function closeDupeModal() {
+  const m = document.getElementById("dupe-modal");
+  m.classList.add("hidden");
+  m.setAttribute("aria-hidden", "true");
+  document.getElementById("dupe-content").innerHTML = "";
+}
+
+async function previewDuplicates() {
+  const res = await fetch(`/admin/effects/duplicates`, { headers: { ...authHeaders() }});
+  const j = await res.json();
+  const box = document.getElementById("dupe-content");
+
+  if (j.status !== "success") {
+    box.innerHTML = `<p style="color:#ff6a6a;">Failed to load duplicates.</p>`;
+    return;
+  }
+  if (!j.groups.length) {
+    box.innerHTML = `<p>No duplicate groups found (name + description are identical).</p>`;
+    return;
+  }
+
+  // Build a simple list
+  const html = j.groups.map(g => {
+    const desc = (g.description || "").replace(/\s+/g, " ").slice(0, 240);
+    const ids  = g.ids.join(", ");
+    return `
+      <div style="border:1px solid #333;border-radius:8px;padding:10px;margin:8px 0;">
+        <div><strong>${g.name}</strong></div>
+        <div style="opacity:.8; font-size:.95rem; margin:4px 0;">${desc || "(no description)"}</div>
+        <div class="tiny">Count: ${g.count} — Keep: <code>${g.keep}</code> — Remove: <code>${g.remove.join(", ")}</code></div>
+        <div class="tiny">All IDs: ${ids}</div>
+      </div>
+    `;
+  }).join("");
+
+  box.innerHTML = `
+    <p>The following groups have identical <em>name</em> and <em>description</em>. For each group the lowest ID will be kept and all others deleted. Any spells referencing the removed IDs will be updated to the kept ID.</p>
+    ${html}
+  `;
+}
+
+async function applyDuplicates() {
+  const btn = document.getElementById("dupe-confirm");
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/admin/effects/duplicates`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ apply: true })
+    });
+    const j = await res.json();
+    if (j.status !== "success") throw new Error(j.message || "Failed to dedupe.");
+    alert(j.message || `Removed ${j.deleted_effects} duplicates; updated ${j.touched_spells} spells.`);
+    closeDupeModal();
+    // refresh your effect list here:
+    if (typeof loadEffectsTable === "function") loadEffectsTable();
+  } catch (e) {
+    alert(e.message || "Request failed.");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Hooks
+document.getElementById("btn-dedupe").addEventListener("click", async () => {
+  await previewDuplicates();
+  openDupeModal();
+});
+document.getElementById("dupe-close").addEventListener("click", closeDupeModal);
+document.getElementById("dupe-cancel").addEventListener("click", closeDupeModal);
+document.getElementById("dupe-confirm").addEventListener("click", applyDuplicates);
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "dupe-modal") closeDupeModal();
+});
+
 </script>
 </body>
 </html>

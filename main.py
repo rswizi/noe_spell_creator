@@ -952,5 +952,98 @@ def admin_delete_effect(effect_id: str, request: Request):
 
     return {"status":"success","deleted":effect_id,"patch_text":"\n".join(lines) + "\n"}
 
+# ---- Helpers for effect dedupe ----
+def _norm_text(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+def _effect_duplicate_groups() -> list[dict]:
+    """Group effects by normalized (name, description)."""
+    eff_col = get_col("effects")
+    docs = list(eff_col.find({}, {"_id": 0, "id": 1, "name": 1, "description": 1}))
+    buckets: dict[tuple[str,str], list[dict]] = {}
+    for e in docs:
+        key = (_norm_text(e.get("name")), _norm_text(e.get("description")))
+        buckets.setdefault(key, []).append(e)
+    groups = []
+    for (n, d), items in buckets.items():
+        if len(items) > 1:
+            ids = sorted(str(x["id"]) for x in items)
+            groups.append({
+                "name":      items[0].get("name", ""),
+                "description": items[0].get("description", ""),
+                "ids":       ids,
+                "keep":      ids[0],
+                "remove":    ids[1:],
+                "count":     len(ids),
+            })
+    return groups
+
+@app.get("/admin/effects/duplicates")
+def admin_effect_duplicates_preview(request: Request):
+    """List duplicate groups (same normalized name+description)."""
+    require_auth(request, ["admin", "moderator"])
+    groups = _effect_duplicate_groups()
+    return {"status": "success", "groups": groups, "total_groups": len(groups)}
+
+@app.post("/admin/effects/duplicates")
+async def admin_effect_duplicates_apply(request: Request):
+    """
+    Apply dedupe:
+      - for each group keep the lowest id and delete the others
+      - update any spells referencing removed ids to reference the kept id
+      - avoid inserting duplicate ids in a spell's effects
+    """
+    require_auth(request, ["admin", "moderator"])
+    body = await request.json() if request.headers.get("content-type","").startswith("application/json") else {}
+    apply = bool(body.get("apply"))
+    plan = _effect_duplicate_groups()
+    if not apply:
+        return {"status":"success","applied":False,"groups":plan,"total_groups":len(plan)}
+
+    eff_col = get_col("effects")
+    sp_col  = get_col("spells")
+
+    total_deleted = 0
+    total_spells_touched = 0
+
+    for grp in plan:
+        keep = grp["keep"]
+        remove_ids = grp["remove"]
+
+        # Update spells referencing any of the remove_ids -> keep
+        if remove_ids:
+            affected = list(sp_col.find({"effects": {"$in": remove_ids}}, {"_id": 1, "id": 1, "effects": 1}))
+            for sp in affected:
+                old_list = [str(x) for x in (sp.get("effects") or [])]
+                changed = False
+                new_list = []
+                seen = set()
+                for eid in old_list:
+                    if eid in remove_ids:
+                        eid = keep  # remap to kept id
+                        changed = True
+                    # prevent duplicate entries
+                    if eid not in seen:
+                        new_list.append(eid)
+                        seen.add(eid)
+                if changed:
+                    sp_col.update_one({"_id": sp["_id"]}, {"$set": {"effects": new_list}})
+                    total_spells_touched += 1
+
+        # Delete duplicates
+        if remove_ids:
+            r = eff_col.delete_many({"id": {"$in": remove_ids}})
+            total_deleted += int(r.deleted_count or 0)
+
+    return {
+        "status":"success",
+        "applied": True,
+        "deleted_effects": total_deleted,
+        "touched_spells": total_spells_touched,
+        "groups": plan,
+        "total_groups": len(plan),
+        "message": f"Removed {total_deleted} duplicate effects; updated {total_spells_touched} spell(s)."
+    }
+
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -209,19 +209,43 @@ function filteredEffects() {
 }
 
 /* ---------- Build rows ---------- */
-function populateEffectSelect(selectEl, list, keepValue=true) {
-  const prev = keepValue ? selectEl.value : "";
+function populateEffectSelect(selectEl, list, opts = {}) {
+  const { preserveSelection = true, pinSelected = null } = opts;
+  const prev = preserveSelection ? String(selectEl.value || "") : "";
+  const pinnedId = pinSelected != null && pinSelected !== ""
+    ? String(pinSelected)
+    : (prev || "");
+  
   selectEl.innerHTML = `<option value="">-- Select Effect --</option>`;
+
+    if (pinnedId && !list.some(e => String(e.id) === pinnedId)) {
+    const eff = EFFECTS_BY_ID[pinnedId];
+    if (eff) {
+      const opt = document.createElement("option");
+      opt.value = eff.id;
+      const badge = eff.school_obj?.name
+        ? ` — ${eff.school_obj.name}`
+        : (eff.school ? ` — ${eff.school}` : "");
+      opt.textContent = `[${eff.id}] ${eff.name}${badge} (kept)`;
+      selectEl.appendChild(opt);
+    }
+  }
+
   for (const e of list) {
+    if (String(e.id) === pinnedId) continue;
     const opt = document.createElement("option");
     opt.value = e.id;
-    const schoolLabel = e.school_obj?.name ? ` — ${e.school_obj.name}` : (e.school ? ` — ${e.school}` : "");
-    opt.textContent = `[${e.id}] ${e.name}${schoolLabel}`;
+    const schoolBadge = e.school_obj?.name
+      ? ` — ${e.school_obj.name}`
+      : (e.school ? ` — ${e.school}` : "");
+    opt.textContent = `[${e.id}] ${e.name}${schoolBadge}`;
     selectEl.appendChild(opt);
   }
-  if (keepValue && prev) {
-    const exists = list.some(e => String(e.id) === String(prev));
-    selectEl.value = exists ? prev : "";
+
+  if (pinnedId) {
+    selectEl.value = pinnedId;
+  } else if (!preserveSelection) {
+    selectEl.value = "";
   }
 }
 
@@ -238,8 +262,10 @@ function addEffectRow(prefillId="") {
   const sel = document.createElement("select");
   sel.name = "effects[]";
   sel.required = true;
-  populateEffectSelect(sel, filteredEffects(), false);
-  if (prefillId) sel.value = String(prefillId);
+  populateEffectSelect(sel, filteredEffects(), {
+  preserveSelection: false,
+  pinSelected: prefillId || null
+});
 
   // description
   const desc = document.createElement("div");
@@ -441,21 +467,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // filters
   $("#eff-filter-name").addEventListener("input", () => {
-    // repopulate existing selects based on filters
-    $$('#effects-container select[name="effects[]"]').forEach(sel => {
-      populateEffectSelect(sel, filteredEffects(), true);
+    document.querySelectorAll('#effects-container select[name="effects[]"]').forEach(sel => {
+      populateEffectSelect(sel, filteredEffects(), { preserveSelection: true });
     });
   });
+
   $("#eff-filter-school").addEventListener("change", () => {
-    $$('#effects-container select[name="effects[]"]').forEach(sel => {
-      populateEffectSelect(sel, filteredEffects(), true);
+    document.querySelectorAll('#effects-container select[name="effects[]"]').forEach(sel => {
+      populateEffectSelect(sel, filteredEffects(), { preserveSelection: true });
     });
   });
+
   $("#eff-filter-clear").addEventListener("click", () => {
     $("#eff-filter-name").value = "";
     $("#eff-filter-school").value = "";
-    $$('#effects-container select[name="effects[]"]').forEach(sel => {
-      populateEffectSelect(sel, filteredEffects(), true);
+    document.querySelectorAll('#effects-container select[name="effects[]"]').forEach(sel => {
+      populateEffectSelect(sel, filteredEffects(), { preserveSelection: true });
     });
   });
 
