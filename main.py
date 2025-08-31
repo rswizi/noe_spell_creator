@@ -419,7 +419,6 @@ async def get_costs(request: Request):
 
 @app.post("/submit_spell")
 async def submit_spell(request: Request):
-    # NOTE: Only return plain JSON types to avoid ObjectId serialization issues.
     try:
         body = await request.json()
     except Exception:
@@ -431,20 +430,20 @@ async def submit_spell(request: Request):
         try:
             range_val = int(body.get("range", 0))
         except Exception:
-            return JSONResponse({"status":"error","message":"range must be an integer"}, status_code=400)
+            return JSONResponse({"status": "error", "message": "range must be an integer"}, status_code=400)
         aoe_val     = body.get("aoe") or "A Square"
         try:
             duration  = int(body.get("duration", 1))
         except Exception:
-            return JSONResponse({"status":"error","message":"duration must be an integer"}, status_code=400)
+            return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
 
-        effect_ids  = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
+        effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
         if not effect_ids:
-            return JSONResponse({"status":"error","message":"At least one effect is required."}, status_code=400)
+            return JSONResponse({"status": "error", "message": "At least one effect is required."}, status_code=400)
 
         missing = [eid for eid in effect_ids if not get_col("effects").find_one({"id": eid}, {"_id": 1})]
         if missing:
-            return JSONResponse({"status":"error","message":f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
+            return JSONResponse({"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
 
         cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
 
@@ -455,20 +454,20 @@ async def submit_spell(request: Request):
             "range": range_val,
             "aoe": aoe_val,
             "duration": duration,
-            "effects": effect_ids,          # store IDs only
+            "effects": effect_ids,
             "mp_cost": cc["mp_cost"],
             "en_cost": cc["en_cost"],
             "category": cc["category"],
             "spell_type": body.get("spell_type") or "Simple",
         }
 
-        get_col("spells").insert_one(doc)   # do not include inserted_id in response
+        get_col("spells").insert_one(dict(doc))
 
         return {"status": "success", "id": doc["id"], "spell": doc}
 
     except Exception as e:
         logger.exception("POST /submit_spell failed")
-        return JSONResponse({"status":"error","message":f"{type(e).__name__}: {e}"}, status_code=500)
+        return JSONResponse({"status": "error", "message": f"{type(e).__name__}: {e}"}, status_code=500)
 
 
 # ---------- Ops ----------
