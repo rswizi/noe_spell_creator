@@ -23,7 +23,16 @@
         <select id="filter-school">
           <option value="">All Schools</option>
         </select>
+        <select id="filter-status" title="Filter by tag">
+          <option value="">All Tags</option>
+          <option value="green">Approved</option>
+          <option value="yellow">Review</option>
+          <option value="red">Flagged</option>
+        </select>
         <button id="clear-filters">Reset</button>
+        <button id="delete-flagged" class="btn btn-flag" style="margin-left:auto;">
+          Delete All Flagged
+        </button>
       </div>
     </div>
 
@@ -39,19 +48,22 @@
 <script>
 (() => {
   const API_BASE = "";
-  const $ = s => document.querySelector(s);
+  const $  = (s) => document.querySelector(s);
 
-  // Auth
+  // Auth (from login flow)
   const token = localStorage.getItem("auth_token") || "";
-  const role  = localStorage.getItem("auth_role");
+  const role  = localStorage.getItem("auth_role") || "";
 
-  // Elements
+  // UI elements
   const resultsEl  = $("#results");
   const nameEl     = $("#filter-name");
   const categoryEl = $("#filter-category");
   const schoolEl   = $("#filter-school");
+  const statusEl   = $("#filter-status");      // NEW
+  const clearBtn   = $("#clear-filters");
+  const delFlagBtn = $("#delete-flagged");     // NEW
 
-  // Gate access (UI)
+  // Gate access
   document.addEventListener("DOMContentLoaded", () => {
     if (role !== "admin" && role !== "moderator") {
       alert("Forbidden: admin/moderator only.");
@@ -69,20 +81,25 @@
     nameEl.addEventListener("input", run);
     categoryEl.addEventListener("change", run);
     schoolEl.addEventListener("change", run);
+    if (statusEl) statusEl.addEventListener("change", run);
 
-    $("#clear-filters").addEventListener("click", () => {
+    clearBtn.addEventListener("click", () => {
       nameEl.value = "";
       categoryEl.value = "";
       schoolEl.value = "";
+      if (statusEl) statusEl.value = "";
       fetchSpells();
     });
+
+    if (delFlagBtn) delFlagBtn.addEventListener("click", deleteFlagged);
   }
 
   function debounce(fn, ms = 300) {
     let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
   }
 
-  // ------- Data loading -------
+  // -------- Data --------
+
   async function loadSchools() {
     try {
       const res = await fetch(`${API_BASE}/schools`);
@@ -104,9 +121,13 @@
     const name = (nameEl.value || "").trim();
     const cat  = categoryEl.value || "";
     const sch  = schoolEl.value || "";
+    const st   = statusEl ? (statusEl.value || "") : "";
+
     if (name) params.set("name", name);
     if (cat)  params.set("category", cat);
     if (sch)  params.set("school", sch);
+    if (st)   params.set("status", st);   // NEW
+
     return params.toString();
   }
 
@@ -116,8 +137,9 @@
       const url = q ? `${API_BASE}/spells?${q}` : `${API_BASE}/spells`;
       const res = await fetch(url);
       const data = await res.json();
+
       if (data.error) {
-        resultsEl.innerHTML = `<p style="color:#ff4a4a">Error: ${data.error}</p>`;
+        resultsEl.innerHTML = `<p style="color:#ff4a4a">Error: ${escapeHtml(data.error)}</p>`;
         return;
       }
       renderList(data.spells || []);
@@ -127,7 +149,8 @@
     }
   }
 
-  // ------- Render -------
+  // -------- Render --------
+
   function renderList(spells) {
     if (!spells.length) {
       resultsEl.innerHTML = `<p>No spells found.</p>`;
@@ -152,6 +175,7 @@
       status === "red"   ? "pill pill-red"   :
                            "pill pill-yellow";
 
+    // Inline handlers call functions exposed on window below
     return `
       <div class="effect-entry" style="justify-content:space-between; align-items:flex-start;">
         <div style="flex:1; min-width:0;">
@@ -170,7 +194,7 @@
             <button class="btn btn-flag"    onclick="setStatus('${s.id}','red')">Flag</button>
           </div>
           <div class="action-row">
-            <button class="btn"              onclick="adminEditSpell('${s.id}')">Edit</button>
+            <button class="btn"               onclick="adminEditSpell('${s.id}')">Edit</button>
             <button class="btn btn-secondary" onclick="adminDeleteSpell('${s.id}')">Delete</button>
           </div>
         </div>
@@ -185,7 +209,8 @@
       .replace(/'/g, "&#039;");
   }
 
-  // ------- Actions exposed globally (for inline onclick) -------
+  // -------- Actions (exposed globally for inline onclick) --------
+
   window.adminEditSpell = function(id) {
     window.location.href = `index.html?edit_id=${encodeURIComponent(id)}`;
   };
@@ -193,14 +218,18 @@
   window.adminDeleteSpell = async function(id) {
     if (!token) { alert("You must be logged in."); return; }
     if (!confirm(`Delete spell ${id}? This cannot be undone.`)) return;
+
     try {
       const res = await fetch(`${API_BASE}/spells/${encodeURIComponent(id)}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` }
       });
       const data = await res.json();
-      if (data.status === "success") await fetchSpells();
-      else alert(data.message || "Delete failed.");
+      if (data.status === "success") {
+        await fetchSpells();
+      } else {
+        alert(data.message || "Delete failed.");
+      }
     } catch (e) {
       console.error("delete error:", e);
       alert("Delete request failed.");
@@ -219,13 +248,39 @@
         body: JSON.stringify({ status })
       });
       const data = await res.json();
-      if (data.status === "success") await fetchSpells();
-      else alert(data.message || "Failed to update status.");
+      if (data.status === "success") {
+        await fetchSpells();
+      } else {
+        alert(data.message || "Failed to update status.");
+      }
     } catch (e) {
       console.error("setStatus error:", e);
       alert("Request failed.");
     }
   };
+
+  async function deleteFlagged() {
+    if (!token)  { alert("You must be logged in."); return; }
+    if (role !== "admin") { alert("Admin only."); return; }
+    if (!confirm("Delete ALL flagged (red) spells? This cannot be undone.")) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/spells/flagged`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        alert(`Deleted ${data.deleted} flagged spell(s).`);
+        await fetchSpells();
+      } else {
+        alert(data.message || "Failed to delete flagged spells.");
+      }
+    } catch (e) {
+      console.error("deleteFlagged error:", e);
+      alert("Request failed.");
+    }
+  }
 })();
 </script>
 </html>

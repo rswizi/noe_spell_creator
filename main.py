@@ -605,6 +605,12 @@ async def set_spell_status(spell_id: str, request: Request, payload: dict = Body
 
     return {"status": "success", "id": spell_id, "new_status": status}
 
+@app.delete("/admin/spells/flagged")
+def delete_flagged_spells(request: Request):
+    # Admin only
+    require_auth(request, ["admin"])
+    r = get_col("spells").delete_many({"status": "red"})
+    return {"status": "success", "deleted": r.deleted_count}
 
 # ---------- Ops ----------
 @app.get("/health")
