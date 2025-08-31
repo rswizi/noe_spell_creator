@@ -486,9 +486,10 @@ async def submit_spell(request: Request):
             range_val = int(body.get("range", 0))
         except Exception:
             return JSONResponse({"status": "error", "message": "range must be an integer"}, status_code=400)
-        aoe_val     = body.get("aoe") or "A Square"
+
+        aoe_val = body.get("aoe") or "A Square"
         try:
-            duration  = int(body.get("duration", 1))
+            duration = int(body.get("duration", 1))
         except Exception:
             return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
 
@@ -501,16 +502,28 @@ async def submit_spell(request: Request):
         if missing:
             return JSONResponse({"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
 
-        # SIGNATURE over parameters (NOT name)
+        # compute costs
+        cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
+
+        # signature over parameters (NOT name)
         sig = spell_sig(activation, range_val, aoe_val, duration, effect_ids)
-        conflict = get_col("spells").find_one({"sig_v1": sig, "id": {"$ne": spell_id}}, {"_id": 1})
+
+        # duplicate check (do NOT reference a non-existent spell_id here)
+        conflict = get_col("spells").find_one({"sig_v1": sig}, {"_id": 0, "id": 1, "name": 1})
         if conflict:
             return JSONResponse(
-                {"status": "error", "message": "Another spell with identical parameters already exists."},
+                {
+                    "status": "error",
+                    "message": f"Another spell with identical parameters already exists (id {conflict.get('id')}, name '{conflict.get('name','')}')."
+                },
                 status_code=409
             )
 
+        # new id
+        sid = next_id_str("spells", padding=4)
+
         doc = {
+            "id": sid,
             "name": name,
             "name_key": norm_key(name),
             "sig_v1": sig,
@@ -522,10 +535,13 @@ async def submit_spell(request: Request):
             "mp_cost": cc["mp_cost"],
             "en_cost": cc["en_cost"],
             "category": cc["category"],
+            "spell_type": body.get("spell_type") or "Simple",
+            # default moderation status
+            "status": "yellow",
         }
 
         get_col("spells").insert_one(dict(doc))
-        return {"status": "success", "id": doc["id"], "spell": doc}
+        return {"status": "success", "id": sid, "spell": doc}
 
     except Exception as e:
         logger.exception("POST /submit_spell failed")

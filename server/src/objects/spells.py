@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import List, Union
 from db_mongo import get_col
@@ -6,8 +7,6 @@ from server.src.modules.cost_utils import (
     get_range_cost, get_aoe_cost, get_duration_cost, get_activation_cost, get_school_cost
 )
 from .effects import Effect
-from __future__ import annotations
-
 from typing import Iterable, Tuple, Dict, Any
 from server.src.modules.cost_tables import (
     ACTIVATION_COSTS, RANGE_COSTS, AOE_COSTS, DURATION_COSTS
