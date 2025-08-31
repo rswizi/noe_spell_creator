@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from pymongo.errors import DuplicateKeyError
 
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters
 
@@ -50,6 +51,11 @@ def verify_password(input_pw: str, user_doc: dict) -> bool:
         user_doc.get("password") == input_pw
         or user_doc.get("password_hash") == _sha256(input_pw)
     )
+
+def normalize_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+_ALLOWED_ROLES = {"user", "moderator", "admin"}
 
 def find_user(username: str) -> Optional[dict]:
     # always exclude _id when returning data to the app
@@ -469,6 +475,81 @@ async def submit_spell(request: Request):
         logger.exception("POST /submit_spell failed")
         return JSONResponse({"status": "error", "message": f"{type(e).__name__}: {e}"}, status_code=500)
 
+@app.post("/auth/signup")
+async def auth_signup(request: Request):
+    body = await request.json()
+    username = (body.get("username") or "").strip()
+    email    = normalize_email(body.get("email"))
+    password = body.get("password") or ""
+    confirm  = body.get("confirm_password") or ""
+
+    # basic validation
+    if not username or not email or not password or not confirm:
+        return {"status": "error", "message": "All fields are required."}
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return {"status": "error", "message": "Invalid email address."}
+    if password != confirm:
+        return {"status": "error", "message": "Passwords do not match."}
+    if len(password) < 6:
+        return {"status": "error", "message": "Password must be at least 6 characters."}
+
+    users = get_col("users")
+
+    # reject duplicates proactively (fast path)
+    if users.find_one({"username": username}, {"_id": 1}):
+        return {"status": "error", "message": "Username already taken."}
+    if users.find_one({"email": email}, {"_id": 1}):
+        return {"status": "error", "message": "Email already registered."}
+
+    doc = {
+        "username": username,
+        "email": email,
+        "password_hash": _sha256(password),  # consistent with your current login
+        "role": "user",
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+
+    try:
+        users.insert_one(dict(doc))  # insert a copy (avoid _id leaking into response)
+    except DuplicateKeyError:
+        # In case of a race, rely on unique indexes to protect us:
+        # figure out which field collided
+        if users.find_one({"username": username}, {"_id": 1}):
+            return {"status": "error", "message": "Username already taken."}
+        return {"status": "error", "message": "Email already registered."}
+    except Exception as e:
+        logger.exception("Signup failed")
+        return {"status": "error", "message": f"{type(e).__name__}: {e}"}
+
+    return {"status": "success", "username": username}
+
+@app.get("/admin/users")
+def admin_list_users(request: Request):
+    require_auth(request, roles=["admin"])
+    users = list(
+        get_col("users").find({}, {"_id": 0, "username": 1, "email": 1, "role": 1, "created_at": 1})
+    )
+    # sort by username
+    users.sort(key=lambda u: u["username"].lower())
+    return {"status": "success", "users": users}
+
+@app.put("/admin/users/{target_username}/role")
+async def admin_set_user_role(target_username: str, request: Request):
+    admin_username, _ = require_auth(request, roles=["admin"])
+    body = await request.json()
+    role = (body.get("role") or "").strip().lower()
+
+    if role not in _ALLOWED_ROLES:
+        return JSONResponse({"status": "error", "message": "Invalid role."}, status_code=400)
+
+    # Optional: block changing your own role if you want. For now, allow it.
+
+    r = get_col("users").update_one({"username": target_username}, {"$set": {"role": role}})
+    if r.matched_count == 0:
+        return JSONResponse({"status": "error", "message": "User not found."}, status_code=404)
+
+    write_audit("set_role", admin_username, spell_id="—", before=None, after={"user": target_username, "role": role})
+    return {"status": "success", "username": target_username, "role": role}
 
 # ---------- Ops ----------
 @app.get("/health")

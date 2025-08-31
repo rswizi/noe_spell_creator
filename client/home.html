@@ -26,6 +26,7 @@
       <a class="btn btn-full" href="templates.html">📜 Load From Template</a>
       <a class="btn btn-full" href="export.html">📤 Export Spell</a>
       <a id="btn-admin" class="btn btn-secondary btn-full" href="admin.html" style="display:none;">🛠️ Modify Database</a>
+      <a id="btn-user_mgmt" class="-secondary btn-full" href="user_management.html">👤 User Management</button>
       <a id="btn-import-effects" class="btn btn-secondary btn-full" href="scraper.html" style="display:none;">📥 Import Effects</a>
     </div>
   </div>
@@ -77,10 +78,12 @@
       chip.style.display = "flex";
       openBtn.style.display = "none";
       const adminBtn = document.getElementById("btn-admin");
+      const user_mgmt = document.getElementById("btn-user_mgmt");
       adminBtn.style.display = (role === "admin" || role === "moderator") ? "inline-block" : "none";
+      user_mgmt.style.display = (role === "admin") ? "inline-block" : "none";
       const adminOrMod = (role === "admin" || role === "moderator");
       document.getElementById("btn-admin").style.display = adminOrMod ? "inline-block" : "none";
-      document.getElementById("btn-import-effects").style.display = (role === "admin") ? "inline-block" : "none"; // admin only
+      document.getElementById("btn-import-effects").style.display = (role === "admin") ? "inline-block" : "none";
     }
     function setLoggedOutUI(msg = "") {
       const chip = document.getElementById("user-chip");

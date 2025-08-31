@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Sign Up — Noe Spell Creator</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    .card { max-width: 480px; margin: 2rem auto; padding: 1rem; border: 1px solid #ccc; border-radius: 12px; }
+    .row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .row label { width: 140px; }
+    .row input { flex: 1; padding: 0.5rem; }
+    button { padding: 0.6rem 1rem; }
+    .msg { margin-top: 0.75rem; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Create your account</h2>
+    <div class="row">
+      <label for="su-username">Handle</label>
+      <input id="su-username" autocomplete="username" />
+    </div>
+    <div class="row">
+      <label for="su-email">Email</label>
+      <input id="su-email" type="email" autocomplete="email" />
+    </div>
+    <div class="row">
+      <label for="su-password">Password</label>
+      <input id="su-password" type="password" autocomplete="new-password" />
+    </div>
+    <div class="row">
+      <label for="su-confirm">Confirm</label>
+      <input id="su-confirm" type="password" autocomplete="new-password" />
+    </div>
+    <button id="btn-signup">Sign Up</button>
+    <div class="msg" id="su-msg"></div>
+    <p style="margin-top:1rem;"><a href="/home.html">Back to Home</a></p>
+  </div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const msg = (t, ok=false) => { const el = $("#su-msg"); el.textContent = t; el.style.color = ok ? "green" : "crimson"; };
+
+    $("#btn-signup").addEventListener("click", async () => {
+      const username = $("#su-username").value.trim();
+      const email    = $("#su-email").value.trim();
+      const password = $("#su-password").value;
+      const confirm  = $("#su-confirm").value;
+
+      msg("Submitting...");
+      try {
+        const r = await fetch("/auth/signup", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ username, email, password, confirm_password: confirm })
+        });
+        const j = await r.json();
+        if (j.status === "success") {
+          msg("Account created! You can now log in.", true);
+          // clear form
+          $("#su-username").value = "";
+          $("#su-email").value = "";
+          $("#su-password").value = "";
+          $("#su-confirm").value = "";
+        } else {
+          msg(j.message || "Signup failed.");
+        }
+      } catch (e) {
+        msg("Network error.");
+      }
+    });
+  </script>
+</body>
+</html>

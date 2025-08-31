@@ -20,6 +20,7 @@ def ensure_indexes():
     db.effects.create_index("id",    unique=True)
     db.schools.create_index("id",    unique=True)
     db.users.create_index("username", unique=True)
+    db.users.create_index("email", unique=True, sparse=True)
 
 def next_id_str(sequence_name: str, padding: int = 4) -> str:
     doc = get_db().counters.find_one_and_update(

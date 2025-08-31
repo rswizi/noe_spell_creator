@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>User Management</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+    </div>
+    <section id="user-mgmt" style="margin-top:1rem; display:none;">
+    <h2>User Management</h2>
+    <div id="umg-msg" style="color:crimson;"></div>
+    <table id="umg-table" border="1" cellspacing="0" cellpadding="6" style="width:100%; margin-top:0.5rem;">
+        <thead>
+        <tr>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    </section>
+</body>
+<script>
+(function(){
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  const token = localStorage.getItem("noe_token") || localStorage.getItem("token");
+
+  function authHeaders() {
+    return token ? { "Authorization": "Bearer " + token } : {};
+  }
+
+  async function loadUsers() {
+    $("#umg-msg").textContent = "";
+    const tbody = $("#umg-table tbody");
+    tbody.innerHTML = "<tr><td colspan='4'>Loading…</td></tr>";
+    try {
+      const r = await fetch("/admin/users", { headers: authHeaders() });
+      const j = await r.json();
+      if (j.status !== "success") {
+        $("#umg-msg").textContent = j.message || "Failed to fetch users.";
+        tbody.innerHTML = "";
+        return;
+      }
+      const rows = j.users.map(u => {
+        const role = (u.role || "user");
+        const userEsc = u.username.replace(/"/g, '&quot;');
+        return `
+          <tr>
+            <td>${u.username}</td>
+            <td>${u.email || ""}</td>
+            <td>${role}</td>
+            <td>
+              <button data-user="${userEsc}" data-role="moderator">Make Moderator</button>
+              <button data-user="${userEsc}" data-role="user">Demote to User</button>
+            </td>
+          </tr>`;
+      }).join("");
+      tbody.innerHTML = rows || "<tr><td colspan='4'>No users.</td></tr>";
+    } catch (e) {
+      $("#umg-msg").textContent = "Network error.";
+      tbody.innerHTML = "";
+    }
+  }
+
+  async function setRole(username, role) {
+    const r = await fetch(`/admin/users/${encodeURIComponent(username)}/role`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ role })
+    });
+    const j = await r.json();
+    if (j.status !== "success") {
+      alert(j.message || "Failed to update role.");
+    } else {
+      await loadUsers();
+    }
+  }
+
+  $("#btn-user-mgmt").addEventListener("click", () => {
+    $("#user-mgmt").style.display = "block";
+    loadUsers();
+  });
+
+  $("#user-mgmt").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-role]");
+    if (!btn) return;
+    const username = btn.getAttribute("data-user");
+    const role = btn.getAttribute("data-role");
+    setRole(username, role);
+  });
+})();
+</script>
