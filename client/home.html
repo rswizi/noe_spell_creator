@@ -74,40 +74,49 @@
     }
 
     function setLoggedInUI(username, role) {
-      const chip = document.getElementById("user-chip");
-      const chipName = document.getElementById("chip-name");
-      const openBtn = document.getElementById("open-login");
+      const chip       = document.getElementById("user-chip");
+      const chipName   = document.getElementById("chip-name");
+      const loginBtn   = document.getElementById("open-login");
+      const signupEl   = document.getElementById("open-signup");
+      const adminBtn   = document.getElementById("btn-admin");
+      const userMgmt   = document.getElementById("btn-user_mgmt");
+      const importBtn  = document.getElementById("btn-import-effects");
+      const browseBtn  = document.getElementById("btn-browse");
+      const favsBtn    = document.getElementById("btn-favs");
+
       chipName.textContent = `${username} (${role})`;
       chip.style.display = "flex";
-      openBtn.style.display = "none";
-      const adminBtn = document.getElementById("btn-admin");
-      const user_mgmt = document.getElementById("btn-user_mgmt");
-      adminBtn.style.display = (role === "admin" || role === "moderator") ? "inline-block" : "none";
-      user_mgmt.style.display = (role === "admin") ? "inline-block" : "none";
+      loginBtn.style.display = "none";
+      signupEl.style.display = "none";
+
       const adminOrMod = (role === "admin" || role === "moderator");
-      document.getElementById("btn-admin").style.display = adminOrMod ? "inline-block" : "none";
-      document.getElementById("btn-import-effects").style.display = (role === "admin") ? "inline-block" : "none";
-      const signup = document.getElementById("open-signup").style.display = "inline-block";
-      signup.style.display = "none";
-      document.getElementById("btn-browse").style.display = "inline-block";
-      document.getElementById("btn-favs").style.display   = "inline-block";
+      adminBtn.style.display  = adminOrMod ? "inline-block" : "none";
+      userMgmt.style.display  = (role === "admin") ? "inline-block" : "none";
+      importBtn.style.display = (role === "admin") ? "inline-block" : "none";
+
+      // show logged-in-only buttons
+      browseBtn.style.display = "inline-block";
+      favsBtn.style.display   = "inline-block";
     }
+
     function setLoggedOutUI(msg = "") {
-      const chip = document.getElementById("user-chip");
-      const openBtn = document.getElementById("open-login");
+      const chip       = document.getElementById("user-chip");
+      const loginBtn   = document.getElementById("open-login");
+      const signupEl   = document.getElementById("open-signup");
+
       document.getElementById("login-status").textContent = msg;
+
       chip.style.display = "none";
-      openBtn.style.display = "inline-block";
-      const adminBtn = document.getElementById("btn-admin");
-      adminBtn.style.display = "none";
-      const signup = document.getElementById("open-signup").style.display = "inline-block";
-      const user_mgmt = document.getElementById("btn-user_mgmt");
-      document.getElementById("btn-import-effects").style.display = "none";
-      signup.style.display = "inline-block";
-      user_mgmt.style.display = "none";
-      document.getElementById("btn-browse").style.display = "none";
-      document.getElementById("btn-favs").style.display   = "none";
-    }
+      loginBtn.style.display = "inline-block";
+      signupEl.style.display = "inline-block";
+
+      document.getElementById("btn-admin").style.display           = "none";
+      document.getElementById("btn-user_mgmt").style.display       = "none";
+      document.getElementById("btn-import-effects").style.display  = "none";
+      document.getElementById("btn-browse").style.display          = "none";
+      document.getElementById("btn-favs").style.display            = "none";
+}
+
 
     async function login() {
       const username = document.getElementById("login-username").value.trim();
