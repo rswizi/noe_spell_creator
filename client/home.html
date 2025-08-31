@@ -29,6 +29,8 @@
       <a id="btn-admin" class="btn btn-secondary btn-full" href="admin.html" style="display:none;">🛠️ Modify Database</a>
       <a id="btn-user_mgmt" class="btn btn-secondary btn-full" href="user_management.html" style="display:none;">👤 User Management</a>
       <a id="btn-import-effects" class="btn btn-secondary btn-full" href="scraper.html" style="display:none;">📥 Import Effects</a>
+      <a id="btn-browse"   class="btn btn-full" href="browse.html" style="display:none;">📚 Browse Database</a>
+      <a id="btn-favs"     class="btn btn-full" href="browse.html?favorites=1" style="display:none;">⭐ My Favorites</a>
     </div>
   </div>
 
@@ -87,6 +89,8 @@
       document.getElementById("btn-import-effects").style.display = (role === "admin") ? "inline-block" : "none";
       const signup = document.getElementById("open-signup").style.display = "inline-block";
       signup.style.display = "none";
+      document.getElementById("btn-browse").style.display = "inline-block";
+      document.getElementById("btn-favs").style.display   = "inline-block";
     }
     function setLoggedOutUI(msg = "") {
       const chip = document.getElementById("user-chip");
@@ -101,6 +105,8 @@
       document.getElementById("btn-import-effects").style.display = "none";
       signup.style.display = "inline-block";
       user_mgmt.style.display = "none";
+      document.getElementById("btn-browse").style.display = "none";
+      document.getElementById("btn-favs").style.display   = "none";
     }
 
     async function login() {

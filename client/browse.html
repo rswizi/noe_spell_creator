@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Browse Spells</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <div class="container">
+    <h1>Browse Spells</h1>
+
+    <div class="home-card" style="margin-bottom:18px;">
+      <div class="filter-bar">
+        <input id="filter-name" type="text" placeholder="Filter by name..." />
+        <select id="filter-category">
+          <option value="">All Categories</option>
+          <option>Novice</option><option>Apprentice</option><option>Disciple</option>
+          <option>Adept</option><option>Mage</option><option>Magister</option>
+          <option>High Mage</option><option>Master</option><option>Grand Master</option>
+          <option>Archmage</option><option>Supreme Archmage</option><option>Avant-garde</option>
+        </select>
+        <select id="filter-school">
+          <option value="">All Schools</option>
+        </select>
+
+        <label style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+          <input type="checkbox" id="filter-fav" />
+          <span>Only favorites</span>
+        </label>
+
+        <button id="clear-filters">Reset</button>
+      </div>
+    </div>
+
+    <div class="home-card">
+      <div id="results"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const role  = localStorage.getItem("auth_role");
+
+if (!token) {
+  alert("Please log in to browse the database.");
+  window.location.href = "home.html";
+}
+
+const $ = (s)=>document.querySelector(s);
+const resultsEl = $("#results");
+const nameEl = $("#filter-name");
+const categoryEl = $("#filter-category");
+const schoolEl = $("#filter-school");
+const favOnlyEl = $("#filter-fav");
+
+let favIds = new Set();
+
+function rowSpell(s){
+  const schools = (s.schools||[]).map(sc=>sc.name).join(", ") || "—";
+  const isFav = favIds.has(String(s.id));
+  const btnText = isFav ? "Unfavorite" : "Favorite";
+  const btnClass = isFav ? "btn btn-secondary" : "btn";
+  return `
+    <div class="effect-entry" style="justify-content:space-between;">
+      <div style="flex:1;">
+        <div style="font-weight:bold">${s.name} <span style="opacity:.7">[${s.id}]</span></div>
+        <div style="opacity:.8;font-size:.95rem">
+          ${s.category || "—"} · ${s.activation} · ${s.range} · ${s.aoe} · dur ${s.duration}
+        </div>
+        <div style="opacity:.7;font-size:.9rem">Schools: ${schools}</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="${btnClass}" onclick="toggleFav('${s.id}')">${btnText}</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderList(list){
+  resultsEl.innerHTML = list.length ? list.map(rowSpell).join("") : "<p>No spells found.</p>";
+}
+
+function buildQuery(){
+  const p = new URLSearchParams();
+  const n = nameEl.value.trim();
+  const c = categoryEl.value;
+  const sch = schoolEl.value;
+
+  if(n) p.set("name", n);
+  if(c) p.set("category", c);
+  if(sch) p.set("school", sch);
+  if(favOnlyEl.checked) p.set("favorite", "1");
+  return p.toString();
+}
+
+async function loadSchools(){
+  const res = await fetch(`${API_BASE}/schools`);
+  const data = await res.json();
+  (data.schools || []).forEach(s=>{
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.name} [${s.id}]`;
+    schoolEl.appendChild(opt);
+  });
+}
+
+async function loadFavIds(){
+  const res = await fetch(`${API_BASE}/favorites/ids`, { headers: { "Authorization": `Bearer ${token}` }});
+  const data = await res.json();
+  favIds = new Set((data.ids || []).map(String));
+}
+
+async function fetchSpells(){
+  const q = buildQuery();
+  const url = q ? `${API_BASE}/spells?${q}` : `${API_BASE}/spells`;
+  const headers = favOnlyEl.checked ? { "Authorization": `Bearer ${token}` } : {};
+  const res = await fetch(url, { headers });
+  const data = await res.json();
+  renderList(data.spells || []);
+}
+
+async function toggleFav(id){
+  const isFav = favIds.has(String(id));
+  const method = isFav ? "DELETE" : "POST";
+  const res = await fetch(`${API_BASE}/favorites/${encodeURIComponent(id)}`, {
+    method,
+    headers: { "Authorization": `Bearer ${token}` }
+  });
+  const j = await res.json();
+  if (j.status === "success") {
+    await loadFavIds();
+    await fetchSpells();
+  } else {
+    alert(j.message || "Failed to update favorite.");
+  }
+}
+
+function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+document.addEventListener("DOMContentLoaded", async ()=>{
+
+  const params = new URLSearchParams(location.search);
+  if (params.get("favorites") === "1") favOnlyEl.checked = true;
+
+  await loadSchools();
+  await loadFavIds();
+  await fetchSpells();
+
+  const run = debounce(fetchSpells, 300);
+  nameEl.addEventListener("input", run);
+  categoryEl.addEventListener("change", run);
+  schoolEl.addEventListener("change", run);
+  favOnlyEl.addEventListener("change", fetchSpells);
+
+  $("#clear-filters").addEventListener("click", ()=>{
+    nameEl.value = ""; categoryEl.value = ""; schoolEl.value = ""; favOnlyEl.checked = false; fetchSpells();
+  });
+});
+</script>
+</body>
+</html>

@@ -24,6 +24,10 @@
         <select id="filter-school">
           <option value="">All Schools</option>
         </select>
+        <label style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="filter-fav" />
+          <span>Only favorites</span>
+        </label>
         <button id="clear-filters">Reset</button>
       </div>
     </div>
@@ -93,6 +97,9 @@
   </div>
 
 <script>
+const token = localStorage.getItem("auth_token") || "";
+const favOnlyEl = document.getElementById("filter-fav");
+
 const API_BASE = "";
 
 const $ = (s)=>document.querySelector(s);
@@ -173,8 +180,11 @@ async function loadEffects(){
 
 async function fetchSpells(){
   const q = buildQuery();
-  const url = q ? `${API_BASE}/spells?${q}` : `${API_BASE}/spells`;
-  const res = await fetch(url);
+  const base = q ? `${API_BASE}/spells?${q}&status=green` : `${API_BASE}/spells?status=green`;
+
+  const url = favOnlyEl.checked ? `${base}&favorite=1` : base;
+  const headers = favOnlyEl.checked && token ? { "Authorization": `Bearer ${token}` } : {};
+  const res = await fetch(url, { headers });
   const data = await res.json();
   if(data.error){ resultsEl.innerHTML = `<p style="color:#ff4a4a">Error: ${data.error}</p>`; return; }
   renderList(data.spells || []);
@@ -311,6 +321,8 @@ function copyText(spanId){
 
 // ----- init
 function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+favOnlyEl.addEventListener("change", fetchSpells);
 
 document.addEventListener("DOMContentLoaded", async ()=>{
   // load schools first (needed to map effects)

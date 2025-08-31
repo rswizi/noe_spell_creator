@@ -140,7 +140,7 @@ CLIENT_DIR = BASE_DIR / "client"
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
 # Allow-listed html pages
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup"}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse"}
 
 
 # ---------- Pages ----------
@@ -299,8 +299,8 @@ def list_spells(request: Request):
     name = qp.get("name") or None
     category = qp.get("category") or None
     school = qp.get("school") or None
-    moderation = (qp.get("moderation") or "").lower() or None
     status = qp.get("status") or None
+    fav_only = (qp.get("favorite") or qp.get("fav") or "").lower() in ("1", "true", "yes")
 
 
     try:
@@ -323,7 +323,18 @@ def list_spells(request: Request):
         q["category"] = category
     if status:
         q["status"] = status.lower()
-
+   
+    fav_ids = None
+    if fav_only:
+        try:
+            user, _ = require_user_doc(request)
+        except HTTPException as he:
+            # Not authenticated -> no results
+            return {"spells": [], "page": page, "limit": limit, "total": 0, "error": he.detail}
+        fav_ids = [str(x) for x in (user.get("favorites") or [])]
+        if not fav_ids:
+            return {"spells": [], "page": page, "limit": limit, "total": 0}
+        q["id"] = {"$in": fav_ids}
 
     total = sp_col.count_documents(q)
     cursor = sp_col.find(q, {"_id": 0}).skip((page - 1) * limit).limit(limit)
@@ -620,6 +631,51 @@ def health():
         return {"status": "ok", "mongo": "connected"}
     except Exception as e:
         return {"status": "degraded", "error": str(e)}
+
+# ---------- FAVORITES & FILTER HELPERS ----------
+
+def require_user_doc(request: Request):
+    token = get_auth_token(request)
+    if not token or token not in SESSIONS:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    username, role = SESSIONS[token]
+    user = get_col("users").find_one({"username": username})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user, role
+
+@app.get("/favorites/ids")
+def favorites_ids(request: Request):
+    user, _ = require_user_doc(request)
+    ids = [str(x) for x in (user.get("favorites") or [])]
+    return {"status": "success", "ids": ids}
+
+@app.get("/favorites")
+def favorites_list(request: Request):
+    user, _ = require_user_doc(request)
+    fav = [str(x) for x in (user.get("favorites") or [])]
+    if not fav:
+        return {"status": "success", "spells": []}
+    spells = list(get_col("spells").find({"id": {"$in": fav}}, {"_id": 0}))
+    return {"status": "success", "spells": spells}
+
+@app.post("/favorites/{spell_id}")
+def favorites_add(spell_id: str, request: Request):
+    user, _ = require_user_doc(request)
+    get_col("users").update_one(
+        {"_id": user["_id"]},
+        {"$addToSet": {"favorites": str(spell_id)}}
+    )
+    return {"status": "success", "id": spell_id, "action": "added"}
+
+@app.delete("/favorites/{spell_id}")
+def favorites_remove(spell_id: str, request: Request):
+    user, _ = require_user_doc(request)
+    get_col("users").update_one(
+        {"_id": user["_id"]},
+        {"$pull": {"favorites": str(spell_id)}}
+    )
+    return {"status": "success", "id": spell_id, "action": "removed"}
 
 
 if __name__ == "__main__":
