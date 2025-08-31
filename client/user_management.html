@@ -27,38 +27,64 @@
     </section>
 </body>
 <script>
-(function(){
+(function () {
   const $ = (s) => document.querySelector(s);
-  const $$ = (s) => Array.from(document.querySelectorAll(s));
-  const token = localStorage.getItem("noe_token") || localStorage.getItem("token");
+  const token =
+    localStorage.getItem("auth_token") ||
+    localStorage.getItem("noe_token") ||
+    localStorage.getItem("token");
 
   function authHeaders() {
-    return token ? { "Authorization": "Bearer " + token } : {};
+    return token ? { Authorization: "Bearer " + token } : {};
+  }
+
+  function requireAdminOrShowMessage(role) {
+    if (!token) {
+      $("#umg-msg").textContent = "Please log in as an admin.";
+      return false;
+    }
+    // We can trust /admin/users 401/403 too, but this gives instant feedback
+    const storedRole =
+      localStorage.getItem("auth_role") ||
+      localStorage.getItem("role") ||
+      role;
+    if (storedRole !== "admin") {
+      // (Optionally allow moderators if your backend does)
+      $("#umg-msg").textContent = "Admin access required.";
+      return false;
+    }
+    return true;
   }
 
   async function loadUsers() {
-    $("#umg-msg").textContent = "";
     const tbody = $("#umg-table tbody");
+    $("#umg-msg").textContent = "";
     tbody.innerHTML = "<tr><td colspan='4'>Loading…</td></tr>";
+
     try {
       const r = await fetch("/admin/users", { headers: authHeaders() });
+      if (r.status === 401 || r.status === 403) {
+        $("#umg-msg").textContent = "Not authorized. Please log in as admin.";
+        tbody.innerHTML = "";
+        return;
+      }
       const j = await r.json();
       if (j.status !== "success") {
         $("#umg-msg").textContent = j.message || "Failed to fetch users.";
         tbody.innerHTML = "";
         return;
       }
-      const rows = j.users.map(u => {
-        const role = (u.role || "user");
-        const userEsc = u.username.replace(/"/g, '&quot;');
+      const rows = (j.users || []).map(u => {
+        const role = u.role || "user";
+        const userEsc = (u.username || "").replace(/"/g, '&quot;');
         return `
-          <tr>
-            <td>${u.username}</td>
+          <tr data-username="${userEsc}">
+            <td>${u.username || ""}</td>
             <td>${u.email || ""}</td>
             <td>${role}</td>
             <td>
-              <button data-user="${userEsc}" data-role="moderator">Make Moderator</button>
-              <button data-user="${userEsc}" data-role="user">Demote to User</button>
+              <button class="btn small" data-role="moderator">Make Moderator</button>
+              <button class="btn small" data-role="user">Demote to User</button>
             </td>
           </tr>`;
       }).join("");
@@ -70,30 +96,48 @@
   }
 
   async function setRole(username, role) {
-    const r = await fetch(`/admin/users/${encodeURIComponent(username)}/role`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ role })
-    });
-    const j = await r.json();
-    if (j.status !== "success") {
-      alert(j.message || "Failed to update role.");
-    } else {
-      await loadUsers();
+    try {
+      const r = await fetch(`/admin/users/${encodeURIComponent(username)}/role`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ role })
+      });
+      if (r.status === 401 || r.status === 403) {
+        alert("Not authorized.");
+        return;
+      }
+      const j = await r.json();
+      if (j.status !== "success") {
+        alert(j.message || "Failed to update role.");
+      } else {
+        await loadUsers();
+      }
+    } catch {
+      alert("Network error.");
     }
   }
 
-  $("#btn-user-mgmt").addEventListener("click", () => {
-    $("#user-mgmt").style.display = "block";
-    loadUsers();
-  });
+  document.addEventListener("DOMContentLoaded", () => {
+    // Make the section visible on page load
+    const sec = $("#user-mgmt");
+    if (sec) sec.style.display = "block";
 
-  $("#user-mgmt").addEventListener("click", (ev) => {
-    const btn = ev.target.closest("button[data-role]");
-    if (!btn) return;
-    const username = btn.getAttribute("data-user");
-    const role = btn.getAttribute("data-role");
-    setRole(username, role);
+    // If not admin, show message; still try the request to let backend decide
+    requireAdminOrShowMessage();
+
+    // Load users now
+    loadUsers();
+
+    // Delegate role button clicks
+    $("#user-mgmt").addEventListener("click", (ev) => {
+      const btn = ev.target.closest("button[data-role]");
+      if (!btn) return;
+      const row = btn.closest("tr[data-username]");
+      if (!row) return;
+      const username = row.getAttribute("data-username");
+      const role = btn.getAttribute("data-role");
+      setRole(username, role);
+    });
   });
 })();
 </script>

@@ -142,32 +142,49 @@
     resultsEl.innerHTML = spells.map(spellRow).join("");
   }
 
-  function spellRow(s) {
-    const schoolNames = (s.schools || []).map(sc => sc.name).join(", ") || "—";
-    const meta = [
-      s.category || "—",
-      s.activation ?? "—",
-      s.range ?? "—",
-      s.aoe ?? "—",
-      `dur ${s.duration ?? "—"}`
-    ].join(" · ");
+function spellRow(s) {
+  const schoolNames = (s.schools || []).map(sc => sc.name).join(", ") || "—";
+  const meta = [
+    s.category || "—",
+    s.activation ?? "—",
+    s.range ?? "—",
+    s.aoe ?? "—",
+    `dur ${s.duration ?? "—"}`
+  ].join(" · ");
 
-    return `
-      <div class="effect-entry" style="justify-content:space-between; align-items:flex-start;">
-        <div style="flex:1; min-width:0;">
-          <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-            ${escapeHtml(s.name || "Untitled")} <span style="opacity:.7">[${s.id}]</span>
-          </div>
-          <div style="opacity:.8;font-size:.95rem">${escapeHtml(meta)}</div>
-          <div style="opacity:.7;font-size:.9rem">Schools: ${escapeHtml(schoolNames)}</div>
+  const status = (s.status || "yellow"); // default if missing
+  const color = status === "green" ? "#22c55e" : status === "red" ? "#ef4444" : "#f59e0b";
+
+  return `
+    <div class="effect-entry" style="justify-content:space-between; align-items:flex-start;">
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          ${escapeHtml(s.name || "Untitled")} <span style="opacity:.7">[${s.id}]</span>
         </div>
-        <div style="display:flex; gap:8px; flex-shrink:0;">
+        <div style="opacity:.8;font-size:.95rem">${escapeHtml(meta)}</div>
+        <div style="opacity:.7;font-size:.9rem">Schools: ${escapeHtml(schoolNames)}</div>
+        <div style="margin-top:6px;">
+          <span style="
+            display:inline-block; padding:2px 8px; border-radius:999px;
+            background:${color}; color:white; font-size:.8rem;">
+            ${status.toUpperCase()}
+          </span>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-direction:column; align-items:flex-end; flex-shrink:0;">
+        <div style="display:flex; gap:6px;">
+          <button onclick="setStatus('${s.id}','green')">Approve</button>
+          <button class="btn" onclick="setStatus('${s.id}','yellow')">Review</button>
+          <button class="btn btn-secondary" onclick="setStatus('${s.id}','red')">Flag Delete</button>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:4px;">
           <button onclick="adminEditSpell('${s.id}')">Edit</button>
           <button class="btn btn-secondary" onclick="adminDeleteSpell('${s.id}')">Delete</button>
         </div>
       </div>
-    `;
-  }
+    </div>
+  `;
+}
 
   function escapeHtml(str) {
     return String(str)
@@ -205,7 +222,32 @@
       console.error("delete error:", e);
       alert("Delete request failed.");
     }
-  };
+  window.setStatus = async function(id, status) {
+  if (!token) {
+    alert("You must be logged in.");
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/admin/spells/${encodeURIComponent(id)}/status`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ status })
+    });
+    const data = await res.json();
+    if (data.status === "success") {
+      await fetchSpells();
+    } else {
+      alert(data.message || "Failed to update status.");
+    }
+  } catch (e) {
+    console.error("setStatus error:", e);
+    alert("Request failed.");
+  }
+};
+};
 })();
 </script>
 </body>

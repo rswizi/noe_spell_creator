@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from typing import Dict, Tuple, Optional
 
 import uvicorn
-from fastapi import FastAPI, Request, HTTPException, Query
+from fastapi import FastAPI, Request, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -299,6 +299,9 @@ def list_spells(request: Request):
     name = qp.get("name") or None
     category = qp.get("category") or None
     school = qp.get("school") or None
+    moderation = (qp.get("moderation") or "").lower() or None
+    status = qp.get("status") or None
+
 
     try:
         page = max(1, int(qp.get("page") or 1))
@@ -318,6 +321,9 @@ def list_spells(request: Request):
         q["name"] = {"$regex": name, "$options": "i"}
     if category:
         q["category"] = category
+    if status:
+        q["status"] = status.lower()
+
 
     total = sp_col.count_documents(q)
     cursor = sp_col.find(q, {"_id": 0}).skip((page - 1) * limit).limit(limit)
@@ -388,6 +394,8 @@ async def update_spell(spell_id: str, request: Request):
             "mp_cost": cc["mp_cost"],
             "en_cost": cc["en_cost"],
             "category": cc["category"],
+            "spell_type": body.get("spell_type") or "Simple",
+            "moderation": "yellow",
         }
 
         r = get_col("spells").update_one({"id": spell_id}, {"$set": doc}, upsert=False)
@@ -453,6 +461,19 @@ async def submit_spell(request: Request):
 
         cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
 
+        status = str(body.get("status") or "yellow").lower()
+        if status not in ("red", "yellow", "green"):
+            status = "yellow"
+
+        submitter = "anonymous"
+        try:
+            token = get_auth_token(request)
+            if token and token in SESSIONS:
+                submitter = SESSIONS[token][0]
+        except Exception:
+            pass
+
+        # Build doc
         doc = {
             "id": next_id_str("spells", padding=4),
             "name": name,
@@ -465,9 +486,19 @@ async def submit_spell(request: Request):
             "en_cost": cc["en_cost"],
             "category": cc["category"],
             "spell_type": body.get("spell_type") or "Simple",
+
+            "status": status,
+            "created_by": submitter,
+            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         }
 
-        get_col("spells").insert_one(dict(doc))
+        get_col("spells").insert_one(doc)
+
+        # Optional audit
+        try:
+            write_audit("create_spell", submitter, doc["id"], before=None, after=doc)
+        except Exception:
+            pass
 
         return {"status": "success", "id": doc["id"], "spell": doc}
 
@@ -550,6 +581,30 @@ async def admin_set_user_role(target_username: str, request: Request):
 
     write_audit("set_role", admin_username, spell_id="—", before=None, after={"user": target_username, "role": role})
     return {"status": "success", "username": target_username, "role": role}
+
+@app.put("/admin/spells/{spell_id}/status")
+async def set_spell_status(spell_id: str, request: Request, payload: dict = Body(...)):
+    try:
+        username, role = require_auth(request, ["admin", "moderator"])
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=401)
+
+    status = str(payload.get("status", "")).lower()
+    if status not in ("red", "yellow", "green"):
+        return JSONResponse({"status":"error","message":"invalid status"}, status_code=400)
+
+    r = get_col("spells").update_one({"id": spell_id}, {"$set": {"status": status}})
+    if r.matched_count == 0:
+        return JSONResponse({"status":"error","message":f"Spell {spell_id} not found"}, status_code=404)
+
+    # Optional audit
+    try:
+        write_audit("set_status", username, spell_id, before=None, after={"status": status})
+    except Exception:
+        pass
+
+    return {"status": "success", "id": spell_id, "new_status": status}
+
 
 # ---------- Ops ----------
 @app.get("/health")

@@ -91,7 +91,10 @@ function buildQuery() {
 
 async function fetchSpells() {
   const q = buildQuery();
-  const url = q ? `${API_BASE}/spells?${q}` : `${API_BASE}/spells`;
+  const base = q ? `${API_BASE}/spells?${q}` : `${API_BASE}/spells`;
+
+  const url = base + (base.includes("?") ? "&" : "?") + "status=green";
+
   const res = await fetch(url);
   const data = await res.json();
   if (data.error) {
