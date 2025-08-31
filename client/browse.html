@@ -6,49 +6,24 @@
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    /* Minimal extras to support modal + preview layout */
     .hidden { display: none !important; }
 
-    .modal {
-      position: fixed; inset: 0; display: grid; place-items: center;
-      background: rgba(0,0,0,.45); z-index: 1000; padding: 16px;
-    }
-    .modal-card {
-      width: min(900px, 96vw); max-height: 90vh; overflow: auto;
-      background: #111; color: #eee; border-radius: 16px; padding: 20px 22px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.5);
-    }
-    .modal-close {
-      float: right; font-size: 28px; line-height: 1; background: transparent; border: 0;
-      color: #aaa; cursor: pointer;
-    }
-    .modal-close:hover { color: #fff; }
-    .details-grid {
-      display: grid; gap: 16px; grid-template-columns: 1fr 1fr; margin-bottom: 12px;
-    }
-    .kv { list-style: none; padding: 0; margin: 0; }
-    .kv li { margin: 6px 0; }
-    .bulleted { margin-left: 18px; }
-
-    .browse-layout {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr; /* list | preview */
-      gap: 16px;
-      align-items: start;
-    }
-    .preview-card {
-      background: #0f0f0f;
-      border: 1px solid #222;
-      border-radius: 12px;
-      padding: 14px 16px;
-    }
-    .lt-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    .lt-table th, .lt-table td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
-    .lt-table thead { background: #1b1b1b; }
-    .effect-entry { display:flex; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid #222; }
-    .effect-entry:last-child { border-bottom: 0; }
-    .btn-outline { background: transparent; border:1px solid #444; color:#ddd; padding:4px 8px; border-radius:8px; cursor:pointer; }
+    /* Page layout */
+    .filter-bar { gap: 10px; flex-wrap: wrap; }
+    #preview { background:#0f0f0f; border:1px solid #222; border-radius:12px; padding:14px 16px; }
+    #results .effect-entry { display:flex; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid #222; }
+    #results .effect-entry:last-child { border-bottom:0; }
+    .btn-outline { background:transparent; border:1px solid #444; color:#ddd; padding:4px 8px; border-radius:8px; cursor:pointer; }
     .btn-outline:hover { border-color:#777; color:#fff; }
+
+    /* Simple modal */
+    .modal { position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:1000; padding:16px; }
+    .modal-card { width:min(900px,96vw); max-height:90vh; overflow:auto; background:#111; color:#eee; border-radius:16px; padding:20px 22px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+    .modal-close { float:right; font-size:28px; line-height:1; background:transparent; border:0; color:#aaa; cursor:pointer; }
+    .modal-close:hover { color:#fff; }
+    .kv { list-style:none; padding:0; margin:0; }
+    .kv li { margin:6px 0; }
+    .bulleted { margin-left:18px; }
   </style>
 </head>
 
@@ -80,18 +55,17 @@
       </div>
     </div>
 
-    <!-- List + Preview -->
-    <div class="browse-layout">
-      <div class="home-card">
-        <div id="results"></div>
+    <!-- Preview ABOVE the list -->
+    <div class="home-card" style="margin-bottom:18px;">
+      <div id="preview">
+        <h3>Preview</h3>
+        <p>Select a spell below to see a quick summary here.</p>
       </div>
+    </div>
 
-      <div class="home-card">
-        <div id="preview" class="preview-card">
-          <h3>Preview</h3>
-          <p>Select a spell to see a quick preview here (includes EN cost & learning time).</p>
-        </div>
-      </div>
+    <!-- Results list -->
+    <div class="home-card">
+      <div id="results"></div>
     </div>
 
     <div style="margin-top:16px;">
@@ -110,7 +84,7 @@
           <h3>Overview</h3>
           <ul class="kv">
             <li><strong>Name:</strong> <span id="detail-name"></span></li>
-            <li><strong>School:</strong> <span id="detail-school"></span></li>
+            <li><strong>School(s):</strong> <span id="detail-school"></span></li>
             <li><strong>Type:</strong> <span id="detail-school-type"></span></li>
             <li><strong>Tier:</strong> <span id="detail-tier"></span></li>
             <li><strong>Range:</strong> <span id="detail-range"></span></li>
@@ -148,7 +122,6 @@
 ---------------------------- */
 const API_BASE = "";
 const token = localStorage.getItem("auth_token") || "";
-const role  = localStorage.getItem("auth_role");
 
 if (!token) {
   alert("Please log in to browse the database.");
@@ -185,7 +158,6 @@ const LEARNING_DAYS = {
 
 function normTier(t) {
   if (!t) return t;
-  // Normalize dash/casing variants
   const map = {
     "avant-garde": "Avant-Garde",
     "avant garde": "Avant-Garde",
@@ -217,7 +189,6 @@ function rowSpell(s){
   const btnText = isFav ? "Unfavorite" : "Favorite";
   const btnClass = isFav ? "btn btn-secondary" : "btn";
 
-  // Single click anywhere on the left area updates the preview; "Show details" opens modal.
   return `
     <div class="effect-entry">
       <div style="flex:1; cursor:pointer;" onclick="selectForPreview('${String(s.id)}')">
@@ -236,7 +207,6 @@ function rowSpell(s){
 }
 
 function renderList(list){
-  // Refresh cache
   cacheById.clear();
   for (const s of list) cacheById.set(String(s.id), s);
   resultsEl.innerHTML = list.length ? list.map(rowSpell).join("") : "<p>No spells found.</p>";
@@ -250,30 +220,14 @@ function renderPreview(spell) {
   const en         = computeEN(spell);
   const learning   = getLearningDays(tier, schoolType);
 
-  const ltRows = Object.entries(LEARNING_DAYS).map(([k, v]) => {
-    const value = (String(schoolType).toLowerCase() === 'complex') ? v*2 : v;
-    return `<tr><td>${k}</td><td>${value}</td></tr>`;
-  }).join("");
-
   const html = `
-    <div class="preview-card">
-      <h3>${spell.name || 'Untitled Spell'}</h3>
-      <p><strong>School:</strong> ${schoolName} (${schoolType})</p>
-      <p><strong>Tier:</strong> ${tier}</p>
-      <p><strong>MP Cost:</strong> ${mp}</p>
-      <p><strong>EN Cost:</strong> ${en}</p>
-      <p><strong>Learning Time:</strong> ${learning} days</p>
-
-      <h4 style="margin-top:10px;">Learning Time (by Tier)</h4>
-      <table class="lt-table">
-        <thead>
-          <tr><th>School of Spell</th><th>Learning Time (Days)</th></tr>
-        </thead>
-        <tbody>${ltRows}</tbody>
-      </table>
-
-      ${spell.description ? `<p style="margin-top:10px;">${spell.description}</p>` : ''}
-    </div>
+    <h3>${spell.name || 'Untitled Spell'}</h3>
+    <p><strong>School:</strong> ${schoolName} (${schoolType})</p>
+    <p><strong>Tier:</strong> ${tier}</p>
+    <p><strong>MP Cost:</strong> ${mp}</p>
+    <p><strong>EN Cost:</strong> ${en}</p>
+    <p><strong>Learning Time:</strong> ${learning} day${learning===1?'':'s'}</p>
+    ${spell.description ? `<p style="margin-top:10px;">${spell.description}</p>` : ''}
   `;
   document.getElementById('preview').innerHTML = html;
 }
@@ -287,16 +241,13 @@ function selectForPreview(id) {
    Modal (Details)
 ---------------------------- */
 async function fetchSpellById(id) {
-  // Try an API endpoint if it exists; if not, return from cache
   try {
     const res = await fetch(`${API_BASE}/spells/${encodeURIComponent(id)}`);
     if (res.ok) {
       const data = await res.json();
       return data.spell ?? data;
     }
-  } catch (e) {
-    // ignore and fall back to cache
-  }
+  } catch {}
   return cacheById.get(String(id));
 }
 
@@ -306,14 +257,13 @@ async function openSpellDetails(spellId) {
     const spell = await fetchSpellById(spellId);
     if (!spell) throw new Error("Spell not found");
 
-    const schoolName = (spell.school && (spell.school.name || spell.school)) || (spell.schools?.[0]?.name) || '—';
-    const schoolType = (spell.school_type || spell.schoolType || spell.school?.type || 'Simple');
-    const tier       = normTier(spell.tier || spell.category || '—');
+    const schoolNames = (spell.schools || []).map(sc => sc.name).join(", ") || (spell.school?.name || spell.school || '—');
+    const schoolType  = (spell.school_type || spell.schoolType || spell.school?.type || 'Simple');
+    const tier        = normTier(spell.tier || spell.category || '—');
 
-    // Title + overview
     document.getElementById('spell-details-title').textContent = spell.name ?? 'Spell Details';
     document.getElementById('detail-name').textContent = spell.name ?? '—';
-    document.getElementById('detail-school').textContent = schoolName;
+    document.getElementById('detail-school').textContent = schoolNames;
     document.getElementById('detail-school-type').textContent = schoolType;
     document.getElementById('detail-tier').textContent = tier;
     document.getElementById('detail-range').textContent = spell.range ?? '—';
@@ -322,12 +272,11 @@ async function openSpellDetails(spellId) {
     document.getElementById('detail-activation').textContent = spell.activation ?? '—';
     document.getElementById('detail-description').textContent = spell.description ?? '—';
 
-    // Costs
     document.getElementById('detail-mp').textContent = (spell.mp_cost ?? 0);
     document.getElementById('detail-en').textContent = computeEN(spell);
-    document.getElementById('detail-learning').textContent = `${getLearningDays(tier, schoolType)} days`;
+    const learning = getLearningDays(tier, schoolType);
+    document.getElementById('detail-learning').textContent = `${learning} day${learning===1?'':'s'}`;
 
-    // Effects
     const ul = document.getElementById('detail-effects');
     ul.innerHTML = '';
     if (Array.isArray(spell.effects) && spell.effects.length) {
@@ -376,7 +325,7 @@ function buildQuery(){
   if(n) p.set("name", n);
   if(c) p.set("category", c);
   if(sch) p.set("school", sch);
-  p.set("status", "green");
+  p.set("status", "green");              // approved only
   if(favOnlyEl.checked) p.set("favorite", "1");
   return p.toString();
 }
