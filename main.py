@@ -649,7 +649,7 @@ async def set_spell_status(spell_id: str, request: Request, payload: dict = Body
 @app.delete("/admin/spells/flagged")
 def delete_flagged_spells(request: Request):
     # Admin only
-    require_auth(request, ["admin"])
+    require_auth(request, ["admin", "moderator"])
     r = get_col("spells").delete_many({"status": "red"})
     return {"status": "success", "deleted": r.deleted_count}
 
@@ -664,7 +664,7 @@ def health():
 
 @app.post("/admin/maintenance/backfill_spell_sigs")
 def backfill_spell_sigs(request: Request):
-    require_auth(request, ["admin"])
+    require_auth(request, ["admin", "moderator"])
     db = get_db()
     updated = 0
     for sp in db.spells.find({}, {"_id":1,"activation":1,"range":1,"aoe":1,"duration":1,"effects":1,"sig_v1":1}):
@@ -678,7 +678,7 @@ def backfill_spell_sigs(request: Request):
 
 @app.post("/admin/maintenance/dedupe_spells_by_sig")
 async def dedupe_spells_by_sig(request: Request):
-    require_auth(request, ["admin"])
+    require_auth(request, ["admin", "moderator"])
     body = await request.json() if request.headers.get("content-type","").startswith("application/json") else {}
     apply = bool(body.get("apply"))
 
