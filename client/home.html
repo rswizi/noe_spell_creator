@@ -16,6 +16,7 @@
         <button id="chip-logout" class="btn linklike">Log Out</button>
       </div>
       <button id="open-login" class="btn btn-secondary small">Log In</button>
+      <a id="open-signup" class="btn btn-secondary small" href="signup.html">Sign Up</a>
     </div>
   </div>
 
@@ -26,7 +27,7 @@
       <a class="btn btn-full" href="templates.html">📜 Load From Template</a>
       <a class="btn btn-full" href="export.html">📤 Export Spell</a>
       <a id="btn-admin" class="btn btn-secondary btn-full" href="admin.html" style="display:none;">🛠️ Modify Database</a>
-      <a id="btn-user_mgmt" class="-secondary btn-full" href="user_management.html">👤 User Management</button>
+      <a id="btn-user_mgmt" class="btn btn-secondary btn-full" href="user_management.html" style="display:none;">👤 User Management</a>
       <a id="btn-import-effects" class="btn btn-secondary btn-full" href="scraper.html" style="display:none;">📥 Import Effects</a>
     </div>
   </div>
@@ -84,6 +85,8 @@
       const adminOrMod = (role === "admin" || role === "moderator");
       document.getElementById("btn-admin").style.display = adminOrMod ? "inline-block" : "none";
       document.getElementById("btn-import-effects").style.display = (role === "admin") ? "inline-block" : "none";
+      const signup = document.getElementById("open-signup").style.display = "inline-block";
+      signup.style.display = "none";
     }
     function setLoggedOutUI(msg = "") {
       const chip = document.getElementById("user-chip");
@@ -93,6 +96,11 @@
       openBtn.style.display = "inline-block";
       const adminBtn = document.getElementById("btn-admin");
       adminBtn.style.display = "none";
+      const signup = document.getElementById("open-signup").style.display = "inline-block";
+      const user_mgmt = document.getElementById("btn-user_mgmt");
+      document.getElementById("btn-import-effects").style.display = "none";
+      signup.style.display = "inline-block";
+      user_mgmt.style.display = "none";
     }
 
     async function login() {

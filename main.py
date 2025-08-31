@@ -140,7 +140,7 @@ CLIENT_DIR = BASE_DIR / "client"
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
 # Allow-listed html pages
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export"}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup"}
 
 
 # ---------- Pages ----------
