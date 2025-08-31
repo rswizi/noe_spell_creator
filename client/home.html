@@ -36,6 +36,8 @@
       <a id="btn-user_mgmt" class="btn btn-secondary btn-full" href="user_management.html" style="display:none;">👤 User Management</a>
       <a id="btn-import-effects" class="btn btn-secondary btn-full" href="scraper.html" style="display:none;">📥 Import Effects</a>
       <a id="btn-browse-effects" class="btn btn-secondary btn-full" href="browse_effects.html" style="display:none;">🧪 Browse Effects</a>
+      <a id="btn-browse-schools" class="btn btn-secondary btn-full" href="browse_schools.html" style="display:none;">🏫 Browse Schools</a>
+
     </div>
   </div>
 
@@ -105,6 +107,7 @@
     userMgmt.style.display  = (role === "admin") ? "inline-block" : "none";
     document.getElementById("btn-import-effects").style.display = adminOrMod ? "inline-block" : "none";
     document.getElementById("btn-browse-effects").style.display = adminOrMod ? "inline-block" : "none";
+    document.getElementById("btn-browse-schools").style.display = adminOrMod ? "inline-block" : "none";
 
     browseBtn.style.display = "inline-block";
     favsBtn.style.display   = "inline-block";
@@ -126,6 +129,7 @@
     document.getElementById("btn-favs").style.display           = "none";
     document.getElementById("btn-import-effects").style.display = "none";
     document.getElementById("btn-browse-effects").style.display = "none";
+    document.getElementById("btn-browse-schools").style.display = "none";
 
   }
 

@@ -149,7 +149,7 @@ CLIENT_DIR = BASE_DIR / "client"
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
 # Allow-listed html pages
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects"}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools"}
 
 
 # ---------- Pages ----------
@@ -772,8 +772,13 @@ def favorites_remove(spell_id: str, request: Request):
 # ---- Admin: list / edit / delete effects ------------------------------------
 
 @app.get("/admin/effects")
-def admin_list_effects(request: Request, name: str | None = Query(default=None), school: str | None = Query(default=None)):
-    # moderators + admins
+def admin_list_effects(
+    request: Request,
+    name: str | None = Query(default=None),
+    school: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+):
     require_auth(request, ["admin", "moderator"])
     col = get_col("effects")
     sch = get_col("schools")
@@ -782,20 +787,21 @@ def admin_list_effects(request: Request, name: str | None = Query(default=None),
     if name:
         q["name"] = {"$regex": name, "$options": "i"}
     if school:
-        # allow filtering by school id OR name
         or_terms = [{"school": {"$regex": school, "$options": "i"}}]
         ids = [s["id"] for s in sch.find({"name": {"$regex": school, "$options": "i"}}, {"id": 1})]
         if ids:
             or_terms.append({"school": {"$in": ids}})
         q["$or"] = or_terms
 
-    docs = list(col.find(q, {"_id": 0}))
+    total = col.count_documents(q)
+    docs = list(col.find(q, {"_id": 0}).skip((page-1)*limit).limit(limit))
     s_map = {s["id"]: s.get("name", s["id"]) for s in sch.find({}, {"_id": 0, "id": 1, "name": 1})}
     for e in docs:
         sid = str(e.get("school") or "")
         e["school_name"] = s_map.get(sid, sid)
     docs.sort(key=lambda e: e["name"].lower())
-    return {"status": "success", "effects": docs}
+
+    return {"status": "success", "effects": docs, "page": page, "limit": limit, "total": total}
 
 
 def _recompute_spells_for_effect(effect_id: str) -> tuple[str, int]:
@@ -1071,6 +1077,177 @@ def mp_to_next_category_delta(current_mp: int) -> int:
     if ans is None:
         return 0
     return max(0, ans - base)
+
+# ---- Admin: list / edit / delete schools ------------------------------------
+
+@app.get("/admin/schools")
+def admin_list_schools(
+    request: Request,
+    name: str | None = Query(default=None),
+    sid: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    require_auth(request, ["admin", "moderator"])
+    sch = get_col("schools")
+
+    q: dict = {}
+    if name:
+        q["name"] = {"$regex": name, "$options": "i"}
+    if sid:
+        q["id"] = {"$regex": sid, "$options": "i"}
+
+    total = sch.count_documents(q)
+    docs = list(sch.find(q, {"_id": 0}).skip((page-1)*limit).limit(limit))
+    docs.sort(key=lambda x: x.get("name","").lower())
+    return {"status":"success","schools":docs,"page":page,"limit":limit,"total":total}
+
+
+def _recompute_spells_for_school(school_id: str) -> tuple[str, int]:
+    """
+    Recompute every spell that references ANY effect from this school.
+    Returns (patch_text, changed_count).
+    """
+    eff_col = get_col("effects")
+    sp_col  = get_col("spells")
+
+    eff_ids = [e["id"] for e in eff_col.find({"school": school_id}, {"_id":0,"id":1})]
+    if not eff_ids:
+        return (f"No effects belong to school [{school_id}].", 0)
+
+    affected = list(sp_col.find({"effects": {"$in": eff_ids}}, {"_id": 0}))
+    if not affected:
+        return ("No spells referenced effects from this school.", 0)
+
+    changed = 0
+    lines: list[str] = [f"Recompute after School update [{school_id}]:", ""]
+
+    for sp in affected:
+        old_mp = int(sp.get("mp_cost", 0))
+        old_en = int(sp.get("en_cost", 0))
+        old_cat = sp.get("category", "")
+
+        cc = compute_spell_costs(
+            sp.get("activation","Action"),
+            int(sp.get("range",0)),
+            sp.get("aoe","A Square"),
+            int(sp.get("duration",1)),
+            [str(x) for x in (sp.get("effects") or [])]
+        )
+
+        new_mp, new_en, new_cat = cc["mp_cost"], cc["en_cost"], cc["category"]
+
+        if (old_mp, old_en, old_cat) != (new_mp, new_en, new_cat):
+            sp_col.update_one({"id": sp["id"]}, {"$set": {
+                "mp_cost": new_mp,
+                "en_cost": new_en,
+                "category": new_cat
+            }})
+            changed += 1
+            lines.append(
+              f"[{sp['id']}] {sp.get('name','(unnamed)')}: "
+              f"MP {old_mp} → {new_mp}, EN {old_en} → {new_en}, Category {old_cat} → {new_cat}"
+            )
+
+    if changed == 0:
+        lines.append("No MP/EN/category changes after recompute.")
+    return ("\n".join(lines), changed)
+
+
+@app.put("/admin/schools/{school_id}")
+async def admin_update_school(school_id: str, request: Request):
+    require_auth(request, ["admin", "moderator"])
+    body = await request.json()
+
+    sch = get_col("schools")
+    old = sch.find_one({"id": school_id}, {"_id": 0})
+    if not old:
+        return JSONResponse({"status":"error","message":"School not found"}, status_code=404)
+
+    # Only allow editing of these fields
+    name        = (body.get("name") or old.get("name","")).strip()
+    school_type = (body.get("school_type") or old.get("school_type","Simple")).strip()
+    range_type  = (body.get("range_type")  or old.get("range_type","A")).strip().upper()
+    aoe_type    = (body.get("aoe_type")    or old.get("aoe_type","A")).strip().upper()
+    upgrade     = bool(body.get("upgrade", old.get("upgrade", old.get("is_upgrade", False))))
+
+    sch.update_one({"id": school_id}, {"$set":{
+        "name": name,
+        "school_type": school_type,
+        "range_type": range_type,
+        "aoe_type": aoe_type,
+        "upgrade": bool(upgrade)
+    }})
+
+    # build header of changes
+    ch = []
+    def _chg(lbl, a, b):
+        if a != b: ch.append(f"{lbl}: {a} → {b}")
+    _chg("Name", old.get("name",""), name)
+    _chg("Type", old.get("school_type",""), school_type)
+    _chg("Range Type", old.get("range_type",""), range_type)
+    _chg("AoE Type", old.get("aoe_type",""), aoe_type)
+    _chg("Upgrade", bool(old.get("upgrade", old.get("is_upgrade", False))), bool(upgrade))
+
+    header = [f"Edited School [{school_id}] {name}", ""]
+    header.extend(ch if ch else ["No direct field changes"])
+    header.append("")
+
+    patch_text, changed_count = _recompute_spells_for_school(school_id)
+    return {"status":"success","updated":school_id,"changed_spells":changed_count,"patch_text":"\n".join(header)+patch_text+"\n"}
+
+
+@app.delete("/admin/schools/{school_id}")
+def admin_delete_school(school_id: str, request: Request, force: bool = Query(default=False)):
+    require_auth(request, ["admin", "moderator"])
+    sch = get_col("schools")
+    eff = get_col("effects")
+
+    school = sch.find_one({"id": school_id}, {"_id": 0})
+    if not school:
+        return {"status":"error","message":"School not found"}
+
+    used_count = eff.count_documents({"school": school_id})
+    if used_count > 0 and not force:
+        return {"status":"error","message":f"Cannot delete: {used_count} effect(s) still reference this school. Reassign or delete them first."}
+
+    # If force=True, delete all its effects as well and recompute spells
+    lines = [f"Deleted School [{school_id}] {school.get('name','')}",""]
+    if used_count > 0 and force:
+        # gather effect IDs before deletion
+        eff_ids = [e["id"] for e in eff.find({"school": school_id}, {"_id":0,"id":1})]
+        eff.delete_many({"school": school_id})
+        from_ids = set(eff_ids)
+
+        sp_col = get_col("spells")
+        affected = list(sp_col.find({"effects": {"$in": list(from_ids)}}, {"_id": 0}))
+        for sp in affected:
+            new_effects = [eid for eid in (sp.get("effects") or []) if eid not in from_ids]
+
+            old_mp, old_en = int(sp.get("mp_cost",0)), int(sp.get("en_cost",0))
+            old_cat = sp.get("category","")
+
+            cc = compute_spell_costs(
+                sp.get("activation","Action"),
+                int(sp.get("range",0)),
+                sp.get("aoe","A Square"),
+                int(sp.get("duration",1)),
+                [str(x) for x in new_effects]
+            )
+
+            sp_col.update_one({"id": sp["id"]}, {"$set":{
+                "effects": new_effects,
+                "mp_cost": cc["mp_cost"],
+                "en_cost": cc["en_cost"],
+                "category": cc["category"]
+            }})
+            lines.append(
+              f"[{sp['id']}] {sp.get('name','(unnamed)')}: "
+              f"MP {old_mp} → {cc['mp_cost']}, EN {old_en} → {cc['en_cost']}, Category {old_cat} → {cc['category']} (effects removed with school)"
+            )
+
+    sch.delete_one({"id": school_id})
+    return {"status":"success","deleted":school_id,"patch_text":"\n".join(lines) + "\n"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

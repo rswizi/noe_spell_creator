@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Browse Schools</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .hidden { display:none !important; }
+    .scrollbox { max-height: 60vh; overflow: auto; }
+    .row { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid #222; }
+    .row:last-child { border-bottom:0; }
+    .kv {opacity:.85; font-size:.95rem}
+    .modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.45); z-index: 1000; padding: 16px; }
+    .modal-card { width: min(640px, 96vw); background:#111; color:#eee; border-radius: 16px; padding: 20px 22px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+    .modal-close { float:right; background:transparent; border:0; color:#aaa; font-size:22px; cursor:pointer }
+    .modal-close:hover { color:#fff; }
+    .grid2 { display:grid; gap:10px; grid-template-columns: 1fr 1fr; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Browse Schools</h1>
+
+    <div class="home-card" style="margin-bottom:18px;">
+      <div class="filter-bar">
+        <input id="filter-name" type="text" placeholder="Filter by name..." />
+        <input id="filter-id" type="text" placeholder="Filter by id..." />
+        <select id="limit">
+          <option value="50">50</option>
+          <option value="100" selected>100</option>
+          <option value="200">200</option>
+          <option value="500">500</option>
+        </select>
+        <button id="clear-filters">Reset</button>
+      </div>
+    </div>
+
+    <div class="home-card">
+      <div id="results" class="scrollbox"></div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
+        <button class="btn btn-secondary" id="prev-page">Prev</button>
+        <span id="page-info" style="align-self:center; opacity:.8;"></span>
+        <button class="btn btn-secondary" id="next-page">Next</button>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+    </div>
+  </div>
+
+  <!-- Edit modal -->
+  <div id="edit-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+      <button class="modal-close" id="edit-close" aria-label="Close">✕</button>
+      <h2 id="edit-title">Edit School</h2>
+
+      <div class="grid2" style="margin-top:10px;">
+        <div>
+          <label>Name</label>
+          <input id="ed-name" />
+        </div>
+        <div>
+          <label>Type</label>
+          <select id="ed-type">
+            <option>Simple</option>
+            <option>Complex</option>
+          </select>
+        </div>
+        <div>
+          <label>Range Type</label>
+          <select id="ed-range"><option>A</option><option>B</option><option>C</option></select>
+        </div>
+        <div>
+          <label>AoE Type</label>
+          <select id="ed-aoe"><option>A</option><option>B</option><option>C</option></select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="ed-upg" type="checkbox" /><label for="ed-upg" style="margin:0;">Upgrade?</label>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <button class="btn" id="ed-save">Save</button>
+        <button class="btn btn-secondary" id="ed-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const role  = (localStorage.getItem("auth_role") || "").toLowerCase();
+if (!token || (role !== "admin" && role !== "moderator")) {
+  alert("Forbidden: moderators/admins only.");
+  location.href = "home.html";
+}
+
+const $ = s => document.querySelector(s);
+const resultsEl = $("#results");
+const nameEl = $("#filter-name");
+const idEl   = $("#filter-id");
+const limitEl= $("#limit");
+const pageInfo = $("#page-info");
+let PAGE = 1, TOTAL = 0;
+
+let CURRENT = null; // school being edited
+
+function authHeaders(extra={}) {
+  return { "Authorization": `Bearer ${token}`, ...extra };
+}
+
+function row(s) {
+  const upg = s.upgrade ? "Yes" : "No";
+  return `
+    <div class="row">
+      <div style="flex:1">
+        <div style="font-weight:600">${s.name} <span style="opacity:.7">[${s.id}]</span></div>
+        <div class="kv">Type: ${s.school_type || "Simple"} · Range: ${s.range_type || "A"} · AoE: ${s.aoe_type || "A"} · Upgrade: ${upg}</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" onclick="openEdit(${JSON.stringify(s).replace(/"/g,'&quot;')})">Edit</button>
+        <button class="btn btn-secondary" onclick="delSchool('${s.id}')">Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+function render(list, page, limit, total) {
+  resultsEl.innerHTML = list.length ? list.map(row).join("") : "<p>No schools found.</p>";
+  pageInfo.textContent = `Page ${page} • ${list.length} / ${total}`;
+  $("#prev-page").disabled = page <= 1;
+  $("#next-page").disabled = page * limit >= total;
+}
+
+function buildQuery() {
+  const p = new URLSearchParams();
+  if (nameEl.value.trim()) p.set("name", nameEl.value.trim());
+  if (idEl.value.trim())   p.set("sid", idEl.value.trim());
+  p.set("page", String(PAGE));
+  p.set("limit", String(limitEl.value));
+  return p.toString();
+}
+
+async function fetchSchools() {
+  const q = buildQuery();
+  const res = await fetch(`${API_BASE}/admin/schools?${q}`, { headers: authHeaders() });
+  const j = await res.json();
+  if (j.status !== "success") {
+    resultsEl.innerHTML = `<p style="color:#f66">${j.message || "Failed to load schools"}</p>`;
+    return;
+  }
+  TOTAL = j.total || 0;
+  render(j.schools || [], j.page || 1, j.limit || 100, TOTAL);
+}
+
+function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+document.addEventListener("DOMContentLoaded", () => {
+  fetchSchools();
+
+  const run = debounce(() => { PAGE = 1; fetchSchools(); }, 300);
+  nameEl.addEventListener("input", run);
+  idEl.addEventListener("input", run);
+  limitEl.addEventListener("change", () => { PAGE = 1; fetchSchools(); });
+
+  $("#clear-filters").addEventListener("click", () => {
+    nameEl.value = ""; idEl.value = ""; PAGE = 1; fetchSchools();
+  });
+  $("#prev-page").addEventListener("click", () => { if (PAGE>1){ PAGE--; fetchSchools(); } });
+  $("#next-page").addEventListener("click", () => { if (PAGE * Number(limitEl.value) < TOTAL){ PAGE++; fetchSchools(); } });
+
+  // modal controls
+  $("#edit-close").addEventListener("click", closeEdit);
+  $("#ed-cancel").addEventListener("click", closeEdit);
+  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeEdit(); });
+  $("#ed-save").addEventListener("click", saveEdit);
+});
+
+function openEdit(s) {
+  CURRENT = s;
+  $("#edit-title").textContent = `Edit School — ${s.name} [${s.id}]`;
+  $("#ed-name").value  = s.name || "";
+  $("#ed-type").value  = s.school_type || "Simple";
+  $("#ed-range").value = (s.range_type || "A").toUpperCase();
+  $("#ed-aoe").value   = (s.aoe_type || "A").toUpperCase();
+  $("#ed-upg").checked = !!(s.upgrade || s.is_upgrade);
+  openModal();
+}
+function openModal(){ $("#edit-modal").classList.remove("hidden"); $("#edit-modal").setAttribute("aria-hidden","false"); }
+function closeEdit(){ $("#edit-modal").classList.add("hidden"); $("#edit-modal").setAttribute("aria-hidden","true"); CURRENT=null; }
+
+async function saveEdit() {
+  if (!CURRENT) return;
+  const body = {
+    name: $("#ed-name").value.trim(),
+    school_type: $("#ed-type").value,
+    range_type: $("#ed-range").value,
+    aoe_type: $("#ed-aoe").value,
+    upgrade: $("#ed-upg").checked
+  };
+  const res = await fetch(`${API_BASE}/admin/schools/${encodeURIComponent(CURRENT.id)}`, {
+    method: "PUT",
+    headers: { ...authHeaders(), "Content-Type":"application/json" },
+    body: JSON.stringify(body)
+  });
+  const j = await res.json();
+  if (j.status === "success") {
+    closeEdit();
+    alert(`Saved. ${j.changed_spells} spell(s) were recomputed.\n\nPatch:\n${j.patch_text}`);
+    fetchSchools();
+  } else {
+    alert(j.message || "Save failed.");
+  }
+}
+
+async function delSchool(id) {
+  if (!confirm("Delete this school?\n\nIf it has effects, you'll need to reassign or delete them first (unless you use a 'force' API call).")) return;
+  const res = await fetch(`${API_BASE}/admin/schools/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: authHeaders()
+  });
+  const j = await res.json();
+  if (j.status === "success") {
+    alert("Deleted.\n\n" + (j.patch_text || ""));
+    fetchSchools();
+  } else {
+    alert(j.message || "Delete failed.");
+  }
+}
+</script>
+</body>
+</html>
