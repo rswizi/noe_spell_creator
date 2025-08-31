@@ -78,27 +78,42 @@ def write_audit(action, username, spell_id, before, after):
         "before": before, "after": after
     })
 
+# ---- replace your helper with this ----
 def compute_spell_costs(
     activation: str, range_val: int, aoe: str, duration: int, effect_ids: list[str]
 ) -> dict:
-    """Load effects and compute MP/EN with your Spell model."""
+    """
+    Load effects and compute MP/EN using Spell.compute_cost.
+    Returns mp/en, category, and a detailed 'breakdown' dict
+    (activation/range/aoe/duration/effects/schools/total).
+    """
     try:
         effects = [load_effect(str(eid)) for eid in (effect_ids or [])]
     except Exception:
-        # fallback stub if load_effect ever fails
-        docs = list(get_col("effects").find(
-            {"id": {"$in": [str(eid) for eid in (effect_ids or [])]}},
-            {"_id": 0, "mp_cost": 1, "en_cost": 1}
-        ))
+        # very defensive fallback (no school info, used only if load_effect fails)
+        docs = list(
+            get_col("effects").find(
+                {"id": {"$in": [str(eid) for eid in (effect_ids or [])]}},
+                {"_id": 0, "mp_cost": 1, "en_cost": 1},
+            )
+        )
+
         class _E:
             def __init__(self, mp, en):
                 self.mp_cost = int(mp or 0)
                 self.en_cost = int(en or 0)
+
         effects = [_E(d.get("mp_cost", 0), d.get("en_cost", 0)) for d in docs]
 
-    mp_cost, en_cost = Spell.compute_cost(range_val, aoe, duration, activation, effects)
-    return {"mp_cost": mp_cost, "en_cost": en_cost, "category": category_for_mp(mp_cost)}
-
+    mp_cost, en_cost, breakdown = Spell.compute_cost(
+        range_val, aoe, duration, activation, effects
+    )
+    return {
+        "mp_cost": mp_cost,
+        "en_cost": en_cost,
+        "category": category_for_mp(mp_cost),
+        "breakdown": breakdown,
+    }
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -430,62 +445,31 @@ def delete_spell(spell_id: str, request: Request):
 
 @app.post("/costs")
 async def get_costs(request: Request):
-    body = await request.json()
-    activation   = body.get("activation") or "Action"
-    aoe_val      = body.get("aoe") or "A Square"
     try:
-        range_val   = int(body.get("range", 0))
-        duration_val= int(body.get("duration", 1))
+        body = await request.json()
     except Exception:
-        return JSONResponse({"status": "error", "message": "range/duration must be integers"}, status_code=400)
+        return JSONResponse({"status": "error", "message": "Invalid JSON"}, status_code=400)
+
+    activation = body.get("activation") or "Action"
+    aoe_val    = body.get("aoe") or "A Square"
+    try:
+        range_val    = int(body.get("range", 0))
+        duration_val = int(body.get("duration", 1))
+    except Exception:
+        return JSONResponse(
+            {"status": "error", "message": "range/duration must be integers"},
+            status_code=400,
+        )
 
     effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
 
-    def compute(range_, aoe_, duration_, activation_, ids):
-        eff_objs = [load_effect(eid) for eid in ids]
-        return Spell.compute_cost(range_, aoe_, duration_, activation_, eff_objs)
-
-    # Full cost with current knobs + effects
-    full_mp, full_en = compute(range_val, aoe_val, duration_val, activation, effect_ids)
-
-    # Baseline knobs (your app’s defaults)
-    D_ACT, D_RANGE, D_AOE, D_DUR = "Action", 0, "A Square", 1
-    base_mp, base_en = compute(D_RANGE, D_AOE, D_DUR, D_ACT, effect_ids)
-
-    # Individual knob deltas (keep effects the same to capture interactions)
-    r_mp, r_en   = compute(range_val, D_AOE,   D_DUR,   D_ACT, effect_ids)
-    a_mp, a_en   = compute(D_RANGE,   aoe_val, D_DUR,   D_ACT, effect_ids)
-    d_mp, d_en   = compute(D_RANGE,   D_AOE,   duration_val, D_ACT, effect_ids)
-    ac_mp, ac_en = compute(D_RANGE,   D_AOE,   D_DUR,   activation, effect_ids)
-
-    br_range = (r_mp - base_mp, r_en - base_en)
-    br_aoe   = (a_mp - base_mp, a_en - base_en)
-    br_dur   = (d_mp - base_mp, d_en - base_en)
-    br_act   = (ac_mp - base_mp, ac_en - base_en)
-
-    # Per-effect deltas (full vs without that effect)
-    per_effect = []
-    for eid in effect_ids:
-        ids_wo = [x for x in effect_ids if x != eid]
-        wo_mp, wo_en = compute(range_val, aoe_val, duration_val, activation, ids_wo)
-        eff_mp, eff_en = (full_mp - wo_mp), (full_en - wo_en)
-        try:
-            name = load_effect(eid).name
-        except Exception:
-            name = eid
-        per_effect.append({"id": eid, "name": name, "mp": eff_mp, "en": eff_en})
-
+    cc = compute_spell_costs(activation, range_val, aoe_val, duration_val, effect_ids)
+    # Surface exactly what the UI expects (totals + detailed breakdown)
     return {
-        "mp_cost": full_mp,
-        "en_cost": full_en,
-        "category": category_for_mp(full_mp),
-        "breakdown": {
-            "activation": {"value": activation,   "mp": br_act[0],   "en": br_act[1]},
-            "range":      {"value": range_val,    "mp": br_range[0], "en": br_range[1]},
-            "aoe":        {"value": aoe_val,      "mp": br_aoe[0],   "en": br_aoe[1]},
-            "duration":   {"value": duration_val, "mp": br_dur[0],   "en": br_dur[1]},
-            "effects": per_effect,
-        }
+        "mp_cost": cc["mp_cost"],
+        "en_cost": cc["en_cost"],
+        "category": cc["category"],
+        "breakdown": cc["breakdown"],
     }
 
 @app.post("/submit_spell")
