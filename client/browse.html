@@ -5,11 +5,58 @@
   <title>Browse Spells</title>
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* Minimal extras to support modal + preview layout */
+    .hidden { display: none !important; }
+
+    .modal {
+      position: fixed; inset: 0; display: grid; place-items: center;
+      background: rgba(0,0,0,.45); z-index: 1000; padding: 16px;
+    }
+    .modal-card {
+      width: min(900px, 96vw); max-height: 90vh; overflow: auto;
+      background: #111; color: #eee; border-radius: 16px; padding: 20px 22px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    }
+    .modal-close {
+      float: right; font-size: 28px; line-height: 1; background: transparent; border: 0;
+      color: #aaa; cursor: pointer;
+    }
+    .modal-close:hover { color: #fff; }
+    .details-grid {
+      display: grid; gap: 16px; grid-template-columns: 1fr 1fr; margin-bottom: 12px;
+    }
+    .kv { list-style: none; padding: 0; margin: 0; }
+    .kv li { margin: 6px 0; }
+    .bulleted { margin-left: 18px; }
+
+    .browse-layout {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr; /* list | preview */
+      gap: 16px;
+      align-items: start;
+    }
+    .preview-card {
+      background: #0f0f0f;
+      border: 1px solid #222;
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .lt-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .lt-table th, .lt-table td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
+    .lt-table thead { background: #1b1b1b; }
+    .effect-entry { display:flex; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid #222; }
+    .effect-entry:last-child { border-bottom: 0; }
+    .btn-outline { background: transparent; border:1px solid #444; color:#ddd; padding:4px 8px; border-radius:8px; cursor:pointer; }
+    .btn-outline:hover { border-color:#777; color:#fff; }
+  </style>
 </head>
+
 <body>
   <div class="container">
     <h1>Browse Spells</h1>
 
+    <!-- Filters -->
     <div class="home-card" style="margin-bottom:18px;">
       <div class="filter-bar">
         <input id="filter-name" type="text" placeholder="Filter by name..." />
@@ -18,7 +65,7 @@
           <option>Novice</option><option>Apprentice</option><option>Disciple</option>
           <option>Adept</option><option>Mage</option><option>Magister</option>
           <option>High Mage</option><option>Master</option><option>Grand Master</option>
-          <option>Archmage</option><option>Supreme Archmage</option><option>Avant-garde</option>
+          <option>Archmage</option><option>Supreme Archmage</option><option>Avant-Garde</option>
         </select>
         <select id="filter-school">
           <option value="">All Schools</option>
@@ -33,8 +80,18 @@
       </div>
     </div>
 
-    <div class="home-card">
-      <div id="results"></div>
+    <!-- List + Preview -->
+    <div class="browse-layout">
+      <div class="home-card">
+        <div id="results"></div>
+      </div>
+
+      <div class="home-card">
+        <div id="preview" class="preview-card">
+          <h3>Preview</h3>
+          <p>Select a spell to see a quick preview here (includes EN cost & learning time).</p>
+        </div>
+      </div>
     </div>
 
     <div style="margin-top:16px;">
@@ -42,7 +99,53 @@
     </div>
   </div>
 
+  <!-- Spell Details Modal -->
+  <div id="spell-details-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="spell-details-title">
+      <button class="modal-close" id="spell-details-close" aria-label="Close">&times;</button>
+      <h2 id="spell-details-title">Spell Details</h2>
+
+      <div class="details-grid">
+        <div>
+          <h3>Overview</h3>
+          <ul class="kv">
+            <li><strong>Name:</strong> <span id="detail-name"></span></li>
+            <li><strong>School:</strong> <span id="detail-school"></span></li>
+            <li><strong>Type:</strong> <span id="detail-school-type"></span></li>
+            <li><strong>Tier:</strong> <span id="detail-tier"></span></li>
+            <li><strong>Range:</strong> <span id="detail-range"></span></li>
+            <li><strong>AOE:</strong> <span id="detail-aoe"></span></li>
+            <li><strong>Duration:</strong> <span id="detail-duration"></span></li>
+            <li><strong>Activation:</strong> <span id="detail-activation"></span></li>
+          </ul>
+        </div>
+
+        <div>
+          <h3>Costs</h3>
+          <ul class="kv">
+            <li><strong>MP Cost:</strong> <span id="detail-mp"></span></li>
+            <li><strong>EN Cost:</strong> <span id="detail-en"></span></li>
+            <li><strong>Learning Time:</strong> <span id="detail-learning"></span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div>
+        <h3>Description</h3>
+        <p id="detail-description"></p>
+      </div>
+
+      <div>
+        <h3>Effects</h3>
+        <ul id="detail-effects" class="bulleted"></ul>
+      </div>
+    </div>
+  </div>
+
 <script>
+/* ---------------------------
+   Auth / Globals
+---------------------------- */
 const API_BASE = "";
 const token = localStorage.getItem("auth_token") || "";
 const role  = localStorage.getItem("auth_role");
@@ -52,40 +155,218 @@ if (!token) {
   window.location.href = "home.html";
 }
 
-const $ = (s)=>document.querySelector(s);
-const resultsEl = $("#results");
-const nameEl = $("#filter-name");
-const categoryEl = $("#filter-category");
-const schoolEl = $("#filter-school");
-const favOnlyEl = $("#filter-fav");
+const $  = (s)=>document.querySelector(s);
+const resultsEl   = $("#results");
+const nameEl      = $("#filter-name");
+const categoryEl  = $("#filter-category");
+const schoolEl    = $("#filter-school");
+const favOnlyEl   = $("#filter-fav");
 
 let favIds = new Set();
+let cacheById = new Map(); // cache spells by id for preview/details
 
+/* ---------------------------
+   Learning time & EN helpers
+---------------------------- */
+const LEARNING_DAYS = {
+  "Novice": 2,
+  "Apprentice": 8,
+  "Disciple": 10,
+  "Adept": 14,
+  "Mage": 16,
+  "Magister": 20,
+  "High Mage": 22,
+  "Master": 28,
+  "Grand Master": 32,
+  "Archmage": 36,
+  "Supreme Archmage": 46,
+  "Avant-Garde": 50
+};
+
+function normTier(t) {
+  if (!t) return t;
+  // Normalize dash/casing variants
+  const map = {
+    "avant-garde": "Avant-Garde",
+    "avant garde": "Avant-Garde",
+    "Avant-garde": "Avant-Garde"
+  };
+  return map[t] || t;
+}
+
+function getLearningDays(tier, schoolType /* "Simple" | "Complex" */) {
+  const base = LEARNING_DAYS[normTier(tier)] ?? 0;
+  return (String(schoolType).toLowerCase() === "complex") ? base * 2 : base;
+}
+
+// Prefer explicit top-level en_cost, otherwise sum effect ENs.
+function computeEN(spell) {
+  if (typeof spell.en_cost === 'number') return spell.en_cost;
+  if (Array.isArray(spell.effects)) {
+    return spell.effects.reduce((sum, ef) => sum + (Number(ef.en_cost) || 0), 0);
+  }
+  return 0;
+}
+
+/* ---------------------------
+   Row / List / Preview
+---------------------------- */
 function rowSpell(s){
-  const schools = (s.schools||[]).map(sc=>sc.name).join(", ") || "—";
+  const schools = (s.schools||[]).map(sc=>sc.name).join(", ") || (s.school?.name || s.school || "—");
   const isFav = favIds.has(String(s.id));
   const btnText = isFav ? "Unfavorite" : "Favorite";
   const btnClass = isFav ? "btn btn-secondary" : "btn";
+
+  // Single click anywhere on the left area updates the preview; "Show details" opens modal.
   return `
-    <div class="effect-entry" style="justify-content:space-between;">
-      <div style="flex:1;">
+    <div class="effect-entry">
+      <div style="flex:1; cursor:pointer;" onclick="selectForPreview('${String(s.id)}')">
         <div style="font-weight:bold">${s.name} <span style="opacity:.7">[${s.id}]</span></div>
         <div style="opacity:.8;font-size:.95rem">
-          ${s.category || "—"} · ${s.activation} · ${s.range} · ${s.aoe} · dur ${s.duration}
+          ${s.category || "—"} · ${s.activation || "—"} · ${s.range || "—"} · ${s.aoe || "—"} · dur ${s.duration || "—"}
         </div>
         <div style="opacity:.7;font-size:.9rem">Schools: ${schools}</div>
       </div>
-      <div style="display:flex; gap:8px;">
-        <button class="${btnClass}" onclick="toggleFav('${s.id}')">${btnText}</button>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button class="btn-outline" onclick="openSpellDetails('${String(s.id)}')">Show details</button>
+        <button class="${btnClass}" onclick="toggleFav('${String(s.id)}')">${btnText}</button>
       </div>
     </div>
   `;
 }
 
 function renderList(list){
+  // Refresh cache
+  cacheById.clear();
+  for (const s of list) cacheById.set(String(s.id), s);
   resultsEl.innerHTML = list.length ? list.map(rowSpell).join("") : "<p>No spells found.</p>";
 }
 
+function renderPreview(spell) {
+  const schoolName = (spell.school && (spell.school.name || spell.school)) || (spell.schools?.[0]?.name) || '—';
+  const schoolType = (spell.school_type || spell.schoolType || spell.school?.type || 'Simple');
+  const tier       = normTier(spell.tier || spell.category || '—');
+  const mp         = (spell.mp_cost ?? 0);
+  const en         = computeEN(spell);
+  const learning   = getLearningDays(tier, schoolType);
+
+  const ltRows = Object.entries(LEARNING_DAYS).map(([k, v]) => {
+    const value = (String(schoolType).toLowerCase() === 'complex') ? v*2 : v;
+    return `<tr><td>${k}</td><td>${value}</td></tr>`;
+  }).join("");
+
+  const html = `
+    <div class="preview-card">
+      <h3>${spell.name || 'Untitled Spell'}</h3>
+      <p><strong>School:</strong> ${schoolName} (${schoolType})</p>
+      <p><strong>Tier:</strong> ${tier}</p>
+      <p><strong>MP Cost:</strong> ${mp}</p>
+      <p><strong>EN Cost:</strong> ${en}</p>
+      <p><strong>Learning Time:</strong> ${learning} days</p>
+
+      <h4 style="margin-top:10px;">Learning Time (by Tier)</h4>
+      <table class="lt-table">
+        <thead>
+          <tr><th>School of Spell</th><th>Learning Time (Days)</th></tr>
+        </thead>
+        <tbody>${ltRows}</tbody>
+      </table>
+
+      ${spell.description ? `<p style="margin-top:10px;">${spell.description}</p>` : ''}
+    </div>
+  `;
+  document.getElementById('preview').innerHTML = html;
+}
+
+function selectForPreview(id) {
+  const s = cacheById.get(String(id));
+  if (s) renderPreview(s);
+}
+
+/* ---------------------------
+   Modal (Details)
+---------------------------- */
+async function fetchSpellById(id) {
+  // Try an API endpoint if it exists; if not, return from cache
+  try {
+    const res = await fetch(`${API_BASE}/spells/${encodeURIComponent(id)}`);
+    if (res.ok) {
+      const data = await res.json();
+      return data.spell ?? data;
+    }
+  } catch (e) {
+    // ignore and fall back to cache
+  }
+  return cacheById.get(String(id));
+}
+
+async function openSpellDetails(spellId) {
+  const modal = document.getElementById('spell-details-modal');
+  try {
+    const spell = await fetchSpellById(spellId);
+    if (!spell) throw new Error("Spell not found");
+
+    const schoolName = (spell.school && (spell.school.name || spell.school)) || (spell.schools?.[0]?.name) || '—';
+    const schoolType = (spell.school_type || spell.schoolType || spell.school?.type || 'Simple');
+    const tier       = normTier(spell.tier || spell.category || '—');
+
+    // Title + overview
+    document.getElementById('spell-details-title').textContent = spell.name ?? 'Spell Details';
+    document.getElementById('detail-name').textContent = spell.name ?? '—';
+    document.getElementById('detail-school').textContent = schoolName;
+    document.getElementById('detail-school-type').textContent = schoolType;
+    document.getElementById('detail-tier').textContent = tier;
+    document.getElementById('detail-range').textContent = spell.range ?? '—';
+    document.getElementById('detail-aoe').textContent = spell.aoe ?? '—';
+    document.getElementById('detail-duration').textContent = spell.duration ?? '—';
+    document.getElementById('detail-activation').textContent = spell.activation ?? '—';
+    document.getElementById('detail-description').textContent = spell.description ?? '—';
+
+    // Costs
+    document.getElementById('detail-mp').textContent = (spell.mp_cost ?? 0);
+    document.getElementById('detail-en').textContent = computeEN(spell);
+    document.getElementById('detail-learning').textContent = `${getLearningDays(tier, schoolType)} days`;
+
+    // Effects
+    const ul = document.getElementById('detail-effects');
+    ul.innerHTML = '';
+    if (Array.isArray(spell.effects) && spell.effects.length) {
+      spell.effects.forEach(ef => {
+        const li = document.createElement('li');
+        const en = (ef.en_cost != null) ? ` [EN ${ef.en_cost}]` : '';
+        const mp = (ef.mp_cost != null) ? ` [MP ${ef.mp_cost}]` : '';
+        li.textContent = `${ef.name || ef.title || 'Effect'}: ${ef.description || ''}${mp}${en}`;
+        ul.appendChild(li);
+      });
+    } else {
+      const li = document.createElement('li');
+      li.textContent = '—';
+      ul.appendChild(li);
+    }
+
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+  } catch (e) {
+    console.error(e);
+    alert('Could not load spell details.');
+    closeSpellDetails();
+  }
+}
+
+function closeSpellDetails() {
+  const modal = document.getElementById('spell-details-modal');
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'spell-details-close') closeSpellDetails();
+  if (e.target && e.target.id === 'spell-details-modal') closeSpellDetails();
+});
+
+/* ---------------------------
+   Data loading / Filters
+---------------------------- */
 function buildQuery(){
   const p = new URLSearchParams();
   const n = nameEl.value.trim();
@@ -145,8 +426,8 @@ async function toggleFav(id){
 }
 
 function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
-document.addEventListener("DOMContentLoaded", async ()=>{
 
+document.addEventListener("DOMContentLoaded", async ()=>{
   const params = new URLSearchParams(location.search);
   if (params.get("favorites") === "1") favOnlyEl.checked = true;
 

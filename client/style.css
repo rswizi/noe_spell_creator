@@ -363,3 +363,25 @@ input[type="submit"]:hover {
 .knob-cost { margin-left: 8px; opacity: .75; font-size: .9rem; }
 .effect-cost { margin-top: 4px; opacity: .8; font-size: .9rem; }
 .type-chip { margin-left:8px; padding:2px 6px; border-radius:6px; background:rgb(0, 0, 0); font-size:.8rem; color: #0a0a0a; }
+
+  .hidden { display: none; }
+  .modal {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    background: rgba(0,0,0,.45); z-index: 1000; padding: 16px;
+  }
+  .modal-card {
+    width: min(900px, 96vw); max-height: 90vh; overflow: auto;
+    background: #111; color: #eee; border-radius: 16px; padding: 20px 22px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  }
+  .modal-close {
+    float: right; font-size: 28px; line-height: 1; background: transparent; border: 0;
+    color: #aaa; cursor: pointer;
+  }
+  .modal-close:hover { color: #fff; }
+  .details-grid {
+    display: grid; gap: 16px; grid-template-columns: 1fr 1fr; margin-bottom: 12px;
+  }
+  .kv { list-style: none; padding: 0; margin: 0; }
+  .kv li { margin: 6px 0; }
+  .bulleted { margin-left: 18px; }
