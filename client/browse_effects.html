@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Browse Effects</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .hidden { display:none!important; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid #222; }
+    .row:last-child { border-bottom:0; }
+    .row .meta { opacity:.8; font-size:.95rem; }
+    .btn-outline { background:transparent; border:1px solid #444; color:#ddd; padding:4px 8px; border-radius:8px; cursor:pointer; }
+    .btn-outline:hover { border-color:#777; color:#fff; }
+    .modal { position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:1000; padding:16px; }
+    .modal-card { width:min(720px, 96vw); max-height:90vh; overflow:auto; background:#111; color:#eee; border-radius:16px; padding:20px 22px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+    .modal-close { float:right; font-size:28px; line-height:1; background:transparent; border:0; color:#aaa; cursor:pointer; }
+    .modal-close:hover { color:#fff; }
+    label small { opacity:.7; margin-left:8px; }
+    input[type="number"] { width:120px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Browse Effects</h1>
+
+    <div class="home-card" style="margin-bottom:18px;">
+      <div class="filter-bar">
+        <input id="filter-name" type="text" placeholder="Filter by name…" />
+        <select id="filter-school">
+          <option value="">All Schools</option>
+        </select>
+        <button id="clear-filters">Reset</button>
+      </div>
+    </div>
+
+    <div class="home-card">
+      <div id="list"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="edit-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+      <button class="modal-close" id="edit-close" aria-label="Close">✕</button>
+      <h2 id="edit-title">Edit Effect</h2>
+
+      <div class="form">
+        <label>Name
+          <input id="ef-name" type="text" />
+        </label>
+        <label>Description
+          <textarea id="ef-desc" rows="5" style="width:100%;"></textarea>
+        </label>
+
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <label>MP Cost <small>(integer)</small>
+            <input id="ef-mp" type="number" step="1" />
+          </label>
+          <label>EN Cost <small>(integer)</small>
+            <input id="ef-en" type="number" step="1" />
+          </label>
+          <label>School
+            <select id="ef-school"></select>
+          </label>
+        </div>
+      </div>
+
+      <div id="edit-status" style="margin-top:10px; color:#ffb84a;"></div>
+
+      <div class="modal-actions" style="margin-top:12px;">
+        <button class="btn btn-secondary" id="edit-cancel">Cancel</button>
+        <button class="btn" id="edit-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const role  = localStorage.getItem("auth_role");
+
+if (!token || (role !== "admin" && role !== "moderator")) {
+  alert("Forbidden: moderators/admins only.");
+  window.location.href = "home.html";
+}
+
+const $ = s => document.querySelector(s);
+const listEl = $("#list");
+const nameEl = $("#filter-name");
+const schoolEl = $("#filter-school");
+
+// edit modal fields
+const modal = $("#edit-modal");
+const statusEl = $("#edit-status");
+const nameInput = $("#ef-name");
+const descInput = $("#ef-desc");
+const mpInput = $("#ef-mp");
+const enInput = $("#ef-en");
+const schoolInput = $("#ef-school");
+
+let schools = [];
+let effects = [];
+let currentEditId = null;
+
+function authHeaders() {
+  return { "Authorization": "Bearer " + token, "Content-Type": "application/json" };
+}
+
+function openModal() { modal.classList.remove("hidden"); modal.setAttribute("aria-hidden", "false"); }
+function closeModal() { modal.classList.add("hidden"); modal.setAttribute("aria-hidden", "true"); statusEl.textContent=""; currentEditId = null; }
+
+// load schools into filters and modal select
+async function loadSchools() {
+  const r = await fetch(`${API_BASE}/schools`);
+  const j = await r.json();
+  schools = j.schools || [];
+  // page filter
+  for (const s of schools) {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.name} [${s.id}]`;
+    schoolEl.appendChild(opt);
+  }
+  // modal select
+  schoolInput.innerHTML = "";
+  for (const s of schools) {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.name} [${s.id}]`;
+    schoolInput.appendChild(opt);
+  }
+}
+
+function buildQuery() {
+  const p = new URLSearchParams();
+  const n = nameEl.value.trim();
+  const s = schoolEl.value;
+  if (n) p.set("name", n);
+  if (s) p.set("school", s);
+  return p.toString();
+}
+
+async function fetchEffects() {
+  const q = buildQuery();
+  const url = q ? `${API_BASE}/admin/effects?${q}` : `${API_BASE}/admin/effects`;
+  const r = await fetch(url, { headers: authHeaders() });
+  const j = await r.json();
+  if (j.status !== "success") {
+    listEl.innerHTML = `<p style="color:#ff4a4a;">${j.message || "Failed to load effects."}</p>`;
+    return;
+  }
+  effects = j.effects || [];
+  renderList();
+}
+
+function renderList() {
+  if (!effects.length) { listEl.innerHTML = "<p>No effects found.</p>"; return; }
+  listEl.innerHTML = effects.map(e => {
+    const schoolName = e.school_name || e.school || "—";
+    return `
+      <div class="row">
+        <div style="min-width:0;">
+          <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            [${e.id}] ${e.name}
+          </div>
+          <div class="meta">School: ${schoolName} · MP ${e.mp_cost} · EN ${e.en_cost}</div>
+        </div>
+        <div style="display:flex; gap:8px; flex-shrink:0;">
+          <button class="btn" onclick="editEffect('${e.id}')">Edit</button>
+          <button class="btn btn-secondary" onclick="deleteEffect('${e.id}')">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+window.editEffect = function(id) {
+  const ef = effects.find(x => String(x.id) === String(id));
+  if (!ef) return;
+  currentEditId = ef.id;
+  $("#edit-title").textContent = `Edit Effect [${ef.id}]`;
+  nameInput.value = ef.name || "";
+  descInput.value = ef.description || "";
+  mpInput.value = Number(ef.mp_cost ?? 0);
+  enInput.value = Number(ef.en_cost ?? 0);
+  schoolInput.value = ef.school || "";
+  openModal();
+};
+
+window.deleteEffect = async function(id) {
+  if (!confirm(`Delete effect [${id}]? This will update all spells using it.`)) return;
+  const r = await fetch(`${API_BASE}/admin/effects/${encodeURIComponent(id)}`, { method:"DELETE", headers: authHeaders() });
+  const j = await r.json();
+  if (j.status === "success") {
+    // Offer patch-note download if provided
+    if (j.patch_text) downloadTxt(`patch_effect_${id}.txt`, j.patch_text);
+    await fetchEffects();
+  } else {
+    alert(j.message || "Delete failed.");
+  }
+};
+
+function downloadTxt(filename, text) {
+  const blob = new Blob([text], {type: "text/plain"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+$("#edit-save").addEventListener("click", async () => {
+  if (!currentEditId) return;
+  statusEl.textContent = "Saving and recomputing spells…";
+  const payload = {
+    name: nameInput.value.trim(),
+    description: descInput.value.trim(),
+    mp_cost: Number(mpInput.value),
+    en_cost: Number(enInput.value),
+    school: schoolInput.value
+  };
+  const r = await fetch(`${API_BASE}/admin/effects/${encodeURIComponent(currentEditId)}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const j = await r.json();
+  if (j.status === "success") {
+    statusEl.textContent = "Saved.";
+    closeModal();
+    if (j.patch_text) downloadTxt(`patch_effect_${currentEditId}.txt`, j.patch_text);
+    await fetchEffects();
+  } else {
+    statusEl.textContent = j.message || "Save failed.";
+  }
+});
+
+$("#edit-close").addEventListener("click", closeModal);
+$("#edit-cancel").addEventListener("click", closeModal);
+
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadSchools();
+  await fetchEffects();
+
+  const run = () => fetchEffects();
+  $("#clear-filters").addEventListener("click", () => { nameEl.value=""; schoolEl.value=""; fetchEffects(); });
+  nameEl.addEventListener("input", run);
+  schoolEl.addEventListener("change", run);
+});
+</script>
+</body>
+</html>

@@ -35,6 +35,7 @@
       <a id="btn-admin" class="btn btn-secondary btn-full" href="admin.html" style="display:none;">🛠️ Modify Database</a>
       <a id="btn-user_mgmt" class="btn btn-secondary btn-full" href="user_management.html" style="display:none;">👤 User Management</a>
       <a id="btn-import-effects" class="btn btn-secondary btn-full" href="scraper.html" style="display:none;">📥 Import Effects</a>
+      <a id="btn-browse-effects" class="btn btn-secondary btn-full" href="browse_effects.html" style="display:none;">🧪 Browse Effects</a>
     </div>
   </div>
 
@@ -91,7 +92,6 @@
     const signupEl   = document.getElementById("open-signup");
     const adminBtn   = document.getElementById("btn-admin");
     const userMgmt   = document.getElementById("btn-user_mgmt");
-    const importBtn  = document.getElementById("btn-import-effects");
     const browseBtn  = document.getElementById("btn-browse");
     const favsBtn    = document.getElementById("btn-favs");
 
@@ -103,7 +103,8 @@
     const adminOrMod = (role === "admin" || role === "moderator");
     adminBtn.style.display  = adminOrMod ? "inline-block" : "none";
     userMgmt.style.display  = (role === "admin") ? "inline-block" : "none";
-    importBtn.style.display = adminOrMod ? "inline-block" : "none";
+    document.getElementById("btn-import-effects").style.display = adminOrMod ? "inline-block" : "none";
+    document.getElementById("btn-browse-effects").style.display = adminOrMod ? "inline-block" : "none";
 
     browseBtn.style.display = "inline-block";
     favsBtn.style.display   = "inline-block";
@@ -121,9 +122,11 @@
 
     document.getElementById("btn-admin").style.display          = "none";
     document.getElementById("btn-user_mgmt").style.display      = "none";
-    document.getElementById("btn-import-effects").style.display = "none";
     document.getElementById("btn-browse").style.display         = "none";
     document.getElementById("btn-favs").style.display           = "none";
+    document.getElementById("btn-import-effects").style.display = "none";
+    document.getElementById("btn-browse-effects").style.display = "none";
+
   }
 
   // --- auth calls ---

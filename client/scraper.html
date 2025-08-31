@@ -79,11 +79,37 @@ const API_BASE = "";
 const $ = s => document.querySelector(s);
 
 // Inputs (now explicitly referenced)
+const token = localStorage.getItem("auth_token") || "";
+const role  = localStorage.getItem("auth_role") || "";
 const schoolNameInput  = $("#school-name");
 const schoolTypeSelect = $("#school-type");
 const rangeTypeSelect  = $("#range-type");
 const aoeTypeSelect    = $("#aoe-type");
 const upgradeCheckbox  = $("#upgrade");
+
+if (!token || (role !== "admin" && role !== "moderator")) {
+  alert("Forbidden: moderators/admins only.");
+  window.location.href = "home.html";
+}
+
+function authHeaders(extra = {}) {
+  return { "Authorization": `Bearer ${token}`, "Content-Type": "application/json", ...extra };
+}
+
+// Example submit handler:
+async function submitBulkCreate(payload) {
+  const res = await fetch(`${API_BASE}/effects/bulk_create`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (data.status !== "success") {
+    alert(data.message || "Import failed");
+    return;
+  }
+  alert(`Imported ${data.created.length} effect(s) into ${data.school.name}`);
+}
 
 // Table preview model
 let PREVIEW = []; // [{name, description, mp_cost, en_cost}]
@@ -244,15 +270,6 @@ $("#confirm-btn").addEventListener("click", async ()=>{
   }catch(e){
     console.error(e);
     $("#errors").textContent = "Request failed: " + e.message;
-  }
-});
-
-// Optional: gate the page to admins in the UI (still enforced by backend)
-document.addEventListener("DOMContentLoaded", ()=>{
-  const role = localStorage.getItem("auth_role");
-  if (role !== "admin") {
-    alert("Forbidden: admin only.");
-    location.href = "home.html";
   }
 });
 </script>

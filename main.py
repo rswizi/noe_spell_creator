@@ -155,7 +155,7 @@ CLIENT_DIR = BASE_DIR / "client"
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
 # Allow-listed html pages
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse"}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects"}
 
 
 # ---------- Pages ----------
@@ -247,12 +247,23 @@ def get_effects(name: str | None = Query(default=None), school: str | None = Que
     return {"effects": docs}
 
 @app.post("/effects/bulk_create")
+@app.post("/admin/effects/bulk_create")  # alias; keeps old/new frontends working
 async def bulk_create_effects(request: Request):
-    """Admin: create a batch of effects for a school."""
+    # 1) Auth gate with clear errors
     try:
         require_auth(request, ["admin", "moderator"])
-        body = await request.json()
+    except Exception as e:
+        msg = str(e)
+        code = 401 if "Not authenticated" in msg else 403
+        return JSONResponse({"status": "error", "message": msg}, status_code=code)
 
+    # 2) Parse body outside the broad try so JSON errors are distinct
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid JSON"}, status_code=400)
+
+    try:
         school_name = (body.get("school_name") or "").strip()
         school_type = (body.get("school_type") or "Simple").strip()
         range_type  = (body.get("range_type")  or "A").strip()
@@ -268,12 +279,20 @@ async def bulk_create_effects(request: Request):
         sch_col = get_col("schools")
         eff_col = get_col("effects")
 
-        existing = sch_col.find_one({"name": {"$regex": f"^{re.escape(school_name)}$", "$options": "i"}}, {"_id": 0})
+        # find-or-create school
+        existing = sch_col.find_one(
+            {"name": {"$regex": f"^{re.escape(school_name)}$", "$options": "i"}}, {"_id": 0}
+        )
         if existing:
             sid = existing["id"]
             sch_col.update_one(
                 {"id": sid},
-                {"$set": {"school_type": school_type, "range_type": range_type, "aoe_type": aoe_type, "upgrade": bool(upgrade)}}
+                {"$set": {
+                    "school_type": school_type,
+                    "range_type": range_type,
+                    "aoe_type": aoe_type,
+                    "upgrade": bool(upgrade)
+                }}
             )
             school = sch_col.find_one({"id": sid}, {"_id": 0})
         else:
@@ -284,6 +303,7 @@ async def bulk_create_effects(request: Request):
             }
             sch_col.insert_one(school)
 
+        # (Optional) light duplicate guard for effects in this batch: (name, mp, en) within same school
         created = []
         for e in effects:
             name = (e.get("name") or "").strip()
@@ -293,6 +313,15 @@ async def bulk_create_effects(request: Request):
                 en   = int(e.get("en_cost"))
             except Exception:
                 return JSONResponse({"status":"error","message":f"Non-numeric MP/EN in effect '{name}'"}, status_code=400)
+
+            # prevent obvious duplicates inside same school
+            dup = eff_col.find_one(
+                {"school": school["id"], "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}, "mp_cost": mp, "en_cost": en},
+                {"_id": 1}
+            )
+            if dup:
+                # skip silently or collect as 'skipped'; here we skip & continue
+                continue
 
             eff_id = next_id_str("effects", padding=4)
             rec = {"id": eff_id, "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school["id"]}
@@ -749,7 +778,179 @@ def favorites_remove(spell_id: str, request: Request):
     )
     return {"status": "success", "id": spell_id, "action": "removed"}
 
+# ---- Admin: list / edit / delete effects ------------------------------------
 
+@app.get("/admin/effects")
+def admin_list_effects(request: Request, name: str | None = Query(default=None), school: str | None = Query(default=None)):
+    # moderators + admins
+    require_auth(request, ["admin", "moderator"])
+    col = get_col("effects")
+    sch = get_col("schools")
+
+    q: dict = {}
+    if name:
+        q["name"] = {"$regex": name, "$options": "i"}
+    if school:
+        # allow filtering by school id OR name
+        or_terms = [{"school": {"$regex": school, "$options": "i"}}]
+        ids = [s["id"] for s in sch.find({"name": {"$regex": school, "$options": "i"}}, {"id": 1})]
+        if ids:
+            or_terms.append({"school": {"$in": ids}})
+        q["$or"] = or_terms
+
+    docs = list(col.find(q, {"_id": 0}))
+    s_map = {s["id"]: s.get("name", s["id"]) for s in sch.find({}, {"_id": 0, "id": 1, "name": 1})}
+    for e in docs:
+        sid = str(e.get("school") or "")
+        e["school_name"] = s_map.get(sid, sid)
+    docs.sort(key=lambda e: e["name"].lower())
+    return {"status": "success", "effects": docs}
+
+
+def _recompute_spells_for_effect(effect_id: str) -> tuple[str, int]:
+    """
+    Recompute every spell that references effect_id.
+    Returns (patch_text, changed_count).
+    """
+    sp_col = get_col("spells")
+    changed = 0
+    lines: list[str] = []
+
+    affected = list(sp_col.find({"effects": effect_id}, {"_id": 0}))
+    if not affected:
+        return ("No spells referenced this effect.", 0)
+
+    for sp in affected:
+        old_mp = int(sp.get("mp_cost", 0))
+        old_en = int(sp.get("en_cost", 0))
+        old_cat = sp.get("category", "")
+
+        # recompute with current effect docs
+        cc = compute_spell_costs(
+            sp.get("activation", "Action"),
+            int(sp.get("range", 0)),
+            sp.get("aoe", "A Square"),
+            int(sp.get("duration", 1)),
+            [str(x) for x in (sp.get("effects") or [])]
+        )
+
+        new_mp, new_en, new_cat = cc["mp_cost"], cc["en_cost"], cc["category"]
+
+        # Only write if something changed
+        if (old_mp, old_en, old_cat) != (new_mp, new_en, new_cat):
+            sp_col.update_one({"id": sp["id"]}, {"$set": {
+                "mp_cost": new_mp,
+                "en_cost": new_en,
+                "category": new_cat
+            }})
+            changed += 1
+            lines.append(
+                f"[{sp['id']}] {sp.get('name','(unnamed)')}: "
+                f"MP {old_mp} → {new_mp}, EN {old_en} → {new_en}, Category {old_cat} → {new_cat}"
+            )
+
+    if not lines:
+        lines.append("No MP/EN/category changes after recompute.")
+    return ("\n".join(lines), changed)
+
+
+@app.put("/admin/effects/{effect_id}")
+async def admin_update_effect(effect_id: str, request: Request):
+    # moderators + admins
+    require_auth(request, ["admin", "moderator"])
+    body = await request.json()
+
+    # Fetch old effect (for patch notes)
+    col = get_col("effects")
+    old = col.find_one({"id": effect_id}, {"_id": 0})
+    if not old:
+        return JSONResponse({"status":"error","message":"Effect not found"}, status_code=404)
+
+    # Validate + build update
+    name = (body.get("name") or old.get("name") or "").strip()
+    desc = (body.get("description") or body.get("desc") or old.get("description") or "").strip()
+    try:
+        mp = int(body.get("mp_cost", old.get("mp_cost", 0)))
+        en = int(body.get("en_cost", old.get("en_cost", 0)))
+    except Exception:
+        return JSONResponse({"status":"error","message":"MP/EN must be integers"}, status_code=400)
+
+    school = str(body.get("school", old.get("school",""))).strip() or old.get("school","")
+
+    # Update the effect first
+    col.update_one({"id": effect_id}, {"$set": {
+        "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school
+    }})
+
+    # Build patch header (effect changes)
+    effect_changes = []
+    def _chg(label, a, b):
+        if a != b: effect_changes.append(f"{label}: {a} → {b}")
+
+    _chg("Name", old.get("name",""), name)
+    _chg("School", old.get("school",""), school)
+    _chg("MP", int(old.get("mp_cost",0)), mp)
+    _chg("EN", int(old.get("en_cost",0)), en)
+    if (old.get("description","") != desc):
+        effect_changes.append("Description: (updated)")
+
+    header = [f"Edited Effect [{effect_id}]", ""] + ([*effect_changes, ""] if effect_changes else ["No direct field changes",""])
+
+    # Recompute all spells using this effect
+    spell_patch_text, changed_count = _recompute_spells_for_effect(effect_id)
+
+    patch_text = "\n".join(header + ["Impacted Spells:", spell_patch_text]) + "\n"
+    return {"status":"success","updated":effect_id,"changed_spells":changed_count,"patch_text":patch_text}
+
+
+@app.delete("/admin/effects/{effect_id}")
+def admin_delete_effect(effect_id: str, request: Request):
+    # moderators + admins
+    require_auth(request, ["admin", "moderator"])
+    col = get_col("effects")
+    old = col.find_one({"id": effect_id}, {"_id": 0})
+    if not old:
+        return {"status":"error","message":"Effect not found"}
+
+    # Remove effect
+    col.delete_one({"id": effect_id})
+
+    # For each spell containing it, drop the id and recompute
+    sp_col = get_col("spells")
+    affected = list(sp_col.find({"effects": effect_id}, {"_id": 0}))
+    lines = [f"Deleted Effect [{effect_id}] {old.get('name','')}",""]
+
+    for sp in affected:
+        new_effects = [e for e in (sp.get("effects") or []) if str(e) != str(effect_id)]
+
+        old_mp = int(sp.get("mp_cost", 0))
+        old_en = int(sp.get("en_cost", 0))
+        old_cat = sp.get("category","")
+
+        cc = compute_spell_costs(
+            sp.get("activation","Action"),
+            int(sp.get("range",0)),
+            sp.get("aoe","A Square"),
+            int(sp.get("duration",1)),
+            [str(x) for x in new_effects]
+        )
+
+        sp_col.update_one({"id": sp["id"]}, {"$set":{
+            "effects": new_effects,
+            "mp_cost": cc["mp_cost"],
+            "en_cost": cc["en_cost"],
+            "category": cc["category"]
+        }})
+
+        lines.append(
+          f"[{sp['id']}] {sp.get('name','(unnamed)')}: "
+          f"MP {old_mp} → {cc['mp_cost']}, EN {old_en} → {cc['en_cost']}, Category {old_cat} → {cc['category']} (effect removed)"
+        )
+
+    if len(lines) == 2:
+        lines.append("No spells referenced this effect.")
+
+    return {"status":"success","deleted":effect_id,"patch_text":"\n".join(lines) + "\n"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
