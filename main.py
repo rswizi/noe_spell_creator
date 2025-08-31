@@ -250,7 +250,7 @@ def get_effects(name: str | None = Query(default=None), school: str | None = Que
 async def bulk_create_effects(request: Request):
     """Admin: create a batch of effects for a school."""
     try:
-        require_auth(request, ["admin"])
+        require_auth(request, ["admin", "moderator"])
         body = await request.json()
 
         school_name = (body.get("school_name") or "").strip()
