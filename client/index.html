@@ -39,6 +39,7 @@
     <!-- Range -->
     <label for="range">Range:</label>
     <small id="cost-range" class="knob-cost"></small><br><br>
+    <small id="range-type-chip" class="type-chip"></small>
     <select id="range" name="range" required>
       <option value="0">0</option>
       <option value="1">1</option>
@@ -53,6 +54,7 @@
     <!-- AoE -->
     <label for="aoe">Area of Effect (AoE):</label>
     <small id="cost-aoe" class="knob-cost"></small><br><br>
+    <small id="aoe-type-chip" class="type-chip"></small>
     <select id="aoe" name="aoe" required>
       <option value="A Square">A Square</option>
       <option value="Line (3)">Line (3)</option>
@@ -103,6 +105,78 @@
   </form>
 
 <script>
+
+let EFFECTS_BY_ID = {};
+let SCHOOLS_BY_ID = {};
+const TYPE_ORDER = { A:1, B:2, C:3 };
+
+function maxType(arr) {
+  if (!arr || !arr.length) return "A";
+  let best = "A";
+  for (const t of arr) {
+    const up = String(t || "A").toUpperCase();
+    if (TYPE_ORDER[up] > TYPE_ORDER[best]) best = up;
+  }
+  return best;
+}
+
+// Preload effects and schools into maps (id -> doc)
+async function preloadMetadata() {
+  const [er, sr] = await Promise.all([
+    fetch(`${API_BASE}/effects`),
+    fetch(`${API_BASE}/schools`),
+  ]);
+  const ejson = await er.json();
+  const sjson = await sr.json();
+  (ejson.effects || []).forEach(e => { EFFECTS_BY_ID[String(e.id)] = e; });
+  (sjson.schools || []).forEach(s => { SCHOOLS_BY_ID[String(s.id)] = s; });
+}
+
+function recomputeKnobTypes() {
+  // collect selected effect IDs from rows
+  const selectedEids = Array.from(document.querySelectorAll('.effect-entry select[name="effects[]"]'))
+    .map(sel => sel.value)
+    .filter(Boolean);
+
+  // gather range/aoe types from their schools
+  const types = selectedEids.map(eid => {
+    const eff = EFFECTS_BY_ID[String(eid)];
+    const sch = eff ? SCHOOLS_BY_ID[String(eff.school)] : null;
+    return {
+      r: (sch && sch.range_type) || "A",
+      a: (sch && sch.aoe_type)   || "A",
+    };
+  });
+
+  const rangeType = maxType(types.map(t => t.r));
+  const aoeType   = maxType(types.map(t => t.a));
+
+  // show chips
+  const rChip = document.getElementById('range-type-chip');
+  const aChip = document.getElementById('aoe-type-chip');
+  if (rChip) rChip.textContent = `Type ${rangeType}`;
+  if (aChip) aChip.textContent = `Type ${aoeType}`;
+
+  // try to adjust AoE select to same shape but new letter
+  const aoeSel = document.getElementById('aoe');
+  if (aoeSel && aoeSel.value) {
+    const parts = aoeSel.value.split(/\s+/, 2); // e.g. ["A", "Square"]
+    if (parts.length === 2) {
+      const desired = `${aoeType} ${parts[1]}`;
+      for (const opt of aoeSel.options) {
+        if (opt.value === desired) {
+          aoeSel.value = desired;
+          break;
+        }
+      }
+    }
+  }
+
+  // refresh preview so costs reflect new type mix
+  if (typeof updatePreview === "function") {
+    updatePreview();
+  }
+}
 
 let LAST_BREAKDOWN = null;
 
@@ -294,6 +368,7 @@ function effectMatchesFilters(effect, filters) {
 
       const select = document.createElement('select');
       select.name = "effects[]";
+      effectSelect.addEventListener('change', recomputeKnobTypes);
       select.required = true;
 
       populateEffectSelect(select, getFilteredEffects(), /*keepValue*/ false);
@@ -342,6 +417,7 @@ function effectMatchesFilters(effect, filters) {
 
     const select = document.createElement('select');
     select.name = "effects[]";
+    effectSelect.addEventListener('change', recomputeKnobTypes);
     select.required = true;
 
     // initial population with current filters
@@ -366,7 +442,8 @@ function effectMatchesFilters(effect, filters) {
     const button = document.createElement("button");
     button.type = "button";
     button.innerText = "✖";
-    button.onclick = () => { entry.remove(); updatePreview(); };
+    button.onclick = () => { entry.remove(); updatePreview(); recomputeKnobTypes();
+};
 
     entry.appendChild(leftCol);
     entry.appendChild(button);
@@ -442,7 +519,7 @@ function effectMatchesFilters(effect, filters) {
 
   // ---------- DOM boot ----------
   document.addEventListener("DOMContentLoaded", async () => {
-    // grab filter inputs
+  await preloadMetadata();
     effFilterNameEl   = document.getElementById("eff-filter-name");
     effFilterSchoolEl = document.getElementById("eff-filter-school");
 
@@ -489,6 +566,7 @@ function effectMatchesFilters(effect, filters) {
         }
       });
     }
+  recomputeKnobTypes(); // set initial chips & costs
   });
 
   function confirmHome(e) {
