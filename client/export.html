@@ -2,25 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Export Spells</title>
+  <title>Spell Creator — Export Spell</title>
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    .hidden { display: none !important; }
-    .effect-entry { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #222; }
-    .effect-entry:last-child { border-bottom:0; }
-    .btn-outline { background: transparent; border:1px solid #444; color:#ddd; padding:6px 10px; border-radius:8px; cursor:pointer; }
-    .btn-outline:hover { border-color:#777; color:#fff; }
-    .modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.5); z-index: 1000; padding: 16px; }
-    .modal-card { width: min(520px, 96vw); background:#111; color:#eee; border-radius: 14px; padding: 18px 20px; border:1px solid #252525; }
-    .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
-    .small { font-size:.92rem; opacity:.9; }
-  </style>
 </head>
 <body>
   <div class="container">
-    <h1>Export Spells</h1>
+    <h1>Export Spell</h1>
 
+    <!-- Filters -->
     <div class="home-card" style="margin-bottom:18px;">
       <div class="filter-bar">
         <input id="filter-name" type="text" placeholder="Filter by name..." />
@@ -29,272 +19,123 @@
           <option>Novice</option><option>Apprentice</option><option>Disciple</option>
           <option>Adept</option><option>Mage</option><option>Magister</option>
           <option>High Mage</option><option>Master</option><option>Grand Master</option>
-          <option>Archmage</option><option>Supreme Archmage</option><option>Avant-Garde</option>
+          <option>Archmage</option><option>Supreme Archmage</option><option>Avant-garde</option>
         </select>
         <select id="filter-school">
           <option value="">All Schools</option>
         </select>
+        <label style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="filter-fav" />
+          <span>Only favorites</span>
+        </label>
         <button id="clear-filters">Reset</button>
       </div>
-      <p class="small">Only approved (green) spells are shown.</p>
     </div>
 
+    <!-- Results -->
     <div class="home-card">
       <div id="results"></div>
     </div>
 
+    <!-- Back -->
     <div style="margin-top:16px;">
       <a class="btn btn-secondary" href="home.html">← Back Home</a>
     </div>
   </div>
 
-  <!-- Template chooser modal -->
-  <div id="tmpl-modal" class="modal hidden" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true">
-      <h3 style="margin-top:0;">Export to Foundry</h3>
-      <p>Choose a template type for <span id="tmpl-spell-name" style="font-weight:600;"></span>.</p>
+  <!-- Flavour modal -->
+  <div id="flavour-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+  <div id="flavour-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="flavour-title" aria-hidden="true">
+    <div class="modal-card" style="max-width:720px;">
+      <header>
+        <div class="modal-title" id="flavour-title">Export Spell — Add Flavour</div>
+        <button class="modal-close" id="flavour-close" aria-label="Close">✕</button>
+      </header>
+
+      <div style="margin-bottom:10px; opacity:.9;">
+        Optional: add flavour text (supports **rich** formatting).
+      </div>
+
+      <!-- simple rich text toolbar -->
+      <div style="display:flex; gap:8px; margin-bottom:6px;">
+        <button class="btn btn-secondary small" onclick="execRT('bold')"><b>B</b></button>
+        <button class="btn btn-secondary small" onclick="execRT('italic')"><i>I</i></button>
+        <button class="btn btn-secondary small" onclick="execRT('underline')"><u>U</u></button>
+        <button class="btn btn-secondary small" onclick="execRT('insertUnorderedList')">• List</button>
+      </div>
+      <div id="flavour-editor" contenteditable="true" style="
+        min-height:140px; padding:12px; background:#101010; border:1px solid #c02d2d; border-radius:8px; ">
+      </div>
+
       <div class="modal-actions">
-        <button class="btn btn-secondary" id="tmpl-cancel">Cancel</button>
-        <button class="btn" id="tmpl-passive">Passive</button>
-        <button class="btn" id="tmpl-active">Active</button>
+        <button class="btn btn-secondary" id="flavour-cancel">Cancel</button>
+        <button class="btn" id="flavour-continue">Continue</button>
       </div>
     </div>
   </div>
 
+  <!-- Export view -->
+  <div class="container" id="export-view" style="display:none; margin-top:24px;">
+    <div class="home-card">
+      <h2 id="exp-title" style="margin-bottom:10px;"></h2>
+
+      <div id="exp-fields" style="display:grid; gap:10px;"></div>
+
+      <div style="margin-top:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;">Description</h3>
+          <button class="btn btn-secondary" id="copy-description">Copy Description</button>
+        </div>
+        <div id="description-preview" style="margin-top:8px; padding:12px; background:#121212; border:1px solid #c02d2d; border-radius:10px;"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="export.html">← New Export</a>
+      <a class="btn btn-secondary" href="home.html">Back Home</a>
+    </div>
+  </div>
+
 <script>
-/* ---------------------------
-   Setup / Data caches
----------------------------- */
+const token = localStorage.getItem("auth_token") || "";
+const favOnlyEl = document.getElementById("filter-fav");
+
 const API_BASE = "";
-const $  = (s)=>document.querySelector(s);
-const resultsEl   = $("#results");
-const nameEl      = $("#filter-name");
-const categoryEl  = $("#filter-category");
-const schoolEl    = $("#filter-school");
 
-let ALL_SCHOOLS = [];          // [{id,name,school_type,...}]
-let SCHOOL_BY_ID = {};         // id -> school
-let ALL_EFFECTS = [];          // [{id,name,description,school,mp_cost,en_cost}]
-let EFFECT_BY_ID = {};         // id -> effect
-let CACHE_SPELL_BY_ID = new Map();
-let CHOOSE_FOR_ID = null;
+const $ = (s)=>document.querySelector(s);
+const resultsEl = $("#results");
+const nameEl = $("#filter-name");
+const categoryEl = $("#filter-category");
+const schoolEl = $("#filter-school");
 
-/* ---------------------------
-   Foundry base templates
-   (taken from your examples)
----------------------------- */
-const BASE_ACTIVE = (() => {
-  return {
-    "name": "Spell (Active)",
-    "type": "equippableItem",
-    "_id": randId(),
-    "img": "icons/svg/item-bag.svg",
-    "system": {
-      "hidden": [
-        {"name":"pv","value":"${0+sum(lookup('cout_table','valeur','ressource','pvb'))}$"},
-        {"name":"en","value":"${0+sum(lookup('cout_table','valeur','ressource','enb'))}$"},
-        {"name":"verr","value":"${equalText(type,'Archetype') ? 1 : 0}$"},
-        {"name":"dv","value":"${0+sum(lookup('cout_table','valeur','ressource','dvb'))}$"},
-        {"name":"is_spell","value":"${equalText(type,'Spell') ? 1 : 0}$"},
-        {"name":"simple_spell","value":"${is_spell == 1 and complexx == 0 and craftomancy == 0 ? 1 : 0}$"},
-        {"name":"complex_spell","value":"${is_spell == 1 and complexx == 1 and craftomancy == 0 ? 1 : 0}$"},
-        {"name":"craftomancy_spell","value":"${is_spell == 1 and complexx == 0 and craftomancy == 1 ? 1 : is_spell == 1 and complexx == 1 and craftomancy == 1 ? 3 : 0}$"},
-        {"name":"cn","value":"${0+sum(lookup('cout_table','valeur','ressource','cnb'))}$"}
-      ],
-      "header": {"contents":[],"key":"custom_header","cssClass":null,"role":0,"permission":0,"tooltip":null,"visibilityFormula":null,"flow":"vertical","align":"","type":"panel","collapsible":false,"defaultCollapsed":true,"title":"","titleStyle":"default"},
-      "body": {
-        "contents": [
-          {
-            "key": "", "cssClass": "", "role": "0", "permission": "0", "tooltip": "", "visibilityFormula": "",
-            "type": "panel", "contents": [
-              {
-                "key": "", "cssClass":"", "role":"0", "permission":"0", "tooltip":"", "visibilityFormula":"", "type":"panel",
-                "contents":[
-                  {"key":"","cssClass":"subtitle-text","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"label","size":"full-size","icon":"","value":"Cost","prefix":"","suffix":"","rollMessage":"","altRollMessage":"","rollMessageToChat":true,"altRollMessageToChat":true,"style":"bold"},
-                  {
-                    "key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"panel","contents":[
-                      {"key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"label","size":"full-size","icon":"","value":"Active","prefix":"","suffix":"","rollMessage":"","altRollMessage":"","rollMessageToChat":true,"altRollMessageToChat":true,"style":"bold"},
-                      {"key":"actif","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"checkbox","label":"","size":"small","defaultChecked":false},
-                      {"key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"actif == 1","type":"label","size":"full-size","icon":"","value":"Active Now?","prefix":"","suffix":"","rollMessage":"","altRollMessage":"","rollMessageToChat":true,"altRollMessageToChat":true,"style":"bold"},
-                      {"key":"active_rn","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"actif == 1","type":"checkbox","label":"","size":"full-size","defaultChecked":false}
-                    ],
-                    "flow":"grid-2","align":"center","collapsible":false,"defaultCollapsed":false,"title":"","titleStyle":"default"
-                  }
-                ],
-                "flow":"horizontal","align":"center","collapsible":false,"defaultCollapsed":false,"title":"","titleStyle":"default"
-              },
-              {
-                "key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"is_spell == 1","type":"panel","contents":[
-                  {
-                    "key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"panel","contents":[
-                      {"key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"label","size":"full-size","icon":"","value":"Complex","prefix":"","suffix":"","rollMessage":"","altRollMessage":"","rollMessageToChat":true,"altRollMessageToChat":true,"style":"bold"},
-                      {"key":"complexx","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"checkbox","label":"","size":"full-size","defaultChecked":false}
-                    ],
-                    "flow":"grid-2","align":"center","collapsible":false,"defaultCollapsed":false,"title":"","titleStyle":"default"
-                  },
-                  {
-                    "key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"panel","contents":[
-                      {"key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"label","size":"full-size","icon":"","value":"Craftomancy","prefix":"","suffix":"","rollMessage":"","altRollMessage":"","rollMessageToChat":true,"altRollMessageToChat":true,"style":"bold"},
-                      {"key":"craftomancy","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"checkbox","label":"","size":"full-size","defaultChecked":false}
-                    ],
-                    "flow":"grid-2","align":"center","collapsible":false,"defaultCollapsed":false,"title":"","titleStyle":"default"
-                  },
-                  {
-                    "key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"panel","contents":[
-                      {"key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"label","size":"full-size","icon":"","value":"Category","prefix":"","suffix":"","rollMessage":"","altRollMessage":"","rollMessageToChat":true,"altRollMessageToChat":true,"style":"bold"},
-                      {"key":"spell_category","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"select","label":"","defaultValue":"Novice","size":"full-size","selectedOptionType":"custom","options": catOptions()},
-                      {"key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"label","size":"full-size","icon":"","value":"Status","prefix":"","suffix":"","rollMessage":"","altRollMessage":"","rollMessageToChat":true,"altRollMessageToChat":true,"style":"bold"},
-                      {"key":"learned","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"select","label":"","defaultValue":"1","size":"full-size","selectedOptionType":"custom","options":[{"key":"0","value":"Learned"},{"key":"1","value":"Known"}]}
-                    ],
-                    "flow":"grid-2","align":"center","collapsible":false,"defaultCollapsed":false,"title":"","titleStyle":"default"
-                  }
-                ],
-                "flow":"grid-3","align":"center","collapsible":false,"defaultCollapsed":false,"title":"","titleStyle":"default"
-              }
-            ],
-            "flow":"grid-2","align":"center","collapsible":false,"defaultCollapsed":true,"title":"","titleStyle":"default"
-          },
-          {
-            "key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"table","contents":[
-              [
-                labelCell("<p><strong>Range</strong></p>"),
-                labelCell("<p><strong>AoE</strong></p>"),
-                labelCell("<p><strong>Activation</strong></p>"),
-                labelCell("Note"),
-                null, null
-              ],
-              [
-                textCell("portee","Self"),
-                textCell("zone","Square"),
-                selectCell("act","Action",["Action","Special Action","Free Action","Ritual"]),
-                textCell("effet","N/A"),
-                null, null
-              ]
-            ],
-            "cols":4,"rows":2,"layout":"ccccccc","type":"table"
-          },
-          panelDescription()
-        ],
-        "key":"custom_body","cssClass":null,"role":0,"permission":0,"tooltip":null,"flow":"vertical","align":"","type":"panel","visibilityFormula":null,"collapsible":false,"defaultCollapsed":true,"title":"","titleStyle":"default"
-      },
-      "display":{"width":"850","height":"500","fix_size":false,"pp_width":"64","pp_height":"64"},
-      "template":"J9o2iAz51pJFqc7q",
-      "props":{
-        "name":"Spell (Active)","spell_category":"Novice","learned":"1","type":"Spell","ver":"1",
-        "portee":"Self","zone":"Square","act":"Action","effet":"N/A",
-        "uuid":"Item."+randId(),"id":randId(),"img":"icons/svg/item-bag.svg",
-        "pv":0,"en":0,"verr":0,"dv":0,"is_spell":1,"cn":0,
-        "actif":false,"active_rn":false,"complexx":false,"craftomancy":false,
-        "cout_table":{"0":{"$deleted":false,"valeur":"","ressource":"enb"}},
-        "simple_spell":1,"complex_spell":0,"craftomancy_spell":0,
-        "source":""
-      },
-      "modifiers":[],"unique":false,"container":null,"uniqueId":randId(),"templateSystemUniqueVersion":3997128925
-    },
-    "effects": [], "folder": null,
-    "flags": {"custom-system-builder":{"version":"4.6.6"}},
-    "_stats": {"coreVersion":"12.343","systemId":"custom-system-builder","systemVersion":"4.6.6","createdTime":Date.now(),"modifiedTime":Date.now(),"lastModifiedBy":"system"},
-    "items":[]
-  };
-})();
+let ALL_SCHOOLS = [];
+let SCHOOL_BY_ID = {};
+let ALL_EFFECTS = [];   // cache to resolve effect details for description
 
-const BASE_PASSIVE = (() => {
-  return {
-    "name": "Spell (Passive)",
-    "type": "equippableItem",
-    "_id": randId(),
-    "img": "icons/svg/item-bag.svg",
-    "system": {
-      "hidden": [
-        {"name":"verr","value":"${equalText(type,'Archetype') ? 1 : 0}$"},
-        {"name":"is_passive","value":"1"},
-        {"name":"is_spell","value":"${equalText(type,'Spell') ? 1 : 0}$"},
-        {"name":"craftomancy_spell","value":"${is_spell == 1 and complex == 0 and craftomancy == 1 ? 1 : is_spell == 1 and complex == 1 and craftomancy == 1 ? 3 : 0}$"},
-        {"name":"complex_spell","value":"${is_spell == 1 and complex == 1 and craftomancy == 0 ? 1 : 0}$"},
-        {"name":"simple_spell","value":"${is_spell == 1 and complex == 0 and craftomancy == 0 ? 1 : 0}$"},
-        {"name":"pv","value":"0"},{"name":"en","value":"0"},{"name":"cn","value":"0"},{"name":"actif","value":"0"}
-      ],
-      "header":{"contents":[],"key":"custom_header","cssClass":null,"role":0,"permission":0,"tooltip":null,"visibilityFormula":null,"flow":"vertical","align":"","type":"panel","collapsible":false,"defaultCollapsed":true,"title":"","titleStyle":"default"},
-      "body": {
-        "contents":[
-          {
-            "key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"panel","contents":[
-              {
-                "key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"table",
-                "contents":[
-                  [
-                    labelCell("Type"),
-                    selectCell("type","Spell",["Archetype","Talent","Specie","Expertise","Spell","Other"]),
-                    labelCell("Version","verr==1"),
-                    numberCell("ver","1","verr==1"),
-                    labelCell("Source","is_spell == 1"),
-                    textCell("source","", "is_spell == 1")
-                  ],
-                  [null,null,null,null]
-                ],
-                "cols":6,"rows":1,"layout":""
-              },
-              {
-                "key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"is_spell == 1","type":"panel","contents":[
-                  optionPanel("Complex","complexx"),
-                  optionPanel("Craftomancy","craftomancy"),
-                  categoryPanel()
-                ],"flow":"grid-3","align":"center","collapsible":false,"defaultCollapsed":false,"title":"","titleStyle":"default"
-              }
-            ],
-            "flow":"grid-2","align":"center","collapsible":false,"defaultCollapsed":true,"title":"","titleStyle":"default"
-          },
-          panelDescription()
-        ],
-        "key":"custom_body","cssClass":null,"role":0,"permission":0,"tooltip":null,"flow":"vertical","align":"","type":"panel","visibilityFormula":null,"collapsible":false,"defaultCollapsed":true,"title":"","titleStyle":"default"
-      },
-      "display":{"width":"700","height":"400","fix_size":false,"pp_width":"64","pp_height":"64"},
-      "template":"dxdMJNjsednQvPw2",
-      "props":{"name":"Spell (Passive)","type":"Spell","ver":"1","learned":"1","source":"","complexx":false,"craftomancy":false,"spell_category":"Novice"},
-      "modifiers":[],"unique":false,"container":null,"uniqueId":randId(),"templateSystemUniqueVersion":3814201775
-    },
-    "effects": [], "folder": null, "flags":{"custom-system-builder":{"version":"4.6.6"}},
-    "_stats":{"coreVersion":"12.343","systemId":"custom-system-builder","systemVersion":"4.6.6","createdTime":Date.now(),"modifiedTime":Date.now(),"lastModifiedBy":"system"},
-    "items":[]
-  };
-})();
+// ----- UI helpers
+function execRT(cmd) { document.execCommand(cmd, false, null); }
 
-/* Small helpers to build cell objects (keeps templates tidy) */
-function labelCell(value, vis=null){ return {"key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":vis??"","type":"label","size":"full-size","icon":"","value":value,"prefix":"","suffix":"","rollMessage":"","altRollMessage":"","rollMessageToChat":true,"altRollMessageToChat":true,"style":"bold"}; }
-function textCell(key, def="", vis=null){ return {"key":key,"cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":vis??"","type":"textField","label":"","defaultValue":def,"size":"full-size","charList":"","autocomplete":""}; }
-function numberCell(key, def="", vis=null){ return {"key":key,"cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":vis??"","type":"numberField","label":"","defaultValue":def,"size":"small","allowDecimal":false,"minVal":"","maxVal":"","allowRelative":false,"showControls":false,"controlsStyle":"hover","inputStyle":"text"}; }
-function selectCell(key, def, opts, vis=null){ return {"key":key,"cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":vis??"","type":"select","label":"","defaultValue":def,"size":"full-size","selectedOptionType":"custom","options": opts.map(x=>({key:x,value:x}))}; }
-function panelDescription(){ return {"key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"panel","contents":[labelCell("Description"),{"key":"desc","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":null,"type":"textArea","label":"","defaultValue":"","size":"full-size","style":"sheet"}],"flow":"vertical","align":"left","collapsible":false,"defaultCollapsed":true,"title":"","titleStyle":"default"}; }
-function optionPanel(label, key){ return {"key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"panel","contents":[labelCell(label),{"key":key,"cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"checkbox","label":"","size":"full-size","defaultChecked":false}],"flow":"grid-2","align":"center","collapsible":false,"defaultCollapsed":false,"title":"","titleStyle":"default"}; }
-function categoryPanel(){ return {"key":"","cssClass":"","role":"0","permission":"0","tooltip":"","visibilityFormula":"","type":"panel","contents":[labelCell("Category"),selectCell("spell_category","Novice",catOptions().map(o=>o.key)),labelCell("Status"),selectCell("learned","1",["0","1"])],"flow":"grid-2","align":"center","collapsible":false,"defaultCollapsed":false,"title":"","titleStyle":"default"}; }
-function catOptions(){
-  return [
-    {key:"Novice",value:"Novice"},{key:"Apprentice",value:"Apprentice"},{key:"Disciple",value:"Disciple"},
-    {key:"Adept",value:"Adept"},{key:"Mage",value:"Mage"},{key:"Magister",value:"Magister"},
-    {key:"High Mage",value:"High Mage"},{key:"Master",value:"Master"},{key:"Grand Master",value:"Grand Master"},
-    {key:"Archmage",value:"Archmage"},{key:"Supreme Archmage",value:"Supreme Archmage"},{key:"Avant-Garde",value:"Avant-Garde"}
-  ];
-}
-function randId(){ const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'; let out=''; for(let i=0;i<16;i++) out+=chars[Math.floor(Math.random()*chars.length)]; return out; }
-
-/* ---------------------------
-   Loaders & filters
----------------------------- */
-function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
-
-async function loadSchools(){
-  const r = await fetch(`${API_BASE}/schools`); const j = await r.json();
-  ALL_SCHOOLS = j.schools || [];
-  SCHOOL_BY_ID = Object.fromEntries(ALL_SCHOOLS.map(s => [String(s.id), s]));
-  // filter dropdown
-  const sel = $("#filter-school");
-  ALL_SCHOOLS.forEach(s => { const o = document.createElement("option"); o.value = s.id; o.textContent = `${s.name} [${s.id}]`; sel.appendChild(o); });
+function rowSpell(s) {
+  const schools = (s.schools||[]).map(sc=>sc.name).join(", ") || "—";
+  return `
+    <div class="effect-entry" style="justify-content:space-between;">
+      <div style="flex:1;">
+        <div style="font-weight:bold">${s.name} <span style="opacity:.7">[${s.id}]</span></div>
+        <div style="opacity:.8;font-size:.95rem">
+          ${s.category || "—"} · ${s.activation} · ${s.range} · ${s.aoe} · dur ${s.duration}
+        </div>
+        <div style="opacity:.7;font-size:.9rem">Schools: ${schools}</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" onclick="openFlavour('${s.id}')">Export</button>
+      </div>
+    </div>
+  `;
 }
 
-async function loadEffects(){
-  const r = await fetch(`${API_BASE}/effects`); const j = await r.json();
-  ALL_EFFECTS = j.effects || [];
-  EFFECT_BY_ID = Object.fromEntries(ALL_EFFECTS.map(e => [String(e.id), e]));
+function renderList(list){
+  if(!list.length){ resultsEl.innerHTML = `<p>No spells found.</p>`; return; }
+  resultsEl.innerHTML = list.map(rowSpell).join("");
 }
 
 function buildQuery(){
@@ -305,166 +146,205 @@ function buildQuery(){
   if(n) p.set("name", n);
   if(c) p.set("category", c);
   if(sch) p.set("school", sch);
-  p.set("status","green"); // approved only
   return p.toString();
+}
+
+// ----- data loading
+async function loadSchools(){
+  const res = await fetch(`${API_BASE}/schools`);
+  const data = await res.json();
+  ALL_SCHOOLS = data.schools || [];
+  SCHOOL_BY_ID = {};
+  ALL_SCHOOLS.forEach(s => SCHOOL_BY_ID[String(s.id)] = s);
+
+  // fill filter
+  schoolEl.innerHTML = `<option value="">All Schools</option>`;
+  ALL_SCHOOLS.forEach(s=>{
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.name} [${s.id}]`;
+    schoolEl.appendChild(opt);
+  });
+}
+
+async function loadEffects(){
+  const res = await fetch(`${API_BASE}/effects`);
+  const data = await res.json();
+  // normalize school to {id,name}
+  ALL_EFFECTS = (data.effects || []).map(e=>{
+    const sid = String(e.school || "").trim();
+    const sch = SCHOOL_BY_ID[sid] || { id: sid, name: sid };
+    return { ...e, school: { id: sch.id, name: sch.name } };
+  });
 }
 
 async function fetchSpells(){
   const q = buildQuery();
-  const url = q ? `${API_BASE}/spells?${q}` : `${API_BASE}/spells?status=green`;
-  const r = await fetch(url); const j = await r.json();
-  const list = j.spells || [];
-  CACHE_SPELL_BY_ID.clear();
-  list.forEach(s => CACHE_SPELL_BY_ID.set(String(s.id), s));
-  renderList(list);
+  const base = q ? `${API_BASE}/spells?${q}&status=green` : `${API_BASE}/spells?status=green`;
+
+  const url = favOnlyEl.checked ? `${base}&favorite=1` : base;
+  const headers = favOnlyEl.checked && token ? { "Authorization": `Bearer ${token}` } : {};
+  const res = await fetch(url, { headers });
+  const data = await res.json();
+  if(data.error){ resultsEl.innerHTML = `<p style="color:#ff4a4a">Error: ${data.error}</p>`; return; }
+  renderList(data.spells || []);
 }
 
-/* ---------------------------
-   Rendering
----------------------------- */
-function spellRow(s){
-  const schools = (s.schools||[]).map(sc=>sc.name).join(", ") || "—";
-  return `
-    <div class="effect-entry">
-      <div style="flex:1;">
-        <div style="font-weight:bold">${s.name} <span style="opacity:.7">[${s.id}]</span></div>
-        <div style="opacity:.85">${s.category || "—"} · ${s.activation || "—"} · ${s.range ?? "—"} · ${s.aoe || "—"} · dur ${s.duration ?? "—"}</div>
-        <div style="opacity:.75;font-size:.92rem">Schools: ${schools}</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="btn-outline" onclick="openTemplateChooser('${String(s.id)}')">Export to Foundry</button>
-      </div>
-    </div>
-  `;
+// ----- export flow
+let EXPORT_TARGET = null;
+
+function openFlavour(spellId){
+  EXPORT_TARGET = spellId;
+  $("#flavour-editor").innerHTML = ""; // reset
+  $("#flavour-modal").classList.add("open");
+  $("#flavour-backdrop").classList.add("open");
 }
 
-function renderList(list){
-  resultsEl.innerHTML = list.length ? list.map(spellRow).join("") : "<p>No spells found.</p>";
+function closeFlavour(){
+  $("#flavour-modal").classList.remove("open");
+  $("#flavour-backdrop").classList.remove("open");
 }
 
-/* ---------------------------
-   Template chooser & export
----------------------------- */
-function openTemplateChooser(spellId){
-  CHOOSE_FOR_ID = String(spellId);
-  const sp = CACHE_SPELL_BY_ID.get(CHOOSE_FOR_ID);
-  $("#tmpl-spell-name").textContent = sp ? sp.name : `#${CHOOSE_FOR_ID}`;
-  $("#tmpl-modal").classList.remove("hidden");
-  $("#tmpl-modal").setAttribute("aria-hidden","false");
-}
-function closeTemplateChooser(){
-  $("#tmpl-modal").classList.add("hidden");
-  $("#tmpl-modal").setAttribute("aria-hidden","true");
-}
+async function continueExport(){
+  try{
+    const res = await fetch(`${API_BASE}/spells/${encodeURIComponent(EXPORT_TARGET)}`);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    const sp = data.spell;
 
-async function exportFoundry(type /* 'active' | 'passive' */){
-  const id = CHOOSE_FOR_ID;
-  if (!id) return closeTemplateChooser();
-  // fetch full spell doc (has effects ids)
-  const r = await fetch(`${API_BASE}/spells/${encodeURIComponent(id)}`);
-  const j = await r.json();
-  const spell = j.spell || CACHE_SPELL_BY_ID.get(String(id));
-  if (!spell) { alert("Spell not found"); return closeTemplateChooser(); }
+    // combine exportable fields
+    const fields = [
+      ["MP Cost", sp.mp_cost],
+      ["EN Cost", sp.en_cost],
+      ["Activation", sp.activation],
+      ["Range", sp.range],
+      ["AoE", sp.aoe],
+      ["Duration", sp.duration],
+      ["Category", sp.category],
+    ];
 
-  // derive complexity: if any involved school is Complex
-  const schoolIds = (spell.schools || []).map(s => String(s.id)); // from list_spells
-  let complex = false;
-  for (const sid of schoolIds) {
-    const sch = SCHOOL_BY_ID[sid];
-    if (sch && String(sch.school_type || "").toLowerCase() === "complex") { complex = true; break; }
+    // build description HTML
+    const flavourHTML = $("#flavour-editor").innerHTML.trim();
+    const line = `<hr style="border:0;border-top:1px solid #c02d2d;margin:10px 0;">`;
+    const italicOpen = `<div style="font-style:italic">`;
+    const italicClose = `</div>`;
+
+    // resolve effects with names + descriptions
+    const byId = {};
+    ALL_EFFECTS.forEach(e => byId[String(e.id)] = e);
+
+    // count occurrences of each effect
+    const counts = {};
+    (sp.effects || []).forEach(eid => {
+        const key = String(eid);
+        counts[key] = (counts[key] || 0) + 1;
+    });
+
+    // now render unique lines
+    const effectLines = Object.entries(counts).map(([eid, count]) => {
+        const e = byId[eid] || { name: `[${eid}]`, description: "" };
+        const desc = e.description || "";
+        const suffix = count > 1 ? ` [x${count}]` : "";
+        return `<div><b>${e.name}${suffix}</b>: ${desc}</div>`;
+    }).join("");
+
+    const descHTML =
+      (flavourHTML ? `${flavourHTML}${line}` : "") +
+      `${italicOpen}${effectLines}${italicClose}`;
+
+    // fill UI
+    $("#exp-title").textContent = `${sp.name} [${sp.id}]`;
+
+    const fieldsWrap = $("#exp-fields");
+    fieldsWrap.innerHTML = "";
+    fields.forEach(([label, val])=>{
+      const id = `copy-${label.replace(/\s+/g,'-').toLowerCase()}`;
+      fieldsWrap.insertAdjacentHTML("beforeend", `
+        <div style="display:flex; justify-content:space-between; align-items:center; border:1px solid #c02d2d; padding:10px; border-radius:10px;">
+          <div><strong>${label}:</strong> <span id="${id}-val">${val}</span></div>
+          <button class="btn btn-secondary" onclick="copyText('${id}-val')">Copy</button>
+        </div>
+      `);
+    });
+
+    $("#description-preview").innerHTML = descHTML;
+
+    // copy description button (HTML + plain)
+    $("#copy-description").onclick = () => copyRich(descHTML);
+
+    // Show export section
+    closeFlavour();
+    $("#export-view").style.display = "block";
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  }catch(e){
+    alert("Export failed: " + e.message);
   }
-
-  // build description (join effect names + descriptions)
-  const effectIds = (spell.effects || []).map(String);
-  const descLines = [];
-  let actif = false;
-  for (const eid of effectIds) {
-    const ef = EFFECT_BY_ID[eid];
-    if (!ef) continue;
-    const n = ef.name || `Effect ${eid}`;
-    const d = (ef.description || "").trim();
-    if (/\[active\]|\(active\)/i.test(d)) actif = true;
-    descLines.push(`• ${n}: ${d || "(no description)"}`);
-  }
-  const description = descLines.join("\n");
-
-  // Source = name + [ID]
-  const source = `${spell.name} [${spell.id}]`;
-
-  // Create export object from template
-  let out = (type === "active") ? structuredClone(BASE_ACTIVE) : structuredClone(BASE_PASSIVE);
-
-  // Common props
-  out.name = spell.name;
-  out.system.props.name = spell.name;
-  out.system.props.spell_category = spell.category || "Novice";
-  out.system.props.source = source;
-  out.system.props.complexx = !!complex;
-  // description field
-  // (If you later store a top-level spell description, swap this in.)
-  if (type === "active") {
-    // Active-specific fills
-    out.system.props.desc = description;
-    out.system.props.act = spell.activation || "Action";
-    out.system.props.portee = (Number(spell.range) === 0 ? "Self" : String(spell.range));
-    out.system.props.zone = spell.aoe || "Square";
-
-    // EN cost into cout_table (row 0, ressource enb)
-    const en = Number(spell.en_cost ?? 0);
-    if (!out.system.props.cout_table) out.system.props.cout_table = {"0":{"$deleted":false,"valeur":"","ressource":"enb"}};
-    if (!out.system.props.cout_table["0"]) out.system.props.cout_table["0"] = {"$deleted":false,"valeur":"","ressource":"enb"};
-    out.system.props.cout_table["0"].valeur = String(isFinite(en) ? en : 0);
-
-    // actif flag: 1 if any effect description has [Active] or (Active)
-    out.system.props.actif = !!actif;
-  } else {
-    // Passive-specific fills
-    out.system.props.desc = description;
-  }
-
-  // IDs / uuids freshen (nice-to-have)
-  const newId = randId();
-  out._id = newId;
-  if (out.system?.props) {
-    out.system.props.id = newId;
-    out.system.props.uuid = "Item."+newId;
-  }
-  if (out.uniqueId) out.uniqueId = newId;
-
-  // filename & download
-  const kind = (type === "active") ? "active" : "passive";
-  const filename = `fvtt-spell-${sanitize(spell.name)}-${spell.id}-${kind}.json`;
-  const blob = new Blob([JSON.stringify(out, null, 2)], {type: "application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 2000);
-  closeTemplateChooser();
 }
 
-function sanitize(s){ return String(s||"spell").replace(/[^\w\-]+/g,"_"); }
+// ----- copy helpers (preserve formatting)
+async function copyRich(html){
+  try{
+    const blobHtml = new Blob([html], { type: "text/html" });
+    // fallback plain text (strip tags)
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    const plain = tmp.innerText;
 
-/* ---------------------------
-   Events & boot
----------------------------- */
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/html": blobHtml,
+        "text/plain": new Blob([plain], { type: "text/plain" })
+      })
+    ]);
+    alert("Description copied (with formatting).");
+  }catch(err){
+    // fallback: select element content
+    const el = $("#description-preview");
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand("copy");
+    sel.removeAllRanges();
+    alert("Description copied.");
+  }
+}
+
+function copyText(spanId){
+  const text = document.getElementById(spanId).innerText;
+  navigator.clipboard.writeText(String(text)).then(
+    ()=>alert("Copied."),
+    ()=>alert("Copy failed.")
+  );
+}
+
+// ----- init
+function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+favOnlyEl.addEventListener("change", fetchSpells);
+
 document.addEventListener("DOMContentLoaded", async ()=>{
+  // load schools first (needed to map effects)
   await loadSchools();
   await loadEffects();
   await fetchSpells();
 
-  const run = debounce(fetchSpells, 250);
+  const run = debounce(fetchSpells, 300);
   nameEl.addEventListener("input", run);
   categoryEl.addEventListener("change", run);
   schoolEl.addEventListener("change", run);
-  $("#clear-filters").addEventListener("click", () => {
-    nameEl.value = ""; categoryEl.value = ""; schoolEl.value = ""; fetchSpells();
+  $("#clear-filters").addEventListener("click", ()=>{
+    nameEl.value=""; categoryEl.value=""; schoolEl.value=""; fetchSpells();
   });
 
-  // modal buttons
-  $("#tmpl-cancel").addEventListener("click", (e)=>{ e.preventDefault(); closeTemplateChooser(); });
-  $("#tmpl-active").addEventListener("click", (e)=>{ e.preventDefault(); exportFoundry("active"); });
-  $("#tmpl-passive").addEventListener("click", (e)=>{ e.preventDefault(); exportFoundry("passive"); });
-  $("#tmpl-modal").addEventListener("click", (e)=>{ if (e.target.id === "tmpl-modal") closeTemplateChooser(); });
+  $("#flavour-close").addEventListener("click", closeFlavour);
+  $("#flavour-cancel").addEventListener("click", closeFlavour);
+  $("#flavour-continue").addEventListener("click", continueExport);
+  $("#flavour-backdrop").addEventListener("click", closeFlavour);
+
+  // ESC to close modal
+  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeFlavour(); });
 });
 </script>
 </body>
