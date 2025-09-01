@@ -164,7 +164,7 @@ class Spell:
         distinct = len({sid for sid in non_upgrade_ids if sid})
         # At least 1 school; each extra non-upgrade school costs (+1 MP, +5 EN)
         extra_count = max(distinct, 1) - 1
-        sch_mp, sch_en = extra_count, 5 * extra_count
+        sch_mp, sch_en = 5 * extra_count, extra_count
 
         # ----- totals -----
         mp_total = act_mp + rng_mp + aoe_mp + dur_mp + eff_mp + sch_mp
