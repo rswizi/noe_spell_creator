@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Create an Apotheosis</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); }
+    .scroll-pad { max-height: 56vh; overflow:auto; border:1px solid #222; border-radius:10px; padding:10px; }
+    .kv { display:grid; grid-template-columns: auto 1fr; gap:8px 12px; align-items:center; }
+    .pill { display:inline-block; padding:2px 8px; border:1px solid #444; border-radius:999px; margin:2px 4px 0 0; font-size:.9rem; }
+    .muted { opacity:.8 }
+    .small { font-size:.9rem }
+    .row { display:flex; gap:10px; align-items:center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Create an Apotheosis</h1>
+
+    <div class="home-card">
+      <div class="grid">
+        <div>
+          <label>Name</label>
+          <input id="apo-name" type="text" placeholder="e.g. Ascension of Thorns" />
+        </div>
+        <div>
+          <label>Stage</label>
+          <select id="apo-stage">
+            <option value="1">Stage I</option>
+            <option value="2">Stage II</option>
+            <option value="3">Stage III</option>
+            <option value="4">Stage IV</option>
+            <option value="5">Stage V</option>
+          </select>
+        </div>
+        <div>
+          <label>Characteristic Value</label>
+          <input id="apo-char" type="number" step="1" value="0" />
+        </div>
+      </div>
+
+      <label style="margin-top:10px;">Description</label>
+      <textarea id="apo-desc" rows="4" placeholder="Describe the Apotheosis..."></textarea>
+    </div>
+
+    <div class="home-card">
+      <h3>Constraints</h3>
+
+      <div class="row">
+        <input id="c-filter" type="text" placeholder="Filter by name…" />
+        <button id="c-clear" class="btn btn-secondary small">Reset</button>
+      </div>
+
+      <div class="grid" style="margin-top:10px;">
+        <div>
+          <div class="small muted" style="margin-bottom:4px;">Available</div>
+          <div class="scroll-pad">
+            <select id="c-available" size="12" style="width:100%;"></select>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button id="c-add" class="btn small">Add →</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="small muted" style="margin-bottom:4px;">Selected</div>
+          <div class="scroll-pad">
+            <select id="c-selected" size="12" style="width:100%;"></select>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button id="c-remove" class="btn btn-secondary small">← Remove</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="small muted" style="margin-bottom:4px;">Constraint Info</div>
+          <div id="c-info" class="scroll-pad small muted">Select a constraint to see details.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="home-card">
+      <h3>Live Summary</h3>
+      <div class="grid">
+        <div>
+          <div class="kv">
+            <div><strong>Base Stability</strong></div><div id="base-stab">—</div>
+            <div><strong>Base Amplitude</strong></div><div id="base-amp">—</div>
+            <div><strong>Difficulty (Σ constraints)</strong></div><div id="diff-sum">—</div>
+            <div><strong>Extra Stab. Penalty</strong></div><div id="stab-pen-sum">—</div>
+          </div>
+        </div>
+        <div>
+          <div class="kv">
+            <div><strong>Power</strong></div><div id="out-power">—</div>
+            <div><strong>Stability</strong></div><div id="out-stab">—</div>
+            <div><strong>Amplitude</strong></div><div id="out-amp">—</div>
+          </div>
+        </div>
+      </div>
+
+      <hr style="border:0;border-top:1px solid #222;margin:14px 0;">
+
+      <h4>Trading</h4>
+      <div class="small muted" style="margin-bottom:6px;">Allocate Power or Stability into Amplitude / Stability.</div>
+
+      <div class="kv">
+        <div>Power → Stability</div>
+        <div>
+          <input id="trade-p2s" type="range" min="0" max="0" step="1" value="0" />
+          <span class="pill" id="pill-p2s">0</span>
+        </div>
+
+        <div>Power → Amplitude</div>
+        <div>
+          <input id="trade-p2a" type="range" min="0" max="0" step="1" value="0" />
+          <span class="pill" id="pill-p2a">0</span>
+        </div>
+
+        <div>Stability → Amplitude</div>
+        <div>
+          <input id="trade-s2a" type="range" min="0" max="0" step="1" value="0" />
+          <span class="pill" id="pill-s2a">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="home-card">
+      <button id="save" class="btn">💾 Save</button>
+      <a class="btn btn-secondary" href="apotheosis_home.html">← Back</a>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "";
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+/* ---------- Tunable baselines (adjust when you wire real formula) ---------- */
+function baseStabilityForStage(stage){ stage = Number(stage||1); return 10 + 5*stage; }
+function baseAmplitudeForStage(stage){ stage = Number(stage||1); return 0 + 1*(stage-1); }
+
+/* Constraint shape (expected from backend)
+   { id, name, description, difficulty, stability_penalty?, amplitude_bonus? } */
+let ALL_CONSTRAINTS = [];
+let FILTER = "";
+
+// Load constraints
+async function loadConstraints(){
+  const res = await fetch(`${API_BASE}/apoth/constraints`);
+  const data = await res.json();
+  ALL_CONSTRAINTS = (data.constraints || []).map(c => ({
+    id: String(c.id),
+    name: c.name || `C-${c.id}`,
+    description: c.description || "",
+    difficulty: Number(c.difficulty || 0),
+    stability_penalty: Number(c.stability_penalty || 0),
+    amplitude_bonus: Number(c.amplitude_bonus || 0),
+  }));
+  refreshAvailable();
+}
+
+function matches(c){ return !FILTER || c.name.toLowerCase().includes(FILTER); }
+
+function refreshAvailable(){
+  const av = $("#c-available");
+  const selectedIds = new Set($$("#c-selected option").map(o => o.value));
+  const list = ALL_CONSTRAINTS.filter(c => matches(c) && !selectedIds.has(c.id));
+  av.innerHTML = list.map(c => `<option value="${c.id}">[${c.id}] ${c.name}</option>`).join("");
+  $("#c-info").innerHTML = "Select a constraint to see details.";
+}
+
+function addSelected(){
+  const av = $("#c-available");
+  const sel = $("#c-selected");
+  Array.from(av.selectedOptions).forEach(opt=>{
+    const c = ALL_CONSTRAINTS.find(x=>x.id===opt.value);
+    if (!c) return;
+    const o = document.createElement("option");
+    o.value = c.id; o.textContent = `[${c.id}] ${c.name}`;
+    sel.appendChild(o);
+  });
+  refreshAvailable();
+  recalc();
+}
+function removeSelected(){
+  const sel = $("#c-selected");
+  Array.from(sel.selectedOptions).forEach(opt=>opt.remove());
+  refreshAvailable();
+  recalc();
+}
+function selectedConstraintDocs(){
+  const ids = $$("#c-selected option").map(o=>o.value);
+  return ids.map(id => ALL_CONSTRAINTS.find(c=>c.id===id)).filter(Boolean);
+}
+
+function showConstraintInfoFrom(el){
+  const id = el.value;
+  const c = ALL_CONSTRAINTS.find(x=>x.id===id);
+  const wrap = $("#c-info");
+  if (!c) { wrap.textContent = "—"; return; }
+  wrap.innerHTML = `
+    <div><strong>${c.name}</strong></div>
+    <div class="small muted">${c.description || "(No description)"}</div>
+    <div style="margin-top:6px;">
+      <span class="pill">Difficulty: ${c.difficulty}</span>
+      <span class="pill">Stability Penalty: ${c.stability_penalty}</span>
+      <span class="pill">Amplitude Bonus: ${c.amplitude_bonus}</span>
+    </div>
+  `;
+}
+
+/* ----------- Live math ------------- */
+function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+
+function recalc(){
+  const stage = Number($("#apo-stage").value || 1);
+  const charV = Number($("#apo-char").value || 0);
+
+  const cons = selectedConstraintDocs();
+  const diffSum = cons.reduce((s,c)=>s + (c.difficulty||0), 0);
+  const stabPen = cons.reduce((s,c)=>s + (c.stability_penalty||0), 0);
+  const ampBonus= cons.reduce((s,c)=>s + (c.amplitude_bonus||0), 0);
+
+  const baseStab = baseStabilityForStage(stage);
+  const baseAmp  = baseAmplitudeForStage(stage) + ampBonus;
+
+  // Raw stats before trades
+  const rawPower = charV + diffSum;
+  const rawStab  = baseStab - diffSum - stabPen;
+  const rawAmp   = baseAmp;
+
+  // Max allocatable for sliders
+  const p2s = $("#trade-p2s"), p2a = $("#trade-p2a"), s2a = $("#trade-s2a");
+
+  // Clamp slider maxes so we don't overspend
+  p2s.max = Math.max(0, rawPower);
+  p2a.max = Math.max(0, rawPower - Number(p2s.value||0));
+  // stability available after p2s goes in
+  const stabAfterP2S = rawStab + Number(p2s.value||0);
+  s2a.max = Math.max(0, stabAfterP2S);
+
+  // Re-clamp current values if needed
+  p2s.value = clamp(Number(p2s.value||0), 0, Number(p2s.max));
+  p2a.value = clamp(Number(p2a.value||0), 0, Number(p2a.max));
+  s2a.value = clamp(Number(s2a.value||0), 0, Number(s2a.max));
+
+  const tp2s = Number(p2s.value||0);
+  const tp2a = Number(p2a.value||0);
+  const ts2a = Number(s2a.value||0);
+
+  // After trades
+  const power = rawPower - tp2s - tp2a;
+  const stab  = rawStab  + tp2s - ts2a;
+  const amp   = rawAmp   + tp2a + ts2a;
+
+  // UI
+  $("#base-stab").textContent = baseStab;
+  $("#base-amp").textContent  = baseAmp;
+  $("#diff-sum").textContent  = diffSum;
+  $("#stab-pen-sum").textContent = stabPen;
+
+  $("#out-power").textContent = power;
+  $("#out-stab").textContent  = stab;
+  $("#out-amp").textContent   = amp;
+
+  $("#pill-p2s").textContent = tp2s;
+  $("#pill-p2a").textContent = tp2a;
+  $("#pill-s2a").textContent = ts2a;
+}
+
+function payload(){
+  return {
+    name: $("#apo-name").value.trim() || "Untitled Apotheosis",
+    description: $("#apo-desc").value.trim(),
+    stage: Number($("#apo-stage").value||1),
+    characteristic: Number($("#apo-char").value||0),
+    constraints: $$("#c-selected option").map(o=>o.value),
+    // computed
+    power: Number($("#out-power").textContent||0),
+    stability: Number($("#out-stab").textContent||0),
+    amplitude: Number($("#out-amp").textContent||0),
+    trades: {
+      power_to_stability: Number($("#pill-p2s").textContent||0),
+      power_to_amplitude: Number($("#pill-p2a").textContent||0),
+      stability_to_amplitude: Number($("#pill-s2a").textContent||0),
+    }
+  };
+}
+
+async function save(){
+  const token = localStorage.getItem("auth_token") || "";
+  const res = await fetch(`${API_BASE}/apoth/create`, {
+    method: "POST",
+    headers: {
+      "Content-Type":"application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify(payload())
+  });
+  const j = await res.json().catch(()=>({}));
+  if (res.ok && j.status !== "error") {
+    alert("Saved.");
+    location.href = "apotheosis_browse.html";
+  } else {
+    alert(j.message || "Save failed.");
+  }
+}
+
+/* ---------- Events ---------- */
+document.addEventListener("DOMContentLoaded", async ()=>{
+  await loadConstraints();
+  recalc();
+
+  $("#c-filter").addEventListener("input", ()=>{
+    FILTER = $("#c-filter").value.trim().toLowerCase();
+    refreshAvailable();
+  });
+  $("#c-clear").addEventListener("click", ()=>{ $("#c-filter").value=""; FILTER=""; refreshAvailable(); });
+
+  $("#c-available").addEventListener("change", (e)=>showConstraintInfoFrom(e.target));
+  $("#c-selected").addEventListener("change",  (e)=>showConstraintInfoFrom(e.target));
+
+  $("#c-add").addEventListener("click", addSelected);
+  $("#c-remove").addEventListener("click", removeSelected);
+
+  ["apo-stage","apo-char"].forEach(id => document.getElementById(id).addEventListener("input", recalc));
+  ["trade-p2s","trade-p2a","trade-s2a"].forEach(id => document.getElementById(id).addEventListener("input", recalc));
+
+  $("#save").addEventListener("click", save);
+});
+</script>
+</body>
+</html>

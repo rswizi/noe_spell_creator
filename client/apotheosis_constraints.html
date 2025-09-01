@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Manage Constraints (Moderator)</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .scroll-pad { max-height: 64vh; overflow:auto; }
+    .row{ display:flex; gap:8px; align-items:center; }
+    .mini{ font-size:.9rem; opacity:.9 }
+    .effect-entry{ display:grid; grid-template-columns: 1fr 2fr 120px 150px; gap:8px; padding:8px 0; border-bottom:1px solid #222; }
+    .pill{ display:inline-block; padding:2px 8px; border:1px solid #444; border-radius:999px; }
+    .modal{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:1000; padding:16px; }
+    .modal-card{ width:min(780px,96vw); max-height:90vh; overflow:auto; background:#111; color:#eee; border-radius:16px; padding:18px 20px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+    .modal-close{ float:right; font-size:26px; background:transparent; border:0; color:#aaa; cursor:pointer; }
+    .modal-close:hover{ color:#fff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Constraints</h1>
+
+    <div class="home-card">
+      <div class="row">
+        <input id="f-name" type="text" placeholder="Filter by name…" />
+        <button id="f-reset" class="btn btn-secondary small">Reset</button>
+        <div style="margin-left:auto;">
+          <button id="btn-dupes" class="btn btn-secondary">Delete Duplicates…</button>
+          <a class="btn btn-secondary" href="apotheosis_home.html">Back</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="home-card scroll-pad" id="list"></div>
+  </div>
+
+  <!-- Duplicates modal -->
+  <div id="dupe-modal" class="modal" style="display:none;">
+    <div class="modal-card">
+      <button id="dupe-close" class="modal-close">×</button>
+      <h3>Duplicate Constraints</h3>
+      <p class="mini">These groups share the exact same <em>Name</em> and <em>Description</em>. Keep the first in each group and delete the others?</p>
+      <div id="dupe-wrap" class="scroll-pad" style="border:1px solid #222; border-radius:10px; padding:10px; max-height:50vh;"></div>
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button id="dupe-apply" class="btn">Delete All Duplicates</button>
+        <button id="dupe-cancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "";
+const role = (localStorage.getItem("auth_role")||"").toLowerCase();
+if (!(role==="admin" || role==="moderator")) {
+  alert("Forbidden: moderators/admins only.");
+  location.href = "apotheosis_home.html";
+}
+
+const $=s=>document.querySelector(s);
+let CACHE=[];
+
+function row(c){
+  return `
+    <div class="effect-entry" data-id="${c.id}">
+      <div>
+        <div class="mini" style="opacity:.7">[${c.id}]</div>
+        <input class="ed-name" value="${c.name||""}">
+        <div class="mini" style="margin-top:4px;">Diff: <span class="pill">${c.difficulty}</span> · Stab: <span class="pill">${c.stability_penalty}</span> · Amp: <span class="pill">${c.amplitude_bonus}</span></div>
+      </div>
+      <div>
+        <textarea class="ed-desc" rows="2">${c.description||""}</textarea>
+      </div>
+      <div>
+        <input class="ed-diff" type="number" step="1" value="${c.difficulty||0}" />
+        <input class="ed-stab" type="number" step="1" value="${c.stability_penalty||0}" />
+        <input class="ed-amp"  type="number" step="1" value="${c.amplitude_bonus||0}" />
+      </div>
+      <div class="row">
+        <button class="btn btn-secondary small" onclick="saveOne('${c.id}')">Save</button>
+        <button class="btn small" onclick="delOne('${c.id}')">Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+function render(){
+  const f = $("#f-name").value.trim().toLowerCase();
+  const list = f ? CACHE.filter(c=>(c.name||"").toLowerCase().includes(f)) : CACHE.slice();
+  $("#list").innerHTML = list.length ? list.map(row).join("") : `<p>No constraints.</p>`;
+}
+
+async function load(){
+  const res = await fetch(`${API_BASE}/apoth/constraints`);
+  const j = await res.json().catch(()=>({}));
+  CACHE = (j.constraints||[]).map(c=>({
+    id:String(c.id), name:c.name||"", description:c.description||"",
+    difficulty:+(c.difficulty||0), stability_penalty:+(c.stability_penalty||0), amplitude_bonus:+(c.amplitude_bonus||0)
+  }));
+  render();
+}
+
+async function saveOne(id){
+  const el = document.querySelector(`[data-id="${id}"]`);
+  const payload = {
+    name: el.querySelector(".ed-name").value.trim(),
+    description: el.querySelector(".ed-desc").value.trim(),
+    difficulty: +el.querySelector(".ed-diff").value,
+    stability_penalty: +el.querySelector(".ed-stab").value,
+    amplitude_bonus: +el.querySelector(".ed-amp").value
+  };
+  const token = localStorage.getItem("auth_token")||"";
+  const r = await fetch(`${API_BASE}/apoth/constraints/${encodeURIComponent(id)}`, {
+    method:"PUT",
+    headers:{ "Content-Type":"application/json", ...(token?{ "Authorization":`Bearer ${token}`}:{}) },
+    body: JSON.stringify(payload)
+  });
+  const j = await r.json().catch(()=>({}));
+  if (r.ok && j.status!=="error") {
+    alert("Saved.");
+    load();
+  } else {
+    alert(j.message||"Save failed.");
+  }
+}
+
+async function delOne(id){
+  if (!confirm("Delete this constraint?")) return;
+  const token = localStorage.getItem("auth_token")||"";
+  const r = await fetch(`${API_BASE}/apoth/constraints/${encodeURIComponent(id)}`, {
+    method:"DELETE",
+    headers:{ ...(token?{ "Authorization":`Bearer ${token}`}:{}) }
+  });
+  const j = await r.json().catch(()=>({}));
+  if (r.ok && j.status!=="error") {
+    load();
+  } else {
+    alert(j.message||"Delete failed.");
+  }
+}
+
+/* ---- Duplicates (client-side) ---- */
+function findDupes(){
+  const map = new Map(); // key: name||"" + "||" + desc||""
+  for (const c of CACHE){
+    const key = (c.name||"").trim().toLowerCase()+"||"+(c.description||"").trim().toLowerCase();
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(c);
+  }
+  return Array.from(map.values()).filter(arr=>arr.length>1);
+}
+
+function openDupeModal(){
+  const groups = findDupes();
+  const wrap = $("#dupe-wrap");
+  if (!groups.length) {
+    wrap.innerHTML = "<p>No duplicates found.</p>";
+  } else {
+    wrap.innerHTML = groups.map((arr,gi)=>{
+      const rows = arr.map((c,i)=>`<li>${i===0?"<strong>KEEP</strong>":"<span style='color:#ff7878'>DELETE</span>"} — [${c.id}] ${c.name}</li>`).join("");
+      return `<div style="margin:10px 0;"><div><strong>Group ${gi+1}</strong></div><ul style="margin-left:18px">${rows}</ul></div>`;
+    }).join("");
+  }
+  document.getElementById("dupe-modal").style.display="grid";
+
+  // Bind apply
+  document.getElementById("dupe-apply").onclick = async ()=>{
+    const token = localStorage.getItem("auth_token")||"";
+    const groups2 = findDupes();
+    if (!groups2.length) { alert("No duplicates."); return; }
+    // Client-side deletion plan: keep first id in each group
+    const toDelete = [];
+    groups2.forEach(arr => arr.slice(1).forEach(c => toDelete.push(c.id)));
+    if (!toDelete.length) { alert("Nothing to delete."); return; }
+
+    // If you add a server endpoint to dedupe, call it here. For now, batch delete:
+    let ok=0, fail=0;
+    for (const id of toDelete){
+      const r = await fetch(`${API_BASE}/apoth/constraints/${encodeURIComponent(id)}`, {
+        method:"DELETE",
+        headers:{ ...(token?{ "Authorization":`Bearer ${token}`}:{}) }
+      });
+      if (r.ok) ok++; else fail++;
+    }
+    alert(`Deleted ${ok} duplicate(s). ${fail?fail+" failed.":""}`);
+    document.getElementById("dupe-modal").style.display="none";
+    load();
+  };
+}
+
+document.addEventListener("DOMContentLoaded", async ()=>{
+  await load();
+  $("#f-name").addEventListener("input", render);
+  $("#f-reset").addEventListener("click", ()=>{ $("#f-name").value=""; render(); });
+  $("#btn-dupes").addEventListener("click", openDupeModal);
+  $("#dupe-close").addEventListener("click", ()=>$("#dupe-modal").style.display="none");
+  $("#dupe-cancel").addEventListener("click", ()=>$("#dupe-modal").style.display="none");
+  $("#dupe-modal").addEventListener("click", e=>{ if(e.target.id==="dupe-modal") $("#dupe-modal").style.display="none"; });
+});
+</script>
+</body>
+</html>

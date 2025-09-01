@@ -46,9 +46,9 @@
     </div>
   </div>
 
-  <!-- Flavour modal -->
-  <div id="flavour-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-  <div id="flavour-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="flavour-title" aria-hidden="true">
+  <!-- Flavour modal (explicitly hidden by default) -->
+  <div id="flavour-backdrop" class="modal-backdrop" aria-hidden="true" style="display:none;"></div>
+  <div id="flavour-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="flavour-title" aria-hidden="true" style="display:none;">
     <div class="modal-card" style="max-width:720px;">
       <header>
         <div class="modal-title" id="flavour-title">Export Spell — Add Flavour</div>
@@ -117,6 +117,23 @@ let ALL_EFFECTS = [];   // to resolve effect names/descriptions in export
 
 /* ---------- UI helpers ---------- */
 function execRT(cmd) { document.execCommand(cmd, false, null); }
+
+function showModal() {
+  const modal = $("#flavour-modal");
+  const backdrop = $("#flavour-backdrop");
+  modal.style.display = "grid";       // center via CSS grid
+  backdrop.style.display = "block";
+  modal.setAttribute("aria-hidden","false");
+  backdrop.setAttribute("aria-hidden","false");
+}
+function hideModal() {
+  const modal = $("#flavour-modal");
+  const backdrop = $("#flavour-backdrop");
+  modal.style.display = "none";
+  backdrop.style.display = "none";
+  modal.setAttribute("aria-hidden","true");
+  backdrop.setAttribute("aria-hidden","true");
+}
 
 function rowSpell(s) {
   const schools = (s.schools||[]).map(sc=>sc.name).join(", ") || "—";
@@ -205,13 +222,7 @@ let EXPORT_TARGET = null;
 function openFlavour(spellId){
   EXPORT_TARGET = spellId;
   $("#flavour-editor").innerHTML = ""; // reset
-  $("#flavour-modal").classList.add("open");
-  $("#flavour-backdrop").classList.add("open");
-}
-
-function closeFlavour(){
-  $("#flavour-modal").classList.remove("open");
-  $("#flavour-backdrop").classList.remove("open");
+  showModal();
 }
 
 async function continueExport(){
@@ -272,7 +283,7 @@ async function continueExport(){
     $("#copy-description").onclick = () => copyRich(descHTML);
 
     // Show export section
-    closeFlavour();
+    hideModal();
     $("#export-view").style.display = "block";
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
   }catch(e){
@@ -337,12 +348,17 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     fetchSpells();
   });
 
-  // modal controls
-  $("#flavour-close").addEventListener("click", closeFlavour);
-  $("#flavour-cancel").addEventListener("click", closeFlavour);
+  // modal controls (no class toggling; explicit display changes)
+  $("#flavour-close").addEventListener("click", hideModal);
+  $("#flavour-cancel").addEventListener("click", hideModal);
   $("#flavour-continue").addEventListener("click", continueExport);
-  $("#flavour-backdrop").addEventListener("click", closeFlavour);
-  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeFlavour(); });
+  $("#flavour-backdrop").addEventListener("click", hideModal);
+  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") hideModal(); });
+
+  // Prevent clicks inside the card from closing when backdrop is used
+  $("#flavour-modal").addEventListener("click", (e)=>{
+    if (e.target.id === "flavour-modal") hideModal();
+  });
 });
 </script>
 </body>

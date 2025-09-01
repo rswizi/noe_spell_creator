@@ -22,6 +22,7 @@ from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters
 from server.src.objects.effects import load_effect
 from server.src.objects.spells import Spell
 from server.src.modules.category_table import category_for_mp
+from server.src.modules.apotheosis_constants import APO_STAGE_BASE, APO_TYPES, APO_TYPE_BONUS, P2S_COST, P2S_GAIN, P2A_COST, S2A_COST
 
 
 # ---------- Logging ----------
@@ -149,20 +150,18 @@ CLIENT_DIR = BASE_DIR / "client"
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
 # Allow-listed html pages
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools"}
-
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints"}
 
 # ---------- Pages ----------
 @app.get("/", include_in_schema=False)
 def root():
-    return RedirectResponse("/home.html")
+    return RedirectResponse("/portal.html")
 
 @app.get("/{page}.html", include_in_schema=False)
 def serve_page(page: str):
     if page in ALLOWED_PAGES:
         return FileResponse(CLIENT_DIR / f"{page}.html")
     raise HTTPException(404, "Page not found")
-
 
 # ---------- Auth ----------
 @app.post("/auth/login")
@@ -1248,6 +1247,238 @@ def admin_delete_school(school_id: str, request: Request, force: bool = Query(de
 
     sch.delete_one({"id": school_id})
     return {"status":"success","deleted":school_id,"patch_text":"\n".join(lines) + "\n"}
+
+# ========================= Apotheosis 
+def compute_apotheosis_stats(
+    characteristic_value: int,
+    stage: str,
+    apo_type: str,
+    constraint_ids: list[str],
+    trade_p2s_steps: int = 0,
+    trade_p2a_steps: int = 0,
+    trade_s2a_steps: int = 0,
+) -> dict:
+
+    col = get_col("apotheosis_constraints")
+    docs = list(col.find({"id": {"$in": [str(x) for x in (constraint_ids or [])]}}))
+
+    total_difficulty = sum(int(d.get("difficulty", 0)) for d in docs)
+
+    stability = apo_stage_stability(stage)
+    power     = int(characteristic_value or 0) + total_difficulty
+    amplitude = 0
+
+    tbonus = apo_type_bonus(apo_type)
+    power     += tbonus.get("power", 0)
+    stability += tbonus.get("stability", 0)
+    amplitude += tbonus.get("amplitude", 0)
+
+    for d in docs:
+        stability += int(d.get("stability_delta", 0))
+        if bool(d.get("forbid_p2s", False)):
+            forbid_p2s = True
+
+    p2s_applied = 0
+    if not forbid_p2s and trade_p2s_steps > 0:
+        for _ in range(int(trade_p2s_steps)):
+            if power >= P2S_COST:
+                power -= P2S_COST
+                stability += P2S_GAIN
+                p2s_applied += 1
+            else:
+                break
+
+    p2a_applied = 0
+    if trade_p2a_steps > 0:
+        for _ in range(int(trade_p2a_steps)):
+            if power >= P2A_COST:
+                power -= P2A_COST
+                amplitude += 1
+                p2a_applied += 1
+            else:
+                break
+
+    s2a_applied = 0
+    if trade_s2a_steps > 0:
+        for _ in range(int(trade_s2a_steps)):
+            if stability >= S2A_COST:
+                stability -= S2A_COST
+                amplitude += 1
+                s2a_applied += 1
+            else:
+                break
+
+    diameter = 17 + 2 * max(0, int(amplitude))
+
+    return {
+        "stability": max(0, int(stability)),
+        "power": max(0, int(power)),
+        "amplitude": max(0, int(amplitude)),
+        "diameter": int(diameter),
+        "total_difficulty": int(total_difficulty),
+        "tier": tier_from_total_difficulty(total_difficulty),
+        "flags": {"forbid_p2s": forbid_p2s, "p2s_applied": p2s_applied, "p2a_applied": p2a_applied, "s2a_applied": s2a_applied}
+    }
+
+# ---------- Apotheosis: constraints (list / parse / CRUD) ----------
+@app.get("/apotheosis/constraints")
+def apo_list_constraints(request: Request, name: str | None = Query(default=None), category: str | None = Query(default=None)):
+    require_auth(request, roles=["user","moderator","admin"])  # anyone logged-in can view
+    q = {}
+    if name:
+        q["name"] = {"$regex": name, "$options": "i"}
+    if category:
+        q["category"] = {"$regex": category, "$options": "i"}
+    docs = list(get_col("apotheosis_constraints").find(q, {"_id":0}))
+    docs.sort(key=lambda d: d["name"].lower())
+    return {"status":"success","constraints":docs}
+
+@app.post("/apotheosis/constraints/bulk_create")
+async def apo_constraints_bulk_create(request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    body = await request.json()
+    items = body.get("constraints") or []
+
+    if not isinstance(items, list) or not items:
+        return JSONResponse({"status":"error","message":"constraints must be a non-empty list"}, status_code=400)
+
+    col = get_col("apotheosis_constraints")
+    created = []
+    for raw in items:
+        name = (raw.get("name") or "").strip()
+        if not name:
+            return JSONResponse({"status":"error","message":"A constraint is missing a name"}, status_code=400)
+        rec = {
+            "id": next_id_str("apotheosis_constraints", padding=4),
+            "name": name,
+            "category": (raw.get("category") or "").strip(),
+            "description": (raw.get("description") or "").strip(),
+            "difficulty": int(raw.get("difficulty", 0)),  # may be negative or zero safely
+            "stability_delta": int(raw.get("stability_delta", 0)),
+            "forbid_p2s": bool(raw.get("forbid_p2s", False)),
+            # optional "series_key" to block picking multiple in the same series (e.g. Danger I/II/III)
+            "series_key": (raw.get("series_key") or "").strip(),
+            # optional type restriction, e.g. "Terrain" for Uncentered I/II
+            "type_restriction": (raw.get("type_restriction") or "").strip(),
+        }
+        col.insert_one(rec)
+        created.append(rec["id"])
+    return {"status":"success","created":created}
+
+@app.put("/apotheosis/constraints/{cid}")
+async def apo_update_constraint(cid: str, request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    body = await request.json()
+    updates = {}
+    for k in ("name","category","description","series_key","type_restriction"):
+        if k in body: updates[k] = (body.get(k) or "").strip()
+    for k in ("difficulty","stability_delta"):
+        if k in body: updates[k] = int(body.get(k) or 0)
+    if "forbid_p2s" in body: updates["forbid_p2s"] = bool(body.get("forbid_p2s"))
+    r = get_col("apotheosis_constraints").update_one({"id": cid}, {"$set": updates})
+    if r.matched_count == 0:
+        return JSONResponse({"status":"error","message":"Constraint not found"}, status_code=404)
+    return {"status":"success","id":cid,"updates":updates}
+
+@app.delete("/apotheosis/constraints/{cid}")
+def apo_delete_constraint(cid: str, request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    get_col("apotheosis_constraints").delete_one({"id": cid})
+    return {"status":"success","deleted":cid}
+
+
+# ---------- Apotheosis: compute (live preview) ----------
+@app.post("/apotheosis/compute")
+async def apo_compute(request: Request):
+    body = await request.json()
+    try:
+        char_val = int(body.get("characteristic_value", 0))
+    except Exception:
+        return JSONResponse({"status":"error","message":"characteristic_value must be an integer"}, status_code=400)
+
+    stage    = body.get("stage") or "Stage I"
+    apo_type = body.get("type") or "Personal"
+    constraints = [str(x).strip() for x in (body.get("constraints") or []) if str(x).strip()]
+    p2s = int(body.get("trade_p2s", 0))
+    p2a = int(body.get("trade_p2a", 0))
+    s2a = int(body.get("trade_s2a", 0))
+
+    stats = compute_apotheosis_stats(char_val, stage, apo_type, constraints, p2s, p2a, s2a)
+    return {"status":"success", **stats}
+
+
+# ---------- Apotheoses (create/browse/favorite) ----------
+@app.post("/apotheoses")
+async def create_apotheosis(request: Request):
+    username, _ = require_auth(request, roles=["user","moderator","admin"])
+    body = await request.json()
+
+    name = (body.get("name") or "Untitled Apotheosis").strip()
+    desc = (body.get("description") or "").strip()
+    apo_type = (body.get("type") or "Personal").strip()
+    stage = (body.get("stage") or "Stage I").strip()
+    characteristic_value = int(body.get("characteristic_value", 0))
+    constraints = [str(x).strip() for x in (body.get("constraints") or []) if str(x).strip()]
+    p2s = int(body.get("trade_p2s", 0)); p2a = int(body.get("trade_p2a", 0)); s2a = int(body.get("trade_s2a", 0))
+
+    stats = compute_apotheosis_stats(characteristic_value, stage, apo_type, constraints, p2s, p2a, s2a)
+
+    aid = next_id_str("apotheoses", padding=4)
+    doc = {
+        "id": aid,
+        "name": name,
+        "description": desc,
+        "type": apo_type,
+        "stage": stage,
+        "characteristic_value": characteristic_value,
+        "constraints": constraints,
+        "trades": {"p2s": p2s, "p2a": p2a, "s2a": s2a},
+        "stats": stats,
+        "creator": username,
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+    get_col("apotheoses").insert_one(dict(doc))
+    return {"status":"success","apotheosis":doc}
+
+@app.get("/apotheoses")
+def list_apotheoses(request: Request, name: str | None = Query(default=None), typ: str | None = Query(default=None), stage: str | None = Query(default=None), favorite: str | None = Query(default=None)):
+    # auth optional; favorites requires auth
+    qp = request.query_params
+    q = {}
+    if name:  q["name"]  = {"$regex": name, "$options": "i"}
+    if typ:   q["type"]  = {"$regex": typ, "$options": "i"}
+    if stage: q["stage"] = {"$regex": stage, "$options": "i"}
+
+    fav_only = str(favorite or "").lower() in ("1","true","yes")
+    if fav_only:
+        user, _ = require_user_doc(request)
+        fav = [str(x) for x in (user.get("fav_apotheoses") or [])]
+        if not fav:
+            return {"status":"success","apotheoses":[]}
+        q["id"] = {"$in": fav}
+
+    docs = list(get_col("apotheoses").find(q, {"_id":0}))
+    docs.sort(key=lambda d: d["name"].lower())
+    return {"status":"success","apotheoses":docs}
+
+@app.get("/apotheoses/{aid}")
+def get_apotheosis(aid: str):
+    doc = get_col("apotheoses").find_one({"id": aid}, {"_id":0})
+    if not doc:
+        raise HTTPException(404, "Apotheosis not found")
+    return {"status":"success","apotheosis":doc}
+
+@app.post("/apotheoses/{aid}/favorite")
+def fav_apotheosis(aid: str, request: Request):
+    user, _ = require_user_doc(request)
+    get_col("users").update_one({"_id": user["_id"]}, {"$addToSet": {"fav_apotheoses": str(aid)}})
+    return {"status":"success","id":aid,"action":"added"}
+
+@app.delete("/apotheoses/{aid}/favorite")
+def unfav_apotheosis(aid: str, request: Request):
+    user, _ = require_user_doc(request)
+    get_col("users").update_one({"_id": user["_id"]}, {"$pull": {"fav_apotheoses": str(aid)}})
+    return {"status":"success","id":aid,"action":"removed"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

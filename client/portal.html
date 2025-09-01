@@ -1,0 +1,49 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8" />
+<title>NoE Manager — Portal</title>
+<link rel="stylesheet" href="/static/style.css" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  .biggrid{max-width:760px;margin:40px auto;display:grid;gap:16px}
+  .hero{font-size:2rem;margin-bottom:8px}
+  .cta{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .cta a{display:block;text-align:center;padding:24px;border-radius:12px;border:1px solid #333;background:#101010}
+  .muted{opacity:.85}
+</style>
+</head><body>
+  <div class="topbar">
+    <h1>NoE Manager</h1>
+    <div class="auth-inline">
+      <div id="user-chip" class="user-chip">
+        <span class="chip-name" id="chip-name"></span>
+        <button id="chip-logout" class="btn linklike">Log Out</button>
+      </div>
+      <button id="open-login" class="btn btn-secondary small">Log In</button>
+      <a id="open-signup" class="btn btn-secondary small" href="signup.html">Sign Up</a>
+    </div>
+  </div>
+
+  <div class="biggrid">
+    <div class="hero">Choose a manager</div>
+    <div class="cta">
+      <a class="btn btn-full" href="home.html">✨ Spell Manager</a>
+      <a class="btn btn-full" href="apotheosis_home.html">🌟 Apotheosis Manager (Bêta)</a>
+    </div>
+    <div class="muted">Use your existing account. Moderators see extra tools inside each manager.</div>
+  </div>
+
+<script>
+const API_BASE = "";
+function setUI(u){const chip=document.getElementById("user-chip"),name=document.getElementById("chip-name");
+  const l=document.getElementById("open-login"),s=document.getElementById("open-signup");
+  if(u){name.textContent=`${u.username} (${u.role})`;chip.style.display="flex";l.style.display="none";s.style.display="none";}
+  else{chip.style.display="none";l.style.display="inline-block";s.style.display="inline-block";}}
+async function me(){const t=localStorage.getItem("auth_token");if(!t){setUI(null);return;}
+  const r=await fetch(`${API_BASE}/auth/me`,{headers:{Authorization:`Bearer ${t}`}});const j=await r.json();
+  if(j.status==="success") setUI(j); else setUI(null);}
+document.getElementById("chip-logout").onclick=async()=>{const t=localStorage.getItem("auth_token");
+  if(t) await fetch(`${API_BASE}/auth/logout`,{method:"POST",headers:{Authorization:`Bearer ${t}`}}); localStorage.clear(); location.reload();}
+document.addEventListener("DOMContentLoaded", me);
+document.getElementById("open-login").onclick=()=>location.href="home.html"; // reuse existing login modal there
+</script>
+</body></html>

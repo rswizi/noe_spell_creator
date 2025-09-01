@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Browse Apotheoses</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .hidden{display:none!important}
+    .scroll-pad { max-height: 64vh; overflow:auto; }
+    .effect-entry{ display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid #222; }
+    .pill{ display:inline-block; padding:2px 8px; border:1px solid #444; border-radius:999px; margin-right:6px; }
+    .modal{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:1000; padding:16px; }
+    .modal-card{ width:min(820px,96vw); max-height:90vh; overflow:auto; background:#111; color:#eee; border-radius:16px; padding:20px 22px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+    .modal-close{ float:right; font-size:28px; line-height:1; background:transparent; border:0; color:#aaa; cursor:pointer; }
+    .modal-close:hover{ color:#fff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Apotheoses</h1>
+
+    <div class="home-card">
+      <div class="filter-bar">
+        <input id="f-name" type="text" placeholder="Filter by name…" />
+        <select id="f-stage">
+          <option value="">All Stages</option>
+          <option value="1">Stage I</option>
+          <option value="2">Stage II</option>
+          <option value="3">Stage III</option>
+          <option value="4">Stage IV</option>
+          <option value="5">Stage V</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="f-star" />
+          <span>Only starred</span>
+        </label>
+        <button id="f-reset">Reset</button>
+      </div>
+    </div>
+
+    <div class="home-card">
+      <div id="results" class="scroll-pad"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="apotheosis_home.html">← Back</a>
+    </div>
+  </div>
+
+  <!-- Details modal -->
+  <div id="modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button id="modal-close" class="modal-close" aria-label="Close">×</button>
+      <h2 id="m-title"></h2>
+      <p id="m-desc" style="opacity:.9"></p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+        <div>
+          <div><strong>Stage:</strong> <span id="m-stage"></span></div>
+          <div><strong>Characteristic:</strong> <span id="m-char"></span></div>
+        </div>
+        <div>
+          <div><strong>Power:</strong> <span id="m-power"></span></div>
+          <div><strong>Stability:</strong> <span id="m-stab"></span></div>
+          <div><strong>Amplitude:</strong> <span id="m-amp"></span></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <strong>Constraints:</strong>
+        <div id="m-constraints" style="margin-top:6px;"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "";
+const $=s=>document.querySelector(s);
+let CACHE = [];
+let STARS = new Set(JSON.parse(localStorage.getItem("apoth_stars")||"[]"));
+
+function starToggle(id){
+  if (STARS.has(id)) STARS.delete(id); else STARS.add(id);
+  localStorage.setItem("apoth_stars", JSON.stringify(Array.from(STARS)));
+  render(CACHE);
+}
+
+function row(a){
+  const starred = STARS.has(a.id);
+  return `
+    <div class="effect-entry">
+      <div style="flex:1;">
+        <div style="font-weight:bold">${a.name} <span style="opacity:.7">[${a.id}]</span></div>
+        <div style="opacity:.85">${a.description||""}</div>
+        <div class="small" style="margin-top:6px;">
+          <span class="pill">Stage ${a.stage}</span>
+          <span class="pill">Power ${a.power}</span>
+          <span class="pill">Stability ${a.stability}</span>
+          <span class="pill">Amplitude ${a.amplitude}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn" onclick="openDetails('${a.id}')">Details</button>
+        <button class="${starred?'btn btn-secondary':'btn'}" onclick="starToggle('${a.id}')">${starred?'Unstar':'Star'}</button>
+      </div>
+    </div>
+  `;
+}
+
+function render(list){
+  const fName = $("#f-name").value.trim().toLowerCase();
+  const fStage = $("#f-stage").value;
+  const onlyStar = $("#f-star").checked;
+
+  let out = list.slice();
+  if (fName) out = out.filter(a => (a.name||"").toLowerCase().includes(fName));
+  if (fStage) out = out.filter(a => String(a.stage)===String(fStage));
+  if (onlyStar) out = out.filter(a => STARS.has(a.id));
+  $("#results").innerHTML = out.length ? out.map(row).join("") : `<p>No results.</p>`;
+}
+
+async function load(){
+  const res = await fetch(`${API_BASE}/apoth/list`);
+  const j = await res.json().catch(()=>({}));
+  CACHE = j.apotheoses || [];
+  render(CACHE);
+}
+
+function openDetails(id){
+  const a = CACHE.find(x=>String(x.id)===String(id));
+  if (!a) return;
+  $("#m-title").textContent = `${a.name} [${a.id}]`;
+  $("#m-desc").textContent  = a.description || "—";
+  $("#m-stage").textContent = a.stage;
+  $("#m-char").textContent  = a.characteristic;
+  $("#m-power").textContent = a.power;
+  $("#m-stab").textContent  = a.stability;
+  $("#m-amp").textContent   = a.amplitude;
+  const cs = (a.constraints||[]).map(c =>
+    `<span class="pill">${c.name||c.id} (${c.difficulty!=null?`diff ${c.difficulty}`:""})</span>`
+  ).join("");
+  $("#m-constraints").innerHTML = cs || "—";
+  $("#modal").classList.remove("hidden");
+  $("#modal").setAttribute("aria-hidden", "false");
+}
+function closeModal(){
+  $("#modal").classList.add("hidden");
+  $("#modal").setAttribute("aria-hidden", "true");
+}
+
+function debounce(fn,ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms)}}
+
+document.addEventListener("DOMContentLoaded", async ()=>{
+  await load();
+  const run = debounce(()=>render(CACHE), 200);
+  $("#f-name").addEventListener("input", run);
+  $("#f-stage").addEventListener("change", run);
+  $("#f-star").addEventListener("change", run);
+  $("#f-reset").addEventListener("click", ()=>{ $("#f-name").value=""; $("#f-stage").value=""; $("#f-star").checked=false; render(CACHE); });
+  $("#modal-close").addEventListener("click", closeModal);
+  $("#modal").addEventListener("click", e=>{ if(e.target.id==="modal") closeModal(); });
+  document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
+});
+</script>
+</body>
+</html>

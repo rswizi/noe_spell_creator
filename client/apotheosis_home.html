@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Apotheosis — Home</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Apotheosis</h1>
+
+    <div class="home-card grid">
+      <a class="btn btn-full" href="apotheosis_create.html">✨ Create an Apotheosis</a>
+      <a class="btn btn-full" href="apotheosis_browse.html">📚 Consult / Star Apotheoses</a>
+    </div>
+
+    <div id="mod-tools" class="home-card grid" style="display:none;">
+      <a class="btn btn-secondary btn-full" href="apotheosis_constraints.html">🛠️ Edit Constraints</a>
+      <a class="btn btn-secondary btn-full" href="apotheosis_parse_constraints.html">📥 Parse/Add Constraints</a>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+    </div>
+  </div>
+
+<script>
+  (function(){
+    const role = (localStorage.getItem("auth_role")||"").toLowerCase();
+    if (role === "admin" || role === "moderator") {
+      document.getElementById("mod-tools").style.display = "grid";
+    }
+  })();
+</script>
+</body>
+</html>

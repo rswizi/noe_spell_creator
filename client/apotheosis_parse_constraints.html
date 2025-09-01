@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Parse/Add Constraints (Moderator)</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <div class="container">
+    <h1>Parse Constraints</h1>
+
+    <div class="home-card">
+      <p class="small" style="opacity:.85;margin-top:0;">
+        Each entry: <code>Name: Description…</code> → <code>DIFFICULTY</code> → <code>STABILITY_PENALTY (optional)</code> → <code>AMPLITUDE_BONUS (optional)</code>.
+        Negative numbers are allowed.
+      </p>
+      <textarea id="raw" rows="14" placeholder="Paste constraints…"></textarea>
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button id="parse" class="btn">Parse</button>
+        <a class="btn btn-secondary" href="apotheosis_home.html">← Back</a>
+      </div>
+    </div>
+
+    <div id="preview-card" class="home-card" style="display:none;">
+      <h3>Preview</h3>
+      <div id="errors" style="color:#ff6b6b;"></div>
+      <div style="overflow:auto;">
+        <table class="table" style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr><th>Name</th><th>Description</th><th>Difficulty</th><th>Stab. Penalty</th><th>Amp. Bonus</th></tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button id="save" class="btn">Confirm & Save</button>
+        <button id="reparse" class="btn btn-secondary">Re-parse</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "";
+const role = (localStorage.getItem("auth_role")||"").toLowerCase();
+if (!(role==="admin" || role==="moderator")) {
+  alert("Forbidden: moderators/admins only.");
+  location.href = "apotheosis_home.html";
+}
+
+let PREVIEW = [];
+
+function isNumLine(s){ return /^-?\d+$/.test((s||"").trim()); }
+
+function parseRaw(text){
+  const lines = text.split(/\r?\n/).map(l=>l.trim());
+  const out = [];
+  let i=0;
+  while(i<lines.length){
+    while(i<lines.length && lines[i]==="") i++;
+    if(i>=lines.length) break;
+
+    const header = lines[i++];
+    if (!header || isNumLine(header)) throw new Error(`Expected "Name: Description" near line ${i}.`);
+    const idx = header.indexOf(":");
+    if(idx===-1) throw new Error(`Missing ":" near line ${i}.`);
+    const name = header.slice(0,idx).trim();
+    let desc  = header.slice(idx+1).trim();
+
+    // collect extra description lines until a numeric
+    while(i<lines.length && lines[i]!=="" && !isNumLine(lines[i])) { desc += (desc?" ":"") + lines[i++]; }
+
+    if (i>=lines.length || !isNumLine(lines[i])) throw new Error(`Missing difficulty for "${name}".`);
+    const difficulty = parseInt(lines[i++],10);
+
+    // optional stability_penalty
+    let stability_penalty = 0;
+    if (i<lines.length && isNumLine(lines[i])) {
+      stability_penalty = parseInt(lines[i++],10);
+    }
+
+    // optional amplitude_bonus
+    let amplitude_bonus = 0;
+    if (i<lines.length && isNumLine(lines[i])) {
+      amplitude_bonus = parseInt(lines[i++],10);
+    }
+
+    out.push({ name, description: desc, difficulty, stability_penalty, amplitude_bonus });
+
+    while(i<lines.length && lines[i]==="") i++;
+  }
+  if (!out.length) throw new Error("No entries parsed.");
+  return out;
+}
+
+function render(){
+  const tb = document.getElementById("tbody");
+  tb.innerHTML = PREVIEW.map((r,idx)=>`
+    <tr>
+      <td><input data-i="${idx}" data-k="name" value="${r.name}"></td>
+      <td><textarea data-i="${idx}" data-k="description" rows="2">${r.description||""}</textarea></td>
+      <td><input data-i="${idx}" data-k="difficulty" value="${r.difficulty}"></td>
+      <td><input data-i="${idx}" data-k="stability_penalty" value="${r.stability_penalty}"></td>
+      <td><input data-i="${idx}" data-k="amplitude_bonus" value="${r.amplitude_bonus}"></td>
+    </tr>
+  `).join("");
+
+  tb.querySelectorAll("input,textarea").forEach(el=>{
+    el.addEventListener("input", (ev)=>{
+      const i = +ev.target.dataset.i;
+      const k = ev.target.dataset.k;
+      let val = ev.target.value;
+      if (["difficulty","stability_penalty","amplitude_bonus"].includes(k)) {
+        val = val.replace(/[^-?\d]/g,"");
+        ev.target.value = val;
+        PREVIEW[i][k] = (val==="" || val==="-") ? 0 : parseInt(val,10);
+      } else {
+        PREVIEW[i][k] = val;
+      }
+    });
+  });
+}
+
+function validate(){
+  const errs=[];
+  PREVIEW.forEach((r,i)=>{
+    if(!r.name) errs.push(`Row ${i+1}: name is empty`);
+    ["difficulty","stability_penalty","amplitude_bonus"].forEach(k=>{
+      if (Number.isNaN(+r[k])) errs.push(`Row ${i+1}: ${k} not a number`);
+    });
+  });
+  return errs;
+}
+
+document.getElementById("parse").addEventListener("click", ()=>{
+  try{
+    PREVIEW = parseRaw(document.getElementById("raw").value);
+    document.getElementById("errors").textContent = "";
+    document.getElementById("preview-card").style.display = "block";
+    render();
+  }catch(e){
+    document.getElementById("preview-card").style.display = "none";
+    document.getElementById("errors").textContent = e.message;
+  }
+});
+document.getElementById("reparse").addEventListener("click", ()=>document.getElementById("parse").click());
+document.getElementById("save").addEventListener("click", async ()=>{
+  const errs = validate();
+  if (errs.length) { document.getElementById("errors").innerHTML = errs.join("<br>"); return; }
+  const token = localStorage.getItem("auth_token") || "";
+  const res = await fetch(`${API_BASE}/apoth/constraints/bulk_create`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...(token?{ "Authorization":`Bearer ${token}` }:{}) },
+    body: JSON.stringify({ constraints: PREVIEW })
+  });
+  const j = await res.json().catch(()=>({}));
+  if (res.ok && j.status!=="error"){
+    alert(`Inserted ${j.created?.length || PREVIEW.length} constraints.`);
+    location.href = "apotheosis_constraints.html";
+  } else {
+    alert(j.message || "Save failed.");
+  }
+});
+</script>
+</body>
+</html>
