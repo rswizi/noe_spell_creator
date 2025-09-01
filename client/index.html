@@ -212,30 +212,33 @@ function filteredEffects() {
 /* ---------- Build rows ---------- */
 function populateEffectSelect(selectEl, list, opts = {}) {
   const { preserveSelection = true, pinSelected = null } = opts;
+
   const prev = preserveSelection ? String(selectEl.value || "") : "";
-  const pinnedId = pinSelected != null && pinSelected !== ""
-    ? String(pinSelected)
-    : (prev || "");
-  
+  const pinnedId =
+    pinSelected != null && pinSelected !== "" ? String(pinSelected) : (prev || "");
+
   selectEl.innerHTML = `<option value="">-- Select Effect --</option>`;
 
-    if (pinnedId && !list.some(e => String(e.id) === pinnedId)) {
+  let addedPinnedKept = false;
+  if (pinnedId && !list.some(e => String(e.id) === pinnedId)) {
     const eff = EFFECTS_BY_ID[pinnedId];
     if (eff) {
       const opt = document.createElement("option");
-      opt.value = eff.id;
+      opt.value = String(eff.id);
       const badge = eff.school_obj?.name
         ? ` — ${eff.school_obj.name}`
         : (eff.school ? ` — ${eff.school}` : "");
       opt.textContent = `[${eff.id}] ${eff.name}${badge} (kept)`;
       selectEl.appendChild(opt);
+      addedPinnedKept = true;
     }
   }
 
   for (const e of list) {
-    if (String(e.id) === pinnedId) continue;
+    if (addedPinnedKept && String(e.id) === pinnedId) continue;
+
     const opt = document.createElement("option");
-    opt.value = e.id;
+    opt.value = String(e.id);
     const schoolBadge = e.school_obj?.name
       ? ` — ${e.school_obj.name}`
       : (e.school ? ` — ${e.school}` : "");
