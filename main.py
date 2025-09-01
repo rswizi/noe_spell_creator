@@ -1353,12 +1353,11 @@ async def apo_constraints_bulk_create(request: Request):
             "name": name,
             "category": (raw.get("category") or "").strip(),
             "description": (raw.get("description") or "").strip(),
-            "difficulty": int(raw.get("difficulty", 0)),  # may be negative or zero safely
+            "difficulty": int(raw.get("difficulty", 0)),
             "stability_delta": int(raw.get("stability_delta", 0)),
+            "amplitude_bonus": int(raw.get("amplitude_bonus", 0)),
             "forbid_p2s": bool(raw.get("forbid_p2s", False)),
-            # optional "series_key" to block picking multiple in the same series (e.g. Danger I/II/III)
             "series_key": (raw.get("series_key") or "").strip(),
-            # optional type restriction, e.g. "Terrain" for Uncentered I/II
             "type_restriction": (raw.get("type_restriction") or "").strip(),
         }
         col.insert_one(rec)
@@ -1386,7 +1385,6 @@ def apo_delete_constraint(cid: str, request: Request):
     get_col("apotheosis_constraints").delete_one({"id": cid})
     return {"status":"success","deleted":cid}
 
-
 # ---------- Apotheosis: compute (live preview) ----------
 @app.post("/apotheosis/compute")
 async def apo_compute(request: Request):
@@ -1405,7 +1403,6 @@ async def apo_compute(request: Request):
 
     stats = compute_apotheosis_stats(char_val, stage, apo_type, constraints, p2s, p2a, s2a)
     return {"status":"success", **stats}
-
 
 # ---------- Apotheoses (create/browse/favorite) ----------
 @app.post("/apotheoses")
@@ -1479,6 +1476,7 @@ def unfav_apotheosis(aid: str, request: Request):
     user, _ = require_user_doc(request)
     get_col("users").update_one({"_id": user["_id"]}, {"$pull": {"fav_apotheoses": str(aid)}})
     return {"status":"success","id":aid,"action":"removed"}
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

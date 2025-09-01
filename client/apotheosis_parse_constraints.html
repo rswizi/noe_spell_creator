@@ -160,6 +160,81 @@ document.getElementById("save").addEventListener("click", async ()=>{
   } else {
     alert(j.message || "Save failed.");
   }
+  
+  function setError(msg){
+    const el = document.getElementById("errors");
+    el.textContent = msg || "";
+    if (msg) el.scrollIntoView({behavior:"smooth", block:"center"});
+  }
+
+  // allow negative integers cleanly; keep a single leading "-" only
+  function cleanIntInput(raw) {
+    let s = String(raw || "").trim();
+    // remove all non-digits except leading "-"
+    s = s.replace(/[^\d-]/g, "");
+    if (s.indexOf("-") > 0) s = s.replace(/-/g, ""); // "-" must be first if present
+    return s === "" || s === "-" ? "0" : s;
+  }
+
+  // hook inputs back into PREVIEW (use cleanIntInput)
+  function render(){
+    const tb = document.getElementById("tbody");
+    tb.innerHTML = PREVIEW.map((r,idx)=>`
+      <tr>
+        <td><input data-i="${idx}" data-k="name" value="${r.name}"></td>
+        <td><textarea data-i="${idx}" data-k="description" rows="2">${r.description||""}</textarea></td>
+        <td><input data-i="${idx}" data-k="difficulty" value="${r.difficulty}"></td>
+        <td><input data-i="${idx}" data-k="stability_penalty" value="${r.stability_penalty}"></td>
+        <td><input data-i="${idx}" data-k="amplitude_bonus" value="${r.amplitude_bonus}"></td>
+      </tr>
+    `).join("");
+
+    tb.querySelectorAll("input,textarea").forEach(el=>{
+      el.addEventListener("input", (ev)=>{
+        const i = +ev.target.dataset.i;
+        const k = ev.target.dataset.k;
+        if (["difficulty","stability_penalty","amplitude_bonus"].includes(k)) {
+          ev.target.value = cleanIntInput(ev.target.value);
+          PREVIEW[i][k] = parseInt(ev.target.value, 10);
+        } else {
+          PREVIEW[i][k] = ev.target.value;
+        }
+      });
+    });
+  }
+
+  document.getElementById("save").addEventListener("click", async ()=>{
+    const errs = validate();
+    if (errs.length){ setError(errs.join("\n")); return; }
+    setError("");
+
+    const token = localStorage.getItem("auth_token") || "";
+    // map stability_penalty -> stability_delta (backend field)
+    const payload = {
+      constraints: PREVIEW.map(r => ({
+        name: r.name,
+        description: r.description || "",
+        difficulty: Number(r.difficulty),
+        stability_delta: Number(r.stability_penalty),
+        amplitude_bonus: Number(r.amplitude_bonus) || 0   // safe to send; see backend fix below
+      }))
+    };
+
+    const res = await fetch(`${API_BASE}/apotheosis/constraints/bulk_create`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", ...(token?{ "Authorization":`Bearer ${token}` }:{}) },
+      body: JSON.stringify(payload)
+    });
+    const j = await res.json().catch(()=>({}));
+
+    if (res.ok && j.status !== "error") {
+      // non-blocking feedback
+      setError("");
+      location.href = "apotheosis_constraints.html";
+    } else {
+      setError(j.message || "Save failed.");
+    }
+  });
 });
 </script>
 </body>
