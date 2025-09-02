@@ -12,7 +12,7 @@ MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://rswizi:Wyp9h8zvnxq69%2Amangodb
 DB_NAME   = os.getenv("DB_NAME", "NoeSpellCreator")
 
 client = MongoClient(settings.mongodb_uri)
-db = client["noe"]
+_db = client["noe"]
 
 def get_db(): return _db
 def get_col(name: str): return _db[name]

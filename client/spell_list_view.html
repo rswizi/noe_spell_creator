@@ -2,64 +2,94 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>NoE — Spell List</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <title>NoE — Spell List (Anti‑overlap Rewrite)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/style.css" />
   <style>
-    /* ===== SCOPE ALL PAGE STYLES TO A ROOT ID TO AVOID CONFLICTS ===== */
-    #sl * { box-sizing: border-box; }
+    /* =============================
+       ANTI-OVERLAP GUARD RAILS
+       - Scope almost everything under #sl
+       - Lock body scroll when any modal is open
+       - Prevent flex overflow by setting min-width:0
+       - Make tables scroll instead of squishing
+       - Give z-index ladder: topbar(1100) < modal(3001)
+       ============================= */
+
+    html.modal-open, body.modal-open { overflow: hidden; }
+
+    #sl, #sl * { box-sizing: border-box; }
+    #sl { color: #eee; }
+    #sl a { color: inherit; }
 
     /* Layout */
-    #sl .wrap{max-width:1120px;margin:24px auto;padding:0 16px}
-    #sl .hero{font-size:2rem;margin:12px 0 4px}
-    #sl .sub{opacity:.85}
-    #sl .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    #sl .spacer{flex:1}
+    #sl .wrap{ max-width:1120px; margin:24px auto; padding:0 16px; }
+    #sl .hero{ font-size:2rem; margin:12px 0 4px; line-height:1.2; }
+    #sl .sub{ opacity:.85; }
+    #sl .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    #sl .row > * { min-width:0; } /* critical for preventing flex children overflow */
+    #sl .spacer{ flex:1; }
 
-    /* Cards + tables */
-    #sl .card{border:1px solid #333;border-radius:14px;padding:16px;background:#0c0c0c}
-    #sl .grid{display:grid;gap:16px}
-    #sl .grid.cols-2{grid-template-columns:1fr 1fr}
-    @media (max-width:980px){ #sl .grid.cols-2{grid-template-columns:1fr} }
-    #sl .chips{display:flex;gap:6px;flex-wrap:wrap}
-    #sl .pill{border:1px solid #444;padding:2px 8px;border-radius:999px}
-    #sl .muted{opacity:.8}
-    #sl .k{font-weight:600}
-    #sl .hint{font-size:.9rem;opacity:.8}
-    #sl .badge{border:1px solid #555;border-radius:6px;padding:2px 6px}
-    #sl .ok{border-color:#2a6}
-    #sl .warn{border-color:#a62}
-    #sl .err{border-color:#a33}
-    #sl .empty{opacity:.7;padding:10px}
+    /* Cards */
+    #sl .card{ border:1px solid #333; border-radius:14px; padding:16px; background:#0c0c0c; }
 
-    #sl .table{width:100%;border-collapse:collapse;margin-top:12px}
-    #sl .table th,#sl .table td{border-bottom:1px solid #222;padding:10px;text-align:left;vertical-align:top}
-    #sl .table th{opacity:.85}
+    /* Responsive grid */
+    #sl .grid{ display:grid; gap:16px; }
+    #sl .grid.cols-2{ grid-template-columns:1fr 1fr; }
+    @media (max-width:980px){ #sl .grid.cols-2{ grid-template-columns:1fr; } }
 
-    /* Modal system (defaults hidden) */
-    #sl .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:none}
-    #sl .modal{position:fixed;inset:0;display:none;z-index:1001;align-items:center;justify-content:center;padding:16px}
-    #sl .modal.open,#sl .modal-backdrop.open{display:flex}
+    /* Chips & utilities */
+    #sl .chips{ display:flex; gap:6px; flex-wrap:wrap; }
+    #sl .pill{ border:1px solid #444; padding:2px 8px; border-radius:999px; }
+    #sl .muted{ opacity:.8; }
+    #sl .k{ font-weight:600; }
+    #sl .hint{ font-size:.9rem; opacity:.85; }
+    #sl .badge{ border:1px solid #555; border-radius:6px; padding:2px 6px; white-space:nowrap; }
+    #sl .ok{ border-color:#2a6; }
+    #sl .warn{ border-color:#a62; }
+    #sl .err{ border-color:#a33; }
+    #sl .empty{ opacity:.75; padding:10px; }
+
+    /* Inputs */
+    #sl input[type="text"],
+    #sl input[type="number"],
+    #sl input[type="password"],
+    #sl select { width:auto; max-width:100%; padding:8px 10px; background:#0a0a0a; color:#eee; border:1px solid #333; border-radius:8px; }
+
+    /* Table: wrap in a scroll container to avoid layout collapse */
+    #sl .table-wrap{ overflow:auto; -webkit-overflow-scrolling: touch; border-radius:10px; }
+    #sl .table{ width:100%; border-collapse:collapse; min-width:760px; }
+    #sl .table th, #sl .table td{ border-bottom:1px solid #222; padding:10px; text-align:left; vertical-align:top; }
+    #sl .table th{ opacity:.85; position:sticky; top:0; background:#0c0c0c; }
+    #sl .table td, #sl .table th{ word-break: break-word; overflow-wrap: anywhere; }
+
+    /* Modal system */
+    #sl .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:3000; display:none; }
+    #sl .modal{ position:fixed; inset:0; display:none; z-index:3001; align-items:center; justify-content:center; padding:16px; }
+    #sl .modal.open, #sl .modal-backdrop.open{ display:flex; }
     #sl .modal-card{
-      width:100%;max-width:960px;background:#0e0e0e;border:1px solid #2a2a2a;
-      border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.6)
+      width:100%; max-width:960px; background:#0e0e0e; border:1px solid #2a2a2a;
+      border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.6);
+      max-height:90vh; overflow:auto;
     }
-    #sl .modal-card header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-    #sl .modal-title{font-weight:700}
-    #sl .modal-close{border:0;background:transparent;color:inherit;cursor:pointer;font-size:18px}
+    #sl .modal-card header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:12px; }
+    #sl .modal-title{ font-weight:700; }
+    #sl .modal-close{ border:0; background:transparent; color:inherit; cursor:pointer; font-size:18px; }
 
     /* IV grid */
-    #sl .grid-iv{display:grid;gap:8px;grid-template-columns:repeat(4,1fr)}
-    #sl .grid-iv label{font-size:.9rem;opacity:.9}
-    #sl .grid-iv input{width:100%}
-    @media (max-width:840px){ #sl .grid-iv{grid-template-columns:repeat(2,1fr)} }
+    #sl .grid-iv{ display:grid; gap:8px; grid-template-columns:repeat(4, minmax(120px,1fr)); }
+    #sl .grid-iv label{ font-size:.9rem; opacity:.95 }
+    #sl .grid-iv input{ width:100%; }
+    @media (max-width:840px){ #sl .grid-iv{ grid-template-columns:repeat(2, minmax(120px,1fr)); } }
+
+    /* Ensure topbar (if globally positioned) won't fight with content */
+    .topbar { position: sticky; top:0; z-index:1100; backdrop-filter: blur(4px); }
   </style>
 </head>
 <body>
   <div class="topbar">
     <h1>NoE Manager</h1>
     <div class="auth-inline">
-      <div id="user-chip" class="user-chip">
+      <div id="user-chip" class="user-chip" style="display:none;">
         <span class="chip-name" id="chip-name"></span>
         <button id="chip-logout" class="btn linklike">Log Out</button>
       </div>
@@ -123,20 +153,22 @@
             <button class="btn" id="recalc">Recalculate</button>
           </div>
 
-          <table class="table" id="schools-table">
-            <thead>
-              <tr>
-                <th style="width:22%;">School</th>
-                <th style="width:20%;">Linked</th>
-                <th style="width:22%;">MS Breakdown</th>
-                <th style="width:18%;">MS</th>
-                <th style="width:18%;">Category</th>
-              </tr>
-            </thead>
-            <tbody id="schools-body">
-              <tr><td colspan="5" class="empty">Loading…</td></tr>
-            </tbody>
-          </table>
+          <div class="table-wrap">
+            <table class="table" id="schools-table">
+              <thead>
+                <tr>
+                  <th style="width:22%;">School</th>
+                  <th style="width:20%;">Linked</th>
+                  <th style="width:22%;">MS Breakdown</th>
+                  <th style="width:18%;">MS</th>
+                  <th style="width:18%;">Category</th>
+                </tr>
+              </thead>
+              <tbody id="schools-body">
+                <tr><td colspan="5" class="empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
           <div class="hint" style="margin-top:8px;">
             Learning Time (days): Novice 2 • Apprentice 8 • Disciple 10 • Adept 14 • Mage 16 • Magister 20 • High Mage 22 • Master 28 • Grand Master 32 • Archmage 36 • Supreme Archmage 46 • Avant-Garde 50
           </div>
@@ -149,20 +181,22 @@
             <span class="spacer"></span>
             <button class="btn" id="open-add-spells">Add Spells</button>
           </div>
-          <table class="table">
-            <thead>
-              <tr>
-                <th style="width:30%;">Name</th>
-                <th>Schools</th>
-                <th style="width:14%;">Category</th>
-                <th style="width:18%;">Eligibility</th>
-                <th style="width:10%;"></th>
-              </tr>
-            </thead>
-            <tbody id="my-spells-body">
-              <tr><td colspan="5" class="empty">Loading…</td></tr>
-            </tbody>
-          </table>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th style="width:30%;">Name</th>
+                  <th>Schools</th>
+                  <th style="width:14%;">Category</th>
+                  <th style="width:18%;">Eligibility</th>
+                  <th style="width:10%;"></th>
+                </tr>
+              </thead>
+              <tbody id="my-spells-body">
+                <tr><td colspan="5" class="empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
       </div><!-- /#content -->
@@ -181,7 +215,7 @@
         <label for="login-password" style="margin-top:10px;">Password</label>
         <input type="password" id="login-password" placeholder="Enter password" />
         <div id="login-status" class="sub" style="margin-top:8px;"></div>
-        <div class="modal-actions">
+        <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
           <button class="btn btn-secondary" id="cancel-login">Cancel</button>
           <button class="btn" id="login-btn">Log In</button>
         </div>
@@ -210,20 +244,22 @@
           <span class="spacer"></span>
           <button class="btn" id="as-add-selected">Add Selected</button>
         </div>
-        <table class="table">
-          <thead>
-            <tr>
-              <th style="width:4%;"><input type="checkbox" id="as-check-all"></th>
-              <th style="width:30%;">Name</th>
-              <th>Schools</th>
-              <th style="width:14%;">Category</th>
-              <th style="width:18%;">Eligibility</th>
-            </tr>
-          </thead>
-          <tbody id="as-results"><tr><td colspan="5" class="empty">Search to begin.</td></tr></tbody>
-        </table>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:4%;"><input type="checkbox" id="as-check-all"></th>
+                <th style="width:30%;">Name</th>
+                <th>Schools</th>
+                <th style="width:14%;">Category</th>
+                <th style="width:18%;">Eligibility</th>
+              </tr>
+            </thead>
+            <tbody id="as-results"><tr><td colspan="5" class="empty">Search to begin.</td></tr></tbody>
+          </table>
+        </div>
         <div id="as-status" class="hint" style="margin-top:8px;"></div>
-        <div class="modal-actions">
+        <div class="modal-actions" style="margin-top:12px; display:flex; justify-content:flex-end;">
           <button class="btn btn-secondary" id="addspells-cancel">Close</button>
         </div>
       </div>
@@ -267,16 +303,16 @@
         </div>
 
         <div id="iv-status" class="hint" style="margin-top:8px;"></div>
-        <div class="modal-actions">
+        <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
           <button class="btn btn-secondary" id="iv-cancel">Cancel</button>
           <button class="btn" id="iv-save">Save</button>
         </div>
       </div>
     </div>
   </div>
-  
+
   <script>
-    const API_BASE = ""; // set "/api" if needed
+    const API_BASE = ""; // set "/api" if your backend is mounted there
 
     // ---------- Category thresholds ----------
     const CATS = [
@@ -309,7 +345,7 @@
       return p.get(name) || "";
     }
     function lc(s){ return (s||"").toString().trim().toLowerCase(); }
-    function title(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+    function title(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : ""; }
 
     function mapCategory(ms){
       for (const c of CATS) { if (ms >= c.ms) return c; }
@@ -547,14 +583,13 @@
     // ---- Eligibility check
     function catOrder(name){ return CAT_ORDER[name] ?? 0; }
     function eligibleForSpell(spell) {
-      // Must meet the spell's category in ALL of its schools
       const need = spell.category || "Novice";
       const reqOrd = catOrder(need);
       const myBySchool = Object.fromEntries(computed.map(r => [ (r.school.id || r.school.name || "").toLowerCase(), r.cat ]));
       const byName     = Object.fromEntries(computed.map(r => [ (r.school.name || "").toLowerCase(), r.cat ]));
       return (spell.schools || []).every(s => {
         const k = (s.id || s.name || "").toLowerCase();
-        const mine = myBySchool[k] || byName[k]; // match by id or name
+        const mine = myBySchool[k] || byName[k];
         return mine && catOrder(mine.name) >= reqOrd;
       });
     }
@@ -597,8 +632,8 @@
     // ---- Add Spells modal wiring
     const asModal = document.getElementById("addspells-modal");
     const asBackdrop = document.getElementById("addspells-backdrop");
-    function openAdd(){ asModal.classList.add("open"); asBackdrop.classList.add("open"); document.getElementById("as-q").focus(); }
-    function closeAdd(){ asModal.classList.remove("open"); asBackdrop.classList.remove("open"); document.getElementById("as-status").textContent=""; }
+    function openAdd(){ openModal(asModal, asBackdrop); document.getElementById("as-q").focus(); }
+    function closeAdd(){ closeModal(asModal, asBackdrop); document.getElementById("as-status").textContent=""; }
 
     function fillSchoolSelect(){
       const sel = document.getElementById("as-school");
@@ -629,6 +664,24 @@
           <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Below requirement"}</span></td>
         `;
         body.appendChild(tr);
+      }
+    }
+
+    // ---- Generic modal helpers (adds body/html scroll lock) ----
+    function openModal(modalEl, backdropEl){
+      modalEl.classList.add("open");
+      backdropEl.classList.add("open");
+      document.documentElement.classList.add("modal-open");
+      document.body.classList.add("modal-open");
+    }
+    function closeModal(modalEl, backdropEl){
+      modalEl.classList.remove("open");
+      backdropEl.classList.remove("open");
+      // If no other modal is open, release scroll lock
+      const anyOpen = document.querySelector('#sl .modal.open');
+      if (!anyOpen) {
+        document.documentElement.classList.remove("modal-open");
+        document.body.classList.remove("modal-open");
       }
     }
 
@@ -675,8 +728,8 @@
     const loginModal = document.getElementById("login-modal");
     const loginBackdrop = document.getElementById("login-backdrop");
     const loginStatus = document.getElementById("login-status");
-    function openLogin(){ loginModal.classList.add("open"); loginBackdrop.classList.add("open"); document.getElementById("login-username").focus(); }
-    function closeLogin(){ loginModal.classList.remove("open"); loginBackdrop.classList.remove("open"); loginStatus.textContent=""; }
+    function openLogin(){ openModal(loginModal, loginBackdrop); document.getElementById("login-username").focus(); }
+    function closeLogin(){ closeModal(loginModal, loginBackdrop); loginStatus.textContent=""; }
     async function login() {
       const username = document.getElementById("login-username").value.trim();
       const password = document.getElementById("login-password").value;
@@ -700,7 +753,7 @@
     }
     async function logout() {
       if (token) {
-        await fetch(`${API_BASE}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }});
+        try { await fetch(`${API_BASE}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }}); } catch {}
       }
       localStorage.clear();
       setLoggedOutUI();
@@ -721,11 +774,82 @@
       document.getElementById("login-btn").addEventListener("click", (e)=>{e.preventDefault();login();});
 
       // IV modal
-      document.getElementById("edit-iv").addEventListener("click", (e)=>{e.preventDefault();openIV();});
-      document.getElementById("iv-backdrop").addEventListener("click", closeIV);
-      document.getElementById("iv-close").addEventListener("click", (e)=>{e.preventDefault();closeIV();});
-      document.getElementById("iv-cancel").addEventListener("click", (e)=>{e.preventDefault();closeIV();});
-      document.getElementById("iv-save").addEventListener("click", (e)=>{e.preventDefault();saveIV();});
+      const ivModal = document.getElementById("iv-modal");
+      const ivBackdrop = document.getElementById("iv-backdrop");
+      const ivStatus = document.getElementById("iv-status");
+      function openIV(){
+        const iv = spellList?.initial_values || {};
+        document.getElementById("iv-mag-input").value = +(iv.mag ?? 0);
+        const n = iv.natures || {};
+        const s = iv.skills || {};
+        const get = (obj,k)=> +(obj?.[k] ?? 0);
+        // natures
+        document.getElementById("iv-fire").value = get(n,"fire");
+        document.getElementById("iv-water").value = get(n,"water");
+        document.getElementById("iv-wind").value = get(n,"wind");
+        document.getElementById("iv-earth").value = get(n,"earth");
+        document.getElementById("iv-sun").value = get(n,"sun");
+        document.getElementById("iv-moon").value = get(n,"moon");
+        document.getElementById("iv-lightning").value = get(n,"lightning");
+        document.getElementById("iv-ki").value = get(n,"ki");
+        // skills
+        document.getElementById("iv-aura").value = get(s,"aura");
+        document.getElementById("iv-incantation").value = get(s,"incantation");
+        document.getElementById("iv-enchantement").value = get(s,"enchantement");
+        document.getElementById("iv-potential").value = get(s,"potential");
+        document.getElementById("iv-restoration").value = get(s,"restoration");
+        document.getElementById("iv-stealth").value = get(s,"stealth");
+        document.getElementById("iv-investigation").value = get(s,"investigation");
+        document.getElementById("iv-charm").value = get(s,"charm");
+        document.getElementById("iv-intimidation").value = get(s,"intimidation");
+
+        openModal(ivModal, ivBackdrop);
+        ivStatus.textContent = "";
+      }
+      function closeIV(){ closeModal(ivModal, ivBackdrop); ivStatus.textContent=""; }
+
+      async function saveIV(){
+        try{
+          const payload = {
+            initial_values: {
+              mag: +document.getElementById("iv-mag-input").value || 0,
+              natures: {
+                fire: +document.getElementById("iv-fire").value || 0,
+                water: +document.getElementById("iv-water").value || 0,
+                wind: +document.getElementById("iv-wind").value || 0,
+                earth: +document.getElementById("iv-earth").value || 0,
+                sun: +document.getElementById("iv-sun").value || 0,
+                moon: +document.getElementById("iv-moon").value || 0,
+                lightning: +document.getElementById("iv-lightning").value || 0,
+                ki: +document.getElementById("iv-ki").value || 0,
+              },
+              skills: {
+                aura: +document.getElementById("iv-aura").value || 0,
+                incantation: +document.getElementById("iv-incantation").value || 0,
+                enchantement: +document.getElementById("iv-enchantement").value || 0,
+                potential: +document.getElementById("iv-potential").value || 0,
+                restoration: +document.getElementById("iv-restoration").value || 0,
+                stealth: +document.getElementById("iv-stealth").value || 0,
+                investigation: +document.getElementById("iv-investigation").value || 0,
+                charm: +document.getElementById("iv-charm").value || 0,
+                intimidation: +document.getElementById("iv-intimidation").value || 0,
+              }
+            }
+          };
+          ivStatus.textContent = "Saving…";
+          const res = await updateSpellList(listId, payload);
+          if (res.status !== "success") throw new Error(res.message || "Failed to save.");
+          spellList.initial_values = payload.initial_values;
+          renderIVChips(spellList.initial_values);
+          computed = computeAll();
+          renderSchools();
+          await loadMySpells(); // refresh eligibility badges too
+          ivStatus.textContent = "Saved!";
+          closeIV();
+        }catch(e){
+          ivStatus.textContent = e.message || "Save failed.";
+        }
+      }
 
       // schools filters
       document.getElementById("filter-name").addEventListener("input", renderSchools);
@@ -745,95 +869,30 @@
       document.getElementById("as-add-selected").addEventListener("click", async (e)=>{
         e.preventDefault();
         const ids = Array.from(document.querySelectorAll(".as-chk:checked")).map(c=>c.value);
-        if (!ids.length) { document.getElementById("as-status").textContent = "Select at least one spell."; return; }
-        document.getElementById("as-status").textContent = "Adding…";
+        const status = document.getElementById("as-status");
+        if (!ids.length) { status.textContent = "Select at least one spell."; return; }
+        status.textContent = "Adding…";
         const res = await addSpells(ids);
-        if (res.status !== "success") { document.getElementById("as-status").textContent = res.message || "Add failed."; return; }
-        document.getElementById("as-status").textContent = `Added ${ids.length} spell(s).`;
+        if (res.status !== "success") { status.textContent = res.message || "Add failed."; return; }
+        status.textContent = `Added ${ids.length} spell(s).`;
         await loadMySpells();
         closeAdd();
       });
 
+      // auth buttons
+      document.getElementById("chip-logout").addEventListener("click", (e)=>{e.preventDefault();logout();});
+      document.getElementById("open-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
+      document.getElementById("gate-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
+      document.getElementById("login-btn").addEventListener("click", (e)=>{e.preventDefault();login();});
+
+      // expose IV modal helpers to outer scope handlers
+      window.openIV = openIV;
+      window.closeIV = closeIV;
+      window.saveIV = saveIV;
+
+      // init
       init();
     });
-
-    // ---------- Edit IV modal (functions defined after event wiring) ----------
-    const ivModal = document.getElementById("iv-modal");
-    const ivBackdrop = document.getElementById("iv-backdrop");
-    const ivStatus = document.getElementById("iv-status");
-    function openIV(){
-      const iv = spellList?.initial_values || {};
-      document.getElementById("iv-mag-input").value = +(iv.mag ?? 0);
-      const n = iv.natures || {};
-      const s = iv.skills || {};
-      const get = (obj,k)=> +(obj?.[k] ?? 0);
-      // natures
-      document.getElementById("iv-fire").value = get(n,"fire");
-      document.getElementById("iv-water").value = get(n,"water");
-      document.getElementById("iv-wind").value = get(n,"wind");
-      document.getElementById("iv-earth").value = get(n,"earth");
-      document.getElementById("iv-sun").value = get(n,"sun");
-      document.getElementById("iv-moon").value = get(n,"moon");
-      document.getElementById("iv-lightning").value = get(n,"lightning");
-      document.getElementById("iv-ki").value = get(n,"ki");
-      // skills
-      document.getElementById("iv-aura").value = get(s,"aura");
-      document.getElementById("iv-incantation").value = get(s,"incantation");
-      document.getElementById("iv-enchantement").value = get(s,"enchantement");
-      document.getElementById("iv-potential").value = get(s,"potential");
-      document.getElementById("iv-restoration").value = get(s,"restoration");
-      document.getElementById("iv-stealth").value = get(s,"stealth");
-      document.getElementById("iv-investigation").value = get(s,"investigation");
-      document.getElementById("iv-charm").value = get(s,"charm");
-      document.getElementById("iv-intimidation").value = get(s,"intimidation");
-
-      ivModal.classList.add("open"); ivBackdrop.classList.add("open");
-      ivStatus.textContent = "";
-    }
-    function closeIV(){ ivModal.classList.remove("open"); ivBackdrop.classList.remove("open"); ivStatus.textContent=""; }
-
-    async function saveIV(){
-      try{
-        const payload = {
-          initial_values: {
-            mag: +document.getElementById("iv-mag-input").value || 0,
-            natures: {
-              fire: +document.getElementById("iv-fire").value || 0,
-              water: +document.getElementById("iv-water").value || 0,
-              wind: +document.getElementById("iv-wind").value || 0,
-              earth: +document.getElementById("iv-earth").value || 0,
-              sun: +document.getElementById("iv-sun").value || 0,
-              moon: +document.getElementById("iv-moon").value || 0,
-              lightning: +document.getElementById("iv-lightning").value || 0,
-              ki: +document.getElementById("iv-ki").value || 0,
-            },
-            skills: {
-              aura: +document.getElementById("iv-aura").value || 0,
-              incantation: +document.getElementById("iv-incantation").value || 0,
-              enchantement: +document.getElementById("iv-enchantement").value || 0,
-              potential: +document.getElementById("iv-potential").value || 0,
-              restoration: +document.getElementById("iv-restoration").value || 0,
-              stealth: +document.getElementById("iv-stealth").value || 0,
-              investigation: +document.getElementById("iv-investigation").value || 0,
-              charm: +document.getElementById("iv-charm").value || 0,
-              intimidation: +document.getElementById("iv-intimidation").value || 0,
-            }
-          }
-        };
-        ivStatus.textContent = "Saving…";
-        const res = await updateSpellList(listId, payload);
-        if (res.status !== "success") throw new Error(res.message || "Failed to save.");
-        spellList.initial_values = payload.initial_values;
-        renderIVChips(spellList.initial_values);
-        computed = computeAll();
-        renderSchools();
-        await loadMySpells(); // refresh eligibility badges too
-        ivStatus.textContent = "Saved!";
-        closeIV();
-      }catch(e){
-        ivStatus.textContent = e.message || "Save failed.";
-      }
-    }
   </script>
 </body>
 </html>
