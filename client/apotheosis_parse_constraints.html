@@ -148,7 +148,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
   const errs = validate();
   if (errs.length) { document.getElementById("errors").innerHTML = errs.join("<br>"); return; }
   const token = localStorage.getItem("auth_token") || "";
-  const res = await fetch(`${API_BASE}/apoth/constraints/bulk_create`, {
+  const res = await fetch(`${API_BASE}/apotheosis/constraints/bulk_create`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...(token?{ "Authorization":`Bearer ${token}` }:{}) },
     body: JSON.stringify({ constraints: PREVIEW })
@@ -203,36 +203,46 @@ document.getElementById("save").addEventListener("click", async ()=>{
     });
   }
 
-  document.getElementById("save").addEventListener("click", async ()=>{
+  document.getElementById("save").addEventListener("click", async () => {
+    // basic validation first
     const errs = validate();
-    if (errs.length){ setError(errs.join("\n")); return; }
-    setError("");
+    if (errs.length) {
+      document.getElementById("errors").innerHTML = errs.join("<br>");
+      return;
+    }
 
     const token = localStorage.getItem("auth_token") || "";
-    // map stability_penalty -> stability_delta (backend field)
+
+    // map frontend → backend fields
     const payload = {
       constraints: PREVIEW.map(r => ({
         name: r.name,
         description: r.description || "",
-        difficulty: Number(r.difficulty),
-        stability_delta: Number(r.stability_penalty),
-        amplitude_bonus: Number(r.amplitude_bonus) || 0   // safe to send; see backend fix below
+        difficulty: Number(r.difficulty),              // can be negative
+        stability_delta: Number(r.stability_penalty),  // backend expects this name
+        amplitude_bonus: Number(r.amplitude_bonus || 0)
       }))
     };
 
-    const res = await fetch(`${API_BASE}/apotheosis/constraints/bulk_create`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json", ...(token?{ "Authorization":`Bearer ${token}` }:{}) },
-      body: JSON.stringify(payload)
-    });
-    const j = await res.json().catch(()=>({}));
+    try {
+      const res = await fetch(`${API_BASE}/apotheosis/constraints/bulk_create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
+      });
 
-    if (res.ok && j.status !== "error") {
-      // non-blocking feedback
-      setError("");
-      location.href = "apotheosis_constraints.html";
-    } else {
-      setError(j.message || "Save failed.");
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.status !== "error") {
+        alert(`Inserted ${j.created?.length ?? payload.constraints.length} constraints.`);
+        location.href = "apotheosis_constraints.html";
+      } else {
+        alert(j.message || "Save failed.");
+      }
+    } catch (e) {
+      alert("Save failed.");
     }
   });
 });
