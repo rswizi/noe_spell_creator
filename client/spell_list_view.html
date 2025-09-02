@@ -5,6 +5,55 @@
   <title>NoE — Spell List</title>
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* ===== SCOPE ALL PAGE STYLES TO A ROOT ID TO AVOID CONFLICTS ===== */
+    #sl * { box-sizing: border-box; }
+
+    /* Layout */
+    #sl .wrap{max-width:1120px;margin:24px auto;padding:0 16px}
+    #sl .hero{font-size:2rem;margin:12px 0 4px}
+    #sl .sub{opacity:.85}
+    #sl .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    #sl .spacer{flex:1}
+
+    /* Cards + tables */
+    #sl .card{border:1px solid #333;border-radius:14px;padding:16px;background:#0c0c0c}
+    #sl .grid{display:grid;gap:16px}
+    #sl .grid.cols-2{grid-template-columns:1fr 1fr}
+    @media (max-width:980px){ #sl .grid.cols-2{grid-template-columns:1fr} }
+    #sl .chips{display:flex;gap:6px;flex-wrap:wrap}
+    #sl .pill{border:1px solid #444;padding:2px 8px;border-radius:999px}
+    #sl .muted{opacity:.8}
+    #sl .k{font-weight:600}
+    #sl .hint{font-size:.9rem;opacity:.8}
+    #sl .badge{border:1px solid #555;border-radius:6px;padding:2px 6px}
+    #sl .ok{border-color:#2a6}
+    #sl .warn{border-color:#a62}
+    #sl .err{border-color:#a33}
+    #sl .empty{opacity:.7;padding:10px}
+
+    #sl .table{width:100%;border-collapse:collapse;margin-top:12px}
+    #sl .table th,#sl .table td{border-bottom:1px solid #222;padding:10px;text-align:left;vertical-align:top}
+    #sl .table th{opacity:.85}
+
+    /* Modal system (defaults hidden) */
+    #sl .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:none}
+    #sl .modal{position:fixed;inset:0;display:none;z-index:1001;align-items:center;justify-content:center;padding:16px}
+    #sl .modal.open,#sl .modal-backdrop.open{display:flex}
+    #sl .modal-card{
+      width:100%;max-width:960px;background:#0e0e0e;border:1px solid #2a2a2a;
+      border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.6)
+    }
+    #sl .modal-card header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    #sl .modal-title{font-weight:700}
+    #sl .modal-close{border:0;background:transparent;color:inherit;cursor:pointer;font-size:18px}
+
+    /* IV grid */
+    #sl .grid-iv{display:grid;gap:8px;grid-template-columns:repeat(4,1fr)}
+    #sl .grid-iv label{font-size:.9rem;opacity:.9}
+    #sl .grid-iv input{width:100%}
+    @media (max-width:840px){ #sl .grid-iv{grid-template-columns:repeat(2,1fr)} }
+  </style>
 </head>
 <body>
   <div class="topbar">
@@ -20,209 +69,212 @@
     </div>
   </div>
 
-  <div class="wrap">
-    <div class="hero" id="list-name">Spell List</div>
-    <div class="sub" id="list-meta">Loading…</div>
+  <!-- ROOT WRAPPER TO SCOPE STYLES -->
+  <div id="sl">
+    <div class="wrap">
+      <div class="hero" id="list-name">Spell List</div>
+      <div class="sub" id="list-meta">Loading…</div>
 
-    <!-- Auth Gate -->
-    <div id="auth-gate" class="card" style="display:none;margin-top:12px;">
-      <div style="margin-bottom:8px;">You must be logged in to view this spell list.</div>
-      <button class="btn" id="gate-login">Log In</button>
+      <!-- Auth Gate -->
+      <div id="auth-gate" class="card" style="display:none;margin-top:12px;">
+        <div style="margin-bottom:8px;">You must be logged in to view this spell list.</div>
+        <button class="btn" id="gate-login">Log In</button>
+      </div>
+
+      <!-- Content -->
+      <div id="content" class="grid" style="display:none;margin-top:16px;">
+
+        <!-- IV card -->
+        <div class="card">
+          <div class="row">
+            <h2 style="margin:0;">Initial Values</h2>
+            <span class="spacer"></span>
+            <button class="btn btn-secondary" id="edit-iv">Edit Initial Values</button>
+          </div>
+          <div class="grid cols-2" style="margin-top:10px;">
+            <div>
+              <div class="muted" style="margin-bottom:6px;">Natures</div>
+              <div id="iv-natures" class="chips"></div>
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">Skills</div>
+              <div id="iv-skills" class="chips"></div>
+              <div class="muted" style="margin-top:10px;">MAG: <span id="iv-mag" class="k">0</span></div>
+            </div>
+          </div>
+          <div class="hint" style="margin-top:10px;">
+            MS = MAG + linked skill + (best of: top two linked intensities) or (top one intensity +2).
+          </div>
+        </div>
+
+        <!-- Schools card -->
+        <div class="card">
+          <div class="row" style="margin-bottom:8px;">
+            <h2 style="margin:0;">School Categories</h2>
+            <span class="spacer"></span>
+            <input id="filter-name" type="text" placeholder="Filter by school name…" style="min-width:220px;">
+            <select id="filter-min-cat">
+              <option value="">Min. Category: Any</option>
+            </select>
+            <select id="sort-by">
+              <option value="cat_desc">Sort: Category (high → low)</option>
+              <option value="name_asc">Sort: Name (A → Z)</option>
+            </select>
+            <button class="btn" id="recalc">Recalculate</button>
+          </div>
+
+          <table class="table" id="schools-table">
+            <thead>
+              <tr>
+                <th style="width:22%;">School</th>
+                <th style="width:20%;">Linked</th>
+                <th style="width:22%;">MS Breakdown</th>
+                <th style="width:18%;">MS</th>
+                <th style="width:18%;">Category</th>
+              </tr>
+            </thead>
+            <tbody id="schools-body">
+              <tr><td colspan="5" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+          <div class="hint" style="margin-top:8px;">
+            Learning Time (days): Novice 2 • Apprentice 8 • Disciple 10 • Adept 14 • Mage 16 • Magister 20 • High Mage 22 • Master 28 • Grand Master 32 • Archmage 36 • Supreme Archmage 46 • Avant-Garde 50
+          </div>
+        </div>
+
+        <!-- My Spells card -->
+        <div class="card" id="my-spells-card" style="display:none;">
+          <div class="row" style="margin-bottom:8px;">
+            <h2 style="margin:0;">My Spells</h2>
+            <span class="spacer"></span>
+            <button class="btn" id="open-add-spells">Add Spells</button>
+          </div>
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:30%;">Name</th>
+                <th>Schools</th>
+                <th style="width:14%;">Category</th>
+                <th style="width:18%;">Eligibility</th>
+                <th style="width:10%;"></th>
+              </tr>
+            </thead>
+            <tbody id="my-spells-body">
+              <tr><td colspan="5" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div><!-- /#content -->
+    </div><!-- /.wrap -->
+
+    <!-- Login Modal -->
+    <div id="login-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+    <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true">
+      <div class="modal-card">
+        <header>
+          <div class="modal-title" id="login-title">Log In</div>
+          <button class="modal-close" id="close-login" aria-label="Close">✕</button>
+        </header>
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" placeholder="Enter username" />
+        <label for="login-password" style="margin-top:10px;">Password</label>
+        <input type="password" id="login-password" placeholder="Enter password" />
+        <div id="login-status" class="sub" style="margin-top:8px;"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="cancel-login">Cancel</button>
+          <button class="btn" id="login-btn">Log In</button>
+        </div>
+      </div>
     </div>
 
-    <!-- Content -->
-    <div id="content" class="grid" style="display:none;margin-top:16px;">
-
-      <!-- IV card -->
-      <div class="card">
-        <div class="row">
-          <h2 style="margin:0;">Initial Values</h2>
-          <span class="spacer"></span>
-          <button class="btn btn-secondary" id="edit-iv">Edit Initial Values</button>
-        </div>
-        <div class="grid cols-2" style="margin-top:10px;">
-          <div>
-            <div class="muted" style="margin-bottom:6px;">Natures</div>
-            <div id="iv-natures" class="chips"></div>
-          </div>
-          <div>
-            <div class="muted" style="margin-bottom:6px;">Skills</div>
-            <div id="iv-skills" class="chips"></div>
-            <div class="muted" style="margin-top:10px;">MAG: <span id="iv-mag" class="k">0</span></div>
-          </div>
-        </div>
-        <div class="hint" style="margin-top:10px;">
-          MS = MAG + linked skill + (best of: top two linked intensities) or (top one intensity +2).
-        </div>
-      </div>
-
-      <!-- Schools card -->
-      <div class="card">
-        <div class="row" style="margin-bottom:8px;">
-          <h2 style="margin:0;">School Categories</h2>
-          <span class="spacer"></span>
-          <input id="filter-name" type="text" placeholder="Filter by school name…" style="min-width:220px;">
-          <select id="filter-min-cat">
-            <option value="">Min. Category: Any</option>
+    <!-- Add Spells Modal -->
+    <div id="addspells-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+    <div id="addspells-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal-card" style="max-width:1000px;">
+        <header>
+          <div class="modal-title">Add Spells</div>
+          <button class="modal-close" id="addspells-close" aria-label="Close">✕</button>
+        </header>
+        <div class="row" style="gap:10px; margin-bottom:8px;">
+          <input id="as-q" type="text" placeholder="Search name…" style="min-width:220px;">
+          <select id="as-school"><option value="">Any school</option></select>
+          <select id="as-category">
+            <option value="">Any category</option>
+            <option>Novice</option><option>Apprentice</option><option>Disciple</option>
+            <option>Adept</option><option>Mage</option><option>Magister</option>
+            <option>High Mage</option><option>Master</option><option>Grand Master</option>
+            <option>Archmage</option><option>Supreme Archmage</option><option>Avant-Garde</option>
           </select>
-          <select id="sort-by">
-            <option value="cat_desc">Sort: Category (high → low)</option>
-            <option value="name_asc">Sort: Name (A → Z)</option>
-          </select>
-          <button class="btn" id="recalc">Recalculate</button>
-        </div>
-
-        <table class="table" id="schools-table">
-          <thead>
-            <tr>
-              <th style="width:22%;">School</th>
-              <th style="width:20%;">Linked</th>
-              <th style="width:22%;">MS Breakdown</th>
-              <th style="width:18%;">MS</th>
-              <th style="width:18%;">Category</th>
-            </tr>
-          </thead>
-          <tbody id="schools-body">
-            <tr><td colspan="5" class="empty">Loading…</td></tr>
-          </tbody>
-        </table>
-        <div class="hint" style="margin-top:8px;">
-          Learning Time (days): Novice 2 • Apprentice 8 • Disciple 10 • Adept 14 • Mage 16 • Magister 20 • High Mage 22 • Master 28 • Grand Master 32 • Archmage 36 • Supreme Archmage 46 • Avant-Garde 50
-        </div>
-      </div>
-
-      <!-- My Spells card -->
-      <div class="card" id="my-spells-card" style="display:none;">
-        <div class="row" style="margin-bottom:8px;">
-          <h2 style="margin:0;">My Spells</h2>
+          <button class="btn" id="as-search">Search</button>
           <span class="spacer"></span>
-          <button class="btn" id="open-add-spells">Add Spells</button>
+          <button class="btn" id="as-add-selected">Add Selected</button>
         </div>
         <table class="table">
           <thead>
             <tr>
+              <th style="width:4%;"><input type="checkbox" id="as-check-all"></th>
               <th style="width:30%;">Name</th>
               <th>Schools</th>
               <th style="width:14%;">Category</th>
               <th style="width:18%;">Eligibility</th>
-              <th style="width:10%;"></th>
             </tr>
           </thead>
-          <tbody id="my-spells-body">
-            <tr><td colspan="5" class="empty">Loading…</td></tr>
-          </tbody>
+          <tbody id="as-results"><tr><td colspan="5" class="empty">Search to begin.</td></tr></tbody>
         </table>
+        <div id="as-status" class="hint" style="margin-top:8px;"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="addspells-cancel">Close</button>
+        </div>
       </div>
+    </div>
 
-    </div><!-- /#content -->
-  </div><!-- /.wrap -->
+    <!-- Edit IV Modal -->
+    <div id="iv-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+    <div id="iv-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal-card" style="max-width:960px;">
+        <header>
+          <div class="modal-title" id="iv-title">Edit Initial Values</div>
+          <button class="modal-close" id="iv-close" aria-label="Close">✕</button>
+        </header>
 
-  <!-- Backdrop + Login Modal (sibling) -->
-  <div id="login-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-  <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true">
-    <div class="modal-card">
-      <header>
-        <div class="modal-title" id="login-title">Log In</div>
-        <button class="modal-close" id="close-login" aria-label="Close">✕</button>
-      </header>
-      <label for="login-username">Username</label>
-      <input type="text" id="login-username" placeholder="Enter username" />
-      <label for="login-password" style="margin-top:10px;">Password</label>
-      <input type="password" id="login-password" placeholder="Enter password" />
-      <div id="login-status" class="sub" style="margin-top:8px;"></div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" id="cancel-login">Cancel</button>
-        <button class="btn" id="login-btn">Log In</button>
+        <label for="iv-mag-input" class="k">MAG</label>
+        <input id="iv-mag-input" type="number" min="0" step="1" value="0" />
+
+        <div style="margin:12px 0 6px;font-weight:600;">Natures</div>
+        <div class="grid-iv">
+          <div><label>Fire</label><input type="number" id="iv-fire" min="0" step="1"></div>
+          <div><label>Water</label><input type="number" id="iv-water" min="0" step="1"></div>
+          <div><label>Wind</label><input type="number" id="iv-wind" min="0" step="1"></div>
+          <div><label>Earth</label><input type="number" id="iv-earth" min="0" step="1"></div>
+          <div><label>Sun</label><input type="number" id="iv-sun" min="0" step="1"></div>
+          <div><label>Moon</label><input type="number" id="iv-moon" min="0" step="1"></div>
+          <div><label>Lightning</label><input type="number" id="iv-lightning" min="0" step="1"></div>
+          <div><label>Ki</label><input type="number" id="iv-ki" min="0" step="1"></div>
+        </div>
+
+        <div style="margin:12px 0 6px;font-weight:600;">Skills</div>
+        <div class="grid-iv">
+          <div><label>Aura</label><input type="number" id="iv-aura" min="0" step="1"></div>
+          <div><label>Incantation</label><input type="number" id="iv-incantation" min="0" step="1"></div>
+          <div><label>Enchantement</label><input type="number" id="iv-enchantement" min="0" step="1"></div>
+          <div><label>Potential</label><input type="number" id="iv-potential" min="0" step="1"></div>
+          <div><label>Restoration</label><input type="number" id="iv-restoration" min="0" step="1"></div>
+          <div><label>Stealth</label><input type="number" id="iv-stealth" min="0" step="1"></div>
+          <div><label>Investigation</label><input type="number" id="iv-investigation" min="0" step="1"></div>
+          <div><label>Charm</label><input type="number" id="iv-charm" min="0" step="1"></div>
+          <div><label>Intimidation</label><input type="number" id="iv-intimidation" min="0" step="1"></div>
+        </div>
+
+        <div id="iv-status" class="hint" style="margin-top:8px;"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="iv-cancel">Cancel</button>
+          <button class="btn" id="iv-save">Save</button>
+        </div>
       </div>
     </div>
   </div>
-
-  <!-- Backdrop + Add Spells Modal (sibling) -->
-  <div id="addspells-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-  <div id="addspells-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card" style="max-width:1000px;">
-      <header>
-        <div class="modal-title">Add Spells</div>
-        <button class="modal-close" id="addspells-close" aria-label="Close">✕</button>
-      </header>
-      <div class="row" style="gap:10px; margin-bottom:8px;">
-        <input id="as-q" type="text" placeholder="Search name…" style="min-width:220px;">
-        <select id="as-school"><option value="">Any school</option></select>
-        <select id="as-category">
-          <option value="">Any category</option>
-          <option>Novice</option><option>Apprentice</option><option>Disciple</option>
-          <option>Adept</option><option>Mage</option><option>Magister</option>
-          <option>High Mage</option><option>Master</option><option>Grand Master</option>
-          <option>Archmage</option><option>Supreme Archmage</option><option>Avant-Garde</option>
-        </select>
-        <button class="btn" id="as-search">Search</button>
-        <span class="spacer"></span>
-        <button class="btn" id="as-add-selected">Add Selected</button>
-      </div>
-      <table class="table">
-        <thead>
-          <tr>
-            <th style="width:4%;"><input type="checkbox" id="as-check-all"></th>
-            <th style="width:30%;">Name</th>
-            <th>Schools</th>
-            <th style="width:14%;">Category</th>
-            <th style="width:18%;">Eligibility</th>
-          </tr>
-        </thead>
-        <tbody id="as-results"><tr><td colspan="5" class="empty">Search to begin.</td></tr></tbody>
-      </table>
-      <div id="as-status" class="hint" style="margin-top:8px;"></div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" id="addspells-cancel">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Backdrop + Edit IV Modal (sibling) -->
-  <div id="iv-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-  <div id="iv-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card" style="max-width:960px;">
-      <header>
-        <div class="modal-title" id="iv-title">Edit Initial Values</div>
-        <button class="modal-close" id="iv-close" aria-label="Close">✕</button>
-      </header>
-
-      <label for="iv-mag-input" class="k">MAG</label>
-      <input id="iv-mag-input" type="number" min="0" step="1" value="0" />
-
-      <div style="margin:12px 0 6px;font-weight:600;">Natures</div>
-      <div class="grid-iv">
-        <div><label>Fire</label><input type="number" id="iv-fire" min="0" step="1"></div>
-        <div><label>Water</label><input type="number" id="iv-water" min="0" step="1"></div>
-        <div><label>Wind</label><input type="number" id="iv-wind" min="0" step="1"></div>
-        <div><label>Earth</label><input type="number" id="iv-earth" min="0" step="1"></div>
-        <div><label>Sun</label><input type="number" id="iv-sun" min="0" step="1"></div>
-        <div><label>Moon</label><input type="number" id="iv-moon" min="0" step="1"></div>
-        <div><label>Lightning</label><input type="number" id="iv-lightning" min="0" step="1"></div>
-        <div><label>Ki</label><input type="number" id="iv-ki" min="0" step="1"></div>
-      </div>
-
-      <div style="margin:12px 0 6px;font-weight:600;">Skills</div>
-      <div class="grid-iv">
-        <div><label>Aura</label><input type="number" id="iv-aura" min="0" step="1"></div>
-        <div><label>Incantation</label><input type="number" id="iv-incantation" min="0" step="1"></div>
-        <div><label>Enchantement</label><input type="number" id="iv-enchantement" min="0" step="1"></div>
-        <div><label>Potential</label><input type="number" id="iv-potential" min="0" step="1"></div>
-        <div><label>Restoration</label><input type="number" id="iv-restoration" min="0" step="1"></div>
-        <div><label>Stealth</label><input type="number" id="iv-stealth" min="0" step="1"></div>
-        <div><label>Investigation</label><input type="number" id="iv-investigation" min="0" step="1"></div>
-        <div><label>Charm</label><input type="number" id="iv-charm" min="0" step="1"></div>
-        <div><label>Intimidation</label><input type="number" id="iv-intimidation" min="0" step="1"></div>
-      </div>
-
-      <div id="iv-status" class="hint" style="margin-top:8px;"></div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" id="iv-cancel">Cancel</button>
-        <button class="btn" id="iv-save">Save</button>
-      </div>
-    </div>
-  </div>
-
+  
   <script>
     const API_BASE = ""; // set "/api" if needed
 
