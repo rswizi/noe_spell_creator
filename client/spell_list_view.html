@@ -64,6 +64,7 @@
 
     <!-- Content -->
     <div id="content" class="grid" style="display:none;margin-top:16px;">
+      <!-- IV card -->
       <div class="card">
         <div class="row">
           <h2 style="margin:0;">Initial Values</h2>
@@ -86,6 +87,7 @@
         </div>
       </div>
 
+      <!-- Schools card -->
       <div class="card">
         <div class="row" style="margin-bottom:8px;">
           <h2 style="margin:0;">School Categories</h2>
@@ -119,10 +121,33 @@
           Learning Time (days): Novice 2 • Apprentice 8 • Disciple 10 • Adept 14 • Mage 16 • Magister 20 • High Mage 22 • Master 28 • Grand Master 32 • Archmage 36 • Supreme Archmage 46 • Avant-Garde 50
         </div>
       </div>
+
+      <!-- My Spells card -->
+      <div class="card" id="my-spells-card" style="display:none;">
+        <div class="row" style="margin-bottom:8px;">
+          <h2 style="margin:0;">My Spells</h2>
+          <span class="spacer"></span>
+          <button class="btn" id="open-add-spells">Add Spells</button>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="width:30%;">Name</th>
+              <th>Schools</th>
+              <th style="width:14%;">Category</th>
+              <th style="width:18%;">Eligibility</th>
+              <th style="width:10%;"></th>
+            </tr>
+          </thead>
+          <tbody id="my-spells-body">
+            <tr><td colspan="5" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
-  <!-- Backdrop + Login Modal -->
+  <!-- Backdrop + Login Modal (sibling) -->
   <div id="login-backdrop" class="modal-backdrop" aria-hidden="true"></div>
   <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true">
     <div class="modal-card">
@@ -146,7 +171,51 @@
     </div>
   </div>
 
-  <!-- Backdrop + Edit IV Modal -->
+  <!-- Backdrop + Add Spells Modal (sibling) -->
+  <div id="addspells-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+  <div id="addspells-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-card" style="max-width:1000px;">
+      <header>
+        <div class="modal-title">Add Spells</div>
+        <button class="modal-close" id="addspells-close" aria-label="Close">✕</button>
+      </header>
+
+      <div class="row" style="gap:10px; margin-bottom:8px;">
+        <input id="as-q" type="text" placeholder="Search name…" style="min-width:220px;">
+        <select id="as-school"><option value="">Any school</option></select>
+        <select id="as-category">
+          <option value="">Any category</option>
+          <option>Novice</option><option>Apprentice</option><option>Disciple</option>
+          <option>Adept</option><option>Mage</option><option>Magister</option>
+          <option>High Mage</option><option>Master</option><option>Grand Master</option>
+          <option>Archmage</option><option>Supreme Archmage</option><option>Avant-Garde</option>
+        </select>
+        <button class="btn" id="as-search">Search</button>
+        <span class="spacer"></span>
+        <button class="btn" id="as-add-selected">Add Selected</button>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:4%;"><input type="checkbox" id="as-check-all"></th>
+            <th style="width:30%;">Name</th>
+            <th>Schools</th>
+            <th style="width:14%;">Category</th>
+            <th style="width:18%;">Eligibility</th>
+          </tr>
+        </thead>
+        <tbody id="as-results"><tr><td colspan="5" class="empty">Search to begin.</td></tr></tbody>
+      </table>
+
+      <div id="as-status" class="hint" style="margin-top:8px;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="addspells-cancel">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Backdrop + Edit IV Modal (sibling) -->
   <div id="iv-backdrop" class="modal-backdrop" aria-hidden="true"></div>
   <div id="iv-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="iv-title" aria-hidden="true">
     <div class="modal-card" style="max-width:960px;">
@@ -216,7 +285,7 @@
     let token = "";
     let listId = "";
     let spellList = null;   // { id, name, initial_values:{ mag, natures{}, skills{} }, ... }
-    let schools = [];       // [{name, linked_skill, linked_intensities: []}, ...]
+    let schools = [];       // [{id,name, linked_skill, linked_intensities: []}, ...]
     let computed = [];      // results per school
 
     // ---------- Helpers ----------
@@ -339,12 +408,7 @@
       for (const sch of schools) {
         const b = bestMSForSchool(iv, sch);
         const cat = mapCategory(b.ms);
-        out.push({
-          school: sch,
-          ms: b.ms,
-          cat,
-          breakdown: b
-        });
+        out.push({ school: sch, ms: b.ms, cat, breakdown: b });
       }
       return out;
     }
@@ -369,17 +433,12 @@
 
       let rows = [...computed];
 
-      if (nameFilter) {
-        rows = rows.filter(r => lc(r.school.name || "").includes(nameFilter));
-      }
-      if (minCat) {
-        rows = rows.filter(r => CAT_ORDER[r.cat.name] >= CAT_ORDER[minCat]);
-      }
+      if (nameFilter) rows = rows.filter(r => lc(r.school.name || "").includes(nameFilter));
+      if (minCat) rows = rows.filter(r => CAT_ORDER[r.cat.name] >= CAT_ORDER[minCat]);
 
       if (sortBy === "name_asc") {
         rows.sort((a,b)=> (a.school.name||"").localeCompare(b.school.name||""));
       } else {
-        // category high → low, then MS desc, then name
         rows.sort((a,b)=>{
           const d = CAT_ORDER[b.cat.name] - CAT_ORDER[a.cat.name];
           if (d!==0) return d;
@@ -434,15 +493,135 @@
       document.getElementById("open-login").style.display = "inline-block";
     }
 
+    // ---- Spell List API (add/remove/list)
+    async function fetchListSpells() {
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const j = await r.json();
+      return (j.spells || []);
+    }
+    async function addSpells(ids) {
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids })
+      });
+      return await r.json();
+    }
+    async function removeSpell(id) {
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return await r.json();
+    }
+
+    // ---- Public /spells search (with derived schools)
+    async function searchSpells(q="", school="", category="") {
+      const params = new URLSearchParams();
+      if (q) params.set("name", q);
+      if (school) params.set("school", school);
+      if (category) params.set("category", category);
+      params.set("limit","100");
+      const r = await fetch(`${API_BASE}/spells?${params.toString()}`);
+      const j = await r.json();
+      return j.spells || [];
+    }
+
+    // ---- Eligibility check
+    function catOrder(name){ return CAT_ORDER[name] ?? 0; }
+    function eligibleForSpell(spell) {
+      // Must meet the spell's category in ALL of its schools
+      const need = spell.category || "Novice";
+      const reqOrd = catOrder(need);
+      const myBySchool = Object.fromEntries(computed.map(r => [ (r.school.id || r.school.name || "").toLowerCase(), r.cat ]));
+      const byName     = Object.fromEntries(computed.map(r => [ (r.school.name || "").toLowerCase(), r.cat ]));
+      return (spell.schools || []).every(s => {
+        const k = (s.id || s.name || "").toLowerCase();
+        const mine = myBySchool[k] || byName[k]; // match by id or name
+        return mine && catOrder(mine.name) >= reqOrd;
+      });
+    }
+
+    // ---- Render My Spells
+    let mySpells = [];
+    async function loadMySpells(){
+      document.getElementById("my-spells-card").style.display = "block";
+      const tbody = document.getElementById("my-spells-body");
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">Loading…</td></tr>`;
+      mySpells = await fetchListSpells();
+
+      if (!mySpells.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty">No spells yet. Click “Add Spells”.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = "";
+      for (const sp of mySpells) {
+        const tr = document.createElement("tr");
+        const schools = (sp.schools||[]).map(s=>s.name).join(", ");
+        const ok = eligibleForSpell(sp);
+        tr.innerHTML = `
+          <td><div class="k">${sp.name}</div><div class="muted">id: ${sp.id}</div></td>
+          <td>${schools||"—"}</td>
+          <td>${sp.category || "—"}</td>
+          <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Below requirement"}</span></td>
+          <td><button class="btn btn-secondary small" data-remove="${sp.id}">Remove</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+      tbody.querySelectorAll("[data-remove]").forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          const id = btn.getAttribute("data-remove");
+          await removeSpell(id);
+          await loadMySpells();
+        });
+      });
+    }
+
+    // ---- Add Spells modal wiring
+    const asModal = document.getElementById("addspells-modal");
+    const asBackdrop = document.getElementById("addspells-backdrop");
+    function openAdd(){ asModal.classList.add("open"); asBackdrop.classList.add("open"); document.getElementById("as-q").focus(); }
+    function closeAdd(){ asModal.classList.remove("open"); asBackdrop.classList.remove("open"); document.getElementById("as-status").textContent=""; }
+
+    function fillSchoolSelect(){
+      const sel = document.getElementById("as-school");
+      sel.innerHTML = `<option value="">Any school</option>`;
+      for (const s of schools) {
+        const opt = document.createElement("option");
+        opt.value = s.id || s.name; opt.textContent = s.name || s.id;
+        sel.appendChild(opt);
+      }
+    }
+
+    async function runSearch(){
+      const q = document.getElementById("as-q").value.trim();
+      const school = document.getElementById("as-school").value;
+      const cat = document.getElementById("as-category").value;
+      const list = await searchSpells(q, school, cat);
+      const body = document.getElementById("as-results");
+      if (!list.length) { body.innerHTML = `<tr><td colspan="5" class="empty">No results.</td></tr>`; return; }
+      body.innerHTML = "";
+      for (const sp of list) {
+        const ok = eligibleForSpell(sp);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input type="checkbox" class="as-chk" value="${sp.id}"></td>
+          <td><div class="k">${sp.name}</div><div class="muted">id: ${sp.id}</div></td>
+          <td>${(sp.schools||[]).map(s=>s.name).join(", ") || "—"}</td>
+          <td>${sp.category || "—"}</td>
+          <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Below requirement"}</span></td>
+        `;
+        body.appendChild(tr);
+      }
+    }
+
     async function init(){
       token = localStorage.getItem("auth_token") || "";
       listId = qs("id");
-      if (!listId) {
-        document.getElementById("list-meta").textContent = "Missing list id in URL.";
-        return;
-      }
+      if (!listId) { document.getElementById("list-meta").textContent = "Missing list id in URL."; return; }
 
-      // auth check
       const me = await apiMe();
       if (!me.ok) {
         setLoggedOutUI();
@@ -457,7 +636,6 @@
         document.getElementById("list-name").textContent = spellList.name || "Spell List";
         const created = spellList.created_at ? new Date(spellList.created_at).toLocaleString() : "";
         document.getElementById("list-meta").textContent = created ? `Created ${created}` : "";
-        // Ensure MAG key exists for older lists
         spellList.initial_values = spellList.initial_values || {};
         if (typeof spellList.initial_values.mag === "undefined") spellList.initial_values.mag = 0;
 
@@ -466,21 +644,111 @@
 
         schools = await fetchSchools();
         computed = computeAll();
+
         document.getElementById("content").style.display = "grid";
         renderSchools();
+
+        // NEW: prime the Add Spells picker + list
+        fillSchoolSelect();
+        await loadMySpells();
       }catch(e){
         document.getElementById("list-meta").textContent = `Error: ${e.message}`;
       }
     }
 
-    // ---------- Edit IV modal ----------
+    // ---------- Auth modal ----------
+    const loginModal = document.getElementById("login-modal");
+    const loginBackdrop = document.getElementById("login-backdrop");
+    const loginStatus = document.getElementById("login-status");
+    function openLogin(){ loginModal.classList.add("open"); loginBackdrop.classList.add("open"); document.getElementById("login-username").focus(); }
+    function closeLogin(){ loginModal.classList.remove("open"); loginBackdrop.classList.remove("open"); loginStatus.textContent=""; }
+    async function login() {
+      const username = document.getElementById("login-username").value.trim();
+      const password = document.getElementById("login-password").value;
+      loginStatus.textContent = "";
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        localStorage.setItem("auth_token", data.token);
+        localStorage.setItem("auth_username", data.username);
+        localStorage.setItem("auth_role", data.role);
+        token = data.token;
+        setLoggedInUI(data.username, data.role);
+        closeLogin();
+        init();
+      } else {
+        loginStatus.textContent = data.message || "Login failed";
+      }
+    }
+    async function logout() {
+      if (token) {
+        await fetch(`${API_BASE}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }});
+      }
+      localStorage.clear();
+      setLoggedOutUI();
+      document.getElementById("auth-gate").style.display = "block";
+      document.getElementById("content").style.display = "none";
+    }
+
+    // ---------- Events ----------
+    document.addEventListener("DOMContentLoaded", () => {
+      // topbar/auth
+      document.getElementById("chip-logout").addEventListener("click", (e)=>{e.preventDefault();logout();});
+      document.getElementById("open-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
+      document.getElementById("gate-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
+      document.getElementById("login-backdrop").addEventListener("click", closeLogin);
+      document.getElementById("close-login").addEventListener("click", (e)=>{e.preventDefault();closeLogin();});
+      document.getElementById("cancel-login").addEventListener("click", (e)=>{e.preventDefault();closeLogin();});
+      document.addEventListener("keydown", (e)=>{ if (e.key==="Escape"){ closeLogin(); closeIV(); closeAdd(); }});
+      document.getElementById("login-btn").addEventListener("click", (e)=>{e.preventDefault();login();});
+
+      // IV modal
+      document.getElementById("edit-iv").addEventListener("click", (e)=>{e.preventDefault();openIV();});
+      document.getElementById("iv-backdrop").addEventListener("click", closeIV);
+      document.getElementById("iv-close").addEventListener("click", (e)=>{e.preventDefault();closeIV();});
+      document.getElementById("iv-cancel").addEventListener("click", (e)=>{e.preventDefault();closeIV();});
+      document.getElementById("iv-save").addEventListener("click", (e)=>{e.preventDefault();saveIV();});
+
+      // schools filters
+      document.getElementById("filter-name").addEventListener("input", renderSchools);
+      document.getElementById("filter-min-cat").addEventListener("change", renderSchools);
+      document.getElementById("sort-by").addEventListener("change", renderSchools);
+      document.getElementById("recalc").addEventListener("click", ()=>{ computed = computeAll(); renderSchools(); });
+
+      // add spells modal
+      document.getElementById("open-add-spells").addEventListener("click", (e)=>{ e.preventDefault(); openAdd(); });
+      document.getElementById("addspells-close").addEventListener("click", (e)=>{ e.preventDefault(); closeAdd(); });
+      document.getElementById("addspells-cancel").addEventListener("click", (e)=>{ e.preventDefault(); closeAdd(); });
+      document.getElementById("addspells-backdrop").addEventListener("click", closeAdd);
+      document.getElementById("as-search").addEventListener("click", (e)=>{ e.preventDefault(); runSearch(); });
+      document.getElementById("as-check-all").addEventListener("change", (e)=>{
+        document.querySelectorAll(".as-chk").forEach(c => c.checked = e.target.checked);
+      });
+      document.getElementById("as-add-selected").addEventListener("click", async (e)=>{
+        e.preventDefault();
+        const ids = Array.from(document.querySelectorAll(".as-chk:checked")).map(c=>c.value);
+        if (!ids.length) { document.getElementById("as-status").textContent = "Select at least one spell."; return; }
+        document.getElementById("as-status").textContent = "Adding…";
+        const res = await addSpells(ids);
+        if (res.status !== "success") { document.getElementById("as-status").textContent = res.message || "Add failed."; return; }
+        document.getElementById("as-status").textContent = `Added ${ids.length} spell(s).`;
+        await loadMySpells();
+        closeAdd();
+      });
+
+      init();
+    });
+
+    // ---------- Edit IV modal (functions defined after event wiring) ----------
     const ivModal = document.getElementById("iv-modal");
     const ivBackdrop = document.getElementById("iv-backdrop");
     const ivStatus = document.getElementById("iv-status");
     function openIV(){
       const iv = spellList?.initial_values || {};
       document.getElementById("iv-mag-input").value = +(iv.mag ?? 0);
-
       const n = iv.natures || {};
       const s = iv.skills || {};
       const get = (obj,k)=> +(obj?.[k] ?? 0);
@@ -540,79 +808,17 @@
         ivStatus.textContent = "Saving…";
         const res = await updateSpellList(listId, payload);
         if (res.status !== "success") throw new Error(res.message || "Failed to save.");
-        // refresh local copy
         spellList.initial_values = payload.initial_values;
         renderIVChips(spellList.initial_values);
         computed = computeAll();
         renderSchools();
+        await loadMySpells(); // refresh eligibility badges too
         ivStatus.textContent = "Saved!";
         closeIV();
       }catch(e){
         ivStatus.textContent = e.message || "Save failed.";
       }
     }
-
-    // ---------- Auth modal ----------
-    const loginModal = document.getElementById("login-modal");
-    const loginBackdrop = document.getElementById("login-backdrop");
-    const loginStatus = document.getElementById("login-status");
-    function openLogin(){ loginModal.classList.add("open"); loginBackdrop.classList.add("open"); document.getElementById("login-username").focus(); }
-    function closeLogin(){ loginModal.classList.remove("open"); loginBackdrop.classList.remove("open"); loginStatus.textContent=""; }
-    async function login() {
-      const username = document.getElementById("login-username").value.trim();
-      const password = document.getElementById("login-password").value;
-      loginStatus.textContent = "";
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
-      if (data.status === "success") {
-        localStorage.setItem("auth_token", data.token);
-        localStorage.setItem("auth_username", data.username);
-        localStorage.setItem("auth_role", data.role);
-        token = data.token;
-        setLoggedInUI(data.username, data.role);
-        closeLogin();
-        init(); // reload page data as authenticated user
-      } else {
-        loginStatus.textContent = data.message || "Login failed";
-      }
-    }
-    async function logout() {
-      if (token) {
-        await fetch(`${API_BASE}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }});
-      }
-      localStorage.clear();
-      setLoggedOutUI();
-      document.getElementById("auth-gate").style.display = "block";
-      document.getElementById("content").style.display = "none";
-    }
-
-    // ---------- Events ----------
-    document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("chip-logout").addEventListener("click", (e)=>{e.preventDefault();logout();});
-      document.getElementById("open-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
-      document.getElementById("gate-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
-      document.getElementById("login-backdrop").addEventListener("click", closeLogin);
-      document.getElementById("close-login").addEventListener("click", (e)=>{e.preventDefault();closeLogin();});
-      document.getElementById("cancel-login").addEventListener("click", (e)=>{e.preventDefault();closeLogin();});
-      document.addEventListener("keydown", (e)=>{ if (e.key==="Escape"){ closeLogin(); closeIV(); }});
-      document.getElementById("login-btn").addEventListener("click", (e)=>{e.preventDefault();login();});
-
-      document.getElementById("edit-iv").addEventListener("click", (e)=>{e.preventDefault();openIV();});
-      document.getElementById("iv-backdrop").addEventListener("click", closeIV);
-      document.getElementById("iv-close").addEventListener("click", (e)=>{e.preventDefault();closeIV();});
-      document.getElementById("iv-cancel").addEventListener("click", (e)=>{e.preventDefault();closeIV();});
-      document.getElementById("iv-save").addEventListener("click", (e)=>{e.preventDefault();saveIV();});
-
-      document.getElementById("filter-name").addEventListener("input", renderSchools);
-      document.getElementById("filter-min-cat").addEventListener("change", renderSchools);
-      document.getElementById("sort-by").addEventListener("change", renderSchools);
-      document.getElementById("recalc").addEventListener("click", ()=>{ computed = computeAll(); renderSchools(); });
-
-      init();
-    });
   </script>
 </body>
 </html>
