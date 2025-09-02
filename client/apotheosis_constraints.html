@@ -22,7 +22,6 @@
 
     <div class="home-card list-wrap">
       <div id="list">
-        <!-- header + rows injected -->
       </div>
     </div>
   </div>
@@ -52,17 +51,6 @@ if (!(role==="admin" || role==="moderator")) {
 
 const $=s=>document.querySelector(s);
 let CACHE=[];
-
-/* ---------- Rendering ---------- */
-function headerRow(){
-  return `
-    <div class="grid header">
-      <div>ID</div>
-      <div>Constraints</div>
-      <div>Numbers</div>
-      <div style="text-align:right;">Actions</div>
-    </div>`;
-}
 
 function row(c){
   return `
@@ -99,7 +87,7 @@ function row(c){
 function render(){
   const f = $("#f-name").value.trim().toLowerCase();
   const list = f ? CACHE.filter(c=>(c.name||"").toLowerCase().includes(f)) : CACHE.slice();
-  $("#list").innerHTML = headerRow() + (list.length ? list.map(row).join("") : `<div class="grid item"><div class="muted">No constraints.</div></div>`);
+  $("#list").innerHTML = (list.length ? list.map(row).join("") : `<div class="grid item"><div class="muted">No constraints.</div></div>`);
 }
 
 /* ---------- Data ---------- */
