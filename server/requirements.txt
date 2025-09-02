@@ -7,3 +7,5 @@ dnspython
 python-dotenv
 pydantic
 certifi
+pydantic>=2.6,<3
+pydantic-settings>=2,<3

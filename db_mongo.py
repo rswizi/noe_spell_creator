@@ -5,10 +5,11 @@ from pymongo import MongoClient, ReturnDocument, ASCENDING
 import json, hashlib, re
 from pymongo import MongoClient
 from settings import settings
+from settings import settings
 
 load_dotenv()
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://rswizi:Wyp9h8zvnxq69%2Amangodb@noespellcreator.kftlncu.mongodb.net/?retryWrites=true&w=majority&appName=NoeSpellCreator")
+MONGODB_URI = settings.mongodb_uri
 DB_NAME   = os.getenv("DB_NAME", "NoeSpellCreator")
 
 client = MongoClient(settings.mongodb_uri)
