@@ -7,6 +7,8 @@ from pymongo.database import Database
 from settings import settings
 import json, hashlib, re
 
+_client = MongoClient(settings.mongodb_uri)
+
 def norm_key(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip()).lower()
 
@@ -82,3 +84,10 @@ def spell_sig(activation: str, range_val: int, aoe: str, duration: int, effect_i
     }
     raw = json.dumps(payload, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+def _db_name_from_uri_fallback() -> str:
+    u = urlparse(settings.mongodb_uri or "")
+    return (u.path or "").lstrip("/") or os.getenv("DB_NAME") or "noe_spell_creator"
+
+def get_db() -> Database:
+    return _client[_db_name_from_uri_fallback()]
