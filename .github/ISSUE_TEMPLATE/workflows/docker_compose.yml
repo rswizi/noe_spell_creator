@@ -1,0 +1,6 @@
+# docker-compose.yml
+services:
+  app:
+    build: .
+    environment:
+      - MONGODB_URI=${MONGODB_URI}
