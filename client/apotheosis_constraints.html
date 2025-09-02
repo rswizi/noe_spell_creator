@@ -6,15 +6,85 @@
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    .scroll-pad { max-height: 64vh; overflow:auto; }
-    .row{ display:flex; gap:8px; align-items:center; }
+    :root{
+      --row-gap: 10px;
+      --pad: 10px;
+      --border: #222;
+      --muted: .85;
+    }
+
+    /* Toolbar */
+    .toolbar{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .toolbar .spacer{ flex:1 1 auto; }
+
+    /* List wrapper */
+    .list-wrap{
+      border:1px solid var(--border);
+      border-radius:12px;
+      overflow:auto;
+      max-height:64vh;
+      background:#0f0f0f;
+    }
+
+    /* Grid header + rows share same template */
+    .grid{
+      display:grid;
+      grid-template-columns:
+        90px                         /* ID */
+        minmax(160px, 1.2fr)         /* Name */
+        minmax(260px, 2fr)           /* Description */
+        minmax(230px, 1fr)           /* Numbers */
+        150px;                       /* Actions */
+      gap: var(--row-gap);
+      align-items:center;
+      padding: 10px var(--pad);
+      border-bottom:1px solid var(--border);
+    }
+    .grid.header{
+      position:sticky; top:0;
+      background:#101010;
+      z-index:1;
+      font-weight:600;
+    }
+    .grid.item{ padding-top:12px; padding-bottom:12px; }
+
+    /* Field blocks */
+    .id-pill{ opacity:var(--muted); font-size:.9rem }
     .mini{ font-size:.9rem; opacity:.9 }
-    .effect-entry{ display:grid; grid-template-columns: 1fr 2fr 120px 150px; gap:8px; padding:8px 0; border-bottom:1px solid #222; }
-    .pill{ display:inline-block; padding:2px 8px; border:1px solid #444; border-radius:999px; }
+    .muted{ opacity:var(--muted) }
+    .num-grid{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap:6px;
+      align-items:end;
+    }
+    .num-grid label{ display:block; font-size:.8rem; opacity:.85; margin-bottom:2px; }
+    .num-grid input{ width:100%; }
+
+    .actions{ display:flex; gap:8px; justify-content:flex-end; }
+
+    /* Inputs should fill their cells */
+    input[type="text"], textarea{ width:100%; }
+
+    /* Modal bits (unchanged functionally) */
     .modal{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:1000; padding:16px; }
     .modal-card{ width:min(780px,96vw); max-height:90vh; overflow:auto; background:#111; color:#eee; border-radius:16px; padding:18px 20px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
     .modal-close{ float:right; font-size:26px; background:transparent; border:0; color:#aaa; cursor:pointer; }
     .modal-close:hover{ color:#fff; }
+
+    /* Responsive: stack on narrow screens */
+    @media (max-width: 920px){
+      .grid{
+        grid-template-columns: 1fr;
+      }
+      .actions{ justify-content:flex-start; }
+      .id-pill{ margin-bottom:4px; }
+    }
   </style>
 </head>
 <body>
@@ -22,17 +92,20 @@
     <h1>Constraints</h1>
 
     <div class="home-card">
-      <div class="row">
+      <div class="toolbar">
         <input id="f-name" type="text" placeholder="Filter by name…" />
         <button id="f-reset" class="btn btn-secondary small">Reset</button>
-        <div style="margin-left:auto;">
-          <button id="btn-dupes" class="btn btn-secondary">Delete Duplicates…</button>
-          <a class="btn btn-secondary" href="apotheosis_home.html">Back</a>
-        </div>
+        <div class="spacer"></div>
+        <button id="btn-dupes" class="btn btn-secondary">Delete Duplicates…</button>
+        <a class="btn btn-secondary" href="apotheosis_home.html">Back</a>
       </div>
     </div>
 
-    <div class="home-card scroll-pad" id="list"></div>
+    <div class="home-card list-wrap">
+      <div id="list">
+        <!-- header + rows injected -->
+      </div>
+    </div>
   </div>
 
   <!-- Duplicates modal -->
@@ -41,7 +114,7 @@
       <button id="dupe-close" class="modal-close">×</button>
       <h3>Duplicate Constraints</h3>
       <p class="mini">Groups below share the exact same <em>Name</em> and <em>Description</em>. Keep the first in each group and delete the others?</p>
-      <div id="dupe-wrap" class="scroll-pad" style="border:1px solid #222; border-radius:10px; padding:10px; max-height:50vh;"></div>
+      <div id="dupe-wrap" class="mini" style="border:1px solid #222; border-radius:10px; padding:10px; max-height:50vh; overflow:auto;"></div>
       <div style="display:flex; gap:10px; margin-top:10px;">
         <button id="dupe-apply" class="btn">Delete All Duplicates</button>
         <button id="dupe-cancel" class="btn btn-secondary">Cancel</button>
@@ -61,27 +134,47 @@ if (!(role==="admin" || role==="moderator")) {
 const $=s=>document.querySelector(s);
 let CACHE=[];
 
+/* ---------- Rendering ---------- */
+function headerRow(){
+  return `
+    <div class="grid header">
+      <div>ID</div>
+      <div>Name</div>
+      <div>Description</div>
+      <div>Numbers</div>
+      <div style="text-align:right;">Actions</div>
+    </div>`;
+}
+
 function row(c){
   return `
-    <div class="effect-entry" data-id="${c.id}">
+    <div class="grid item" data-id="${c.id}">
+      <div class="id-pill">[${c.id}]</div>
+
       <div>
-        <div class="mini" style="opacity:.7">[${c.id}]</div>
-        <input class="ed-name" value="${c.name||""}">
-        <div class="mini" style="margin-top:4px;">
-          Diff: <span class="pill">${c.difficulty}</span>
-          · Stab Δ: <span class="pill">${c.stability_delta}</span>
-          · Amp +: <span class="pill">${c.amplitude_bonus}</span>
+        <input class="ed-name" type="text" value="${(c.name||"").replace(/"/g,'&quot;')}">
+      </div>
+
+      <div>
+        <textarea class="ed-desc" rows="2">${(c.description||"")}</textarea>
+      </div>
+
+      <div class="num-grid">
+        <div>
+          <label>Diff.</label>
+          <input class="ed-diff" type="number" step="1" value="${c.difficulty||0}" />
+        </div>
+        <div>
+          <label>Stab Δ</label>
+          <input class="ed-stab" type="number" step="1" value="${c.stability_delta||0}" />
+        </div>
+        <div>
+          <label>Amp +</label>
+          <input class="ed-amp"  type="number" step="1" value="${c.amplitude_bonus||0}" />
         </div>
       </div>
-      <div>
-        <textarea class="ed-desc" rows="2">${c.description||""}</textarea>
-      </div>
-      <div>
-        <input class="ed-diff" type="number" step="1" value="${c.difficulty||0}" />
-        <input class="ed-stab" type="number" step="1" value="${c.stability_delta||0}" />
-        <input class="ed-amp"  type="number" step="1" value="${c.amplitude_bonus||0}" />
-      </div>
-      <div class="row">
+
+      <div class="actions">
         <button class="btn btn-secondary small" onclick="saveOne('${c.id}')">Save</button>
         <button class="btn small" onclick="delOne('${c.id}')">Delete</button>
       </div>
@@ -92,9 +185,10 @@ function row(c){
 function render(){
   const f = $("#f-name").value.trim().toLowerCase();
   const list = f ? CACHE.filter(c=>(c.name||"").toLowerCase().includes(f)) : CACHE.slice();
-  $("#list").innerHTML = list.length ? list.map(row).join("") : `<p>No constraints.</p>`;
+  $("#list").innerHTML = headerRow() + (list.length ? list.map(row).join("") : `<div class="grid item"><div class="muted">No constraints.</div></div>`);
 }
 
+/* ---------- Data ---------- */
 async function load(){
   const headers = token ? { "Authorization": `Bearer ${token}` } : {};
   const res = await fetch(`${API_BASE}/apotheosis/constraints`, { headers });
@@ -109,7 +203,7 @@ async function load(){
 }
 
 async function saveOne(id){
-  const el = document.querySelector(`[data-id="${id}"]`);
+  const el = document.querySelector(`[data-id="${CSS.escape(id)}"]`);
   const payload = {
     name: el.querySelector(".ed-name").value.trim(),
     description: el.querySelector(".ed-desc").value.trim(),
@@ -124,7 +218,6 @@ async function saveOne(id){
   });
   const j = await r.json().catch(()=>({}));
   if (r.ok && j.status!=="error") {
-    alert("Saved.");
     load();
   } else {
     alert(j.message||"Save failed.");
@@ -145,7 +238,7 @@ async function delOne(id){
   }
 }
 
-/* ---- Duplicates (client-side) ---- */
+/* ---------- Duplicates (client-side) ---------- */
 function findDupes(){
   const map = new Map();
   for (const c of CACHE){
@@ -167,11 +260,10 @@ function openDupeModal(){
       return `<div style="margin:10px 0;"><div><strong>Group ${gi+1}</strong></div><ul style="margin-left:18px">${rows}</ul></div>`;
     }).join("");
   }
-  document.getElementById("dupe-modal").style.display="grid";
+  $("#dupe-modal").style.display="grid";
 
-  document.getElementById("dupe-apply").onclick = async ()=>{
+  $("#dupe-apply").onclick = async ()=>{
     const groups2 = findDupes();
-    if (!groups2.length) { alert("No duplicates."); return; }
     const toDelete = [];
     groups2.forEach(arr => arr.slice(1).forEach(c => toDelete.push(c.id)));
     if (!toDelete.length) { alert("Nothing to delete."); return; }
@@ -184,12 +276,13 @@ function openDupeModal(){
       });
       if (r.ok) ok++; else fail++;
     }
-    alert(`Deleted ${ok} duplicate(s). ${fail?fail+" failed.":""}`);
-    document.getElementById("dupe-modal").style.display="none";
+    alert(`Deleted ${ok} duplicate(s).${fail?` ${fail} failed.`:""}`);
+    $("#dupe-modal").style.display="none";
     load();
   };
 }
 
+/* ---------- Boot ---------- */
 document.addEventListener("DOMContentLoaded", async ()=>{
   await load();
   $("#f-name").addEventListener("input", render);
