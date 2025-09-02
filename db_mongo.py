@@ -6,6 +6,9 @@ import json, hashlib, re
 from pymongo import MongoClient
 from settings import settings
 from settings import settings
+from functools import lru_cache
+from urllib.parse import urlparse
+from pymongo.database import Database
 
 load_dotenv()
 
@@ -93,3 +96,32 @@ def spell_sig(activation: str, range_val: int, aoe: str, duration: int, effect_i
     }
     raw = json.dumps(payload, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+def _mask(uri: str) -> str:
+    # don’t ever log secrets; just mask user:pass
+    try:
+        u = urlparse(uri)
+        auth = "*****" if u.password or u.username else ""
+        netloc = u.hostname or ""
+        return f"{u.scheme}://{auth}@{netloc}{u.path or ''}"
+    except Exception:
+        return "<invalid-uri>"
+
+@lru_cache
+def get_client() -> MongoClient:
+    uri = settings.mongodb_uri
+    if not uri or "xxxx.mongodb.net" in uri or "example.com" in uri:
+        raise RuntimeError("MONGODB_URI is missing or still a placeholder.")
+    return MongoClient(uri)
+
+def get_db(name="noe"):
+    return get_client()[name]
+
+
+def spell_sig(doc: dict) -> str:
+    # your helper
+    return f"{doc.get('name','').lower()}::{','.join(sorted(s['name'] for s in doc.get('schools',[])))}"
+
+def ensure_indexes(db: Database):
+    db["spells"].create_index("id", unique=True)
+    db["spells"].create_index([("name", 1)])
