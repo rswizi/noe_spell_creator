@@ -109,30 +109,6 @@ def compute_spell_costs(
         "breakdown": breakdown,
     }
 
-# ---------- Lifespan (startup/shutdown) ----------
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Ensure indexes and counters are ready on boot
-    ensure_indexes()
-    sync_counters()
-
-    # Seed admin if provided via env
-    u = os.getenv("ADMIN_USER")
-    p = os.getenv("ADMIN_PASSWORD")
-    if u and p and not get_col("users").find_one({"username": u}):
-        get_col("users").update_one(
-            {"username": u},
-            {"$set": {"username": u, "password_hash": _sha256(p), "role": "admin"}},
-            upsert=True,
-        )
-        logger.info("Seeded admin user '%s' from env", u)
-
-    yield
-
-
-# ---------- App ----------
-app = FastAPI(lifespan=lifespan)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -721,6 +697,17 @@ async def dedupe_spells_by_sig(request: Request):
             plan.append({"sig": g["_id"], "keep": ids[0], "remove": ids[1:]})
 
     return {"status":"success","applied":apply,"groups":plan}
+
+# ---------- Lifespan (startup/shutdown) ----------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Ensure indexes and counters are ready on boot
+    ensure_indexes()
+    sync_counters()
+    # ... seed admin ...
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 # ---------- FAVORITES & FILTER HELPERS ----------
 
@@ -1618,51 +1605,6 @@ def remove_spell_from_list(list_id: str, spell_id: str, request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     col.update_one({"id": list_id}, {"$pull": {"spells": str(spell_id)}})
     return {"status":"success","removed": str(spell_id)}
-
-log = logging.getLogger("uvicorn")
-
-def build_client() -> MongoClient:
-    uri = settings.mongodb_uri
-    if not uri or "xxxx.mongodb.net" in uri:
-        raise RuntimeError("MONGODB_URI is missing or still a placeholder.")
-    return MongoClient(uri)
-
-def ensure_indexes(db):  # <-- keep your real index creation here
-    # db["spells"].create_index([("name", 1)], unique=True)
-    pass
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # ----- startup -----
-    client = build_client()
-    app.state.mongo = client
-    app.state.db = client.get_database() or client["noe"]  # picks DB from URI, else "noe"
-    try:
-        ensure_indexes(app.state.db)
-        log.info("Mongo connected and indexes ensured.")
-    except Exception as e:
-        log.exception("Index setup failed: %s", e)
-        # Optional: raise to fail fast
-        # raise
-    yield
-    # ----- shutdown -----
-    try:
-        client.close()
-        log.info("Mongo client closed.")
-    except Exception:
-        log.exception("Error closing Mongo client")
-
-app = FastAPI(lifespan=lifespan)
-
-# Dependency to get the DB from app.state
-def get_db(request: Request):
-    return request.app.state.db
-
-# Example route
-@app.get("/health")
-def health(db = Depends(get_db)):
-    # Optionally touch the DB to verify connectivity
-    return {"ok": True}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
