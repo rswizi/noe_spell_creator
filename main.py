@@ -109,6 +109,17 @@ def compute_spell_costs(
         "breakdown": breakdown,
     }
 
+# ---------- Lifespan (startup/shutdown) ----------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Ensure indexes and counters are ready on boot
+    ensure_indexes()
+    sync_counters()
+    # ... seed admin ...
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -697,17 +708,6 @@ async def dedupe_spells_by_sig(request: Request):
             plan.append({"sig": g["_id"], "keep": ids[0], "remove": ids[1:]})
 
     return {"status":"success","applied":apply,"groups":plan}
-
-# ---------- Lifespan (startup/shutdown) ----------
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Ensure indexes and counters are ready on boot
-    ensure_indexes()
-    sync_counters()
-    # ... seed admin ...
-    yield
-
-app = FastAPI(lifespan=lifespan)
 
 # ---------- FAVORITES & FILTER HELPERS ----------
 
