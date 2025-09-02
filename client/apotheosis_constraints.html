@@ -5,6 +5,87 @@
   <title>Manage Constraints (Moderator)</title>
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --row-gap: 10px;
+      --pad: 10px;
+      --border: #222;
+      --muted: .85;
+    }
+
+    /* Toolbar */
+    .toolbar{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .toolbar .spacer{ flex:1 1 auto; }
+
+    /* List wrapper */
+    .list-wrap{
+      border:1px solid var(--border);
+      border-radius:12px;
+      overflow:auto;
+      max-height:64vh;
+      background:#0f0f0f;
+    }
+
+    /* Grid header + rows share same template */
+    .grid{
+      display:grid;
+      grid-template-columns:
+        90px                         /* ID */
+        minmax(160px, 1.2fr)         /* Name */
+        minmax(260px, 2fr)           /* Description */
+        minmax(230px, 1fr)           /* Numbers */
+        150px;                       /* Actions */
+      gap: var(--row-gap);
+      align-items:center;
+      padding: 10px var(--pad);
+      border-bottom:1px solid var(--border);
+    }
+    .grid.header{
+      position:sticky; top:0;
+      background:#101010;
+      z-index:1;
+      font-weight:600;
+    }
+    .grid.item{ padding-top:12px; padding-bottom:12px; }
+
+    /* Field blocks */
+    .id-pill{ opacity:var(--muted); font-size:.9rem }
+    .mini{ font-size:.9rem; opacity:.9 }
+    .muted{ opacity:var(--muted) }
+    .num-grid{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap:6px;
+      align-items:end;
+    }
+    .num-grid label{ display:block; font-size:.8rem; opacity:.85; margin-bottom:2px; }
+    .num-grid input{ width:100%; }
+
+    .actions{ display:flex; gap:8px; justify-content:flex-end; }
+
+    /* Inputs should fill their cells */
+    input[type="text"], textarea{ width:100%; }
+
+    /* Modal bits (unchanged functionally) */
+    .modal{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:1000; padding:16px; }
+    .modal-card{ width:min(780px,96vw); max-height:90vh; overflow:auto; background:#111; color:#eee; border-radius:16px; padding:18px 20px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+    .modal-close{ float:right; font-size:26px; background:transparent; border:0; color:#aaa; cursor:pointer; }
+    .modal-close:hover{ color:#fff; }
+
+    /* Responsive: stack on narrow screens */
+    @media (max-width: 920px){
+      .grid{
+        grid-template-columns: 1fr;
+      }
+      .actions{ justify-content:flex-start; }
+      .id-pill{ margin-bottom:4px; }
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -22,6 +103,7 @@
 
     <div class="home-card list-wrap">
       <div id="list">
+        <!-- header + rows injected -->
       </div>
     </div>
   </div>
@@ -51,6 +133,17 @@ if (!(role==="admin" || role==="moderator")) {
 
 const $=s=>document.querySelector(s);
 let CACHE=[];
+
+/* ---------- Rendering ---------- */
+function headerRow(){
+  return `
+    <div class="grid header">
+      <div>ID</div>
+      <div>Constraints</div>
+      <div>Numbers</div>
+      <div style="text-align:right;">Actions</div>
+    </div>`;
+}
 
 function row(c){
   return `
@@ -87,7 +180,7 @@ function row(c){
 function render(){
   const f = $("#f-name").value.trim().toLowerCase();
   const list = f ? CACHE.filter(c=>(c.name||"").toLowerCase().includes(f)) : CACHE.slice();
-  $("#list").innerHTML = (list.length ? list.map(row).join("") : `<div class="grid item"><div class="muted">No constraints.</div></div>`);
+  $("#list").innerHTML = headerRow() + (list.length ? list.map(row).join("") : `<div class="grid item"><div class="muted">No constraints.</div></div>`);
 }
 
 /* ---------- Data ---------- */
@@ -96,7 +189,7 @@ async function load(){
   const res = await fetch(`${API_BASE}/apotheosis/constraints`, { headers });
   const j = await res.json().catch(()=>({}));
   CACHE = (j.constraints||[]).map(c=>({
-    id:String(c.id), name:c.name||"",
+    id:String(c.id), name:c.name||"", description:c.description||"",
     difficulty:+(c.difficulty||0),
     stability_delta:+(c.stability_delta||0),
     amplitude_bonus:+(c.amplitude_bonus||0)
