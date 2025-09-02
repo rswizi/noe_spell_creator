@@ -2,233 +2,328 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Browse Schools</title>
+  <title>NoE — Browse Schools (Admin)</title>
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    .hidden { display:none !important; }
-    .scrollbox { max-height: 60vh; overflow: auto; }
-    .row { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid #222; }
-    .row:last-child { border-bottom:0; }
-    .kv {opacity:.85; font-size:.95rem}
-    .modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.45); z-index: 1000; padding: 16px; }
-    .modal-card { width: min(640px, 96vw); background:#111; color:#eee; border-radius: 16px; padding: 20px 22px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
-    .modal-close { float:right; background:transparent; border:0; color:#aaa; font-size:22px; cursor:pointer }
-    .modal-close:hover { color:#fff; }
-    .grid2 { display:grid; gap:10px; grid-template-columns: 1fr 1fr; }
+    .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+    .hero{font-size:2rem;margin:12px 0 4px}
+    .sub{opacity:.85}
+    .card{border:1px solid #333;border-radius:14px;padding:16px;background:#0c0c0c}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .spacer{flex:1}
+    .table{width:100%;border-collapse:collapse;margin-top:10px}
+    .table th,.table td{border-bottom:1px solid #222;padding:10px;text-align:left}
+    .chip{border:1px solid #444;border-radius:12px;padding:1px 8px;margin-right:6px;display:inline-block}
+    .modal, .modal-backdrop { display: none; }
+    .modal.open, .modal-backdrop.open { display: block; }
+    .grid-2{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+    @media (max-width: 920px){ .grid-2{grid-template-columns:1fr} }
+    .fieldset{border:1px solid #2a2a2a;border-radius:10px;padding:10px}
+    .fieldset legend{opacity:.85;font-size:.95rem;padding:0 6px}
+    .checks{display:grid;grid-template-columns:repeat(4, minmax(120px,1fr));gap:8px}
+    @media (max-width: 700px){ .checks{grid-template-columns:repeat(2, minmax(120px,1fr));} }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Browse Schools</h1>
-
-    <div class="home-card" style="margin-bottom:18px;">
-      <div class="filter-bar">
-        <input id="filter-name" type="text" placeholder="Filter by name..." />
-        <input id="filter-id" type="text" placeholder="Filter by id..." />
-        <select id="limit">
-          <option value="50">50</option>
-          <option value="100" selected>100</option>
-          <option value="200">200</option>
-          <option value="500">500</option>
-        </select>
-        <button id="clear-filters">Reset</button>
+  <div class="topbar">
+    <h1>NoE Manager</h1>
+    <div class="auth-inline">
+      <div id="user-chip" class="user-chip">
+        <span class="chip-name" id="chip-name"></span>
+        <button id="chip-logout" class="btn linklike">Log Out</button>
       </div>
-    </div>
-
-    <div class="home-card">
-      <div id="results" class="scrollbox"></div>
-      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
-        <button class="btn btn-secondary" id="prev-page">Prev</button>
-        <span id="page-info" style="align-self:center; opacity:.8;"></span>
-        <button class="btn btn-secondary" id="next-page">Next</button>
-      </div>
-    </div>
-
-    <div style="margin-top:16px;">
-      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+      <button id="open-login" class="btn btn-secondary small">Log In</button>
+      <a class="btn btn-secondary small" href="home.html">Back to Spell Manager</a>
     </div>
   </div>
 
-  <!-- Edit modal -->
-  <div id="edit-modal" class="modal hidden" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="edit-title">
-      <button class="modal-close" id="edit-close" aria-label="Close">✕</button>
-      <h2 id="edit-title">Edit School</h2>
+  <div class="wrap">
+    <div class="hero">Browse Schools</div>
+    <div class="sub">Moderator tools for editing school metadata, including linked skill & intensities.</div>
 
-      <div class="grid2" style="margin-top:10px;">
-        <div>
+    <!-- Gate -->
+    <div id="auth-gate" class="card" style="display:none;margin-top:12px;">
+      <div class="danger"><strong>Unauthorized.</strong> You must be logged in as a moderator or admin.</div>
+      <div style="margin-top:8px;"><a class="btn" href="home.html">Log In</a></div>
+    </div>
+
+    <div id="content" class="card" style="display:none;margin-top:12px;">
+      <div class="row">
+        <input id="q" type="text" placeholder="Search by school name…" style="min-width:220px;">
+        <button class="btn" id="search">Search</button>
+        <span class="spacer"></span>
+        <span id="count" class="sub"></span>
+      </div>
+
+      <table class="table" id="t">
+        <thead>
+          <tr>
+            <th style="width:24%">School</th>
+            <th style="width:20%">Linked Skill</th>
+            <th>Linked Intensities</th>
+            <th style="width:20%">Type / Range / AoE</th>
+            <th style="width:12%"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="5" class="sub">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Login Modal -->
+  <div id="login-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+  <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-card">
+      <header>
+        <div class="modal-title">Log In</div>
+        <button class="modal-close" id="close-login" aria-label="Close">✕</button>
+      </header>
+      <label>Username</label><input id="login-username" type="text">
+      <label style="margin-top:8px;">Password</label><input id="login-password" type="password">
+      <div id="login-status" class="sub" style="margin-top:8px;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="cancel-login">Cancel</button>
+        <button class="btn" id="login-btn">Log In</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="edit-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+  <div id="edit-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-card" style="max-width:900px;">
+      <header>
+        <div class="modal-title">Edit School</div>
+        <button class="modal-close" id="edit-close" aria-label="Close">✕</button>
+      </header>
+
+      <div class="grid-2">
+        <div class="fieldset">
+          <legend>Basics</legend>
           <label>Name</label>
-          <input id="ed-name" />
+          <input id="f-name" type="text">
+          <div class="row" style="margin-top:8px;">
+            <div>
+              <label>Type</label>
+              <input id="f-type" type="text" placeholder="Simple / …">
+            </div>
+            <div>
+              <label>Range Type</label>
+              <input id="f-range" type="text" placeholder="A/B/C">
+            </div>
+            <div>
+              <label>AoE Type</label>
+              <input id="f-aoe" type="text" placeholder="A/B/C">
+            </div>
+            <div style="display:flex;align-items:end;gap:8px;">
+              <input id="f-upgrade" type="checkbox"><label for="f-upgrade" style="margin:0;">Upgrade</label>
+            </div>
+          </div>
         </div>
-        <div>
-          <label>Type</label>
-          <select id="ed-type">
-            <option>Simple</option>
-            <option>Complex</option>
+
+        <div class="fieldset">
+          <legend>Links for MS (Spell List Manager)</legend>
+          <label>Linked Skill</label>
+          <select id="f-skill">
+            <option value="">— none —</option>
+            <option value="aura">Aura</option>
+            <option value="incantation">Incantation</option>
+            <option value="enchantement">Enchantement</option>
+            <option value="potential">Potential</option>
+            <option value="restoration">Restoration</option>
+            <option value="stealth">Stealth</option>
+            <option value="investigation">Investigation</option>
+            <option value="charm">Charm</option>
+            <option value="intimidation">Intimidation</option>
           </select>
-        </div>
-        <div>
-          <label>Range Type</label>
-          <select id="ed-range"><option>A</option><option>B</option><option>C</option></select>
-        </div>
-        <div>
-          <label>AoE Type</label>
-          <select id="ed-aoe"><option>A</option><option>B</option><option>C</option></select>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input id="ed-upg" type="checkbox" /><label for="ed-upg" style="margin:0;">Upgrade?</label>
+
+          <label style="margin-top:8px;">Linked Intensities</label>
+          <div class="checks">
+            <label><input type="checkbox" name="ints" value="fire"> Fire</label>
+            <label><input type="checkbox" name="ints" value="water"> Water</label>
+            <label><input type="checkbox" name="ints" value="wind"> Wind</label>
+            <label><input type="checkbox" name="ints" value="earth"> Earth</label>
+            <label><input type="checkbox" name="ints" value="sun"> Sun</label>
+            <label><input type="checkbox" name="ints" value="moon"> Moon</label>
+            <label><input type="checkbox" name="ints" value="lightning"> Lightning</label>
+            <label><input type="checkbox" name="ints" value="ki"> Ki</label>
+          </div>
+          <div class="hint" style="margin-top:6px;">Used to compute MS: MAG + linked skill + (best of 2 intensities or 1 intensity +2).</div>
         </div>
       </div>
 
-      <div style="margin-top:12px;">
-        <button class="btn" id="ed-save">Save</button>
-        <button class="btn btn-secondary" id="ed-cancel">Cancel</button>
+      <div id="edit-status" class="sub" style="margin-top:8px;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="edit-cancel">Cancel</button>
+        <button class="btn" id="edit-save">Save</button>
       </div>
+
+      <pre id="patch" style="margin-top:12px;max-height:220px;overflow:auto;border:1px solid #222;padding:10px;border-radius:10px;display:none;"></pre>
     </div>
   </div>
 
-<script>
-const API_BASE = "";
-const token = localStorage.getItem("auth_token") || "";
-const role  = (localStorage.getItem("auth_role") || "").toLowerCase();
-if (!token || (role !== "admin" && role !== "moderator")) {
-  alert("Forbidden: moderators/admins only.");
-  location.href = "home.html";
-}
+  <script>
+    const API_BASE = ""; // set "/api" if you serve behind a prefix
+    let token = localStorage.getItem("auth_token") || "";
+    const $ = (s)=>document.querySelector(s);
 
-const $ = s => document.querySelector(s);
-const resultsEl = $("#results");
-const nameEl = $("#filter-name");
-const idEl   = $("#filter-id");
-const limitEl= $("#limit");
-const pageInfo = $("#page-info");
-let PAGE = 1, TOTAL = 0;
+    // ---------- auth ----------
+    async function me(){
+      if(!token) return {ok:false};
+      const r = await fetch(`${API_BASE}/auth/me`, {headers:{Authorization:`Bearer ${token}`}});
+      const j = await r.json();
+      return (j && j.status==="success") ? {ok:true,user:j} : {ok:false};
+    }
+    function setIn(u){
+      $("#chip-name").textContent = `${u.username} (${u.role})`;
+      $("#user-chip").style.display = "flex";
+      $("#open-login").style.display = "none";
+    }
+    function setOut(){
+      $("#user-chip").style.display = "none";
+      $("#open-login").style.display = "inline-block";
+    }
+    async function logout(){
+      if(token) await fetch(`${API_BASE}/auth/logout`,{method:"POST",headers:{Authorization:`Bearer ${token}`}});
+      localStorage.clear(); token=""; setOut();
+      $("#content").style.display="none"; $("#auth-gate").style.display="block";
+    }
+    document.getElementById("chip-logout").onclick = (e)=>{e.preventDefault();logout();};
 
-let CURRENT = null; // school being edited
+    // login modal
+    const loginModal = document.getElementById("login-modal");
+    const loginBackdrop = document.getElementById("login-backdrop");
+    function openLogin(){loginModal.classList.add("open");loginBackdrop.classList.add("open");}
+    function closeLogin(){loginModal.classList.remove("open");loginBackdrop.classList.remove("open");$("#login-status").textContent="";}
+    document.getElementById("open-login").onclick=(e)=>{e.preventDefault();openLogin();};
+    document.getElementById("close-login").onclick=(e)=>{e.preventDefault();closeLogin();};
+    document.getElementById("cancel-login").onclick=(e)=>{e.preventDefault();closeLogin();};
+    document.getElementById("login-backdrop").onclick=closeLogin;
+    document.getElementById("login-btn").onclick=async(e)=>{
+      e.preventDefault();
+      const username = $("#login-username").value.trim();
+      const password = $("#login-password").value;
+      const r = await fetch(`${API_BASE}/auth/login`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password})});
+      const j = await r.json();
+      if(j.status==="success"){ localStorage.setItem("auth_token", j.token); localStorage.setItem("auth_role", j.role); token=j.token; setIn(j); closeLogin(); init(); }
+      else $("#login-status").textContent = j.message || "Login failed";
+    };
 
-function authHeaders(extra={}) {
-  return { "Authorization": `Bearer ${token}`, ...extra };
-}
+    // ---------- data ----------
+    let SCHOOLS = [];
+    async function fetchSchools(q=""){
+      const url = new URL(`${API_BASE}/admin/schools`, location.origin);
+      if(q) url.searchParams.set("name", q);
+      const r = await fetch(url.toString().replace(location.origin,""), {headers:{Authorization:`Bearer ${token}`}});
+      if(r.status===401 || r.status===403) throw new Error("Unauthorized");
+      const j = await r.json();
+      return j.schools || [];
+    }
 
-function row(s) {
-  const upg = s.upgrade ? "Yes" : "No";
-  return `
-    <div class="row">
-      <div style="flex:1">
-        <div style="font-weight:600">${s.name} <span style="opacity:.7">[${s.id}]</span></div>
-        <div class="kv">Type: ${s.school_type || "Simple"} · Range: ${s.range_type || "A"} · AoE: ${s.aoe_type || "A"} · Upgrade: ${upg}</div>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button class="btn" onclick="openEdit(${JSON.stringify(s).replace(/"/g,'&quot;')})">Edit</button>
-        <button class="btn btn-secondary" onclick="delSchool('${s.id}')">Delete</button>
-      </div>
-    </div>
-  `;
-}
+    function renderRows(){
+      const tb = $("#tbody"); tb.innerHTML="";
+      if(!SCHOOLS.length){ tb.innerHTML='<tr><td colspan="5" class="sub">No schools.</td></tr>'; $("#count").textContent=""; return; }
+      $("#count").textContent = `${SCHOOLS.length} result(s)`;
+      for(const s of SCHOOLS){
+        const tr = document.createElement("tr");
+        const ints = (s.linked_intensities||[]).map(x=>`<span class="chip">${x}</span>`).join(" ");
+        tr.innerHTML = `
+          <td><div class="k">${s.name||s.id}</div><div class="sub">id: ${s.id}</div></td>
+          <td>${s.linked_skill || "—"}</td>
+          <td>${ints || "—"}</td>
+          <td>${s.school_type||"-"} / ${s.range_type||"-"} / ${s.aoe_type||"-"}</td>
+          <td><button class="btn btn-secondary small" data-edit="${s.id}">Edit</button></td>
+        `;
+        tb.appendChild(tr);
+      }
+      tb.querySelectorAll("[data-edit]").forEach(btn=>{
+        btn.addEventListener("click", ()=> openEdit(btn.getAttribute("data-edit")));
+      });
+    }
 
-function render(list, page, limit, total) {
-  resultsEl.innerHTML = list.length ? list.map(row).join("") : "<p>No schools found.</p>";
-  pageInfo.textContent = `Page ${page} • ${list.length} / ${total}`;
-  $("#prev-page").disabled = page <= 1;
-  $("#next-page").disabled = page * limit >= total;
-}
+    // ---------- edit modal ----------
+    const editModal = document.getElementById("edit-modal");
+    const editBackdrop = document.getElementById("edit-backdrop");
+    function openEdit(id){
+      const s = SCHOOLS.find(x=>x.id===id); if(!s) return;
+      $("#f-name").value  = s.name || "";
+      $("#f-type").value  = s.school_type || "";
+      $("#f-range").value = s.range_type || "";
+      $("#f-aoe").value   = s.aoe_type || "";
+      $("#f-upgrade").checked = !!s.upgrade;
+      $("#f-skill").value = (s.linked_skill || "");
+      document.querySelectorAll('input[name="ints"]').forEach(ch => { ch.checked = (s.linked_intensities||[]).includes(ch.value); });
+      $("#edit-status").textContent = "";
+      $("#patch").style.display="none"; $("#patch").textContent="";
+      editModal.classList.add("open"); editBackdrop.classList.add("open");
+      editModal.dataset.id = id;
+    }
+    function closeEdit(){ editModal.classList.remove("open"); editBackdrop.classList.remove("open"); }
+    document.getElementById("edit-close").onclick=(e)=>{e.preventDefault();closeEdit();};
+    document.getElementById("edit-cancel").onclick=(e)=>{e.preventDefault();closeEdit();};
+    editBackdrop.onclick=closeEdit;
 
-function buildQuery() {
-  const p = new URLSearchParams();
-  if (nameEl.value.trim()) p.set("name", nameEl.value.trim());
-  if (idEl.value.trim())   p.set("sid", idEl.value.trim());
-  p.set("page", String(PAGE));
-  p.set("limit", String(limitEl.value));
-  return p.toString();
-}
+    async function saveEdit(){
+      const id = editModal.dataset.id;
+      const ints = Array.from(document.querySelectorAll('input[name="ints"]:checked')).map(x=>x.value);
+      const payload = {
+        name: $("#f-name").value.trim(),
+        school_type: $("#f-type").value.trim(),
+        range_type: $("#f-range").value.trim(),
+        aoe_type: $("#f-aoe").value.trim(),
+        upgrade: $("#f-upgrade").checked,
+        linked_skill: $("#f-skill").value || "",
+        linked_intensities: ints
+      };
+      $("#edit-status").textContent = "Saving…";
+      const r = await fetch(`${API_BASE}/admin/schools/${encodeURIComponent(id)}`, {
+        method:"PUT",
+        headers: {"Content-Type":"application/json", Authorization:`Bearer ${token}`},
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json().catch(()=>({}));
+      if(!r.ok || j.status!=="success"){ $("#edit-status").textContent = j.message || `${r.status} ${r.statusText}`; return; }
+      $("#edit-status").textContent = "Saved.";
+      if (j.patch_text){ $("#patch").style.display="block"; $("#patch").textContent = j.patch_text; }
+      // refresh list row in memory
+      const idx = SCHOOLS.findIndex(x=>x.id===id);
+      if (idx>=0) {
+        SCHOOLS[idx] = { ...SCHOOLS[idx], ...payload };
+      }
+      renderRows();
+      setTimeout(closeEdit, 500);
+    }
+    document.getElementById("edit-save").onclick=(e)=>{e.preventDefault();saveEdit();};
 
-async function fetchSchools() {
-  const q = buildQuery();
-  const res = await fetch(`${API_BASE}/admin/schools?${q}`, { headers: authHeaders() });
-  const j = await res.json();
-  if (j.status !== "success") {
-    resultsEl.innerHTML = `<p style="color:#f66">${j.message || "Failed to load schools"}</p>`;
-    return;
-  }
-  TOTAL = j.total || 0;
-  render(j.schools || [], j.page || 1, j.limit || 100, TOTAL);
-}
+    // ---------- page init ----------
+    async function init(){
+      const auth = await me();
+      if(!auth.ok || !["admin","moderator"].includes(localStorage.getItem("auth_role")||"")){
+        setOut(); $("#auth-gate").style.display="block"; $("#content").style.display="none"; return;
+      }
+      setIn(auth.user);
+      $("#auth-gate").style.display="none";
+      $("#content").style.display="block";
 
-function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+      await doSearch();
+    }
 
-document.addEventListener("DOMContentLoaded", () => {
-  fetchSchools();
+    async function doSearch(){
+      const q = $("#q").value.trim();
+      try{
+        SCHOOLS = await fetchSchools(q);
+        renderRows();
+      }catch(e){
+        $("#tbody").innerHTML = `<tr><td colspan="5" class="sub">Error: ${e.message}</td></tr>`;
+      }
+    }
 
-  const run = debounce(() => { PAGE = 1; fetchSchools(); }, 300);
-  nameEl.addEventListener("input", run);
-  idEl.addEventListener("input", run);
-  limitEl.addEventListener("change", () => { PAGE = 1; fetchSchools(); });
+    document.getElementById("search").onclick=(e)=>{e.preventDefault();doSearch();};
 
-  $("#clear-filters").addEventListener("click", () => {
-    nameEl.value = ""; idEl.value = ""; PAGE = 1; fetchSchools();
-  });
-  $("#prev-page").addEventListener("click", () => { if (PAGE>1){ PAGE--; fetchSchools(); } });
-  $("#next-page").addEventListener("click", () => { if (PAGE * Number(limitEl.value) < TOTAL){ PAGE++; fetchSchools(); } });
-
-  // modal controls
-  $("#edit-close").addEventListener("click", closeEdit);
-  $("#ed-cancel").addEventListener("click", closeEdit);
-  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeEdit(); });
-  $("#ed-save").addEventListener("click", saveEdit);
-});
-
-function openEdit(s) {
-  CURRENT = s;
-  $("#edit-title").textContent = `Edit School — ${s.name} [${s.id}]`;
-  $("#ed-name").value  = s.name || "";
-  $("#ed-type").value  = s.school_type || "Simple";
-  $("#ed-range").value = (s.range_type || "A").toUpperCase();
-  $("#ed-aoe").value   = (s.aoe_type || "A").toUpperCase();
-  $("#ed-upg").checked = !!(s.upgrade || s.is_upgrade);
-  openModal();
-}
-function openModal(){ $("#edit-modal").classList.remove("hidden"); $("#edit-modal").setAttribute("aria-hidden","false"); }
-function closeEdit(){ $("#edit-modal").classList.add("hidden"); $("#edit-modal").setAttribute("aria-hidden","true"); CURRENT=null; }
-
-async function saveEdit() {
-  if (!CURRENT) return;
-  const body = {
-    name: $("#ed-name").value.trim(),
-    school_type: $("#ed-type").value,
-    range_type: $("#ed-range").value,
-    aoe_type: $("#ed-aoe").value,
-    upgrade: $("#ed-upg").checked
-  };
-  const res = await fetch(`${API_BASE}/admin/schools/${encodeURIComponent(CURRENT.id)}`, {
-    method: "PUT",
-    headers: { ...authHeaders(), "Content-Type":"application/json" },
-    body: JSON.stringify(body)
-  });
-  const j = await res.json();
-  if (j.status === "success") {
-    closeEdit();
-    alert(`Saved. ${j.changed_spells} spell(s) were recomputed.\n\nPatch:\n${j.patch_text}`);
-    fetchSchools();
-  } else {
-    alert(j.message || "Save failed.");
-  }
-}
-
-async function delSchool(id) {
-  if (!confirm("Delete this school?\n\nIf it has effects, you'll need to reassign or delete them first (unless you use a 'force' API call).")) return;
-  const res = await fetch(`${API_BASE}/admin/schools/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-    headers: authHeaders()
-  });
-  const j = await res.json();
-  if (j.status === "success") {
-    alert("Deleted.\n\n" + (j.patch_text || ""));
-    fetchSchools();
-  } else {
-    alert(j.message || "Delete failed.");
-  }
-}
-</script>
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
 </body>
 </html>

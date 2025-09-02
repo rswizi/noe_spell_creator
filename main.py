@@ -210,6 +210,8 @@ def list_schools():
             "upgrade": bool(upg),
             "range_type": s.get("range_type"),
             "aoe_type": s.get("aoe_type"),
+            "linked_skill": s.get("linked_skill"),
+            "linked_intensities": s.get("linked_intensities", []),
         })
     out.sort(key=lambda x: x["name"].lower())
     return {"schools": out}
@@ -1160,19 +1162,29 @@ async def admin_update_school(school_id: str, request: Request):
     if not old:
         return JSONResponse({"status":"error","message":"School not found"}, status_code=404)
 
-    # Only allow editing of these fields
     name        = (body.get("name") or old.get("name","")).strip()
     school_type = (body.get("school_type") or old.get("school_type","Simple")).strip()
     range_type  = (body.get("range_type")  or old.get("range_type","A")).strip().upper()
     aoe_type    = (body.get("aoe_type")    or old.get("aoe_type","A")).strip().upper()
     upgrade     = bool(body.get("upgrade", old.get("upgrade", old.get("is_upgrade", False))))
 
+    VALID_SKILLS = {"aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation"}
+    VALID_INTS   = {"fire","water","wind","earth","sun","moon","lightning","ki"}
+
+    ls_raw = (body.get("linked_skill", old.get("linked_skill","")) or "").strip().lower()
+    linked_skill = ls_raw if ls_raw in VALID_SKILLS else ""
+
+    li_raw = body.get("linked_intensities", old.get("linked_intensities", [])) or []
+    linked_intensities = sorted({str(x).strip().lower() for x in li_raw if str(x).strip().lower() in VALID_INTS})
+
     sch.update_one({"id": school_id}, {"$set":{
         "name": name,
         "school_type": school_type,
         "range_type": range_type,
         "aoe_type": aoe_type,
-        "upgrade": bool(upgrade)
+        "upgrade": bool(upgrade),
+        "linked_skill": linked_skill,
+        "linked_intensities": linked_intensities,
     }})
 
     # build header of changes

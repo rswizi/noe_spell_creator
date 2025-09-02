@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NoE — Spell List Manager</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .wrap{max-width:1024px;margin:24px auto;padding:0 16px}
+    .hero{font-size:2rem;margin:12px 0 4px}
+    .sub{opacity:.85}
+    .grid{display:grid;gap:16px;grid-template-columns:1fr 1fr}
+    .card{border:1px solid #333;border-radius:14px;padding:16px;background:#0c0c0c}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .pill{border:1px solid #444;padding:2px 8px;border-radius:999px}
+    .list{display:grid;gap:10px;margin-top:12px}
+    .list-item{display:flex;justify-content:space-between;gap:8px;padding:10px;border:1px solid #222;border-radius:10px}
+
+    .grid-iv{display:grid;gap:8px;grid-template-columns:repeat(4,1fr)}
+    .grid-iv label{font-size:.9rem;opacity:.9}
+    .grid-iv input{width:100%}
+
+    .modal, .modal-backdrop { display: none; }
+    .modal.open, .modal-backdrop.open { display: block; }
+    .empty{opacity:.7;padding:10px}
+    @media (max-width: 840px){
+      .grid{grid-template-columns:1fr}
+      .grid-iv{grid-template-columns:repeat(2,1fr)}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>NoE Manager</h1>
+    <div class="auth-inline">
+      <div id="user-chip" class="user-chip">
+        <span class="chip-name" id="chip-name"></span>
+        <button id="chip-logout" class="btn linklike">Log Out</button>
+      </div>
+      <button id="open-login" class="btn btn-secondary small">Log In</button>
+      <a id="back-portal" class="btn btn-secondary small" href="portal.html">Back to Portal</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="hero">Spell List Manager</div>
+    <div class="sub">Create and manage your personal spell lists. (Login required)</div>
+
+    <div id="auth-gate" class="card" style="display:none;margin-top:12px;">
+      <div style="margin-bottom:8px;">You must be logged in to use the Spell List Manager.</div>
+      <button class="btn" id="gate-login">Log In</button>
+    </div>
+
+    <div class="grid" id="content" style="margin-top:16px; display:none;">
+      <div class="card">
+        <h2 style="margin-bottom:8px;">Create Spell List</h2>
+        <div class="sub" style="margin-bottom:12px;">Give your list a name and set your Initial Values.</div>
+        <div class="row">
+          <input id="sl-name" type="text" placeholder="Spell list name..." style="flex:1;min-width:240px;">
+          <button class="btn" id="open-create">Configure Initial Values</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-bottom:8px;">My Spell Lists</h2>
+        <div class="sub">Your saved spell lists.</div>
+        <div id="my-lists" class="list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="login-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+  <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true">
+    <div class="modal-card">
+      <header>
+        <div class="modal-title" id="login-title">Log In</div>
+        <button class="modal-close" id="close-login" aria-label="Close">✕</button>
+      </header>
+
+      <label for="login-username">Username</label>
+      <input type="text" id="login-username" placeholder="Enter username" />
+
+      <label for="login-password" style="margin-top:10px;">Password</label>
+      <input type="password" id="login-password" placeholder="Enter password" />
+
+      <div id="login-status" style="opacity:.85; margin-top:8px;"></div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="cancel-login">Cancel</button>
+        <button class="btn" id="login-btn">Log In</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="create-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+  <div id="create-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="create-title" aria-hidden="true">
+    <div class="modal-card" style="max-width:960px;">
+      <header>
+        <div class="modal-title" id="create-title">New Spell List</div>
+        <button class="modal-close" id="close-create" aria-label="Close">✕</button>
+      </header>
+
+      <label for="sl-name-dup">Name</label>
+      <input id="sl-name-dup" type="text" placeholder="Spell list name..." />
+
+      <div style="margin:12px 0 6px;font-weight:600;">Initial Values — Natures</div>
+      <div class="grid-iv">
+        <div><label>Fire</label><input type="number" id="iv-fire" min="0" step="1" value="0"></div>
+        <div><label>Water</label><input type="number" id="iv-water" min="0" step="1" value="0"></div>
+        <div><label>Wind</label><input type="number" id="iv-wind" min="0" step="1" value="0"></div>
+        <div><label>Earth</label><input type="number" id="iv-earth" min="0" step="1" value="0"></div>
+        <div><label>Sun</label><input type="number" id="iv-sun" min="0" step="1" value="0"></div>
+        <div><label>Moon</label><input type="number" id="iv-moon" min="0" step="1" value="0"></div>
+        <div><label>Lightning</label><input type="number" id="iv-lightning" min="0" step="1" value="0"></div>
+        <div><label>Ki</label><input type="number" id="iv-ki" min="0" step="1" value="0"></div>
+      </div>
+
+      <div style="margin:12px 0 6px;font-weight:600;">Initial Values — Skills</div>
+      <div class="grid-iv">
+        <div><label>Aura</label><input type="number" id="iv-aura" min="0" step="1" value="0"></div>
+        <div><label>Incantation</label><input type="number" id="iv-incantation" min="0" step="1" value="0"></div>
+        <div><label>Enchantement</label><input type="number" id="iv-enchantement" min="0" step="1" value="0"></div>
+        <div><label>Potential</label><input type="number" id="iv-potential" min="0" step="1" value="0"></div>
+        <div><label>Restoration</label><input type="number" id="iv-restoration" min="0" step="1" value="0"></div>
+        <div><label>Stealth</label><input type="number" id="iv-stealth" min="0" step="1" value="0"></div>
+        <div><label>Investigation</label><input type="number" id="iv-investigation" min="0" step="1" value="0"></div>
+        <div><label>Charm</label><input type="number" id="iv-charm" min="0" step="1" value="0"></div>
+        <div><label>Intimidation</label><input type="number" id="iv-intimidation" min="0" step="1" value="0"></div>
+      </div>
+
+      <div id="create-status" style="opacity:.85; margin-top:8px;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="cancel-create">Cancel</button>
+        <button class="btn" id="create-btn">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "";
+
+    const loginModal = document.getElementById("login-modal");
+    const loginBackdrop = document.getElementById("login-backdrop");
+    const loginStatus = document.getElementById("login-status");
+    function openLogin(){ loginModal.classList.add("open"); loginBackdrop.classList.add("open"); document.getElementById("login-username").focus(); }
+    function closeLogin(){ loginModal.classList.remove("open"); loginBackdrop.classList.remove("open"); loginStatus.textContent=""; }
+    async function login() {
+      const username = document.getElementById("login-username").value.trim();
+      const password = document.getElementById("login-password").value;
+      loginStatus.textContent = "";
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        localStorage.setItem("auth_token", data.token);
+        localStorage.setItem("auth_username", data.username);
+        localStorage.setItem("auth_role", data.role);
+        setLoggedInUI(data.username, data.role);
+        closeLogin();
+        init();
+      } else {
+        loginStatus.textContent = data.message || "Login failed";
+      }
+    }
+    async function logout() {
+      const token = localStorage.getItem("auth_token");
+      if (token) {
+        await fetch(`${API_BASE}/auth/logout`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+      }
+      localStorage.clear();
+      setLoggedOutUI();
+      document.getElementById("content").style.display = "none";
+      document.getElementById("auth-gate").style.display = "block";
+    }
+
+    function setLoggedInUI(username, role) {
+      document.getElementById("chip-name").textContent = `${username} (${role})`;
+      document.getElementById("user-chip").style.display = "flex";
+      document.getElementById("open-login").style.display = "none";
+    }
+    function setLoggedOutUI() {
+      document.getElementById("user-chip").style.display = "none";
+      document.getElementById("open-login").style.display = "inline-block";
+    }
+
+    const createModal = document.getElementById("create-modal");
+    const createBackdrop = document.getElementById("create-backdrop");
+    const createStatus = document.getElementById("create-status");
+    function openCreate(){
+      document.getElementById("sl-name-dup").value = document.getElementById("sl-name").value.trim();
+      createModal.classList.add("open"); createBackdrop.classList.add("open");
+    }
+    function closeCreate(){
+      createModal.classList.remove("open"); createBackdrop.classList.remove("open");
+      createStatus.textContent = "";
+    }
+
+    async function me() {
+      const token = localStorage.getItem("auth_token") || "";
+      if (!token) return { ok:false };
+      try {
+        const res = await fetch(`${API_BASE}/auth/me`, { headers: { "Authorization": `Bearer ${token}` }});
+        const j = await res.json();
+        return (j && j.status==="success") ? { ok:true, user:j } : { ok:false };
+      } catch { return { ok:false }; }
+    }
+
+    async function fetchMyLists() {
+      const token = localStorage.getItem("auth_token") || "";
+      const res = await fetch(`${API_BASE}/spell_lists/mine`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.status === 401) throw new Error("Unauthorized");
+      const j = await res.json();
+      return j.lists || [];
+    }
+
+    async function postCreateSpellList(payload) {
+      const token = localStorage.getItem("auth_token") || "";
+      const res = await fetch(`${API_BASE}/spell_lists`, {
+        method:"POST",
+        headers: {
+          "Content-Type":"application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (res.status === 401) throw new Error("Unauthorized");
+      return await res.json();
+    }
+
+    function renderMyLists(lists) {
+      const container = document.getElementById("my-lists");
+      container.innerHTML = "";
+      if (!lists.length) {
+        container.innerHTML = `<div class="empty">No spell lists yet.</div>`;
+        return;
+      }
+      for (const lst of lists) {
+        const div = document.createElement("div");
+        div.className = "list-item";
+        const meta = document.createElement("div");
+        const name = document.createElement("div");
+        name.style.fontWeight = "600";
+        name.textContent = lst.name;
+
+        const sub = document.createElement("div");
+        sub.className = "sub";
+        const created = lst.created_at ? new Date(lst.created_at).toLocaleString() : "";
+        const count = lst.school_count ?? (lst.stats?.school_count ?? 0);
+        sub.textContent = `Created ${created} • ${count} school snapshots`;
+        meta.appendChild(name); meta.appendChild(sub);
+
+        const actions = document.createElement("div");
+        const openBtn = document.createElement("a");
+        openBtn.className = "btn btn-secondary";
+        openBtn.textContent = "Open";
+        openBtn.href = `spell_list_view.html?id=${encodeURIComponent(lst.id || lst._id || "")}`;
+        actions.appendChild(openBtn);
+
+        div.appendChild(meta);
+        div.appendChild(actions);
+        container.appendChild(div);
+      }
+    }
+
+    function gatherPayload() {
+      const name1 = document.getElementById("sl-name").value.trim();
+      const name2 = document.getElementById("sl-name-dup").value.trim();
+      const name = name2 || name1;
+
+      if (!name) { throw new Error("Please provide a name for your spell list."); }
+
+      const natures = {
+        fire: +document.getElementById("iv-fire").value || 0,
+        water: +document.getElementById("iv-water").value || 0,
+        wind: +document.getElementById("iv-wind").value || 0,
+        earth: +document.getElementById("iv-earth").value || 0,
+        sun: +document.getElementById("iv-sun").value || 0,
+        moon: +document.getElementById("iv-moon").value || 0,
+        lightning: +document.getElementById("iv-lightning").value || 0,
+        ki: +document.getElementById("iv-ki").value || 0,
+      };
+
+      const skills = {
+        aura: +document.getElementById("iv-aura").value || 0,
+        incantation: +document.getElementById("iv-incantation").value || 0,
+        enchantement: +document.getElementById("iv-enchantement").value || 0,
+        potential: +document.getElementById("iv-potential").value || 0,
+        restoration: +document.getElementById("iv-restoration").value || 0,
+        stealth: +document.getElementById("iv-stealth").value || 0,
+        investigation: +document.getElementById("iv-investigation").value || 0,
+        charm: +document.getElementById("iv-charm").value || 0,
+        intimidation: +document.getElementById("iv-intimidation").value || 0,
+      };
+
+      return { name, initial_values: { natures, skills } };
+    }
+
+    async function init() {
+      const auth = await me();
+      if (!auth.ok) {
+        setLoggedOutUI();
+        document.getElementById("auth-gate").style.display = "block";
+        document.getElementById("content").style.display = "none";
+        return;
+      }
+      setLoggedInUI(localStorage.getItem("auth_username") || "User", localStorage.getItem("auth_role") || "");
+      document.getElementById("auth-gate").style.display = "none";
+      document.getElementById("content").style.display = "grid";
+
+      try {
+        const lists = await fetchMyLists();
+        renderMyLists(lists);
+      } catch (e) {
+        const c = document.getElementById("my-lists");
+        c.innerHTML = `<div class="empty">Could not load your lists (${e.message}).</div>`;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("chip-logout").addEventListener("click", (e)=>{e.preventDefault();logout();});
+      document.getElementById("open-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
+      document.getElementById("gate-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
+
+      document.getElementById("login-backdrop").addEventListener("click", closeLogin);
+      document.getElementById("close-login").addEventListener("click", (e)=>{e.preventDefault();closeLogin();});
+      document.getElementById("cancel-login").addEventListener("click", (e)=>{e.preventDefault();closeLogin();});
+      document.getElementById("login-btn").addEventListener("click", (e)=>{e.preventDefault();login();});
+      document.addEventListener("keydown", (e)=>{ if (e.key === "Escape") { closeLogin(); closeCreate(); }});
+
+      document.getElementById("open-create").addEventListener("click", (e)=>{e.preventDefault();openCreate();});
+      document.getElementById("create-backdrop").addEventListener("click", closeCreate);
+      document.getElementById("close-create").addEventListener("click", (e)=>{e.preventDefault();closeCreate();});
+      document.getElementById("cancel-create").addEventListener("click", (e)=>{e.preventDefault();closeCreate();});
+      document.getElementById("create-btn").addEventListener("click", async (e)=>{
+        e.preventDefault();
+        try {
+          const payload = gatherPayload();
+          createStatus.textContent = "Creating...";
+          const res = await postCreateSpellList(payload);
+          if (res.status === "success") {
+            createStatus.textContent = "Created!";
+            closeCreate();
+            const lists = await fetchMyLists();
+            renderMyLists(lists);
+          } else {
+            createStatus.textContent = res.message || "Failed to create spell list.";
+          }
+        } catch (err) {
+          createStatus.textContent = err.message || "Validation error.";
+        }
+      });
+
+      init();
+    });
+  </script>
+</body>
+</html>
