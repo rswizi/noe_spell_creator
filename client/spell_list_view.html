@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NoE — Spell List</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* ===== SCOPE ALL PAGE STYLES TO A ROOT ID TO AVOID CONFLICTS ===== */
+    #sl * { box-sizing: border-box; }
+
+    /* Layout */
+    #sl .wrap{max-width:1120px;margin:24px auto;padding:0 16px}
+    #sl .hero{font-size:2rem;margin:12px 0 4px}
+    #sl .sub{opacity:.85}
+    #sl .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    #sl .spacer{flex:1}
+
+    /* Cards + tables */
+    #sl .card{border:1px solid #333;border-radius:14px;padding:16px;background:#0c0c0c}
+    #sl .grid{display:grid;gap:16px}
+    #sl .grid.cols-2{grid-template-columns:1fr 1fr}
+    @media (max-width:980px){ #sl .grid.cols-2{grid-template-columns:1fr} }
+    #sl .chips{display:flex;gap:6px;flex-wrap:wrap}
+    #sl .pill{border:1px solid #444;padding:2px 8px;border-radius:999px}
+    #sl .muted{opacity:.8}
+    #sl .k{font-weight:600}
+    #sl .hint{font-size:.9rem;opacity:.8}
+    #sl .badge{border:1px solid #555;border-radius:6px;padding:2px 6px}
+    #sl .ok{border-color:#2a6}
+    #sl .warn{border-color:#a62}
+    #sl .err{border-color:#a33}
+    #sl .empty{opacity:.7;padding:10px}
+
+    #sl .table{width:100%;border-collapse:collapse;margin-top:12px}
+    #sl .table th,#sl .table td{border-bottom:1px solid #222;padding:10px;text-align:left;vertical-align:top}
+    #sl .table th{opacity:.85}
+
+    /* Modal system (defaults hidden) */
+    #sl .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:none}
+    #sl .modal{position:fixed;inset:0;display:none;z-index:1001;align-items:center;justify-content:center;padding:16px}
+    #sl .modal.open,#sl .modal-backdrop.open{display:flex}
+    #sl .modal-card{
+      width:100%;max-width:960px;background:#0e0e0e;border:1px solid #2a2a2a;
+      border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.6)
+    }
+    #sl .modal-card header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    #sl .modal-title{font-weight:700}
+    #sl .modal-close{border:0;background:transparent;color:inherit;cursor:pointer;font-size:18px}
+
+    /* IV grid */
+    #sl .grid-iv{display:grid;gap:8px;grid-template-columns:repeat(4,1fr)}
+    #sl .grid-iv label{font-size:.9rem;opacity:.9}
+    #sl .grid-iv input{width:100%}
+    @media (max-width:840px){ #sl .grid-iv{grid-template-columns:repeat(2,1fr)} }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>NoE Manager</h1>
+    <div class="auth-inline">
+      <div id="user-chip" class="user-chip">
+        <span class="chip-name" id="chip-name"></span>
+        <button id="chip-logout" class="btn linklike">Log Out</button>
+      </div>
+      <button id="open-login" class="btn btn-secondary small">Log In</button>
+      <a class="btn btn-secondary small" href="spell_list_home.html">Back to Lists</a>
+      <a class="btn btn-secondary small" href="portal.html">Portal</a>
+    </div>
+  </div>
+
+  <!-- ROOT WRAPPER TO SCOPE STYLES -->
+  <div id="sl">
+    <div class="wrap">
+      <div class="hero" id="list-name">Spell List</div>
+      <div class="sub" id="list-meta">Loading…</div>
+
+      <!-- Auth Gate -->
+      <div id="auth-gate" class="card" style="display:none;margin-top:12px;">
+        <div style="margin-bottom:8px;">You must be logged in to view this spell list.</div>
+        <button class="btn" id="gate-login">Log In</button>
+      </div>
+
+      <!-- Content -->
+      <div id="content" class="grid" style="display:none;margin-top:16px;">
+
+        <!-- IV card -->
+        <div class="card">
+          <div class="row">
+            <h2 style="margin:0;">Initial Values</h2>
+            <span class="spacer"></span>
+            <button class="btn btn-secondary" id="edit-iv">Edit Initial Values</button>
+          </div>
+          <div class="grid cols-2" style="margin-top:10px;">
+            <div>
+              <div class="muted" style="margin-bottom:6px;">Natures</div>
+              <div id="iv-natures" class="chips"></div>
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">Skills</div>
+              <div id="iv-skills" class="chips"></div>
+              <div class="muted" style="margin-top:10px;">MAG: <span id="iv-mag" class="k">0</span></div>
+            </div>
+          </div>
+          <div class="hint" style="margin-top:10px;">
+            MS = MAG + linked skill + (best of: top two linked intensities) or (top one intensity +2).
+          </div>
+        </div>
+
+        <!-- Schools card -->
+        <div class="card">
+          <div class="row" style="margin-bottom:8px;">
+            <h2 style="margin:0;">School Categories</h2>
+            <span class="spacer"></span>
+            <input id="filter-name" type="text" placeholder="Filter by school name…" style="min-width:220px;">
+            <select id="filter-min-cat">
+              <option value="">Min. Category: Any</option>
+            </select>
+            <select id="sort-by">
+              <option value="cat_desc">Sort: Category (high → low)</option>
+              <option value="name_asc">Sort: Name (A → Z)</option>
+            </select>
+            <button class="btn" id="recalc">Recalculate</button>
+          </div>
+
+          <table class="table" id="schools-table">
+            <thead>
+              <tr>
+                <th style="width:22%;">School</th>
+                <th style="width:20%;">Linked</th>
+                <th style="width:22%;">MS Breakdown</th>
+                <th style="width:18%;">MS</th>
+                <th style="width:18%;">Category</th>
+              </tr>
+            </thead>
+            <tbody id="schools-body">
+              <tr><td colspan="5" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+          <div class="hint" style="margin-top:8px;">
+            Learning Time (days): Novice 2 • Apprentice 8 • Disciple 10 • Adept 14 • Mage 16 • Magister 20 • High Mage 22 • Master 28 • Grand Master 32 • Archmage 36 • Supreme Archmage 46 • Avant-Garde 50
+          </div>
+        </div>
+
+        <!-- My Spells card -->
+        <div class="card" id="my-spells-card" style="display:none;">
+          <div class="row" style="margin-bottom:8px;">
+            <h2 style="margin:0;">My Spells</h2>
+            <span class="spacer"></span>
+            <button class="btn" id="open-add-spells">Add Spells</button>
+          </div>
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:30%;">Name</th>
+                <th>Schools</th>
+                <th style="width:14%;">Category</th>
+                <th style="width:18%;">Eligibility</th>
+                <th style="width:10%;"></th>
+              </tr>
+            </thead>
+            <tbody id="my-spells-body">
+              <tr><td colspan="5" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div><!-- /#content -->
+    </div><!-- /.wrap -->
+
+    <!-- Login Modal -->
+    <div id="login-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+    <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true">
+      <div class="modal-card">
+        <header>
+          <div class="modal-title" id="login-title">Log In</div>
+          <button class="modal-close" id="close-login" aria-label="Close">✕</button>
+        </header>
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" placeholder="Enter username" />
+        <label for="login-password" style="margin-top:10px;">Password</label>
+        <input type="password" id="login-password" placeholder="Enter password" />
+        <div id="login-status" class="sub" style="margin-top:8px;"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="cancel-login">Cancel</button>
+          <button class="btn" id="login-btn">Log In</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Spells Modal -->
+    <div id="addspells-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+    <div id="addspells-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal-card" style="max-width:1000px;">
+        <header>
+          <div class="modal-title">Add Spells</div>
+          <button class="modal-close" id="addspells-close" aria-label="Close">✕</button>
+        </header>
+        <div class="row" style="gap:10px; margin-bottom:8px;">
+          <input id="as-q" type="text" placeholder="Search name…" style="min-width:220px;">
+          <select id="as-school"><option value="">Any school</option></select>
+          <select id="as-category">
+            <option value="">Any category</option>
+            <option>Novice</option><option>Apprentice</option><option>Disciple</option>
+            <option>Adept</option><option>Mage</option><option>Magister</option>
+            <option>High Mage</option><option>Master</option><option>Grand Master</option>
+            <option>Archmage</option><option>Supreme Archmage</option><option>Avant-Garde</option>
+          </select>
+          <button class="btn" id="as-search">Search</button>
+          <span class="spacer"></span>
+          <button class="btn" id="as-add-selected">Add Selected</button>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="width:4%;"><input type="checkbox" id="as-check-all"></th>
+              <th style="width:30%;">Name</th>
+              <th>Schools</th>
+              <th style="width:14%;">Category</th>
+              <th style="width:18%;">Eligibility</th>
+            </tr>
+          </thead>
+          <tbody id="as-results"><tr><td colspan="5" class="empty">Search to begin.</td></tr></tbody>
+        </table>
+        <div id="as-status" class="hint" style="margin-top:8px;"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="addspells-cancel">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit IV Modal -->
+    <div id="iv-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+    <div id="iv-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal-card" style="max-width:960px;">
+        <header>
+          <div class="modal-title" id="iv-title">Edit Initial Values</div>
+          <button class="modal-close" id="iv-close" aria-label="Close">✕</button>
+        </header>
+
+        <label for="iv-mag-input" class="k">MAG</label>
+        <input id="iv-mag-input" type="number" min="0" step="1" value="0" />
+
+        <div style="margin:12px 0 6px;font-weight:600;">Natures</div>
+        <div class="grid-iv">
+          <div><label>Fire</label><input type="number" id="iv-fire" min="0" step="1"></div>
+          <div><label>Water</label><input type="number" id="iv-water" min="0" step="1"></div>
+          <div><label>Wind</label><input type="number" id="iv-wind" min="0" step="1"></div>
+          <div><label>Earth</label><input type="number" id="iv-earth" min="0" step="1"></div>
+          <div><label>Sun</label><input type="number" id="iv-sun" min="0" step="1"></div>
+          <div><label>Moon</label><input type="number" id="iv-moon" min="0" step="1"></div>
+          <div><label>Lightning</label><input type="number" id="iv-lightning" min="0" step="1"></div>
+          <div><label>Ki</label><input type="number" id="iv-ki" min="0" step="1"></div>
+        </div>
+
+        <div style="margin:12px 0 6px;font-weight:600;">Skills</div>
+        <div class="grid-iv">
+          <div><label>Aura</label><input type="number" id="iv-aura" min="0" step="1"></div>
+          <div><label>Incantation</label><input type="number" id="iv-incantation" min="0" step="1"></div>
+          <div><label>Enchantement</label><input type="number" id="iv-enchantement" min="0" step="1"></div>
+          <div><label>Potential</label><input type="number" id="iv-potential" min="0" step="1"></div>
+          <div><label>Restoration</label><input type="number" id="iv-restoration" min="0" step="1"></div>
+          <div><label>Stealth</label><input type="number" id="iv-stealth" min="0" step="1"></div>
+          <div><label>Investigation</label><input type="number" id="iv-investigation" min="0" step="1"></div>
+          <div><label>Charm</label><input type="number" id="iv-charm" min="0" step="1"></div>
+          <div><label>Intimidation</label><input type="number" id="iv-intimidation" min="0" step="1"></div>
+        </div>
+
+        <div id="iv-status" class="hint" style="margin-top:8px;"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="iv-cancel">Cancel</button>
+          <button class="btn" id="iv-save">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const API_BASE = ""; // set "/api" if needed
+
+    // ---------- Category thresholds ----------
+    const CATS = [
+      {name:"Avant-Garde", ms:92, days:50},
+      {name:"Supreme Archmage", ms:82, days:46},
+      {name:"Archmage", ms:72, days:36},
+      {name:"Grand Master", ms:62, days:32},
+      {name:"Master", ms:52, days:28},
+      {name:"High Mage", ms:42, days:22},
+      {name:"Magister", ms:37, days:20},
+      {name:"Mage", ms:32, days:16},
+      {name:"Adept", ms:27, days:14},
+      {name:"Disciple", ms:22, days:10},
+      {name:"Apprentice", ms:17, days:8},
+      {name:"Novice", ms:12, days:2},
+      {name:"Unqualified", ms:-Infinity, days:0},
+    ];
+    const CAT_ORDER = Object.fromEntries(CATS.map((c,i)=>[c.name, CATS.length-1 - i]));
+
+    // ---------- State ----------
+    let token = "";
+    let listId = "";
+    let spellList = null;   // { id, name, initial_values:{ mag, natures{}, skills{} }, ... }
+    let schools = [];       // [{id,name, linked_skill, linked_intensities: []}, ...]
+    let computed = [];      // results per school
+
+    // ---------- Helpers ----------
+    function qs(name) {
+      const p = new URLSearchParams(location.search);
+      return p.get(name) || "";
+    }
+    function lc(s){ return (s||"").toString().trim().toLowerCase(); }
+    function title(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+
+    function mapCategory(ms){
+      for (const c of CATS) { if (ms >= c.ms) return c; }
+      return CATS[CATS.length-1];
+    }
+
+    function bestMSForSchool(iv, school){
+      const mag = +((iv.mag ?? 0) || 0);
+      const skillKey = lc(school.linked_skill || "");
+      const skillVal = +((iv.skills?.[skillKey]) ?? 0);
+
+      const ints = (school.linked_intensities || []).map(lc);
+      const pool = ints.map(k => +((iv.natures?.[k]) ?? 0)).sort((a,b)=>b-a);
+      const top1 = pool[0] ?? 0, top2 = pool[1] ?? 0;
+
+      const msTwo = mag + skillVal + top1 + top2;
+      const msOne = mag + skillVal + top1 + 2;
+
+      const useOne = msOne > msTwo;
+      const ms = useOne ? msOne : msTwo;
+      return {
+        ms,
+        useOne,
+        pick: useOne ? [top1, "+2 bonus"] : [top1, top2],
+        mag, skillVal, top1, top2
+      };
+    }
+
+    function fmtPick(p){
+      if (!p) return "";
+      if (p[1] === "+2 bonus") return `${p[0]} + 2`;
+      return `${p[0]} + ${p[1]}`;
+    }
+
+    function renderIVChips(iv){
+      const nWrap = document.getElementById("iv-natures");
+      const sWrap = document.getElementById("iv-skills");
+      nWrap.innerHTML = ""; sWrap.innerHTML = "";
+      const n = iv.natures || {};
+      const s = iv.skills || {};
+      for (const k of ["fire","water","wind","earth","sun","moon","lightning","ki"]) {
+        const v = +n[k] || 0;
+        const chip = document.createElement("span");
+        chip.className = "pill";
+        chip.textContent = `${title(k)}: ${v}`;
+        nWrap.appendChild(chip);
+      }
+      for (const k of ["aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation"]) {
+        const v = +s[k] || 0;
+        const chip = document.createElement("span");
+        chip.className = "pill";
+        chip.textContent = `${title(k)}: ${v}`;
+        sWrap.appendChild(chip);
+      }
+      document.getElementById("iv-mag").textContent = +((iv.mag ?? 0) || 0);
+    }
+
+    function buildMinCatSelect(){
+      const sel = document.getElementById("filter-min-cat");
+      for (const c of [...CATS].reverse().filter(x=>x.name!=="Unqualified")) {
+        const opt = document.createElement("option");
+        opt.value = c.name;
+        opt.textContent = c.name;
+        sel.appendChild(opt);
+      }
+    }
+
+    // ---------- API ----------
+    async function apiMe(){
+      if (!token) return { ok:false };
+      try{
+        const r = await fetch(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` }});
+        const j = await r.json();
+        return (j && j.status==="success") ? { ok:true, user:j } : { ok:false };
+      }catch{ return { ok:false }; }
+    }
+
+    async function fetchSpellList(id){
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (r.status===401) throw new Error("Unauthorized");
+      const j = await r.json();
+      return j.list || j;
+    }
+
+    async function updateSpellList(id, payload){
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (r.status===401) throw new Error("Unauthorized");
+      return await r.json();
+    }
+
+    async function fetchSchools(){
+      const r = await fetch(`${API_BASE}/schools`, { headers: { Authorization: `Bearer ${token}` }});
+      const j = await r.json();
+      return j.schools || j.items || j || [];
+    }
+
+    // ---------- Compute + Render ----------
+    function computeAll(){
+      if (!spellList || !schools.length) return [];
+      const iv = normalizeIV(spellList.initial_values || {});
+      const out = [];
+      for (const sch of schools) {
+        const b = bestMSForSchool(iv, sch);
+        const cat = mapCategory(b.ms);
+        out.push({ school: sch, ms: b.ms, cat, breakdown: b });
+      }
+      return out;
+    }
+
+    function normalizeIV(iv){
+      const defN = {fire:0,water:0,wind:0,earth:0,sun:0,moon:0,lightning:0,ki:0};
+      const defS = {aura:0,incantation:0,enchantement:0,potential:0,restoration:0,stealth:0,investigation:0,charm:0,intimidation:0};
+      const n = Object.assign({}, defN);
+      const s = Object.assign({}, defS);
+      for (const k in (iv.natures||{})) n[lc(k)] = +(iv.natures[k]||0);
+      for (const k in (iv.skills||{})) s[lc(k)] = +(iv.skills[k]||0);
+      return { mag: +(iv.mag||0), natures:n, skills:s };
+    }
+
+    function renderSchools(){
+      const tbody = document.getElementById("schools-body");
+      tbody.innerHTML = "";
+
+      const nameFilter = lc(document.getElementById("filter-name").value);
+      const minCat = document.getElementById("filter-min-cat").value;
+      const sortBy = document.getElementById("sort-by").value;
+
+      let rows = [...computed];
+
+      if (nameFilter) rows = rows.filter(r => lc(r.school.name || "").includes(nameFilter));
+      if (minCat) rows = rows.filter(r => CAT_ORDER[r.cat.name] >= CAT_ORDER[minCat]);
+
+      if (sortBy === "name_asc") {
+        rows.sort((a,b)=> (a.school.name||"").localeCompare(b.school.name||""));
+      } else {
+        rows.sort((a,b)=>{
+          const d = CAT_ORDER[b.cat.name] - CAT_ORDER[a.cat.name];
+          if (d!==0) return d;
+          if (b.ms !== a.ms) return b.ms - a.ms;
+          return (a.school.name||"").localeCompare(b.school.name||"");
+        });
+      }
+
+      if (!rows.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5; td.className = "empty"; td.textContent = "No schools match the current filters.";
+        tr.appendChild(td); tbody.appendChild(tr); return;
+      }
+
+      for (const r of rows) {
+        const tr = document.createElement("tr");
+
+        const tdName = document.createElement("td");
+        tdName.innerHTML = `<div class="k">${r.school.name || "Unknown"}</div>`;
+        tr.appendChild(tdName);
+
+        const tdLinked = document.createElement("td");
+        const ints = (r.school.linked_intensities||[]).join(", ");
+        tdLinked.innerHTML = `<div>Skill: <span class="k">${r.school.linked_skill || "-"}</span></div>
+                              <div>Intensities: <span class="k">${ints || "-"}</span></div>`;
+        tr.appendChild(tdLinked);
+
+        const tdBreak = document.createElement("td");
+        tdBreak.innerHTML = `MAG ${r.breakdown.mag} + Skill ${r.breakdown.skillVal} + ${fmtPick(r.breakdown.pick)}`;
+        tr.appendChild(tdBreak);
+
+        const tdMS = document.createElement("td");
+        tdMS.innerHTML = `<span class="badge ok">MS ${r.ms}</span>`;
+        tr.appendChild(tdMS);
+
+        const tdCat = document.createElement("td");
+        tdCat.innerHTML = `<div class="k">${r.cat.name}</div><div class="muted">${r.cat.days} days</div>`;
+        tr.appendChild(tdCat);
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    function setLoggedInUI(username, role) {
+      document.getElementById("chip-name").textContent = `${username} (${role})`;
+      document.getElementById("user-chip").style.display = "flex";
+      document.getElementById("open-login").style.display = "none";
+    }
+    function setLoggedOutUI() {
+      document.getElementById("user-chip").style.display = "none";
+      document.getElementById("open-login").style.display = "inline-block";
+    }
+
+    // ---- Spell List API (add/remove/list)
+    async function fetchListSpells() {
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const j = await r.json();
+      return (j.spells || []);
+    }
+    async function addSpells(ids) {
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids })
+      });
+      return await r.json();
+    }
+    async function removeSpell(id) {
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return await r.json();
+    }
+
+    // ---- Public /spells search (with derived schools)
+    async function searchSpells(q="", school="", category="") {
+      const params = new URLSearchParams();
+      if (q) params.set("name", q);
+      if (school) params.set("school", school);
+      if (category) params.set("category", category);
+      params.set("limit","100");
+      const r = await fetch(`${API_BASE}/spells?${params.toString()}`);
+      const j = await r.json();
+      return j.spells || [];
+    }
+
+    // ---- Eligibility check
+    function catOrder(name){ return CAT_ORDER[name] ?? 0; }
+    function eligibleForSpell(spell) {
+      // Must meet the spell's category in ALL of its schools
+      const need = spell.category || "Novice";
+      const reqOrd = catOrder(need);
+      const myBySchool = Object.fromEntries(computed.map(r => [ (r.school.id || r.school.name || "").toLowerCase(), r.cat ]));
+      const byName     = Object.fromEntries(computed.map(r => [ (r.school.name || "").toLowerCase(), r.cat ]));
+      return (spell.schools || []).every(s => {
+        const k = (s.id || s.name || "").toLowerCase();
+        const mine = myBySchool[k] || byName[k]; // match by id or name
+        return mine && catOrder(mine.name) >= reqOrd;
+      });
+    }
+
+    // ---- Render My Spells
+    let mySpells = [];
+    async function loadMySpells(){
+      document.getElementById("my-spells-card").style.display = "block";
+      const tbody = document.getElementById("my-spells-body");
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">Loading…</td></tr>`;
+      mySpells = await fetchListSpells();
+
+      if (!mySpells.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty">No spells yet. Click “Add Spells”.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = "";
+      for (const sp of mySpells) {
+        const tr = document.createElement("tr");
+        const schools = (sp.schools||[]).map(s=>s.name).join(", ");
+        const ok = eligibleForSpell(sp);
+        tr.innerHTML = `
+          <td><div class="k">${sp.name}</div><div class="muted">id: ${sp.id}</div></td>
+          <td>${schools||"—"}</td>
+          <td>${sp.category || "—"}</td>
+          <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Below requirement"}</span></td>
+          <td><button class="btn btn-secondary small" data-remove="${sp.id}">Remove</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+      tbody.querySelectorAll("[data-remove]").forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          const id = btn.getAttribute("data-remove");
+          await removeSpell(id);
+          await loadMySpells();
+        });
+      });
+    }
+
+    // ---- Add Spells modal wiring
+    const asModal = document.getElementById("addspells-modal");
+    const asBackdrop = document.getElementById("addspells-backdrop");
+    function openAdd(){ asModal.classList.add("open"); asBackdrop.classList.add("open"); document.getElementById("as-q").focus(); }
+    function closeAdd(){ asModal.classList.remove("open"); asBackdrop.classList.remove("open"); document.getElementById("as-status").textContent=""; }
+
+    function fillSchoolSelect(){
+      const sel = document.getElementById("as-school");
+      sel.innerHTML = `<option value="">Any school</option>`;
+      for (const s of schools) {
+        const opt = document.createElement("option");
+        opt.value = s.id || s.name; opt.textContent = s.name || s.id;
+        sel.appendChild(opt);
+      }
+    }
+
+    async function runSearch(){
+      const q = document.getElementById("as-q").value.trim();
+      const school = document.getElementById("as-school").value;
+      const cat = document.getElementById("as-category").value;
+      const list = await searchSpells(q, school, cat);
+      const body = document.getElementById("as-results");
+      if (!list.length) { body.innerHTML = `<tr><td colspan="5" class="empty">No results.</td></tr>`; return; }
+      body.innerHTML = "";
+      for (const sp of list) {
+        const ok = eligibleForSpell(sp);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input type="checkbox" class="as-chk" value="${sp.id}"></td>
+          <td><div class="k">${sp.name}</div><div class="muted">id: ${sp.id}</div></td>
+          <td>${(sp.schools||[]).map(s=>s.name).join(", ") || "—"}</td>
+          <td>${sp.category || "—"}</td>
+          <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Below requirement"}</span></td>
+        `;
+        body.appendChild(tr);
+      }
+    }
+
+    async function init(){
+      token = localStorage.getItem("auth_token") || "";
+      listId = qs("id");
+      if (!listId) { document.getElementById("list-meta").textContent = "Missing list id in URL."; return; }
+
+      const me = await apiMe();
+      if (!me.ok) {
+        setLoggedOutUI();
+        document.getElementById("auth-gate").style.display = "block";
+        document.getElementById("content").style.display = "none";
+        return;
+      }
+      setLoggedInUI(localStorage.getItem("auth_username")||"User", localStorage.getItem("auth_role")||"");
+
+      try{
+        spellList = await fetchSpellList(listId);
+        document.getElementById("list-name").textContent = spellList.name || "Spell List";
+        const created = spellList.created_at ? new Date(spellList.created_at).toLocaleString() : "";
+        document.getElementById("list-meta").textContent = created ? `Created ${created}` : "";
+        spellList.initial_values = spellList.initial_values || {};
+        if (typeof spellList.initial_values.mag === "undefined") spellList.initial_values.mag = 0;
+
+        renderIVChips(spellList.initial_values);
+        buildMinCatSelect();
+
+        schools = await fetchSchools();
+        computed = computeAll();
+
+        document.getElementById("content").style.display = "grid";
+        renderSchools();
+
+        // NEW: prime the Add Spells picker + list
+        fillSchoolSelect();
+        await loadMySpells();
+      }catch(e){
+        document.getElementById("list-meta").textContent = `Error: ${e.message}`;
+      }
+    }
+
+    // ---------- Auth modal ----------
+    const loginModal = document.getElementById("login-modal");
+    const loginBackdrop = document.getElementById("login-backdrop");
+    const loginStatus = document.getElementById("login-status");
+    function openLogin(){ loginModal.classList.add("open"); loginBackdrop.classList.add("open"); document.getElementById("login-username").focus(); }
+    function closeLogin(){ loginModal.classList.remove("open"); loginBackdrop.classList.remove("open"); loginStatus.textContent=""; }
+    async function login() {
+      const username = document.getElementById("login-username").value.trim();
+      const password = document.getElementById("login-password").value;
+      loginStatus.textContent = "";
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        localStorage.setItem("auth_token", data.token);
+        localStorage.setItem("auth_username", data.username);
+        localStorage.setItem("auth_role", data.role);
+        token = data.token;
+        setLoggedInUI(data.username, data.role);
+        closeLogin();
+        init();
+      } else {
+        loginStatus.textContent = data.message || "Login failed";
+      }
+    }
+    async function logout() {
+      if (token) {
+        await fetch(`${API_BASE}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }});
+      }
+      localStorage.clear();
+      setLoggedOutUI();
+      document.getElementById("auth-gate").style.display = "block";
+      document.getElementById("content").style.display = "none";
+    }
+
+    // ---------- Events ----------
+    document.addEventListener("DOMContentLoaded", () => {
+      // topbar/auth
+      document.getElementById("chip-logout").addEventListener("click", (e)=>{e.preventDefault();logout();});
+      document.getElementById("open-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
+      document.getElementById("gate-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
+      document.getElementById("login-backdrop").addEventListener("click", closeLogin);
+      document.getElementById("close-login").addEventListener("click", (e)=>{e.preventDefault();closeLogin();});
+      document.getElementById("cancel-login").addEventListener("click", (e)=>{e.preventDefault();closeLogin();});
+      document.addEventListener("keydown", (e)=>{ if (e.key==="Escape"){ closeLogin(); closeIV(); closeAdd(); }});
+      document.getElementById("login-btn").addEventListener("click", (e)=>{e.preventDefault();login();});
+
+      // IV modal
+      document.getElementById("edit-iv").addEventListener("click", (e)=>{e.preventDefault();openIV();});
+      document.getElementById("iv-backdrop").addEventListener("click", closeIV);
+      document.getElementById("iv-close").addEventListener("click", (e)=>{e.preventDefault();closeIV();});
+      document.getElementById("iv-cancel").addEventListener("click", (e)=>{e.preventDefault();closeIV();});
+      document.getElementById("iv-save").addEventListener("click", (e)=>{e.preventDefault();saveIV();});
+
+      // schools filters
+      document.getElementById("filter-name").addEventListener("input", renderSchools);
+      document.getElementById("filter-min-cat").addEventListener("change", renderSchools);
+      document.getElementById("sort-by").addEventListener("change", renderSchools);
+      document.getElementById("recalc").addEventListener("click", ()=>{ computed = computeAll(); renderSchools(); });
+
+      // add spells modal
+      document.getElementById("open-add-spells").addEventListener("click", (e)=>{ e.preventDefault(); openAdd(); });
+      document.getElementById("addspells-close").addEventListener("click", (e)=>{ e.preventDefault(); closeAdd(); });
+      document.getElementById("addspells-cancel").addEventListener("click", (e)=>{ e.preventDefault(); closeAdd(); });
+      document.getElementById("addspells-backdrop").addEventListener("click", closeAdd);
+      document.getElementById("as-search").addEventListener("click", (e)=>{ e.preventDefault(); runSearch(); });
+      document.getElementById("as-check-all").addEventListener("change", (e)=>{
+        document.querySelectorAll(".as-chk").forEach(c => c.checked = e.target.checked);
+      });
+      document.getElementById("as-add-selected").addEventListener("click", async (e)=>{
+        e.preventDefault();
+        const ids = Array.from(document.querySelectorAll(".as-chk:checked")).map(c=>c.value);
+        if (!ids.length) { document.getElementById("as-status").textContent = "Select at least one spell."; return; }
+        document.getElementById("as-status").textContent = "Adding…";
+        const res = await addSpells(ids);
+        if (res.status !== "success") { document.getElementById("as-status").textContent = res.message || "Add failed."; return; }
+        document.getElementById("as-status").textContent = `Added ${ids.length} spell(s).`;
+        await loadMySpells();
+        closeAdd();
+      });
+
+      init();
+    });
+
+    // ---------- Edit IV modal (functions defined after event wiring) ----------
+    const ivModal = document.getElementById("iv-modal");
+    const ivBackdrop = document.getElementById("iv-backdrop");
+    const ivStatus = document.getElementById("iv-status");
+    function openIV(){
+      const iv = spellList?.initial_values || {};
+      document.getElementById("iv-mag-input").value = +(iv.mag ?? 0);
+      const n = iv.natures || {};
+      const s = iv.skills || {};
+      const get = (obj,k)=> +(obj?.[k] ?? 0);
+      // natures
+      document.getElementById("iv-fire").value = get(n,"fire");
+      document.getElementById("iv-water").value = get(n,"water");
+      document.getElementById("iv-wind").value = get(n,"wind");
+      document.getElementById("iv-earth").value = get(n,"earth");
+      document.getElementById("iv-sun").value = get(n,"sun");
+      document.getElementById("iv-moon").value = get(n,"moon");
+      document.getElementById("iv-lightning").value = get(n,"lightning");
+      document.getElementById("iv-ki").value = get(n,"ki");
+      // skills
+      document.getElementById("iv-aura").value = get(s,"aura");
+      document.getElementById("iv-incantation").value = get(s,"incantation");
+      document.getElementById("iv-enchantement").value = get(s,"enchantement");
+      document.getElementById("iv-potential").value = get(s,"potential");
+      document.getElementById("iv-restoration").value = get(s,"restoration");
+      document.getElementById("iv-stealth").value = get(s,"stealth");
+      document.getElementById("iv-investigation").value = get(s,"investigation");
+      document.getElementById("iv-charm").value = get(s,"charm");
+      document.getElementById("iv-intimidation").value = get(s,"intimidation");
+
+      ivModal.classList.add("open"); ivBackdrop.classList.add("open");
+      ivStatus.textContent = "";
+    }
+    function closeIV(){ ivModal.classList.remove("open"); ivBackdrop.classList.remove("open"); ivStatus.textContent=""; }
+
+    async function saveIV(){
+      try{
+        const payload = {
+          initial_values: {
+            mag: +document.getElementById("iv-mag-input").value || 0,
+            natures: {
+              fire: +document.getElementById("iv-fire").value || 0,
+              water: +document.getElementById("iv-water").value || 0,
+              wind: +document.getElementById("iv-wind").value || 0,
+              earth: +document.getElementById("iv-earth").value || 0,
+              sun: +document.getElementById("iv-sun").value || 0,
+              moon: +document.getElementById("iv-moon").value || 0,
+              lightning: +document.getElementById("iv-lightning").value || 0,
+              ki: +document.getElementById("iv-ki").value || 0,
+            },
+            skills: {
+              aura: +document.getElementById("iv-aura").value || 0,
+              incantation: +document.getElementById("iv-incantation").value || 0,
+              enchantement: +document.getElementById("iv-enchantement").value || 0,
+              potential: +document.getElementById("iv-potential").value || 0,
+              restoration: +document.getElementById("iv-restoration").value || 0,
+              stealth: +document.getElementById("iv-stealth").value || 0,
+              investigation: +document.getElementById("iv-investigation").value || 0,
+              charm: +document.getElementById("iv-charm").value || 0,
+              intimidation: +document.getElementById("iv-intimidation").value || 0,
+            }
+          }
+        };
+        ivStatus.textContent = "Saving…";
+        const res = await updateSpellList(listId, payload);
+        if (res.status !== "success") throw new Error(res.message || "Failed to save.");
+        spellList.initial_values = payload.initial_values;
+        renderIVChips(spellList.initial_values);
+        computed = computeAll();
+        renderSchools();
+        await loadMySpells(); // refresh eligibility badges too
+        ivStatus.textContent = "Saved!";
+        closeIV();
+      }catch(e){
+        ivStatus.textContent = e.message || "Save failed.";
+      }
+    }
+  </script>
+</body>
+</html>

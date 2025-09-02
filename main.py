@@ -147,7 +147,7 @@ CLIENT_DIR = BASE_DIR / "client"
 
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints"}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view"}
 
 # ---------- Pages ----------
 @app.get("/", include_in_schema=False)
@@ -210,6 +210,8 @@ def list_schools():
             "upgrade": bool(upg),
             "range_type": s.get("range_type"),
             "aoe_type": s.get("aoe_type"),
+            "linked_skill": s.get("linked_skill"),
+            "linked_intensities": s.get("linked_intensities", []),
         })
     out.sort(key=lambda x: x["name"].lower())
     return {"schools": out}
@@ -1160,19 +1162,29 @@ async def admin_update_school(school_id: str, request: Request):
     if not old:
         return JSONResponse({"status":"error","message":"School not found"}, status_code=404)
 
-    # Only allow editing of these fields
     name        = (body.get("name") or old.get("name","")).strip()
     school_type = (body.get("school_type") or old.get("school_type","Simple")).strip()
     range_type  = (body.get("range_type")  or old.get("range_type","A")).strip().upper()
     aoe_type    = (body.get("aoe_type")    or old.get("aoe_type","A")).strip().upper()
     upgrade     = bool(body.get("upgrade", old.get("upgrade", old.get("is_upgrade", False))))
 
+    VALID_SKILLS = {"aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation"}
+    VALID_INTS   = {"fire","water","wind","earth","sun","moon","lightning","ki"}
+
+    ls_raw = (body.get("linked_skill", old.get("linked_skill","")) or "").strip().lower()
+    linked_skill = ls_raw if ls_raw in VALID_SKILLS else ""
+
+    li_raw = body.get("linked_intensities", old.get("linked_intensities", [])) or []
+    linked_intensities = sorted({str(x).strip().lower() for x in li_raw if str(x).strip().lower() in VALID_INTS})
+
     sch.update_one({"id": school_id}, {"$set":{
         "name": name,
         "school_type": school_type,
         "range_type": range_type,
         "aoe_type": aoe_type,
-        "upgrade": bool(upgrade)
+        "upgrade": bool(upgrade),
+        "linked_skill": linked_skill,
+        "linked_intensities": linked_intensities,
     }})
 
     # build header of changes
@@ -1480,6 +1492,132 @@ def unfav_apotheosis(aid: str, request: Request):
     get_col("users").update_one({"_id": user["_id"]}, {"$pull": {"fav_apotheoses": str(aid)}})
     return {"status":"success","id":aid,"action":"removed"}
 
+# ---------- Spell Lists (own & manage) ----------
+def _can_access_list(doc, username, role):
+    return (doc and (doc.get("owner") == username or role in ("admin","moderator")))
+
+@app.post("/spell_lists")
+async def create_spell_list(request: Request):
+    username, _ = require_auth(request, roles=["user","moderator","admin"])
+    body = await request.json()
+    name = (body.get("name") or "Untitled List").strip()
+    sl_id = next_id_str("spell_lists", padding=4)
+    doc = {
+        "id": sl_id,
+        "name": name,
+        "owner": username,
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+        # initial_values matches the shape the view expects
+        "initial_values": {
+            "mag": 0,
+            "natures": {k:0 for k in ("fire","water","wind","earth","sun","moon","lightning","ki")},
+            "skills":  {k:0 for k in ("aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation")}
+        },
+        "spells": []  # store a simple list of spell IDs
+    }
+    get_col("spell_lists").insert_one(dict(doc))
+    return {"status":"success","list":doc}
+
+@app.get("/spell_lists/mine")
+def my_spell_lists(request: Request):
+    username, _ = require_auth(request, roles=["user","moderator","admin"])
+    docs = list(get_col("spell_lists").find({"owner": username}, {"_id":0}))
+    docs.sort(key=lambda d: d.get("created_at",""))
+    return {"status":"success","lists":docs}
+
+@app.get("/spell_lists/{list_id}")
+def get_spell_list(list_id: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    doc = get_col("spell_lists").find_one({"id": list_id}, {"_id":0})
+    if not _can_access_list(doc, username, role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return {"status":"success","list":doc}
+
+@app.put("/spell_lists/{list_id}")
+async def update_spell_list(list_id: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    body = await request.json()
+    col = get_col("spell_lists")
+    doc = col.find_one({"id": list_id})
+    if not _can_access_list(doc, username, role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    updates = {}
+    if "name" in body:
+        updates["name"] = (body.get("name") or "").strip()
+    if "initial_values" in body:
+        iv = body.get("initial_values") or {}
+        iv["mag"] = int(iv.get("mag") or 0)
+        iv["natures"] = {k:int(iv.get("natures",{}).get(k,0) or 0) for k in ("fire","water","wind","earth","sun","moon","lightning","ki")}
+        iv["skills"]  = {k:int(iv.get("skills",{}).get(k,0) or 0)  for k in ("aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation")}
+        updates["initial_values"] = iv
+
+    if not updates:
+        return {"status":"success","list": {k:v for k,v in doc.items() if k!="_id"}}
+
+    col.update_one({"id": list_id}, {"$set": updates})
+    new_doc = col.find_one({"id": list_id}, {"_id":0})
+    return {"status":"success","list": new_doc}
+
+@app.get("/spell_lists/{list_id}/spells")
+def spell_list_spells(list_id: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    sl = get_col("spell_lists").find_one({"id": list_id}, {"_id":0})
+    if not _can_access_list(sl, username, role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    ids = [str(x) for x in (sl.get("spells") or [])]
+    if not ids:
+        return {"status":"success","spells":[]}
+    # include derived schools exactly like /spells does
+    sp_col  = get_col("spells")
+    eff_col = get_col("effects")
+    sch_col = get_col("schools")
+    spells = list(sp_col.find({"id": {"$in": ids}}, {"_id":0}))
+    school_map = {s["id"]: s.get("name", s["id"]) for s in sch_col.find({}, {"_id":0,"id":1,"name":1})}
+    all_eff_ids = {str(eid) for sp in spells for eid in (sp.get("effects") or [])}
+    eff_docs = list(eff_col.find({"id": {"$in": list(all_eff_ids)}}, {"_id":0,"id":1,"school":1}))
+    eff_school = {d["id"]: str(d.get("school") or "") for d in eff_docs}
+    out = []
+    for sp in spells:
+        sch_ids = sorted({eff_school.get(str(eid), "") for eid in (sp.get("effects") or []) if eff_school.get(str(eid), "")})
+        sp["schools"] = [{"id": sid, "name": school_map.get(sid, sid)} for sid in sch_ids]
+        out.append(sp)
+    # keep the same shape / computation you use on /spells (fits your UI). :contentReference[oaicite:0]{index=0}
+    return {"status":"success","spells": out}
+
+@app.post("/spell_lists/{list_id}/spells")
+async def add_spells_to_list(list_id: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    body = await request.json()
+    ids = body.get("ids") or ([body.get("id")] if body.get("id") else [])
+    ids = [str(i).strip() for i in ids if str(i).strip()]
+    if not ids:
+        return JSONResponse({"status":"error","message":"Provide id or ids"}, status_code=400)
+
+    col = get_col("spell_lists")
+    sl = col.find_one({"id": list_id})
+    if not _can_access_list(sl, username, role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # verify spells exist
+    existing = set(str(s["id"]) for s in get_col("spells").find({"id": {"$in": ids}}, {"_id":0,"id":1}))
+    missing = [i for i in ids if i not in existing]
+    if missing:
+        return JSONResponse({"status":"error","message":f"Unknown spell id(s): {', '.join(missing)}"}, status_code=400)
+
+    new_list = list({*(str(x) for x in (sl.get("spells") or [])), *existing})
+    col.update_one({"id": list_id}, {"$set": {"spells": new_list}})
+    return {"status":"success","added": list(existing), "total": len(new_list)}
+
+@app.delete("/spell_lists/{list_id}/spells/{spell_id}")
+def remove_spell_from_list(list_id: str, spell_id: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col("spell_lists")
+    sl = col.find_one({"id": list_id})
+    if not _can_access_list(sl, username, role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    col.update_one({"id": list_id}, {"$pull": {"spells": str(spell_id)}})
+    return {"status":"success","removed": str(spell_id)}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
