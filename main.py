@@ -22,7 +22,7 @@ from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters
 from server.src.objects.effects import load_effect
 from server.src.objects.spells import Spell
 from server.src.modules.category_table import category_for_mp
-from server.src.modules.apotheosis_constants import APO_STAGE_BASE, APO_TYPES, APO_TYPE_BONUS, P2S_COST, P2S_GAIN, P2A_COST, S2A_COST
+from server.src.modules.apotheosis_constants import APO_STAGE_BASE, APO_TYPES, APO_TYPE_BONUS, P2S_COST, P2S_GAIN, P2A_COST, S2A_COST, _ROMAN, _stage_index_from_string, apo_stage_stability, apo_type_bonus, tier_from_total_difficulty
 
 
 # ---------- Logging ----------
@@ -79,7 +79,6 @@ def write_audit(action, username, spell_id, before, after):
         "before": before, "after": after
     })
 
-# ---- replace your helper with this ----
 def compute_spell_costs(
     activation: str, range_val: int, aoe: str, duration: int, effect_ids: list[str]
 ) -> dict:
@@ -146,10 +145,8 @@ SESSIONS: Dict[str, Tuple[str, str]] = {}  # token -> (username, role)
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
 
-# Serve all client assets (css/js/images) from /static
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
-# Allow-listed html pages
 ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints"}
 
 # ---------- Pages ----------
@@ -1273,8 +1270,10 @@ def compute_apotheosis_stats(
     stability += tbonus.get("stability", 0)
     amplitude += tbonus.get("amplitude", 0)
 
+    forbid_p2s = False
     for d in docs:
         stability += int(d.get("stability_delta", 0))
+        amplitude += int(d.get("amplitude_bonus", 0))
         if bool(d.get("forbid_p2s", False)):
             forbid_p2s = True
 
@@ -1335,7 +1334,11 @@ def apo_list_constraints(request: Request, name: str | None = Query(default=None
 
 @app.post("/apotheosis/constraints/bulk_create")
 async def apo_constraints_bulk_create(request: Request):
-    require_auth(request, roles=["moderator","admin"])
+    try:
+        require_auth(request, roles=["moderator","admin"])
+    except Exception as e:
+        # turn the generic exception into a proper 401/403
+        raise HTTPException(status_code=401, detail=str(e))
     body = await request.json()
     items = body.get("constraints") or []
 

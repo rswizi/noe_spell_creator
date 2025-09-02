@@ -2,249 +2,239 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Parse/Add Constraints (Moderator)</title>
+  <title>Parse Apotheosis Constraints</title>
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .small { font-size:.92rem; opacity:.9 }
+    .scrollbox { max-height:420px; overflow:auto; }
+    table.table { width:100%; border-collapse:collapse }
+    table.table th, table.table td { border:1px solid #333; padding:6px 8px; text-align:left; vertical-align:top; }
+    table.table thead { background:#1b1b1b; position:sticky; top:0; z-index:1; }
+    input[type="text"], textarea { width:100%; }
+  </style>
 </head>
 <body>
   <div class="container">
-    <h1>Parse Constraints</h1>
+    <h1>Parse Apotheosis Constraints</h1>
 
     <div class="home-card">
-      <p class="small" style="opacity:.85;margin-top:0;">
-        Each entry: <code>Name: Description…</code> → <code>DIFFICULTY</code> → <code>STABILITY_PENALTY (optional)</code> → <code>AMPLITUDE_BONUS (optional)</code>.
-        Negative numbers are allowed.
+      <p class="small">
+        Paste constraints in this format (blank line between entries):<br>
+        <code>Name: Description (can span multiple lines)<br>DIFFICULTY<br>STABILITY_PENALTY (optional, can be negative)<br>AMPLITUDE_BONUS (optional, can be negative)</code>
       </p>
-      <textarea id="raw" rows="14" placeholder="Paste constraints…"></textarea>
+
+      <label for="raw" class="small">Raw constraints</label>
+      <textarea id="raw" rows="16" placeholder="Example:
+Low 50% HP: Be under half HP
+1
+0
+0
+
+Bloodthirst: Cover the enemy's blood
+3
+-1
+0"></textarea>
+
       <div style="display:flex; gap:10px; margin-top:10px;">
-        <button id="parse" class="btn">Parse</button>
+        <button class="btn" id="parse">Parse</button>
         <a class="btn btn-secondary" href="apotheosis_home.html">← Back</a>
       </div>
     </div>
 
     <div id="preview-card" class="home-card" style="display:none;">
-      <h3>Preview</h3>
-      <div id="errors" style="color:#ff6b6b;"></div>
-      <div style="overflow:auto;">
-        <table class="table" style="width:100%; border-collapse:collapse;">
+      <h3>Preview & Edit</h3>
+      <p class="small">Review all rows. You can fix the text or numbers before saving.</p>
+      <div id="errors" style="color:#ff6b6b; margin:8px 0;"></div>
+
+      <div class="scrollbox">
+        <table class="table">
           <thead>
-            <tr><th>Name</th><th>Description</th><th>Difficulty</th><th>Stab. Penalty</th><th>Amp. Bonus</th></tr>
+          <tr>
+            <th style="min-width:180px;">Name</th>
+            <th style="min-width:360px;">Description</th>
+            <th style="width:120px;">Difficulty</th>
+            <th style="width:150px;">Stability Δ</th>
+            <th style="width:150px;">Amp. Bonus</th>
+          </tr>
           </thead>
           <tbody id="tbody"></tbody>
         </table>
       </div>
+
       <div style="display:flex; gap:10px; margin-top:10px;">
-        <button id="save" class="btn">Confirm & Save</button>
-        <button id="reparse" class="btn btn-secondary">Re-parse</button>
+        <button class="btn" id="save">Confirm & Save</button>
+        <button class="btn btn-secondary" id="reparse">Re-parse</button>
       </div>
     </div>
   </div>
 
 <script>
+/* ---------- Access control ---------- */
 const API_BASE = "";
-const role = (localStorage.getItem("auth_role")||"").toLowerCase();
-if (!(role==="admin" || role==="moderator")) {
+const role = (localStorage.getItem("auth_role") || "").toLowerCase();
+if (!(role === "admin" || role === "moderator")) {
   alert("Forbidden: moderators/admins only.");
   location.href = "apotheosis_home.html";
 }
 
+/* ---------- State ---------- */
 let PREVIEW = [];
 
-function isNumLine(s){ return /^-?\d+$/.test((s||"").trim()); }
+/* ---------- Helpers ---------- */
+function isIntLine(s){ return /^-?\d+$/.test((s||"").trim()); }
 
 function parseRaw(text){
-  const lines = text.split(/\r?\n/).map(l=>l.trim());
+  const lines = text.split(/\r?\n/).map(l => l.trim());
   const out = [];
-  let i=0;
-  while(i<lines.length){
-    while(i<lines.length && lines[i]==="") i++;
-    if(i>=lines.length) break;
+  let i = 0;
+
+  while (i < lines.length) {
+    while (i < lines.length && lines[i] === "") i++;
+    if (i >= lines.length) break;
 
     const header = lines[i++];
-    if (!header || isNumLine(header)) throw new Error(`Expected "Name: Description" near line ${i}.`);
-    const idx = header.indexOf(":");
-    if(idx===-1) throw new Error(`Missing ":" near line ${i}.`);
-    const name = header.slice(0,idx).trim();
-    let desc  = header.slice(idx+1).trim();
+    if (!header || isIntLine(header)) throw new Error(`Expected "Name: Description" near line ${i}.`);
 
-    // collect extra description lines until a numeric
-    while(i<lines.length && lines[i]!=="" && !isNumLine(lines[i])) { desc += (desc?" ":"") + lines[i++]; }
+    const colon = header.indexOf(":");
+    if (colon === -1) throw new Error(`Missing ":" in header near line ${i}.`);
+    const name = header.slice(0, colon).trim();
+    let description = header.slice(colon + 1).trim();
 
-    if (i>=lines.length || !isNumLine(lines[i])) throw new Error(`Missing difficulty for "${name}".`);
-    const difficulty = parseInt(lines[i++],10);
+    // swallow extra description lines until we hit a blank or a numeric line
+    while (i < lines.length && lines[i] !== "" && !isIntLine(lines[i])) {
+      description += (description ? " " : "") + lines[i];
+      i++;
+    }
 
-    // optional stability_penalty
+    if (i >= lines.length || !isIntLine(lines[i])) {
+      throw new Error(`Missing/invalid DIFFICULTY after "${name}". Found: "${lines[i] || ""}"`);
+    }
+    const difficulty = parseInt(lines[i++], 10);
+
     let stability_penalty = 0;
-    if (i<lines.length && isNumLine(lines[i])) {
-      stability_penalty = parseInt(lines[i++],10);
+    if (i < lines.length && isIntLine(lines[i])) {
+      stability_penalty = parseInt(lines[i++], 10);
     }
 
-    // optional amplitude_bonus
     let amplitude_bonus = 0;
-    if (i<lines.length && isNumLine(lines[i])) {
-      amplitude_bonus = parseInt(lines[i++],10);
+    if (i < lines.length && isIntLine(lines[i])) {
+      amplitude_bonus = parseInt(lines[i++], 10);
     }
 
-    out.push({ name, description: desc, difficulty, stability_penalty, amplitude_bonus });
+    out.push({ name, description, difficulty, stability_penalty, amplitude_bonus });
 
-    while(i<lines.length && lines[i]==="") i++;
+    while (i < lines.length && lines[i] === "") i++;
   }
-  if (!out.length) throw new Error("No entries parsed.");
+
+  if (!out.length) throw new Error("No constraints parsed. Check the text format.");
   return out;
 }
 
-function render(){
+// Only allow a single leading '-' and digits thereafter
+function cleanIntInput(v) {
+  let s = String(v ?? "").trim();
+  s = s.replace(/[^\d-]/g, "");
+  if (s.indexOf("-") > 0) s = s.replace(/-/g, "");
+  if (s === "" || s === "-") s = "0";
+  return s;
+}
+
+function renderTable(){
   const tb = document.getElementById("tbody");
   tb.innerHTML = PREVIEW.map((r,idx)=>`
     <tr>
-      <td><input data-i="${idx}" data-k="name" value="${r.name}"></td>
-      <td><textarea data-i="${idx}" data-k="description" rows="2">${r.description||""}</textarea></td>
-      <td><input data-i="${idx}" data-k="difficulty" value="${r.difficulty}"></td>
-      <td><input data-i="${idx}" data-k="stability_penalty" value="${r.stability_penalty}"></td>
-      <td><input data-i="${idx}" data-k="amplitude_bonus" value="${r.amplitude_bonus}"></td>
+      <td><input type="text" data-i="${idx}" data-k="name" value="${r.name}"></td>
+      <td><textarea rows="2" data-i="${idx}" data-k="description">${r.description || ""}</textarea></td>
+      <td><input type="text" data-i="${idx}" data-k="difficulty" value="${r.difficulty}"></td>
+      <td><input type="text" data-i="${idx}" data-k="stability_penalty" value="${r.stability_penalty}"></td>
+      <td><input type="text" data-i="${idx}" data-k="amplitude_bonus" value="${r.amplitude_bonus}"></td>
     </tr>
   `).join("");
 
-  tb.querySelectorAll("input,textarea").forEach(el=>{
+  tb.querySelectorAll("input[type='text']").forEach(el=>{
     el.addEventListener("input", (ev)=>{
-      const i = +ev.target.dataset.i;
-      const k = ev.target.dataset.k;
-      let val = ev.target.value;
+      const i = +ev.target.dataset.i, k = ev.target.dataset.k;
       if (["difficulty","stability_penalty","amplitude_bonus"].includes(k)) {
-        val = val.replace(/[^-?\d]/g,"");
+        const val = cleanIntInput(ev.target.value);
         ev.target.value = val;
-        PREVIEW[i][k] = (val==="" || val==="-") ? 0 : parseInt(val,10);
+        PREVIEW[i][k] = parseInt(val, 10);
       } else {
-        PREVIEW[i][k] = val;
+        PREVIEW[i][k] = ev.target.value;
       }
+    });
+  });
+  tb.querySelectorAll("textarea").forEach(el=>{
+    el.addEventListener("input", (ev)=>{
+      const i = +ev.target.dataset.i, k = ev.target.dataset.k;
+      PREVIEW[i][k] = ev.target.value;
     });
   });
 }
 
 function validate(){
-  const errs=[];
+  const errs = [];
   PREVIEW.forEach((r,i)=>{
-    if(!r.name) errs.push(`Row ${i+1}: name is empty`);
+    if (!r.name) errs.push(`Row ${i+1}: name is empty`);
     ["difficulty","stability_penalty","amplitude_bonus"].forEach(k=>{
-      if (Number.isNaN(+r[k])) errs.push(`Row ${i+1}: ${k} not a number`);
+      if (!Number.isFinite(+r[k])) errs.push(`Row ${i+1}: ${k} is not a number`);
     });
   });
   return errs;
 }
 
+/* ---------- Events ---------- */
 document.getElementById("parse").addEventListener("click", ()=>{
   try{
     PREVIEW = parseRaw(document.getElementById("raw").value);
     document.getElementById("errors").textContent = "";
     document.getElementById("preview-card").style.display = "block";
-    render();
-  }catch(e){
+    renderTable();
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  }catch(err){
+    document.getElementById("errors").textContent = err.message;
     document.getElementById("preview-card").style.display = "none";
-    document.getElementById("errors").textContent = e.message;
   }
 });
-document.getElementById("reparse").addEventListener("click", ()=>document.getElementById("parse").click());
+
+document.getElementById("reparse").addEventListener("click", ()=>{
+  document.getElementById("parse").click();
+});
+
 document.getElementById("save").addEventListener("click", async ()=>{
   const errs = validate();
   if (errs.length) { document.getElementById("errors").innerHTML = errs.join("<br>"); return; }
+
   const token = localStorage.getItem("auth_token") || "";
-  const res = await fetch(`${API_BASE}/apotheosis/constraints/bulk_create`, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json", ...(token?{ "Authorization":`Bearer ${token}` }:{}) },
-    body: JSON.stringify({ constraints: PREVIEW })
-  });
-  const j = await res.json().catch(()=>({}));
-  if (res.ok && j.status!=="error"){
-    alert(`Inserted ${j.created?.length || PREVIEW.length} constraints.`);
-    location.href = "apotheosis_constraints.html";
-  } else {
-    alert(j.message || "Save failed.");
-  }
-  
-  function setError(msg){
-    const el = document.getElementById("errors");
-    el.textContent = msg || "";
-    if (msg) el.scrollIntoView({behavior:"smooth", block:"center"});
-  }
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  // allow negative integers cleanly; keep a single leading "-" only
-  function cleanIntInput(raw) {
-    let s = String(raw || "").trim();
-    // remove all non-digits except leading "-"
-    s = s.replace(/[^\d-]/g, "");
-    if (s.indexOf("-") > 0) s = s.replace(/-/g, ""); // "-" must be first if present
-    return s === "" || s === "-" ? "0" : s;
-  }
+  const payload = {
+    constraints: PREVIEW.map(r => ({
+      name: r.name,
+      description: r.description || "",
+      difficulty: +r.difficulty || 0,
+      stability_delta: +r.stability_penalty || 0, // backend field name
+      amplitude_bonus: +r.amplitude_bonus || 0
+    }))
+  };
 
-  // hook inputs back into PREVIEW (use cleanIntInput)
-  function render(){
-    const tb = document.getElementById("tbody");
-    tb.innerHTML = PREVIEW.map((r,idx)=>`
-      <tr>
-        <td><input data-i="${idx}" data-k="name" value="${r.name}"></td>
-        <td><textarea data-i="${idx}" data-k="description" rows="2">${r.description||""}</textarea></td>
-        <td><input data-i="${idx}" data-k="difficulty" value="${r.difficulty}"></td>
-        <td><input data-i="${idx}" data-k="stability_penalty" value="${r.stability_penalty}"></td>
-        <td><input data-i="${idx}" data-k="amplitude_bonus" value="${r.amplitude_bonus}"></td>
-      </tr>
-    `).join("");
-
-    tb.querySelectorAll("input,textarea").forEach(el=>{
-      el.addEventListener("input", (ev)=>{
-        const i = +ev.target.dataset.i;
-        const k = ev.target.dataset.k;
-        if (["difficulty","stability_penalty","amplitude_bonus"].includes(k)) {
-          ev.target.value = cleanIntInput(ev.target.value);
-          PREVIEW[i][k] = parseInt(ev.target.value, 10);
-        } else {
-          PREVIEW[i][k] = ev.target.value;
-        }
-      });
+  try{
+    const res = await fetch(`${API_BASE}/apotheosis/constraints/bulk_create`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
     });
+    const j = await res.json().catch(()=>({status:"error"}));
+    if (res.ok && j.status !== "error") {
+      alert(`Inserted ${j.created?.length || payload.constraints.length} constraints.`);
+      location.href = "apotheosis_constraints.html";
+    } else {
+      alert(j.message || "Save failed.");
+    }
+  }catch(e){
+    alert("Network error: " + (e?.message || e));
   }
-
-  document.getElementById("save").addEventListener("click", async () => {
-    // basic validation first
-    const errs = validate();
-    if (errs.length) {
-      document.getElementById("errors").innerHTML = errs.join("<br>");
-      return;
-    }
-
-    const token = localStorage.getItem("auth_token") || "";
-
-    // map frontend → backend fields
-    const payload = {
-      constraints: PREVIEW.map(r => ({
-        name: r.name,
-        description: r.description || "",
-        difficulty: Number(r.difficulty),              // can be negative
-        stability_delta: Number(r.stability_penalty),  // backend expects this name
-        amplitude_bonus: Number(r.amplitude_bonus || 0)
-      }))
-    };
-
-    try {
-      const res = await fetch(`${API_BASE}/apotheosis/constraints/bulk_create`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const j = await res.json().catch(() => ({}));
-      if (res.ok && j.status !== "error") {
-        alert(`Inserted ${j.created?.length ?? payload.constraints.length} constraints.`);
-        location.href = "apotheosis_constraints.html";
-      } else {
-        alert(j.message || "Save failed.");
-      }
-    } catch (e) {
-      alert("Save failed.");
-    }
-  });
 });
 </script>
 </body>
