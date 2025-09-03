@@ -895,7 +895,7 @@ async def admin_update_school(school_id: str, request: Request):
     aoe_type    = (body.get("aoe_type")    or old.get("aoe_type","A")).strip().upper()
     upgrade     = bool(body.get("upgrade", old.get("upgrade", old.get("is_upgrade", False))))
 
-    VALID_SKILLS = {"aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation"}
+    VALID_SKILLS = {"aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation","absorption","spirit"}
     VALID_INTS   = {"fire","water","wind","earth","sun","moon","lightning","ki"}
 
     ls_raw = (body.get("linked_skill", old.get("linked_skill","")) or "").strip().lower()
@@ -1161,7 +1161,7 @@ async def create_spell_list(request: Request):
         "natures": {k: int((iv_in.get("natures") or {}).get(k, 0) or 0)
                     for k in ("fire","water","wind","earth","sun","moon","lightning","ki")},
         "skills": {k: int((iv_in.get("skills") or {}).get(k, 0) or 0)
-                   for k in ("aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation")},
+                   for k in ("aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation","absorption","spirit")},
     }
 
     doc = {
@@ -1206,7 +1206,7 @@ async def update_spell_list(list_id: str, request: Request):
         iv = body.get("initial_values") or {}
         iv["mag"] = int(iv.get("mag") or 0)
         iv["natures"] = {k:int(iv.get("natures",{}).get(k,0) or 0) for k in ("fire","water","wind","earth","sun","moon","lightning","ki")}
-        iv["skills"]  = {k:int(iv.get("skills",{}).get(k,0) or 0)  for k in ("aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation")}
+        iv["skills"]  = {k:int(iv.get("skills",{}).get(k,0) or 0)  for k in ("aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation","absorption","spirit")}
         updates["initial_values"] = iv
 
     if not updates:

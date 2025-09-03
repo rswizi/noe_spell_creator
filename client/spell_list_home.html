@@ -127,6 +127,8 @@
         <div><label>Investigation</label><input type="number" id="iv-investigation" min="0" step="1" value="0"></div>
         <div><label>Charm</label><input type="number" id="iv-charm" min="0" step="1" value="0"></div>
         <div><label>Intimidation</label><input type="number" id="iv-intimidation" min="0" step="1" value="0"></div>
+              <div><label>Absorption</label><input type="number" id="iv-absorption" min="0" step="1" value="0"></div>
+        <div><label>Spirit</label><input type="number" id="iv-spirit" min="0" step="1" value="0"></div>
       </div>
 
       <div id="create-status" style="opacity:.85; margin-top:8px;"></div>
@@ -300,6 +302,8 @@
         investigation: +document.getElementById("iv-investigation").value || 0,
         charm: +document.getElementById("iv-charm").value || 0,
         intimidation: +document.getElementById("iv-intimidation").value || 0,
+        absorption: +document.getElementById("iv-absorption").value || 0,
+        spirit: +document.getElementById("iv-spirit").value || 0,
       };
 
       return { name, initial_values: { mag, natures, skills } };
