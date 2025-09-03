@@ -2,30 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>NoE — Spell List (Anti‑overlap Rewrite)</title>
+  <title>NoE — Spell List</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="/static/style.css" />
   <style>
     html.modal-open, body.modal-open { overflow: hidden; }
-
     #sl, #sl * { box-sizing: border-box; }
     #sl { color: #eee; }
     #sl a { color: inherit; }
-
-    /* Layout */
     #sl .wrap{ max-width:1120px; margin:24px auto; padding:0 16px; }
     #sl .hero{ font-size:2rem; margin:12px 0 4px; line-height:1.2; }
     #sl .sub{ opacity:.85; }
     #sl .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    #sl .row > * { min-width:0; } /* critical for preventing flex children overflow */
+    #sl .row > * { min-width:0; }
     #sl .spacer{ flex:1; }
-
     #sl .card{ border:1px solid #333; border-radius:14px; padding:16px; background:#0c0c0c; }
-
     #sl .grid{ display:grid; gap:16px; }
     #sl .grid.cols-2{ grid-template-columns:1fr 1fr; }
     @media (max-width:980px){ #sl .grid.cols-2{ grid-template-columns:1fr; } }
-
     #sl .chips{ display:flex; gap:6px; flex-wrap:wrap; }
     #sl .pill{ border:1px solid #444; padding:2px 8px; border-radius:999px; }
     #sl .muted{ opacity:.8; }
@@ -36,18 +30,14 @@
     #sl .warn{ border-color:#a62; }
     #sl .err{ border-color:#a33; }
     #sl .empty{ opacity:.75; padding:10px; }
-
-    #sl input[type="text"],
-    #sl input[type="number"],
-    #sl input[type="password"],
-    #sl select { width:auto; max-width:100%; padding:8px 10px; background:#0a0a0a; color:#eee; border:1px solid #333; border-radius:8px; }
-
+    #sl input[type="text"], #sl input[type="number"], #sl input[type="password"], #sl select {
+      width:auto; max-width:100%; padding:8px 10px; background:#0a0a0a; color:#eee; border:1px solid #333; border-radius:8px;
+    }
     #sl .table-wrap{ overflow:auto; -webkit-overflow-scrolling: touch; border-radius:10px; }
     #sl .table{ width:100%; border-collapse:collapse; min-width:760px; }
     #sl .table th, #sl .table td{ border-bottom:1px solid #222; padding:10px; text-align:left; vertical-align:top; }
     #sl .table th{ opacity:.85; position:sticky; top:0; background:#0c0c0c; }
     #sl .table td, #sl .table th{ word-break: break-word; overflow-wrap: anywhere; }
-
     #sl .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:3000; display:none; }
     #sl .modal{ position:fixed; inset:0; display:none; z-index:3001; align-items:center; justify-content:center; padding:16px; }
     #sl .modal.open, #sl .modal-backdrop.open{ display:flex; }
@@ -59,13 +49,15 @@
     #sl .modal-card header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:12px; }
     #sl .modal-title{ font-weight:700; }
     #sl .modal-close{ border:0; background:transparent; color:inherit; cursor:pointer; font-size:18px; }
-
     #sl .grid-iv{ display:grid; gap:8px; grid-template-columns:repeat(4, minmax(120px,1fr)); }
     #sl .grid-iv label{ font-size:.9rem; opacity:.95 }
     #sl .grid-iv input{ width:100%; }
     @media (max-width:840px){ #sl .grid-iv{ grid-template-columns:repeat(2, minmax(120px,1fr)); } }
-
     .topbar { position: sticky; top:0; z-index:1100; backdrop-filter: blur(4px); }
+    /* bonuses manager */
+    #bonus-list table{ min-width:760px; }
+    #bonus-editor .section{ border:1px solid #2a2a2a; border-radius:10px; padding:10px; margin-top:10px; }
+    #bonus-schools{ max-height:240px; overflow:auto; border:1px solid #2a2a2a; border-radius:10px; padding:8px; }
   </style>
 </head>
 <body>
@@ -92,96 +84,97 @@
         <button class="btn" id="gate-login">Log In</button>
       </div>
 
-      <div id="content" class="grid" style="display:none;margin-top:16px;">
-
-      </div><!-- /#content -->
-    </div><!-- /.wrap -->
-  <div class="home-card">
-    <div class="row">
-      <h2 style="margin:0;">Initial Values</h2>
-      <span class="spacer"></span>
-      <button class="btn btn-secondary" id="edit-iv">Edit Initial Values</button>
-      <button class="btn btn-flag" id="delete-list">Delete List</button>
-    </div>
-    <div class="grid cols-2" style="margin-top:10px;">
-      <div>
-        <div class="muted" style="margin-bottom:6px;">Natures</div>
-        <div id="iv-natures" class="chips"></div>
-      </div>
-      <div>
-        <div class="muted" style="margin-bottom:6px;">Skills</div>
-        <div id="iv-skills" class="chips"></div>
-        <div class="muted" style="margin-top:10px;">MAG: <span id="iv-mag" class="k">0</span></div>
-      </div>
-    </div>
-    <div class="hint" style="margin-top:10px;">
-      MS = MAG + linked skill + (best of: top two linked intensities) or (top one intensity +2).
-    </div>
-  </div>
-  
-  <div class="home-card">
-    <div class="row" style="margin-bottom:8px;">
-      <h2 style="margin:0;">School Categories</h2>
-      <span class="spacer"></span>
-      <input id="filter-name" type="text" placeholder="Filter by school name…" style="min-width:220px;">
-      <select id="filter-min-cat">
-        <option value="">Min. Category: Any</option>
-      </select>
-      <select id="sort-by">
-        <option value="cat_desc">Sort: Category (high → low)</option>
-        <option value="name_asc">Sort: Name (A → Z)</option>
-      </select>
-      <button class="btn" id="recalc">Recalculate</button>
+      <div id="content" class="grid" style="display:none;margin-top:16px;"></div>
     </div>
 
     <div class="home-card">
-      <table class="table" id="schools-table" class="scrollbox">
-        <thead>
-          <tr>
-            <th style="width:22%;">School</th>
-            <th style="width:20%;">Linked</th>
-            <th style="width:22%;">MS Breakdown</th>
-            <th style="width:18%;">MS</th>
-            <th style="width:18%;">Category</th>
-          </tr>
-        </thead>
-        <tbody id="schools-body">
-          <tr><td colspan="5" class="empty">Loading…</td></tr>
-        </tbody>
-      </table>
+      <div class="row">
+        <h2 style="margin:0;">Initial Values</h2>
+        <span class="spacer"></span>
+        <button class="btn btn-secondary" id="edit-iv">Edit Initial Values</button>
+        <button class="btn" id="open-bonuses">Consult Bonuses</button>
+        <button class="btn btn-flag" id="delete-list" type="button">Delete List</button>
+      </div>
+      <div class="grid cols-2" style="margin-top:10px;">
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Natures</div>
+          <div id="iv-natures" class="chips"></div>
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Skills</div>
+          <div id="iv-skills" class="chips"></div>
+          <div class="muted" style="margin-top:10px;">MAG: <span id="iv-mag" class="k">0</span></div>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:10px;">
+        MS = MAG + linked skill + (best of: top two linked intensities) or (top one intensity +2).
+      </div>
     </div>
-    <div class="hint" style="margin-top:8px;">
-      Learning Time (days): Novice 2 • Apprentice 8 • Disciple 10 • Adept 14 • Mage 16 • Magister 20 • High Mage 22 • Master 28 • Grand Master 32 • Archmage 36 • Supreme Archmage 46 • Avant-Garde 50
-    </div>
-  </div>
 
-  <!-- My Spells card -->
-  <div class="card" id="my-spells-card" style="display:none;">
-    <div class="row" style="margin-bottom:8px;">
-      <h2 style="margin:0;">My Spells</h2>
-      <span class="spacer"></span>
-      <button class="btn" id="open-add-spells">Add Spells</button>
+    <div class="home-card">
+      <div class="row" style="margin-bottom:8px;">
+        <h2 style="margin:0;">School Categories</h2>
+        <span class="spacer"></span>
+        <input id="filter-name" type="text" placeholder="Filter by school name…" style="min-width:220px;">
+        <select id="filter-min-cat">
+          <option value="">Min. Category: Any</option>
+        </select>
+        <select id="sort-by">
+          <option value="cat_desc">Sort: Category (high → low)</option>
+          <option value="name_asc">Sort: Name (A → Z)</option>
+        </select>
+        <button class="btn" id="recalc">Recalculate</button>
+      </div>
+
+      <div class="home-card">
+        <table class="table" id="schools-table">
+          <thead>
+            <tr>
+              <th style="width:22%;">School</th>
+              <th style="width:24%;">Linked</th>
+              <th style="width:22%;">MS Breakdown</th>
+              <th style="width:14%;">MS</th>
+              <th style="width:18%;">Category</th>
+            </tr>
+          </thead>
+          <tbody id="schools-body">
+            <tr><td colspan="5" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hint" style="margin-top:8px;">
+        Learning Time (days): Novice 2 • Apprentice 8 • Disciple 10 • Adept 14 • Mage 16 • Magister 20 • High Mage 22 • Master 28 • Grand Master 32 • Archmage 36 • Supreme Archmage 46 • Avant-Garde 50
+      </div>
     </div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th style="width:30%;">Name</th>
-            <th>Schools</th>
-            <th style="width:14%;">Category</th>
-            <th style="width:18%;">Eligibility</th>
-            <th style="width:10%;"></th>
-          </tr>
-        </thead>
-        <tbody id="my-spells-body">
-          <tr><td colspan="5" class="empty">Loading…</td></tr>
-        </tbody>
-      </table>
+
+    <!-- My Spells -->
+    <div class="card" id="my-spells-card" style="display:none;">
+      <div class="row" style="margin-bottom:8px;">
+        <h2 style="margin:0;">My Spells</h2>
+        <span class="spacer"></span>
+        <button class="btn" id="open-add-spells">Add Spells</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="width:30%;">Name</th>
+              <th>Schools</th>
+              <th style="width:14%;">Category</th>
+              <th style="width:18%;">Eligibility</th>
+              <th style="width:10%;"></th>
+            </tr>
+          </thead>
+          <tbody id="my-spells-body">
+            <tr><td colspan="5" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
+
     <!-- Login Modal -->
     <div id="login-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-    <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true">
+    <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
       <div class="modal-card">
         <header>
           <div class="modal-title" id="login-title">Log In</div>
@@ -277,7 +270,7 @@
           <div><label>Investigation</label><input type="number" id="iv-investigation" min="0" step="1"></div>
           <div><label>Charm</label><input type="number" id="iv-charm" min="0" step="1"></div>
           <div><label>Intimidation</label><input type="number" id="iv-intimidation" min="0" step="1"></div>
-                  <div><label>Absorption</label><input type="number" id="iv-absorption" min="0" step="1"></div>
+          <div><label>Absorption</label><input type="number" id="iv-absorption" min="0" step="1"></div>
           <div><label>Spirit</label><input type="number" id="iv-spirit" min="0" step="1"></div>
         </div>
 
@@ -288,12 +281,154 @@
         </div>
       </div>
     </div>
+
+    <!-- Variant Modal -->
+    <div id="var-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+    <div id="var-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal-card" style="max-width:720px;">
+        <header>
+          <div class="modal-title">Add Variant</div>
+          <button class="modal-close" id="var-close" aria-label="Close">✕</button>
+        </header>
+        <div class="sub" id="var-school-title"></div>
+        <div class="hint" id="var-rule" style="margin:6px 0 10px;"></div>
+        <div id="var-choices" class="chips" style="gap:10px;"></div>
+        <div style="margin-top:10px;">
+          <label for="var-name" class="k">Variant Name</label>
+          <input id="var-name" type="text" placeholder="e.g. Storm Weaving" style="min-width:240px;">
+        </div>
+        <div id="var-status" class="hint" style="margin-top:8px;"></div>
+        <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn btn-secondary" id="var-cancel">Cancel</button>
+          <button class="btn" id="var-save">Save Variant</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bonuses Manager -->
+    <div id="bon-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+    <div id="bon-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal-card" style="max-width:1000px;">
+        <header>
+          <div class="modal-title">Bonuses</div>
+          <button class="modal-close" id="bon-close" aria-label="Close">✕</button>
+        </header>
+
+        <div id="bonus-list" class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:6%;">On</th>
+                <th style="width:24%;">Name</th>
+                <th style="width:14%;">Type</th>
+                <th>Targets</th>
+                <th style="width:14%;">Value</th>
+                <th style="width:10%;"></th>
+              </tr>
+            </thead>
+            <tbody id="bon-body">
+              <tr><td colspan="6" class="empty">No bonuses yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn" id="bon-add">Add Bonus</button>
+        </div>
+
+        <div id="bonus-editor" class="section" style="display:none;">
+          <div class="row">
+            <div class="k">Edit Bonus</div>
+            <span class="spacer"></span>
+            <button class="btn btn-secondary small" id="bon-cancel-edit">Cancel</button>
+            <button class="btn small" id="bon-save-edit">Save</button>
+          </div>
+
+          <div class="grid cols-2" style="margin-top:10px;">
+            <div>
+              <label class="k">Name</label><br/>
+              <input type="text" id="b-name" placeholder="e.g. Masterwork Staff">
+            </div>
+            <div>
+              <label class="k">Enabled</label><br/>
+              <select id="b-enabled">
+                <option value="1">Enabled</option>
+                <option value="0">Disabled</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid cols-2" style="margin-top:10px;">
+            <div>
+              <label class="k">Type</label><br/>
+              <select id="b-type">
+                <option value="nature">Nature-based</option>
+                <option value="skill">Skill-based</option>
+                <option value="school">School-based</option>
+              </select>
+            </div>
+            <div>
+              <label class="k">Value Mode</label><br/>
+              <select id="b-mode">
+                <option value="manual">Manual</option>
+                <option value="level">Level-based (floor(level/10))</option>
+                <option value="quality">Quality-based (X × rank)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid cols-2" style="margin-top:10px;">
+            <div id="b-manual-wrap">
+              <label class="k">Manual Value</label><br/>
+              <input type="number" id="b-manual" value="1" step="1">
+            </div>
+            <div id="b-level-wrap" style="display:none;">
+              <label class="k">Level</label><br/>
+              <input type="number" id="b-level" value="1" step="1" min="0">
+            </div>
+            <div id="b-quality-wrap" style="display:none;">
+              <label class="k">Quality</label><br/>
+              <select id="b-quality">
+                <option>Adequate</option><option>Good</option><option>Very Good</option><option>Excellent</option>
+                <option>Legendary</option><option>Mythical</option><option>Epic</option><option>Divine</option><option>Unreal</option>
+              </select>
+            </div>
+            <div id="b-perstep-wrap" style="display:none;">
+              <label class="k">X per Quality Level</label><br/>
+              <input type="number" id="b-perstep" value="1" step="1">
+            </div>
+          </div>
+
+          <div id="b-targets" class="section">
+            <div class="k">Targets</div>
+            <!-- nature targets -->
+            <div id="t-nature">
+              <div class="hint">Select one or more natures.</div>
+              <div class="chips" id="b-natures" style="gap:10px;margin-top:6px;"></div>
+            </div>
+            <!-- skill targets -->
+            <div id="t-skill" style="display:none;">
+              <div class="hint">Select one or more skills.</div>
+              <div class="chips" id="b-skills" style="gap:10px;margin-top:6px;"></div>
+            </div>
+            <!-- school targets -->
+            <div id="t-school" style="display:none;">
+              <div class="hint">Check schools to apply the bonus (upgrades are shown but have no effect because upgrades are ignored in MS table).</div>
+              <input type="text" id="b-school-filter" placeholder="Filter schools…" style="margin:8px 0; min-width:240px;">
+              <div id="bonus-schools"></div>
+            </div>
+          </div>
+
+          <div class="hint" style="margin-top:10px;">Preview value applied per match: <span class="k" id="b-preview">+0</span></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
     const API_BASE = ""; // set "/api" if your backend is mounted there
 
-    // ---------- Category thresholds ----------
+    // ---------- Categories ----------
     const CATS = [
       {name:"Avant-Garde", ms:92, days:50},
       {name:"Supreme Archmage", ms:82, days:46},
@@ -310,74 +445,181 @@
       {name:"Unqualified", ms:-Infinity, days:0},
     ];
     const CAT_ORDER = Object.fromEntries(CATS.map((c,i)=>[c.name, CATS.length-1 - i]));
+    function catOrder(n){ return CAT_ORDER[n] ?? 0; }
 
     // ---------- State ----------
-    let token = "";
-    let listId = "";
-    let spellList = null;   // { id, name, initial_values:{ mag, natures{}, skills{} }, ... }
-    let schools = [];       // [{id,name, linked_skill, linked_intensities: []}, ...]
-    let computed = [];      // results per school
+    let token = "", listId = "";
+    let spellList = null, schools = [];
+    let computed = [];  // rows
+    // variants & bonuses (localStorage)
+    function vKey(){ return `sl_variants_${listId}`; }
+    function bKey(){ return `sl_bonuses_${listId}`; }
+    function loadVariants(){ try{return JSON.parse(localStorage.getItem(vKey())||"[]");}catch{return[];} }
+    function saveVariants(v){ localStorage.setItem(vKey(), JSON.stringify(v)); }
+    function addVariant(sid, name, natures){
+      const v = loadVariants();
+      const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `v_${Date.now().toString(36)}`;
+      v.push({id, schoolId: sid, name: name.trim(), natures: natures.map(lc)});
+      saveVariants(v);
+    }
+    function loadBonuses(){ try{return JSON.parse(localStorage.getItem(bKey())||"[]");}catch{return[];} }
+    function saveBonuses(list){ localStorage.setItem(bKey(), JSON.stringify(list)); }
 
     // ---------- Helpers ----------
-    function qs(name) {
-      const p = new URLSearchParams(location.search);
-      return p.get(name) || "";
-    }
+    function qs(name){ const p=new URLSearchParams(location.search); return p.get(name)||""; }
     function lc(s){ return (s||"").toString().trim().toLowerCase(); }
-    function title(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : ""; }
+    function title(s){ return s? s.charAt(0).toUpperCase()+s.slice(1) : ""; }
+    const isComplexNeedsTwo = (sch)=> (lc(sch.school_type)==="complex") && (sch.linked_intensities||[]).length>1;
 
-    function mapCategory(ms){
-      for (const c of CATS) { if (ms >= c.ms) return c; }
-      return CATS[CATS.length-1];
+    // quality ranking 1..9
+    const QUALITY = ["Adequate","Good","Very Good","Excellent","Legendary","Mythical","Epic","Divine","Unreal"];
+    function qualityRank(q){ const i = QUALITY.findIndex(x=>lc(x)===lc(q)); return i>=0? (i+1): 1; }
+
+    // ---------- API ----------
+    async function apiMe(){
+      if (!token) return {ok:false};
+      try{ const r = await fetch(`${API_BASE}/auth/me`, { headers:{Authorization:`Bearer ${token}`}});
+        const j = await r.json(); return (j && j.status==="success")? {ok:true,user:j}:{ok:false};
+      }catch{ return {ok:false}; }
+    }
+    async function fetchSpellList(id){
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(id)}`, { headers:{Authorization:`Bearer ${token}`}});
+      if (r.status===401) throw new Error("Unauthorized");
+      const j = await r.json(); return j.list || j;
+    }
+    async function updateSpellList(id, payload){
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(id)}`, {
+        method:"PUT", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` }, body: JSON.stringify(payload)
+      });
+      if (r.status===401) throw new Error("Unauthorized");
+      return await r.json();
+    }
+    async function fetchSchools(){
+      const r = await fetch(`${API_BASE}/schools`, { headers:{Authorization:`Bearer ${token}`}});
+      const j = await r.json(); return j.schools || j.items || j || [];
     }
 
-    function bestMSForSchool(iv, school){
+    // ---------- MS math ----------
+    function mapCategory(ms){ for (const c of CATS){ if (ms >= c.ms) return c; } return CATS[CATS.length-1]; }
+    function bestMSForSchool(iv, school, opts={}){
       const mag = +((iv.mag ?? 0) || 0);
       const skillKey = lc(school.linked_skill || "");
       const skillVal = +((iv.skills?.[skillKey]) ?? 0);
-
       const ints = (school.linked_intensities || []).map(lc);
       const pool = ints.map(k => +((iv.natures?.[k]) ?? 0)).sort((a,b)=>b-a);
       const top1 = pool[0] ?? 0, top2 = pool[1] ?? 0;
-
+      if (opts.forceTwo){
+        const ms = mag + skillVal + top1 + (top2 || 0);
+        return { ms, useOne:false, pick:[top1, top2||0], mag, skillVal, top1, top2 };
+      }
       const msTwo = mag + skillVal + top1 + top2;
       const msOne = mag + skillVal + top1 + 2;
-
       const useOne = msOne > msTwo;
       const ms = useOne ? msOne : msTwo;
-      return {
-        ms,
-        useOne,
-        pick: useOne ? [top1, "+2 bonus"] : [top1, top2],
-        mag, skillVal, top1, top2
-      };
+      return { ms, useOne, pick: useOne? [top1, "+2 bonus"]:[top1, top2], mag, skillVal, top1, top2 };
+    }
+    function msWithChosenNatures(iv, school, chosen){
+      const mag = +((iv.mag ?? 0) || 0);
+      const skillKey = lc(school.linked_skill || "");
+      const skillVal = +((iv.skills?.[skillKey]) ?? 0);
+      const ints = chosen.map(lc);
+      const sum = ints.reduce((acc,k)=>acc + (+((iv.natures?.[k]) ?? 0)), 0);
+      const ms = mag + skillVal + sum;
+      return { ms, useOne: ints.length===1, pick: ints.map(k=>+((iv.natures?.[k]) ?? 0)), mag, skillVal, chosen:ints };
     }
 
-    function fmtPick(p){
-      if (!p) return "";
-      if (p[1] === "+2 bonus") return `${p[0]} + 2`;
-      return `${p[0]} + ${p[1]}`;
+    // ---------- Bonuses application ----------
+    function bonusValue(b){
+      if (b.mode==="manual") return +b.manual || 0;
+      if (b.mode==="level")  return Math.floor((+b.level || 0)/10);
+      if (b.mode==="quality") return (+b.perStep || 1) * qualityRank(b.quality || "Adequate");
+      return 0;
+    }
+    function countNatureMatches(b, row){
+      // For variants, use chosen natures; otherwise use school's linked ints
+      const set = new Set((row.variant?.natures) ? row.variant.natures.map(lc) : (row.school.linked_intensities||[]).map(lc));
+      return (b.targets||[]).map(lc).filter(t => set.has(t)).length;
+    }
+    function bonusApplies(b, row){
+      if (!b.enabled) return 0;
+      const val = bonusValue(b);
+      if (!val) return 0;
+
+      if (b.type==="nature"){
+        const n = countNatureMatches(b, row);
+        return val * n;  // add once per matched nature
+      }
+      if (b.type==="skill"){
+        const ok = (b.targets||[]).map(lc).includes(lc(row.school.linked_skill||""));
+        return ok ? val : 0;
+      }
+      if (b.type==="school"){
+        const id = lc(row.school.id||"");
+        const name = lc(row.school.name||"");
+        const tgs = (b.targets||[]).map(lc);
+        const ok = tgs.includes(id) || tgs.includes(name);
+        return ok ? val : 0;
+      }
+      return 0;
+    }
+    function totalBonusForRow(row){
+      const list = loadBonuses().filter(b=>b.enabled);
+      return list.reduce((sum,b)=> sum + bonusApplies(b,row), 0);
+    }
+
+    // ---------- Compute + Render ----------
+    function normalizeIV(iv){
+      const defN = {fire:0,water:0,wind:0,earth:0,sun:0,moon:0,lightning:0,ki:0};
+      const defS = {aura:0,incantation:0,enchantement:0,potential:0,restoration:0,stealth:0,investigation:0,charm:0,intimidation:0,absorption:0,spirit:0};
+      const n = Object.assign({}, defN), s = Object.assign({}, defS);
+      for (const k in (iv.natures||{})) n[lc(k)] = +(iv.natures[k]||0);
+      for (const k in (iv.skills||{}))  s[lc(k)] = +(iv.skills[k]||0);
+      return { mag: +(iv.mag||0), natures:n, skills:s };
+    }
+
+    function computeAll(){
+      if (!spellList || !schools.length) return [];
+      const iv = normalizeIV(spellList.initial_values || {});
+      const out = [];
+      // base rows (ignore upgrades)
+      for (const sch of schools){
+        if (sch.upgrade) continue;
+        const b = bestMSForSchool(iv, sch, {forceTwo: isComplexNeedsTwo(sch)});
+        let ms = b.ms;
+        const bonus = totalBonusForRow({school: sch, breakdown: b});
+        ms += bonus;
+        const cat = mapCategory(ms);
+        out.push({ school: sch, ms, cat, breakdown: b, bonus });
+      }
+      // variants
+      for (const v of loadVariants()){
+        const sch = schools.find(s => lc(s.id||"") === lc(v.schoolId||""));
+        if (!sch || sch.upgrade) continue;
+        const b = msWithChosenNatures(iv, sch, v.natures||[]);
+        let ms = b.ms;
+        const bonus = totalBonusForRow({school: sch, variant: v, breakdown: b});
+        ms += bonus;
+        const cat = mapCategory(ms);
+        out.push({ school: sch, ms, cat, breakdown: b, variant: {name:v.name, natures:v.natures}, bonus });
+      }
+      return out;
+    }
+
+    function displayName(row){
+      return row.variant ? `${row.school.name || "Unknown"} (${row.variant.name})`
+                         : (row.school.name || "Unknown");
     }
 
     function renderIVChips(iv){
       const nWrap = document.getElementById("iv-natures");
       const sWrap = document.getElementById("iv-skills");
       nWrap.innerHTML = ""; sWrap.innerHTML = "";
-      const n = iv.natures || {};
-      const s = iv.skills || {};
-      for (const k of ["fire","water","wind","earth","sun","moon","lightning","ki",'absorption','spirit']) {
-        const v = +n[k] || 0;
-        const chip = document.createElement("span");
-        chip.className = "pill";
-        chip.textContent = `${title(k)}: ${v}`;
-        nWrap.appendChild(chip);
+      const n = iv.natures || {}; const s = iv.skills || {};
+      for (const k of ["fire","water","wind","earth","sun","moon","lightning","ki"]) {
+        const chip = document.createElement("span"); chip.className="pill"; chip.textContent = `${title(k)}: ${+n[k]||0}`; nWrap.appendChild(chip);
       }
-      for (const k of ["aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation",'absorption','spirit']) {
-        const v = +s[k] || 0;
-        const chip = document.createElement("span");
-        chip.className = "pill";
-        chip.textContent = `${title(k)}: ${v}`;
-        sWrap.appendChild(chip);
+      for (const k of ["aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation","absorption","spirit"]) {
+        const chip = document.createElement("span"); chip.className="pill"; chip.textContent = `${title(k)}: ${+s[k]||0}`; sWrap.appendChild(chip);
       }
       document.getElementById("iv-mag").textContent = +((iv.mag ?? 0) || 0);
     }
@@ -385,72 +627,8 @@
     function buildMinCatSelect(){
       const sel = document.getElementById("filter-min-cat");
       for (const c of [...CATS].reverse().filter(x=>x.name!=="Unqualified")) {
-        const opt = document.createElement("option");
-        opt.value = c.name;
-        opt.textContent = c.name;
-        sel.appendChild(opt);
+        const opt = document.createElement("option"); opt.value = c.name; opt.textContent = c.name; sel.appendChild(opt);
       }
-    }
-
-    // ---------- API ----------
-    async function apiMe(){
-      if (!token) return { ok:false };
-      try{
-        const r = await fetch(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` }});
-        const j = await r.json();
-        return (j && j.status==="success") ? { ok:true, user:j } : { ok:false };
-      }catch{ return { ok:false }; }
-    }
-
-    async function fetchSpellList(id){
-      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(id)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (r.status===401) throw new Error("Unauthorized");
-      const j = await r.json();
-      return j.list || j;
-    }
-
-    async function updateSpellList(id, payload){
-      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(id)}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-      if (r.status===401) throw new Error("Unauthorized");
-      return await r.json();
-    }
-
-    async function fetchSchools(){
-      const r = await fetch(`${API_BASE}/schools`, { headers: { Authorization: `Bearer ${token}` }});
-      const j = await r.json();
-      return j.schools || j.items || j || [];
-    }
-
-    // ---------- Compute + Render ----------
-    function computeAll(){
-      if (!spellList || !schools.length) return [];
-      const iv = normalizeIV(spellList.initial_values || {});
-      const out = [];
-      for (const sch of schools) {
-        const b = bestMSForSchool(iv, sch);
-        const cat = mapCategory(b.ms);
-        out.push({ school: sch, ms: b.ms, cat, breakdown: b });
-      }
-      return out;
-    }
-
-    function normalizeIV(iv){
-      const defN = {fire:0,water:0,wind:0,earth:0,sun:0,moon:0,lightning:0,ki:0};
-      const defS = {aura:0,incantation:0,enchantement:0,potential:0,restoration:0,stealth:0,investigation:0,charm:0,intimidation:0,absorption:0,spirit:0};
-      const n = Object.assign({}, defN);
-      const s = Object.assign({}, defS);
-      for (const k in (iv.natures||{})) n[lc(k)] = +(iv.natures[k]||0);
-      for (const k in (iv.skills||{})) s[lc(k)] = +(iv.skills[k]||0);
-      return { mag: +(iv.mag||0), natures:n, skills:s };
     }
 
     function renderSchools(){
@@ -462,43 +640,48 @@
       const sortBy = document.getElementById("sort-by").value;
 
       let rows = [...computed];
-
-      if (nameFilter) rows = rows.filter(r => lc(r.school.name || "").includes(nameFilter));
+      if (nameFilter) rows = rows.filter(r => lc(displayName(r)).includes(nameFilter));
       if (minCat) rows = rows.filter(r => CAT_ORDER[r.cat.name] >= CAT_ORDER[minCat]);
 
       if (sortBy === "name_asc") {
-        rows.sort((a,b)=> (a.school.name||"").localeCompare(b.school.name||""));
+        rows.sort((a,b)=> displayName(a).localeCompare(displayName(b)));
       } else {
         rows.sort((a,b)=>{
           const d = CAT_ORDER[b.cat.name] - CAT_ORDER[a.cat.name];
           if (d!==0) return d;
           if (b.ms !== a.ms) return b.ms - a.ms;
-          return (a.school.name||"").localeCompare(b.school.name||"");
+          return displayName(a).localeCompare(displayName(b));
         });
       }
 
       if (!rows.length) {
         const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 5; td.className = "empty"; td.textContent = "No schools match the current filters.";
-        tr.appendChild(td); tbody.appendChild(tr); return;
+        tr.innerHTML = `<td colspan="5" class="empty">No schools match the current filters.</td>`;
+        tbody.appendChild(tr); return;
       }
 
-      for (const r of rows) {
+      for (const r of rows){
         const tr = document.createElement("tr");
 
         const tdName = document.createElement("td");
-        tdName.innerHTML = `<div class="k">${r.school.name || "Unknown"}</div>`;
+        tdName.innerHTML = `<div class="k">${displayName(r)}</div>`;
         tr.appendChild(tdName);
 
         const tdLinked = document.createElement("td");
         const ints = (r.school.linked_intensities||[]).join(", ");
-        tdLinked.innerHTML = `<div>Skill: <span class="k">${r.school.linked_skill || "-"}</span></div>
-                              <div>Intensities: <span class="k">${ints || "-"}</span></div>`;
+        tdLinked.innerHTML = `
+          <div>Skill: <span class="k">${r.school.linked_skill || "-"}</span></div>
+          <div>Intensities: <span class="k">${ints || "-"}</span></div>
+          ${r.variant ? "" : `<div style="margin-top:6px;"><button class="btn btn-secondary small" data-variant="${r.school.id}">Add Variant</button></div>`}
+        `;
         tr.appendChild(tdLinked);
 
         const tdBreak = document.createElement("td");
-        tdBreak.innerHTML = `MAG ${r.breakdown.mag} + Skill ${r.breakdown.skillVal} + ${fmtPick(r.breakdown.pick)}`;
+        const bd = r.breakdown;
+        const pickTxt = r.variant
+          ? (r.variant.natures||[]).map(title).join(" + ")
+          : (bd.useOne ? `${bd.top1} + 2` : `${bd.top1} + ${bd.top2}`);
+        tdBreak.innerHTML = `MAG ${bd.mag} + Skill ${bd.skillVal} + ${pickTxt}${r.bonus? ` <span class="muted">+ Bonus ${r.bonus}</span>`:""}`;
         tr.appendChild(tdBreak);
 
         const tdMS = document.createElement("td");
@@ -511,66 +694,54 @@
 
         tbody.appendChild(tr);
       }
-    }
-
-    function setLoggedInUI(username, role) {
-      document.getElementById("chip-name").textContent = `${username} (${role})`;
-      document.getElementById("user-chip").style.display = "flex";
-      document.getElementById("open-login").style.display = "none";
-    }
-    function setLoggedOutUI() {
-      document.getElementById("user-chip").style.display = "none";
-      document.getElementById("open-login").style.display = "inline-block";
-    }
-
-    // ---- Spell List API (add/remove/list)
-    async function fetchListSpells() {
-      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells`, {
-        headers: { Authorization: `Bearer ${token}` }
+      tbody.querySelectorAll("[data-variant]").forEach(btn=>{
+        btn.addEventListener("click", ()=> openVariant(btn.getAttribute("data-variant")));
       });
-      const j = await r.json();
-      return (j.spells || []);
     }
-    async function addSpells(ids) {
+
+    // ---- Eligibility uses BEST category across rows (base+variants) WITH bonuses
+    function eligibleForSpell(spell){
+      const need = spell.category || "Novice";
+      const reqOrd = catOrder(need);
+      const bestBySchool = {};
+      for (const r of computed){
+        const key = (r.school.id || r.school.name || "").toLowerCase();
+        const ord = catOrder(r.cat.name);
+        if (!(key in bestBySchool) || ord > bestBySchool[key]) bestBySchool[key] = ord;
+      }
+      return (spell.schools || []).every(s => {
+        const k = (s.id || s.name || "").toLowerCase();
+        return (bestBySchool[k] ?? -999) >= reqOrd;
+      });
+    }
+
+    // ---- List spells
+    async function fetchListSpells(){
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells`, { headers:{Authorization:`Bearer ${token}`}});
+      const j = await r.json(); return (j.spells || []);
+    }
+    async function addSpells(ids){
       const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ids })
+        method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` }, body:JSON.stringify({ids})
       });
       return await r.json();
     }
-    async function removeSpell(id) {
+    async function removeSpell(id){
       const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` }
+        method:"DELETE", headers:{Authorization:`Bearer ${token}`}
       });
       return await r.json();
     }
 
-    // ---- Public /spells search (with derived schools)
-    async function searchSpells(q="", school="", category="") {
+    // ---- Public /spells search
+    async function searchSpells(q="", school="", category=""){
       const params = new URLSearchParams();
       if (q) params.set("name", q);
       if (school) params.set("school", school);
       if (category) params.set("category", category);
       params.set("limit","100");
       const r = await fetch(`${API_BASE}/spells?${params.toString()}`);
-      const j = await r.json();
-      return j.spells || [];
-    }
-
-    // ---- Eligibility check
-    function catOrder(name){ return CAT_ORDER[name] ?? 0; }
-    function eligibleForSpell(spell) {
-      const need = spell.category || "Novice";
-      const reqOrd = catOrder(need);
-      const myBySchool = Object.fromEntries(computed.map(r => [ (r.school.id || r.school.name || "").toLowerCase(), r.cat ]));
-      const byName     = Object.fromEntries(computed.map(r => [ (r.school.name || "").toLowerCase(), r.cat ]));
-      return (spell.schools || []).every(s => {
-        const k = (s.id || s.name || "").toLowerCase();
-        const mine = myBySchool[k] || byName[k];
-        return mine && catOrder(mine.name) >= reqOrd;
-      });
+      const j = await r.json(); return j.spells || [];
     }
 
     // ---- Render My Spells
@@ -581,18 +752,18 @@
       tbody.innerHTML = `<tr><td colspan="5" class="empty">Loading…</td></tr>`;
       mySpells = await fetchListSpells();
 
-      if (!mySpells.length) {
+      if (!mySpells.length){
         tbody.innerHTML = `<tr><td colspan="5" class="empty">No spells yet. Click “Add Spells”.</td></tr>`;
         return;
       }
       tbody.innerHTML = "";
-      for (const sp of mySpells) {
+      for (const sp of mySpells){
         const tr = document.createElement("tr");
-        const schools = (sp.schools||[]).map(s=>s.name).join(", ");
+        const schTxt = (sp.schools||[]).map(s=>s.name).join(", ");
         const ok = eligibleForSpell(sp);
         tr.innerHTML = `
           <td><div class="k">${sp.name}</div><div class="muted">id: ${sp.id}</div></td>
-          <td>${schools||"—"}</td>
+          <td>${schTxt||"—"}</td>
           <td>${sp.category || "—"}</td>
           <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Below requirement"}</span></td>
           <td><button class="btn btn-secondary small" data-remove="${sp.id}">Remove</button></td>
@@ -608,31 +779,27 @@
       });
     }
 
-    // ---- Add Spells modal wiring
+    // ---- Add Spells modal helpers
     const asModal = document.getElementById("addspells-modal");
     const asBackdrop = document.getElementById("addspells-backdrop");
     function openAdd(){ openModal(asModal, asBackdrop); document.getElementById("as-q").focus(); }
     function closeAdd(){ closeModal(asModal, asBackdrop); document.getElementById("as-status").textContent=""; }
-
     function fillSchoolSelect(){
       const sel = document.getElementById("as-school");
       sel.innerHTML = `<option value="">Any school</option>`;
-      for (const s of schools) {
-        const opt = document.createElement("option");
-        opt.value = s.id || s.name; opt.textContent = s.name || s.id;
-        sel.appendChild(opt);
+      for (const s of schools){
+        const opt = document.createElement("option"); opt.value = s.id || s.name; opt.textContent = s.name || s.id; sel.appendChild(opt);
       }
     }
-
     async function runSearch(){
       const q = document.getElementById("as-q").value.trim();
       const school = document.getElementById("as-school").value;
       const cat = document.getElementById("as-category").value;
       const list = await searchSpells(q, school, cat);
       const body = document.getElementById("as-results");
-      if (!list.length) { body.innerHTML = `<tr><td colspan="5" class="empty">No results.</td></tr>`; return; }
+      if (!list.length){ body.innerHTML = `<tr><td colspan="5" class="empty">No results.</td></tr>`; return; }
       body.innerHTML = "";
-      for (const sp of list) {
+      for (const sp of list){
         const ok = eligibleForSpell(sp);
         const tr = document.createElement("tr");
         tr.innerHTML = `
@@ -646,31 +813,248 @@
       }
     }
 
-    // ---- Generic modal helpers (adds body/html scroll lock) ----
+    // ---- Modal helpers
     function openModal(modalEl, backdropEl){
-      modalEl.classList.add("open");
-      backdropEl.classList.add("open");
-      document.documentElement.classList.add("modal-open");
-      document.body.classList.add("modal-open");
+      modalEl.classList.add("open"); backdropEl.classList.add("open");
+      document.documentElement.classList.add("modal-open"); document.body.classList.add("modal-open");
     }
     function closeModal(modalEl, backdropEl){
-      modalEl.classList.remove("open");
-      backdropEl.classList.remove("open");
-      // If no other modal is open, release scroll lock
+      modalEl.classList.remove("open"); backdropEl.classList.remove("open");
       const anyOpen = document.querySelector('#sl .modal.open');
-      if (!anyOpen) {
-        document.documentElement.classList.remove("modal-open");
-        document.body.classList.remove("modal-open");
-      }
+      if (!anyOpen){ document.documentElement.classList.remove("modal-open"); document.body.classList.remove("modal-open"); }
     }
 
+    // ---------- Variant Modal ----------
+    const varModal = document.getElementById("var-modal");
+    const varBackdrop = document.getElementById("var-backdrop");
+    const varChoices = document.getElementById("var-choices");
+    const varTitle = document.getElementById("var-school-title");
+    const varRule = document.getElementById("var-rule");
+    let varCurrentSchool = null;
+
+    function openVariant(schoolId){
+      varCurrentSchool = schools.find(s => (s.id||"").toLowerCase() === String(schoolId||"").toLowerCase());
+      if (!varCurrentSchool) return;
+      varTitle.textContent = `For: ${varCurrentSchool.name}`;
+      const complexTwo = isComplexNeedsTwo(varCurrentSchool);
+      const ints = (varCurrentSchool.linked_intensities || []).map(lc);
+      varChoices.innerHTML = "";
+      ints.forEach((k,i)=>{
+        const id = `var-int-${i}`;
+        const wrap = document.createElement("label");
+        wrap.className = "pill"; wrap.style.cursor = "pointer";
+        wrap.innerHTML = `<input type="checkbox" id="${id}" value="${k}" style="margin-right:6px;"> ${title(k)}`;
+        varChoices.appendChild(wrap);
+      });
+      if (ints.length===0) { varChoices.innerHTML = `<span class="muted">No intensities defined.</span>`; }
+      varRule.textContent = complexTwo ? "Complex school: select exactly 2 natures."
+                       : (ints.length<=1 ? "Only one linked nature available for this school."
+                                         : "Simple school: select 1 or 2 natures.");
+      document.getElementById("var-name").value = "";
+      document.getElementById("var-status").textContent = "";
+      openModal(varModal, varBackdrop);
+    }
+    function closeVariant(){ closeModal(varModal, varBackdrop); }
+    function saveVariant(){
+      const checks = Array.from(varChoices.querySelectorAll("input[type=checkbox]:checked"));
+      const chosen = checks.map(c=>c.value);
+      const name = document.getElementById("var-name").value.trim();
+      const ints = (varCurrentSchool?.linked_intensities || []);
+      const complexTwo = isComplexNeedsTwo(varCurrentSchool);
+
+      const statusEl = document.getElementById("var-status");
+      if (!name){ statusEl.textContent = "Enter a variant name."; return; }
+      if (complexTwo && chosen.length !== 2){ statusEl.textContent = "Select exactly 2 natures for complex schools."; return; }
+      if (!complexTwo && ints.length > 1 && (chosen.length<1 || chosen.length>2)){ statusEl.textContent = "Select 1 or 2 natures."; return; }
+      if (ints.length===1 && chosen.length!==1){ statusEl.textContent = "This school only has one nature; select that one."; return; }
+
+      addVariant(varCurrentSchool.id, name, chosen);
+      computed = computeAll(); renderSchools(); closeVariant();
+    }
+
+    // ---------- Bonuses UI + logic ----------
+    // build target checkboxes
+    const ALL_NATURES = ["fire","water","wind","earth","sun","moon","lightning","ki"];
+    const ALL_SKILLS = ["aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation","absorption","spirit"];
+
+    function pillCheckbox(container, nameList){
+      container.innerHTML = "";
+      nameList.forEach((k, i)=>{
+        const id = `${container.id}-${i}`;
+        const lbl = document.createElement("label");
+        lbl.className="pill"; lbl.style.cursor="pointer";
+        lbl.innerHTML = `<input type="checkbox" id="${id}" value="${k}" style="margin-right:6px;"> ${title(k)}`;
+        container.appendChild(lbl);
+      });
+    }
+
+    const bonModal = document.getElementById("bon-modal");
+    const bonBackdrop = document.getElementById("bon-backdrop");
+    const bonBody = document.getElementById("bon-body");
+    const bonEditor = document.getElementById("bonus-editor");
+    let editingBonusId = null;
+
+    function openBonuses(){
+      renderBonusesTable();
+      bonEditor.style.display = "none";
+      openModal(bonModal, bonBackdrop);
+    }
+    function closeBonuses(){ closeModal(bonModal, bonBackdrop); }
+
+    function renderBonusesTable(){
+      const items = loadBonuses();
+      if (!items.length){ bonBody.innerHTML = `<tr><td colspan="6" class="empty">No bonuses yet.</td></tr>`; return; }
+      bonBody.innerHTML = "";
+      for (const b of items){
+        const tr = document.createElement("tr");
+        const valuePreview = bonusValue(b);
+        tr.innerHTML = `
+          <td><input type="checkbox" data-bon-toggle="${b.id}" ${b.enabled? "checked":""}></td>
+          <td>${b.name || "—"}</td>
+          <td>${title(b.type)}</td>
+          <td>${(b.targets||[]).map(title).join(", ") || "—"}</td>
+          <td>+${valuePreview}</td>
+          <td>
+            <button class="btn btn-secondary small" data-bon-edit="${b.id}">Edit</button>
+            <button class="btn btn-flag small" data-bon-del="${b.id}">Delete</button>
+          </td>
+        `;
+        bonBody.appendChild(tr);
+      }
+      bonBody.querySelectorAll("[data-bon-toggle]").forEach(ch=>{
+        ch.addEventListener("change", (e)=>{
+          const id = ch.getAttribute("data-bon-toggle");
+          const list = loadBonuses();
+          const i = list.findIndex(x=>x.id===id);
+          if (i>=0){ list[i].enabled = ch.checked; saveBonuses(list); computed = computeAll(); renderSchools(); }
+        });
+      });
+      bonBody.querySelectorAll("[data-bon-edit]").forEach(btn=>{
+        btn.addEventListener("click", ()=> startEditBonus(btn.getAttribute("data-bon-edit")));
+      });
+      bonBody.querySelectorAll("[data-bon-del]").forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          const id = btn.getAttribute("data-bon-del");
+          const list = loadBonuses().filter(x=>x.id!==id);
+          saveBonuses(list); renderBonusesTable(); computed = computeAll(); renderSchools();
+        });
+      });
+    }
+
+    function startEditBonus(id=null){
+      editingBonusId = id;
+      const list = loadBonuses();
+      const item = id ? list.find(x=>x.id===id) : { id:null, name:"", type:"nature", mode:"manual", manual:1, level:1, quality:"Adequate", perStep:1, targets:[], enabled:true };
+      // show editor
+      bonEditor.style.display = "block";
+      document.getElementById("b-name").value = item.name || "";
+      document.getElementById("b-enabled").value = item.enabled ? "1" : "0";
+      document.getElementById("b-type").value = item.type || "nature";
+      document.getElementById("b-mode").value = item.mode || "manual";
+      document.getElementById("b-manual").value = item.manual ?? 1;
+      document.getElementById("b-level").value = item.level ?? 1;
+      document.getElementById("b-quality").value = item.quality || "Adequate";
+      document.getElementById("b-perstep").value = item.perStep ?? 1;
+      // targets UI
+      pillCheckbox(document.getElementById("b-natures"), ALL_NATURES);
+      pillCheckbox(document.getElementById("b-skills"), ALL_SKILLS);
+      buildSchoolTargets();
+      // set checked targets
+      const tset = new Set((item.targets||[]).map(lc));
+      document.querySelectorAll("#b-natures input[type=checkbox], #b-skills input[type=checkbox], #bonus-schools input[type=checkbox]").forEach(ch=>{
+        if (tset.has(lc(ch.value))) ch.checked = true;
+      });
+      updateTargetVisibility();
+      updateValuePreview();
+    }
+
+    function updateTargetVisibility(){
+      const typ = document.getElementById("b-type").value;
+      document.getElementById("t-nature").style.display = typ==="nature" ? "block" : "none";
+      document.getElementById("t-skill").style.display  = typ==="skill" ? "block" : "none";
+      document.getElementById("t-school").style.display = typ==="school" ? "block" : "none";
+    }
+    function updateModeVisibility(){
+      const mode = document.getElementById("b-mode").value;
+      document.getElementById("b-manual-wrap").style.display  = mode==="manual" ? "block" : "none";
+      document.getElementById("b-level-wrap").style.display   = mode==="level"  ? "block" : "none";
+      document.getElementById("b-quality-wrap").style.display = mode==="quality"? "block" : "none";
+      document.getElementById("b-perstep-wrap").style.display = mode==="quality"? "block" : "none";
+      updateValuePreview();
+    }
+    function updateValuePreview(){
+      const b = {
+        mode: document.getElementById("b-mode").value,
+        manual: +document.getElementById("b-manual").value || 0,
+        level: +document.getElementById("b-level").value || 0,
+        quality: document.getElementById("b-quality").value,
+        perStep: +document.getElementById("b-perstep").value || 1
+      };
+      document.getElementById("b-preview").textContent = `+${bonusValue(b)}`;
+    }
+
+    function buildSchoolTargets(){
+      const box = document.getElementById("bonus-schools");
+      const f = lc(document.getElementById("b-school-filter").value || "");
+      const list = schools || [];
+      box.innerHTML = "";
+      list.forEach((s,i)=>{
+        const nm = s.name || s.id;
+        if (f && !lc(nm).includes(f)) return;
+        const id = `b-sch-${i}`;
+        const lbl = document.createElement("label");
+        lbl.style.display = "inline-block"; lbl.style.marginRight = "12px"; lbl.style.marginBottom = "6px";
+        lbl.innerHTML = `<input type="checkbox" id="${id}" value="${s.id}" style="margin-right:6px;"> ${nm}`;
+        box.appendChild(lbl);
+      });
+      if (!box.children.length) box.innerHTML = `<div class="muted">No schools match filter.</div>`;
+    }
+
+    function collectTargets(){
+      const typ = document.getElementById("b-type").value;
+      if (typ==="nature") return Array.from(document.querySelectorAll("#b-natures input:checked")).map(ch=>ch.value);
+      if (typ==="skill")  return Array.from(document.querySelectorAll("#b-skills input:checked")).map(ch=>ch.value);
+      if (typ==="school") return Array.from(document.querySelectorAll("#bonus-schools input:checked")).map(ch=>ch.value);
+      return [];
+    }
+
+    function saveBonusEdit(){
+      const name = document.getElementById("b-name").value.trim();
+      const enabled = document.getElementById("b-enabled").value === "1";
+      const type = document.getElementById("b-type").value;
+      const mode = document.getElementById("b-mode").value;
+      const manual = +document.getElementById("b-manual").value || 0;
+      const level = +document.getElementById("b-level").value || 0;
+      const quality = document.getElementById("b-quality").value;
+      const perStep = +document.getElementById("b-perstep").value || 1;
+      const targets = collectTargets();
+
+      if (!name){ alert("Give this bonus a name."); return; }
+      if (!targets.length){ alert("Select at least one target."); return; }
+
+      const list = loadBonuses();
+      if (editingBonusId){
+        const i = list.findIndex(x=>x.id===editingBonusId);
+        if (i>=0) list[i] = { ...list[i], name, enabled, type, mode, manual, level, quality, perStep, targets };
+      } else {
+        const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `b_${Date.now().toString(36)}`;
+        list.push({ id, name, enabled, type, mode, manual, level, quality, perStep, targets });
+      }
+      saveBonuses(list);
+      renderBonusesTable();
+      computed = computeAll(); renderSchools();
+      bonEditor.style.display = "none";
+      editingBonusId = null;
+    }
+
+    // ---------- Init ----------
     async function init(){
       token = localStorage.getItem("auth_token") || "";
       listId = qs("id");
-      if (!listId) { document.getElementById("list-meta").textContent = "Missing list id in URL."; return; }
+      if (!listId){ document.getElementById("list-meta").textContent = "Missing list id in URL."; return; }
 
       const me = await apiMe();
-      if (!me.ok) {
+      if (!me.ok){
         setLoggedOutUI();
         document.getElementById("auth-gate").style.display = "block";
         document.getElementById("content").style.display = "none";
@@ -695,12 +1079,21 @@
         document.getElementById("content").style.display = "grid";
         renderSchools();
 
-        // NEW: prime the Add Spells picker + list
         fillSchoolSelect();
         await loadMySpells();
       }catch(e){
         document.getElementById("list-meta").textContent = `Error: ${e.message}`;
       }
+    }
+
+    function setLoggedInUI(username, role){
+      document.getElementById("chip-name").textContent = `${username} (${role})`;
+      document.getElementById("user-chip").style.display = "flex";
+      document.getElementById("open-login").style.display = "none";
+    }
+    function setLoggedOutUI(){
+      document.getElementById("user-chip").style.display = "none";
+      document.getElementById("open-login").style.display = "inline-block";
     }
 
     // ---------- Auth modal ----------
@@ -709,48 +1102,37 @@
     const loginStatus = document.getElementById("login-status");
     function openLogin(){ openModal(loginModal, loginBackdrop); document.getElementById("login-username").focus(); }
     function closeLogin(){ closeModal(loginModal, loginBackdrop); loginStatus.textContent=""; }
-    async function login() {
+    async function login(){
       const username = document.getElementById("login-username").value.trim();
       const password = document.getElementById("login-password").value;
       loginStatus.textContent = "";
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ username, password })
-      });
+      const res = await fetch(`${API_BASE}/auth/login`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username,password}) });
       const data = await res.json();
-      if (data.status === "success") {
+      if (data.status==="success"){
         localStorage.setItem("auth_token", data.token);
         localStorage.setItem("auth_username", data.username);
         localStorage.setItem("auth_role", data.role);
-        token = data.token;
-        setLoggedInUI(data.username, data.role);
-        closeLogin();
-        init();
-      } else {
-        loginStatus.textContent = data.message || "Login failed";
-      }
+        token = data.token; setLoggedInUI(data.username, data.role); closeLogin(); init();
+      } else { loginStatus.textContent = data.message || "Login failed"; }
     }
-    async function logout() {
-      if (token) {
-        try { await fetch(`${API_BASE}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }}); } catch {}
-      }
-      localStorage.clear();
-      setLoggedOutUI();
+    async function logout(){
+      if (token){ try{ await fetch(`${API_BASE}/auth/logout`, { method:"POST", headers:{Authorization:`Bearer ${token}`}}); }catch{} }
+      localStorage.clear(); setLoggedOutUI();
       document.getElementById("auth-gate").style.display = "block";
       document.getElementById("content").style.display = "none";
     }
 
-    // ---------- Events ----------
-    document.addEventListener("DOMContentLoaded", () => {
-      // topbar/auth
-      document.getElementById("chip-logout").addEventListener("click", (e)=>{e.preventDefault();logout();});
-      document.getElementById("open-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
-      document.getElementById("gate-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
+    // ---------- Wire events ----------
+    document.addEventListener("DOMContentLoaded", ()=>{
+      // auth
+      document.getElementById("chip-logout").addEventListener("click", (e)=>{ e.preventDefault(); logout(); });
+      document.getElementById("open-login").addEventListener("click", (e)=>{ e.preventDefault(); openLogin(); });
+      document.getElementById("gate-login").addEventListener("click", (e)=>{ e.preventDefault(); openLogin(); });
       document.getElementById("login-backdrop").addEventListener("click", closeLogin);
-      document.getElementById("close-login").addEventListener("click", (e)=>{e.preventDefault();closeLogin();});
-      document.getElementById("cancel-login").addEventListener("click", (e)=>{e.preventDefault();closeLogin();});
-      document.addEventListener("keydown", (e)=>{ if (e.key==="Escape"){ closeLogin(); closeIV(); closeAdd(); }});
-      document.getElementById("login-btn").addEventListener("click", (e)=>{e.preventDefault();login();});
+      document.getElementById("close-login").addEventListener("click", (e)=>{ e.preventDefault(); closeLogin(); });
+      document.getElementById("cancel-login").addEventListener("click", (e)=>{ e.preventDefault(); closeLogin(); });
+      document.addEventListener("keydown", (e)=>{ if (e.key==="Escape"){ closeLogin(); closeIV(); closeAdd(); closeVariant(); closeBonuses(); }});
+      document.getElementById("login-btn").addEventListener("click", (e)=>{ e.preventDefault(); login(); });
 
       // IV modal
       const ivModal = document.getElementById("iv-modal");
@@ -758,63 +1140,21 @@
       const ivStatus = document.getElementById("iv-status");
       function openIV(){
         const iv = spellList?.initial_values || {};
-        document.getElementById("iv-mag-input").value = +(iv.mag ?? 0);
-        const n = iv.natures || {};
-        const s = iv.skills || {};
+        const n = iv.natures || {}; const s = iv.skills || {};
         const get = (obj,k)=> +(obj?.[k] ?? 0);
-        // natures
-        document.getElementById("iv-fire").value = get(n,"fire");
-        document.getElementById("iv-water").value = get(n,"water");
-        document.getElementById("iv-wind").value = get(n,"wind");
-        document.getElementById("iv-earth").value = get(n,"earth");
-        document.getElementById("iv-sun").value = get(n,"sun");
-        document.getElementById("iv-moon").value = get(n,"moon");
-        document.getElementById("iv-lightning").value = get(n,"lightning");
-        document.getElementById("iv-ki").value = get(n,"ki");
-        // skills
-        document.getElementById("iv-aura").value = get(s,"aura");
-        document.getElementById("iv-incantation").value = get(s,"incantation");
-        document.getElementById("iv-enchantement").value = get(s,"enchantement");
-        document.getElementById("iv-potential").value = get(s,"potential");
-        document.getElementById("iv-restoration").value = get(s,"restoration");
-        document.getElementById("iv-stealth").value = get(s,"stealth");
-        document.getElementById("iv-investigation").value = get(s,"investigation");
-        document.getElementById("iv-charm").value = get(s,"charm");
-        document.getElementById("iv-intimidation").value = get(s,"intimidation");
-        document.getElementById("iv-absorption").value = get(s,"absorption");
-        document.getElementById("iv-spirit").value = get(s,"spirit");
-
-        openModal(ivModal, ivBackdrop);
-        ivStatus.textContent = "";
+        document.getElementById("iv-mag-input").value = +(iv.mag ?? 0);
+        ["fire","water","wind","earth","sun","moon","lightning","ki"].forEach(k=>{ document.getElementById(`iv-${k}`).value = get(n,k); });
+        ["aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation","absorption","spirit"].forEach(k=>{ document.getElementById(`iv-${k}`).value = get(s,k); });
+        openModal(ivModal, ivBackdrop); ivStatus.textContent = "";
       }
       function closeIV(){ closeModal(ivModal, ivBackdrop); ivStatus.textContent=""; }
-
       async function saveIV(){
         try{
           const payload = {
             initial_values: {
               mag: +document.getElementById("iv-mag-input").value || 0,
-              natures: {
-                fire: +document.getElementById("iv-fire").value || 0,
-                water: +document.getElementById("iv-water").value || 0,
-                wind: +document.getElementById("iv-wind").value || 0,
-                earth: +document.getElementById("iv-earth").value || 0,
-                sun: +document.getElementById("iv-sun").value || 0,
-                moon: +document.getElementById("iv-moon").value || 0,
-                lightning: +document.getElementById("iv-lightning").value || 0,
-                ki: +document.getElementById("iv-ki").value || 0,
-              },
-              skills: {
-                aura: +document.getElementById("iv-aura").value || 0,
-                incantation: +document.getElementById("iv-incantation").value || 0,
-                enchantement: +document.getElementById("iv-enchantement").value || 0,
-                potential: +document.getElementById("iv-potential").value || 0,
-                restoration: +document.getElementById("iv-restoration").value || 0,
-                stealth: +document.getElementById("iv-stealth").value || 0,
-                investigation: +document.getElementById("iv-investigation").value || 0,
-                charm: +document.getElementById("iv-charm").value || 0,
-                intimidation: +document.getElementById("iv-intimidation").value || 0,
-              }
+              natures: Object.fromEntries(["fire","water","wind","earth","sun","moon","lightning","ki"].map(k=>[k, +document.getElementById(`iv-${k}`).value || 0])),
+              skills: Object.fromEntries(["aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation","absorption","spirit"].map(k=>[k, +document.getElementById(`iv-${k}`).value || 0]))
             }
           };
           ivStatus.textContent = "Saving…";
@@ -822,15 +1162,16 @@
           if (res.status !== "success") throw new Error(res.message || "Failed to save.");
           spellList.initial_values = payload.initial_values;
           renderIVChips(spellList.initial_values);
-          computed = computeAll();
-          renderSchools();
-          await loadMySpells(); // refresh eligibility badges too
-          ivStatus.textContent = "Saved!";
-          closeIV();
-        }catch(e){
-          ivStatus.textContent = e.message || "Save failed.";
-        }
+          computed = computeAll(); renderSchools(); await loadMySpells();
+          ivStatus.textContent = "Saved!"; closeIV();
+        }catch(e){ ivStatus.textContent = e.message || "Save failed."; }
       }
+      document.getElementById("edit-iv").addEventListener("click", (e)=>{ e.preventDefault(); openIV(); });
+      document.getElementById("iv-save").addEventListener("click", (e)=>{ e.preventDefault(); saveIV(); });
+      document.getElementById("iv-cancel").addEventListener("click", (e)=>{ e.preventDefault(); closeIV(); });
+      document.getElementById("iv-close").addEventListener("click", (e)=>{ e.preventDefault(); closeIV(); });
+      document.getElementById("iv-backdrop").addEventListener("click", closeIV);
+      window.closeIV = closeIV; // for escape handling
 
       // schools filters
       document.getElementById("filter-name").addEventListener("input", renderSchools);
@@ -838,59 +1179,53 @@
       document.getElementById("sort-by").addEventListener("change", renderSchools);
       document.getElementById("recalc").addEventListener("click", ()=>{ computed = computeAll(); renderSchools(); });
 
-      // add spells modal
+      // add spells
       document.getElementById("open-add-spells").addEventListener("click", (e)=>{ e.preventDefault(); openAdd(); });
       document.getElementById("addspells-close").addEventListener("click", (e)=>{ e.preventDefault(); closeAdd(); });
       document.getElementById("addspells-cancel").addEventListener("click", (e)=>{ e.preventDefault(); closeAdd(); });
       document.getElementById("addspells-backdrop").addEventListener("click", closeAdd);
       document.getElementById("as-search").addEventListener("click", (e)=>{ e.preventDefault(); runSearch(); });
-      document.getElementById("as-check-all").addEventListener("change", (e)=>{
-        document.querySelectorAll(".as-chk").forEach(c => c.checked = e.target.checked);
-      });
-      document.getElementById("as-add-selected").addEventListener("click", async (e)=>{
-        e.preventDefault();
-        const ids = Array.from(document.querySelectorAll(".as-chk:checked")).map(c=>c.value);
-        const status = document.getElementById("as-status");
-        if (!ids.length) { status.textContent = "Select at least one spell."; return; }
-        status.textContent = "Adding…";
-        const res = await addSpells(ids);
-        if (res.status !== "success") { status.textContent = res.message || "Add failed."; return; }
-        status.textContent = `Added ${ids.length} spell(s).`;
-        await loadMySpells();
-        closeAdd();
-      });
+      document.getElementById("as-check-all").addEventListener("change", (e)=>{ document.querySelectorAll(".as-chk").forEach(c => c.checked = e.target.checked); });
 
-      // auth buttons
-      document.getElementById("chip-logout").addEventListener("click", (e)=>{e.preventDefault();logout();});
-      document.getElementById("open-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
-      document.getElementById("gate-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
-      document.getElementById("login-btn").addEventListener("click", (e)=>{e.preventDefault();login();});
+      // variants
+      document.getElementById("var-close").addEventListener("click", (e)=>{ e.preventDefault(); closeVariant(); });
+      document.getElementById("var-cancel").addEventListener("click", (e)=>{ e.preventDefault(); closeVariant(); });
+      document.getElementById("var-backdrop").addEventListener("click", closeVariant);
+      document.getElementById("var-save").addEventListener("click", (e)=>{ e.preventDefault(); saveVariant(); });
 
-      // expose IV modal helpers to outer scope handlers
-      window.openIV = openIV;
-      window.closeIV = closeIV;
-      window.saveIV = saveIV;
+      // bonuses
+      document.getElementById("open-bonuses").addEventListener("click", (e)=>{ e.preventDefault(); openBonuses(); });
+      document.getElementById("bon-close").addEventListener("click", (e)=>{ e.preventDefault(); closeBonuses(); });
+      document.getElementById("bon-backdrop").addEventListener("click", closeBonuses);
+      document.getElementById("bon-add").addEventListener("click", (e)=>{ e.preventDefault(); startEditBonus(null); });
+      document.getElementById("bon-cancel-edit").addEventListener("click", (e)=>{ e.preventDefault(); bonEditor.style.display="none"; editingBonusId=null; });
+      document.getElementById("bon-save-edit").addEventListener("click", (e)=>{ e.preventDefault(); saveBonusEdit(); });
+      document.getElementById("b-type").addEventListener("change", ()=>{ updateTargetVisibility(); });
+      document.getElementById("b-mode").addEventListener("change", ()=>{ updateModeVisibility(); });
+      document.getElementById("b-manual").addEventListener("input", updateValuePreview);
+      document.getElementById("b-level").addEventListener("input", updateValuePreview);
+      document.getElementById("b-quality").addEventListener("change", updateValuePreview);
+      document.getElementById("b-perstep").addEventListener("input", updateValuePreview);
+      document.getElementById("b-school-filter").addEventListener("input", buildSchoolTargets);
 
-      async function deleteList() {
+      // delete list
+      async function deleteList(){
         if (!confirm("Delete this spell list? This cannot be undone.")) return;
-        try {
-          const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}`, {
-            method: "DELETE", headers: { Authorization: `Bearer ${token}` }
-          });
+        try{
+          const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}`, { method:"DELETE", headers:{Authorization:`Bearer ${token}` }});
           const j = await r.json().catch(()=>({}));
-          if (j.status === "success") {
-            window.location.href = "spell_list_home.html";
-          } else {
-            alert(j.message || "Failed to delete list.");
-          }
-        } catch(err) { alert(err.message || "Failed to delete list."); }
+          if (j.status==="success"){ window.location.href = "spell_list_home.html"; }
+          else { alert(j.message || "Failed to delete list."); }
+        }catch(err){ alert(err.message || "Failed to delete list."); }
       }
-
-
       document.getElementById("delete-list").addEventListener("click", (e)=>{ e.preventDefault(); deleteList(); });
+
       // init
       init();
     });
+
+    // expose for escape close
+    function closeAdd(){ closeModal(document.getElementById("addspells-modal"), document.getElementById("addspells-backdrop")); document.getElementById("as-status").textContent=""; }
   </script>
 </body>
 </html>

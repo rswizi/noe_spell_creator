@@ -1,4 +1,3 @@
-# main.py
 import datetime
 import re
 from pathlib import Path
@@ -161,7 +160,6 @@ async def bulk_create_effects(request: Request):
         sch_col = get_col("schools")
         eff_col = get_col("effects")
 
-        # find-or-create school
         existing = sch_col.find_one(
             {"name": {"$regex": f"^{re.escape(school_name)}$", "$options": "i"}}, {"_id": 0}
         )
@@ -185,7 +183,6 @@ async def bulk_create_effects(request: Request):
             }
             sch_col.insert_one(school)
 
-        # (Optional) light duplicate guard for effects in this batch: (name, mp, en) within same school
         created = []
         for e in effects:
             name = (e.get("name") or "").strip()
@@ -196,13 +193,11 @@ async def bulk_create_effects(request: Request):
             except Exception:
                 return JSONResponse({"status":"error","message":f"Non-numeric MP/EN in effect '{name}'"}, status_code=400)
 
-            # prevent obvious duplicates inside same school
             dup = eff_col.find_one(
                 {"school": school["id"], "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}, "mp_cost": mp, "en_cost": en},
                 {"_id": 1}
             )
             if dup:
-                # skip silently or collect as 'skipped'; here we skip & continue
                 continue
 
             eff_id = next_id_str("effects", padding=4)
@@ -255,7 +250,6 @@ def list_spells(request: Request):
         try:
             user, _ = require_user_doc(request)
         except HTTPException as he:
-            # Not authenticated -> no results
             return {"spells": [], "page": page, "limit": limit, "total": 0, "error": he.detail}
         fav_ids = [str(x) for x in (user.get("favorites") or [])]
         if not fav_ids:
@@ -266,15 +260,12 @@ def list_spells(request: Request):
     cursor = sp_col.find(q, {"_id": 0}).skip((page - 1) * limit).limit(limit)
     spells = list(cursor)
 
-    # map school_id -> school_name
     school_map = {s["id"]: s.get("name", s["id"]) for s in sch_col.find({}, {"_id": 0, "id": 1, "name": 1})}
 
-    # effect -> school
     all_eff_ids = {str(eid) for sp in spells for eid in (sp.get("effects") or [])}
     eff_docs = list(eff_col.find({"id": {"$in": list(all_eff_ids)}}, {"_id": 0, "id": 1, "school": 1}))
     eff_school = {d["id"]: str(d.get("school") or "") for d in eff_docs}
 
-    # attach derived schools
     out = []
     for sp in spells:
         sch_ids = sorted({eff_school.get(str(eid), "") for eid in (sp.get("effects") or []) if eff_school.get(str(eid), "")})
@@ -405,18 +396,14 @@ async def submit_spell(request: Request):
         if not effect_ids:
             return JSONResponse({"status": "error", "message": "At least one effect is required."}, status_code=400)
 
-        # verify effects exist
         missing = [eid for eid in effect_ids if not get_col("effects").find_one({"id": eid}, {"_id": 1})]
         if missing:
             return JSONResponse({"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
 
-        # compute costs
         cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
 
-        # signature over parameters (NOT name)
         sig = spell_sig(activation, range_val, aoe_val, duration, effect_ids)
 
-        # duplicate check (do NOT reference a non-existent spell_id here)
         conflict = get_col("spells").find_one({"sig_v1": sig}, {"_id": 0, "id": 1, "name": 1})
         if conflict:
             return JSONResponse(
@@ -427,7 +414,6 @@ async def submit_spell(request: Request):
                 status_code=409
             )
 
-        # new id
         sid = next_id_str("spells", padding=4)
 
         doc = {
@@ -444,7 +430,6 @@ async def submit_spell(request: Request):
             "en_cost": cc["en_cost"],
             "category": cc["category"],
             "spell_type": body.get("spell_type") or "Simple",
-            # default moderation status
             "status": "yellow",
         }
 
@@ -463,7 +448,6 @@ async def auth_signup(request: Request):
     password = body.get("password") or ""
     confirm  = body.get("confirm_password") or ""
 
-    # basic validation
     if not username or not email or not password or not confirm:
         return {"status": "error", "message": "All fields are required."}
     if "@" not in email or "." not in email.split("@")[-1]:
@@ -475,7 +459,6 @@ async def auth_signup(request: Request):
 
     users = get_col("users")
 
-    # reject duplicates proactively (fast path)
     if users.find_one({"username": username}, {"_id": 1}):
         return {"status": "error", "message": "Username already taken."}
     if users.find_one({"email": email}, {"_id": 1}):
@@ -484,16 +467,14 @@ async def auth_signup(request: Request):
     doc = {
         "username": username,
         "email": email,
-        "password_hash": _sha256(password),  # consistent with your current login
+        "password_hash": _sha256(password),
         "role": "user",
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
     }
 
     try:
-        users.insert_one(dict(doc))  # insert a copy (avoid _id leaking into response)
+        users.insert_one(dict(doc))
     except DuplicateKeyError:
-        # In case of a race, rely on unique indexes to protect us:
-        # figure out which field collided
         if users.find_one({"username": username}, {"_id": 1}):
             return {"status": "error", "message": "Username already taken."}
         return {"status": "error", "message": "Email already registered."}
@@ -509,7 +490,6 @@ def admin_list_users(request: Request):
     users = list(
         get_col("users").find({}, {"_id": 0, "username": 1, "email": 1, "role": 1, "created_at": 1})
     )
-    # sort by username
     users.sort(key=lambda u: u["username"].lower())
     return {"status": "success", "users": users}
 
@@ -521,8 +501,6 @@ async def admin_set_user_role(target_username: str, request: Request):
 
     if role not in _ALLOWED_ROLES:
         return JSONResponse({"status": "error", "message": "Invalid role."}, status_code=400)
-
-    # Optional: block changing your own role if you want. For now, allow it.
 
     r = get_col("users").update_one({"username": target_username}, {"$set": {"role": role}})
     if r.matched_count == 0:
@@ -546,7 +524,6 @@ async def set_spell_status(spell_id: str, request: Request, payload: dict = Body
     if r.matched_count == 0:
         return JSONResponse({"status":"error","message":f"Spell {spell_id} not found"}, status_code=404)
 
-    # Optional audit
     try:
         write_audit("set_status", username, spell_id, before=None, after={"status": status})
     except Exception:
@@ -556,7 +533,6 @@ async def set_spell_status(spell_id: str, request: Request, payload: dict = Body
 
 @app.delete("/admin/spells/flagged")
 def delete_flagged_spells(request: Request):
-    # Admin only
     require_auth(request, ["admin", "moderator"])
     r = get_col("spells").delete_many({"status": "red"})
     return {"status": "success", "deleted": r.deleted_count}
@@ -693,17 +669,14 @@ def admin_list_effects(
 
 @app.put("/admin/effects/{effect_id}")
 async def admin_update_effect(effect_id: str, request: Request):
-    # moderators + admins
     require_auth(request, ["admin", "moderator"])
     body = await request.json()
 
-    # Fetch old effect (for patch notes)
     col = get_col("effects")
     old = col.find_one({"id": effect_id}, {"_id": 0})
     if not old:
         return JSONResponse({"status":"error","message":"Effect not found"}, status_code=404)
 
-    # Validate + build update
     name = (body.get("name") or old.get("name") or "").strip()
     desc = (body.get("description") or body.get("desc") or old.get("description") or "").strip()
     try:
@@ -714,12 +687,10 @@ async def admin_update_effect(effect_id: str, request: Request):
 
     school = str(body.get("school", old.get("school",""))).strip() or old.get("school","")
 
-    # Update the effect first
     col.update_one({"id": effect_id}, {"$set": {
         "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school
     }})
 
-    # Build patch header (effect changes)
     effect_changes = []
     def _chg(label, a, b):
         if a != b: effect_changes.append(f"{label}: {a} → {b}")
@@ -733,7 +704,6 @@ async def admin_update_effect(effect_id: str, request: Request):
 
     header = [f"Edited Effect [{effect_id}]", ""] + ([*effect_changes, ""] if effect_changes else ["No direct field changes",""])
 
-    # Recompute all spells using this effect
     spell_patch_text, changed_count = _recompute_spells_for_effect(effect_id)
 
     patch_text = "\n".join(header + ["Impacted Spells:", spell_patch_text]) + "\n"
@@ -741,17 +711,14 @@ async def admin_update_effect(effect_id: str, request: Request):
 
 @app.delete("/admin/effects/{effect_id}")
 def admin_delete_effect(effect_id: str, request: Request):
-    # moderators + admins
     require_auth(request, ["admin", "moderator"])
     col = get_col("effects")
     old = col.find_one({"id": effect_id}, {"_id": 0})
     if not old:
         return {"status":"error","message":"Effect not found"}
 
-    # Remove effect
     col.delete_one({"id": effect_id})
 
-    # For each spell containing it, drop the id and recompute
     sp_col = get_col("spells")
     affected = list(sp_col.find({"effects": effect_id}, {"_id": 0}))
     lines = [f"Deleted Effect [{effect_id}] {old.get('name','')}",""]
@@ -820,7 +787,6 @@ async def admin_effect_duplicates_apply(request: Request):
         keep = grp["keep"]
         remove_ids = grp["remove"]
 
-        # Update spells referencing any of the remove_ids -> keep
         if remove_ids:
             affected = list(sp_col.find({"effects": {"$in": remove_ids}}, {"_id": 1, "id": 1, "effects": 1}))
             for sp in affected:
@@ -830,9 +796,8 @@ async def admin_effect_duplicates_apply(request: Request):
                 seen = set()
                 for eid in old_list:
                     if eid in remove_ids:
-                        eid = keep  # remap to kept id
+                        eid = keep
                         changed = True
-                    # prevent duplicate entries
                     if eid not in seen:
                         new_list.append(eid)
                         seen.add(eid)
@@ -840,7 +805,6 @@ async def admin_effect_duplicates_apply(request: Request):
                     sp_col.update_one({"_id": sp["_id"]}, {"$set": {"effects": new_list}})
                     total_spells_touched += 1
 
-        # Delete duplicates
         if remove_ids:
             r = eff_col.delete_many({"id": {"$in": remove_ids}})
             total_deleted += int(r.deleted_count or 0)
@@ -914,7 +878,6 @@ async def admin_update_school(school_id: str, request: Request):
         "linked_intensities": linked_intensities,
     }})
 
-    # build header of changes
     ch = []
     def _chg(lbl, a, b):
         if a != b: ch.append(f"{lbl}: {a} → {b}")
@@ -946,10 +909,8 @@ def admin_delete_school(school_id: str, request: Request, force: bool = Query(de
     if used_count > 0 and not force:
         return {"status":"error","message":f"Cannot delete: {used_count} effect(s) still reference this school. Reassign or delete them first."}
 
-    # If force=True, delete all its effects as well and recompute spells
     lines = [f"Deleted School [{school_id}] {school.get('name','')}",""]
     if used_count > 0 and force:
-        # gather effect IDs before deletion
         eff_ids = [e["id"] for e in eff.find({"school": school_id}, {"_id":0,"id":1})]
         eff.delete_many({"school": school_id})
         from_ids = set(eff_ids)
@@ -1002,7 +963,6 @@ async def apo_constraints_bulk_create(request: Request):
     try:
         require_auth(request, roles=["moderator","admin"])
     except Exception as e:
-        # turn the generic exception into a proper 401/403
         raise HTTPException(status_code=401, detail=str(e))
     body = await request.json()
     items = body.get("constraints") or []
@@ -1105,7 +1065,6 @@ async def create_apotheosis(request: Request):
 
 @app.get("/apotheoses")
 def list_apotheoses(request: Request, name: str | None = Query(default=None), typ: str | None = Query(default=None), stage: str | None = Query(default=None), favorite: str | None = Query(default=None)):
-    # auth optional; favorites requires auth
     qp = request.query_params
     q = {}
     if name:  q["name"]  = {"$regex": name, "$options": "i"}
@@ -1154,7 +1113,6 @@ async def create_spell_list(request: Request):
     name = (body.get("name") or "Untitled List").strip()
     sl_id = next_id_str("spell_lists", padding=4)
 
-    # NEW: accept client-provided initial_values, with safe coercion
     iv_in = body.get("initial_values") or {}
     iv = {
         "mag": int(iv_in.get("mag") or 0),
@@ -1169,7 +1127,7 @@ async def create_spell_list(request: Request):
         "name": name,
         "owner": username,
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-        "initial_values": iv,  # use coerced values
+        "initial_values": iv,
         "spells": [],
     }
     get_col("spell_lists").insert_one(dict(doc))
@@ -1225,7 +1183,6 @@ def spell_list_spells(list_id: str, request: Request):
     ids = [str(x) for x in (sl.get("spells") or [])]
     if not ids:
         return {"status":"success","spells":[]}
-    # include derived schools exactly like /spells does
     sp_col  = get_col("spells")
     eff_col = get_col("effects")
     sch_col = get_col("schools")
@@ -1239,7 +1196,6 @@ def spell_list_spells(list_id: str, request: Request):
         sch_ids = sorted({eff_school.get(str(eid), "") for eid in (sp.get("effects") or []) if eff_school.get(str(eid), "")})
         sp["schools"] = [{"id": sid, "name": school_map.get(sid, sid)} for sid in sch_ids]
         out.append(sp)
-    # keep the same shape / computation you use on /spells (fits your UI). :contentReference[oaicite:0]{index=0}
     return {"status":"success","spells": out}
 
 @app.post("/spell_lists/{list_id}/spells")
@@ -1256,7 +1212,6 @@ async def add_spells_to_list(list_id: str, request: Request):
     if not _can_access_list(sl, username, role):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    # verify spells exist
     existing = set(str(s["id"]) for s in get_col("spells").find({"id": {"$in": ids}}, {"_id":0,"id":1}))
     missing = [i for i in ids if i not in existing]
     if missing:
