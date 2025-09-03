@@ -41,6 +41,12 @@
       <span class="spacer"></span>
       <button class="btn btn-secondary" id="edit-iv">Edit Initial Values</button>
     </div>
+    <div class="row">
+      <h2 style="margin:0;">Initial Values</h2>
+      <span class="spacer"></span>
+      <button class="btn btn-secondary" id="edit-iv">Edit Initial Values</button>
+      <button class="btn btn-flag" id="delete-list">Delete List</button>
+    </div>
     <div class="grid cols-2" style="margin-top:10px;">
       <div>
         <div class="muted" style="margin-bottom:6px;">Natures</div>
@@ -796,10 +802,34 @@
       document.getElementById("open-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
       document.getElementById("gate-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
       document.getElementById("login-btn").addEventListener("click", (e)=>{e.preventDefault();login();});
+      document.getElementById("edit-iv").addEventListener("click", (e)=>{ e.preventDefault(); openIV(); });
+      document.getElementById("iv-save").addEventListener("click", (e)=>{ e.preventDefault(); saveIV(); });
+      document.getElementById("iv-cancel").addEventListener("click", (e)=>{ e.preventDefault(); closeIV(); });
+      document.getElementById("iv-close").addEventListener("click", (e)=>{ e.preventDefault(); closeIV(); });
+      document.getElementById("iv-backdrop").addEventListener("click", closeIV);
 
       window.openIV = openIV;
       window.closeIV = closeIV;
       window.saveIV = saveIV;
+
+    async function deleteList() {
+      if (!confirm("Delete this spell list? This cannot be undone.")) return;
+      const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const j = await r.json();
+      if (j.status === "success") {
+        window.location.href = "spell_list_home.html";
+      } else {
+        alert(j.message || "Failed to delete list.");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // …other listeners…
+      document.getElementById("delete-list").addEventListener("click", (e)=>{ e.preventDefault(); deleteList(); });
+    });      
 
       init();
     });

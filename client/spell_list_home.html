@@ -102,7 +102,8 @@
 
       <label for="sl-name-dup">Name</label>
       <input id="sl-name-dup" type="text" placeholder="Spell list name..." />
-
+      <label for="iv-mag-create" class="k">MAG</label>
+      <input id="iv-mag-create" type="number" min="0" step="1" value="0" />
       <div style="margin:12px 0 6px;font-weight:600;">Initial Values — Natures</div>
       <div class="grid-iv">
         <div><label>Fire</label><input type="number" id="iv-fire" min="0" step="1" value="0"></div>
@@ -276,6 +277,8 @@
 
       if (!name) { throw new Error("Please provide a name for your spell list."); }
 
+      const mag = +document.getElementById("iv-mag-create").value || 0;
+
       const natures = {
         fire: +document.getElementById("iv-fire").value || 0,
         water: +document.getElementById("iv-water").value || 0,
@@ -299,7 +302,7 @@
         intimidation: +document.getElementById("iv-intimidation").value || 0,
       };
 
-      return { name, initial_values: { natures, skills } };
+      return { name, initial_values: { mag, natures, skills } };
     }
 
     async function init() {

@@ -16,7 +16,7 @@ from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters
 from server.src.modules.apotheosis_helpers import compute_apotheosis_stats
 from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS, find_user, require_auth, make_token, verify_password, get_auth_token, normalize_email,_sha256
 from server.src.modules.logging_helpers import logger, write_audit
-from server.src.modules.spell_helpers import compute_spell_costs
+from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -691,53 +691,6 @@ def admin_list_effects(
 
     return {"status": "success", "effects": docs, "page": page, "limit": limit, "total": total}
 
-def _recompute_spells_for_effect(effect_id: str) -> tuple[str, int]:
-    """
-    Recompute every spell that references effect_id.
-    Returns (patch_text, changed_count).
-    """
-    sp_col = get_col("spells")
-    changed = 0
-    lines: list[str] = []
-
-    affected = list(sp_col.find({"effects": effect_id}, {"_id": 0}))
-    if not affected:
-        return ("No spells referenced this effect.", 0)
-
-    for sp in affected:
-        old_mp = int(sp.get("mp_cost", 0))
-        old_en = int(sp.get("en_cost", 0))
-        old_cat = sp.get("category", "")
-
-        # recompute with current effect docs
-        cc = compute_spell_costs(
-            sp.get("activation", "Action"),
-            int(sp.get("range", 0)),
-            sp.get("aoe", "A Square"),
-            int(sp.get("duration", 1)),
-            [str(x) for x in (sp.get("effects") or [])]
-        )
-
-        new_mp, new_en, new_cat = cc["mp_cost"], cc["en_cost"], cc["category"]
-
-        # Only write if something changed
-        if (old_mp, old_en, old_cat) != (new_mp, new_en, new_cat):
-            sp_col.update_one({"id": sp["id"]}, {"$set": {
-                "mp_cost": new_mp,
-                "en_cost": new_en,
-                "category": new_cat
-            }})
-            changed += 1
-            lines.append(
-                f"[{sp['id']}] {sp.get('name','(unnamed)')}: "
-                f"MP {old_mp} → {new_mp}, EN {old_en} → {new_en}, Category {old_cat} → {new_cat}"
-            )
-
-    if not lines:
-        lines.append("No MP/EN/category changes after recompute.")
-    return ("\n".join(lines), changed)
-
-
 @app.put("/admin/effects/{effect_id}")
 async def admin_update_effect(effect_id: str, request: Request):
     # moderators + admins
@@ -785,7 +738,6 @@ async def admin_update_effect(effect_id: str, request: Request):
 
     patch_text = "\n".join(header + ["Impacted Spells:", spell_patch_text]) + "\n"
     return {"status":"success","updated":effect_id,"changed_spells":changed_count,"patch_text":patch_text}
-
 
 @app.delete("/admin/effects/{effect_id}")
 def admin_delete_effect(effect_id: str, request: Request):
@@ -835,32 +787,6 @@ def admin_delete_effect(effect_id: str, request: Request):
         lines.append("No spells referenced this effect.")
 
     return {"status":"success","deleted":effect_id,"patch_text":"\n".join(lines) + "\n"}
-
-# ---- Helpers for effect dedupe ----
-def _norm_text(s: str) -> str:
-    return re.sub(r"\s+", " ", (s or "").strip().lower())
-
-def _effect_duplicate_groups() -> list[dict]:
-    """Group effects by normalized (name, description)."""
-    eff_col = get_col("effects")
-    docs = list(eff_col.find({}, {"_id": 0, "id": 1, "name": 1, "description": 1}))
-    buckets: dict[tuple[str,str], list[dict]] = {}
-    for e in docs:
-        key = (_norm_text(e.get("name")), _norm_text(e.get("description")))
-        buckets.setdefault(key, []).append(e)
-    groups = []
-    for (n, d), items in buckets.items():
-        if len(items) > 1:
-            ids = sorted(str(x["id"]) for x in items)
-            groups.append({
-                "name":      items[0].get("name", ""),
-                "description": items[0].get("description", ""),
-                "ids":       ids,
-                "keep":      ids[0],
-                "remove":    ids[1:],
-                "count":     len(ids),
-            })
-    return groups
 
 @app.get("/admin/effects/duplicates")
 def admin_effect_duplicates_preview(request: Request):
@@ -952,58 +878,6 @@ def admin_list_schools(
     docs = list(sch.find(q, {"_id": 0}).skip((page-1)*limit).limit(limit))
     docs.sort(key=lambda x: x.get("name","").lower())
     return {"status":"success","schools":docs,"page":page,"limit":limit,"total":total}
-
-
-def _recompute_spells_for_school(school_id: str) -> tuple[str, int]:
-    """
-    Recompute every spell that references ANY effect from this school.
-    Returns (patch_text, changed_count).
-    """
-    eff_col = get_col("effects")
-    sp_col  = get_col("spells")
-
-    eff_ids = [e["id"] for e in eff_col.find({"school": school_id}, {"_id":0,"id":1})]
-    if not eff_ids:
-        return (f"No effects belong to school [{school_id}].", 0)
-
-    affected = list(sp_col.find({"effects": {"$in": eff_ids}}, {"_id": 0}))
-    if not affected:
-        return ("No spells referenced effects from this school.", 0)
-
-    changed = 0
-    lines: list[str] = [f"Recompute after School update [{school_id}]:", ""]
-
-    for sp in affected:
-        old_mp = int(sp.get("mp_cost", 0))
-        old_en = int(sp.get("en_cost", 0))
-        old_cat = sp.get("category", "")
-
-        cc = compute_spell_costs(
-            sp.get("activation","Action"),
-            int(sp.get("range",0)),
-            sp.get("aoe","A Square"),
-            int(sp.get("duration",1)),
-            [str(x) for x in (sp.get("effects") or [])]
-        )
-
-        new_mp, new_en, new_cat = cc["mp_cost"], cc["en_cost"], cc["category"]
-
-        if (old_mp, old_en, old_cat) != (new_mp, new_en, new_cat):
-            sp_col.update_one({"id": sp["id"]}, {"$set": {
-                "mp_cost": new_mp,
-                "en_cost": new_en,
-                "category": new_cat
-            }})
-            changed += 1
-            lines.append(
-              f"[{sp['id']}] {sp.get('name','(unnamed)')}: "
-              f"MP {old_mp} → {new_mp}, EN {old_en} → {new_en}, Category {old_cat} → {new_cat}"
-            )
-
-    if changed == 0:
-        lines.append("No MP/EN/category changes after recompute.")
-    return ("\n".join(lines), changed)
-
 
 @app.put("/admin/schools/{school_id}")
 async def admin_update_school(school_id: str, request: Request):
@@ -1279,18 +1153,24 @@ async def create_spell_list(request: Request):
     body = await request.json()
     name = (body.get("name") or "Untitled List").strip()
     sl_id = next_id_str("spell_lists", padding=4)
+
+    # NEW: accept client-provided initial_values, with safe coercion
+    iv_in = body.get("initial_values") or {}
+    iv = {
+        "mag": int(iv_in.get("mag") or 0),
+        "natures": {k: int((iv_in.get("natures") or {}).get(k, 0) or 0)
+                    for k in ("fire","water","wind","earth","sun","moon","lightning","ki")},
+        "skills": {k: int((iv_in.get("skills") or {}).get(k, 0) or 0)
+                   for k in ("aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation")},
+    }
+
     doc = {
         "id": sl_id,
         "name": name,
         "owner": username,
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-        # initial_values matches the shape the view expects
-        "initial_values": {
-            "mag": 0,
-            "natures": {k:0 for k in ("fire","water","wind","earth","sun","moon","lightning","ki")},
-            "skills":  {k:0 for k in ("aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation")}
-        },
-        "spells": []  # store a simple list of spell IDs
+        "initial_values": iv,  # use coerced values
+        "spells": [],
     }
     get_col("spell_lists").insert_one(dict(doc))
     return {"status":"success","list":doc}
@@ -1396,6 +1276,15 @@ def remove_spell_from_list(list_id: str, spell_id: str, request: Request):
     col.update_one({"id": list_id}, {"$pull": {"spells": str(spell_id)}})
     return {"status":"success","removed": str(spell_id)}
 
+@app.delete("/spell_lists/{list_id}")
+def delete_spell_list(list_id: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col("spell_lists")
+    doc = col.find_one({"id": list_id})
+    if not _can_access_list(doc, username, role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    col.delete_one({"id": list_id})
+    return {"status": "success", "deleted": list_id}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
