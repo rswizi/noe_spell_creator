@@ -1,5 +1,6 @@
 from typing import Optional
 import re
+from db_mongo import get_col
 
 APO_STAGE_BASE = {
     "Immature Stage": 5,
@@ -94,3 +95,76 @@ def tier_from_total_difficulty(total: int) -> str:
         n = 0
     tier_num = 1 + (n // 5)
     return f"Tier {tier_num}"
+
+def compute_apotheosis_stats(
+    characteristic_value: int,
+    stage: str,
+    apo_type: str,
+    constraint_ids: list[str],
+    trade_p2s_steps: int = 0,
+    trade_p2a_steps: int = 0,
+    trade_s2a_steps: int = 0,
+) -> dict:
+
+    col = get_col("apotheosis_constraints")
+    docs = list(col.find({"id": {"$in": [str(x) for x in (constraint_ids or [])]}}))
+
+    total_difficulty = sum(int(d.get("difficulty", 0)) for d in docs)
+
+    stability = apo_stage_stability(stage)
+    power     = int(characteristic_value or 0) + total_difficulty
+    amplitude = 0
+
+    tbonus = apo_type_bonus(apo_type)
+    power     += tbonus.get("power", 0)
+    stability += tbonus.get("stability", 0)
+    amplitude += tbonus.get("amplitude", 0)
+
+    forbid_p2s = False
+    for d in docs:
+        stability += int(d.get("stability_delta", 0))
+        amplitude += int(d.get("amplitude_bonus", 0))
+        if bool(d.get("forbid_p2s", False)):
+            forbid_p2s = True
+
+    p2s_applied = 0
+    if not forbid_p2s and trade_p2s_steps > 0:
+        for _ in range(int(trade_p2s_steps)):
+            if power >= P2S_COST:
+                power -= P2S_COST
+                stability += P2S_GAIN
+                p2s_applied += 1
+            else:
+                break
+
+    p2a_applied = 0
+    if trade_p2a_steps > 0:
+        for _ in range(int(trade_p2a_steps)):
+            if power >= P2A_COST:
+                power -= P2A_COST
+                amplitude += 1
+                p2a_applied += 1
+            else:
+                break
+
+    s2a_applied = 0
+    if trade_s2a_steps > 0:
+        for _ in range(int(trade_s2a_steps)):
+            if stability >= S2A_COST:
+                stability -= S2A_COST
+                amplitude += 1
+                s2a_applied += 1
+            else:
+                break
+
+    diameter = 17 + 2 * max(0, int(amplitude))
+
+    return {
+        "stability": max(0, int(stability)),
+        "power": max(0, int(power)),
+        "amplitude": max(0, int(amplitude)),
+        "diameter": int(diameter),
+        "total_difficulty": int(total_difficulty),
+        "tier": tier_from_total_difficulty(total_difficulty),
+        "flags": {"forbid_p2s": forbid_p2s, "p2s_applied": p2s_applied, "p2a_applied": p2a_applied, "s2a_applied": s2a_applied}
+    }

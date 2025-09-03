@@ -3,7 +3,6 @@ import datetime
 import re
 from pathlib import Path
 from contextlib import asynccontextmanager
-from typing import Dict, Tuple
 
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Query, Body
@@ -14,8 +13,8 @@ from pymongo.errors import DuplicateKeyError
 
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
 
-from server.src.modules.apotheosis_helpers import P2S_COST, P2S_GAIN, P2A_COST, S2A_COST, apo_stage_stability, apo_type_bonus, tier_from_total_difficulty
-from server.src.modules.authentification_helpers import find_user, require_auth, _ALLOWED_ROLES, make_token, verify_password, get_auth_token, normalize_email,_sha256
+from server.src.modules.apotheosis_helpers import compute_apotheosis_stats
+from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS, find_user, require_auth, make_token, verify_password, get_auth_token, normalize_email,_sha256
 from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs
 
@@ -34,8 +33,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-SESSIONS: Dict[str, Tuple[str, str]] = {}
 
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
@@ -694,7 +691,6 @@ def admin_list_effects(
 
     return {"status": "success", "effects": docs, "page": page, "limit": limit, "total": total}
 
-
 def _recompute_spells_for_effect(effect_id: str) -> tuple[str, int]:
     """
     Recompute every spell that references effect_id.
@@ -1114,81 +1110,7 @@ def admin_delete_school(school_id: str, request: Request, force: bool = Query(de
     sch.delete_one({"id": school_id})
     return {"status":"success","deleted":school_id,"patch_text":"\n".join(lines) + "\n"}
 
-# ========================= Apotheosis 
-def compute_apotheosis_stats(
-    characteristic_value: int,
-    stage: str,
-    apo_type: str,
-    constraint_ids: list[str],
-    trade_p2s_steps: int = 0,
-    trade_p2a_steps: int = 0,
-    trade_s2a_steps: int = 0,
-) -> dict:
-
-    col = get_col("apotheosis_constraints")
-    docs = list(col.find({"id": {"$in": [str(x) for x in (constraint_ids or [])]}}))
-
-    total_difficulty = sum(int(d.get("difficulty", 0)) for d in docs)
-
-    stability = apo_stage_stability(stage)
-    power     = int(characteristic_value or 0) + total_difficulty
-    amplitude = 0
-
-    tbonus = apo_type_bonus(apo_type)
-    power     += tbonus.get("power", 0)
-    stability += tbonus.get("stability", 0)
-    amplitude += tbonus.get("amplitude", 0)
-
-    forbid_p2s = False
-    for d in docs:
-        stability += int(d.get("stability_delta", 0))
-        amplitude += int(d.get("amplitude_bonus", 0))
-        if bool(d.get("forbid_p2s", False)):
-            forbid_p2s = True
-
-    p2s_applied = 0
-    if not forbid_p2s and trade_p2s_steps > 0:
-        for _ in range(int(trade_p2s_steps)):
-            if power >= P2S_COST:
-                power -= P2S_COST
-                stability += P2S_GAIN
-                p2s_applied += 1
-            else:
-                break
-
-    p2a_applied = 0
-    if trade_p2a_steps > 0:
-        for _ in range(int(trade_p2a_steps)):
-            if power >= P2A_COST:
-                power -= P2A_COST
-                amplitude += 1
-                p2a_applied += 1
-            else:
-                break
-
-    s2a_applied = 0
-    if trade_s2a_steps > 0:
-        for _ in range(int(trade_s2a_steps)):
-            if stability >= S2A_COST:
-                stability -= S2A_COST
-                amplitude += 1
-                s2a_applied += 1
-            else:
-                break
-
-    diameter = 17 + 2 * max(0, int(amplitude))
-
-    return {
-        "stability": max(0, int(stability)),
-        "power": max(0, int(power)),
-        "amplitude": max(0, int(amplitude)),
-        "diameter": int(diameter),
-        "total_difficulty": int(total_difficulty),
-        "tier": tier_from_total_difficulty(total_difficulty),
-        "flags": {"forbid_p2s": forbid_p2s, "p2s_applied": p2s_applied, "p2a_applied": p2a_applied, "s2a_applied": s2a_applied}
-    }
-
-# ---------- Apotheosis: constraints (list / parse / CRUD) ----------
+# ---------- Apotheosis ----------
 @app.get("/apotheosis/constraints")
 def apo_list_constraints(request: Request, name: str | None = Query(default=None), category: str | None = Query(default=None)):
     require_auth(request, roles=["user","moderator","admin"])  # anyone logged-in can view
@@ -1257,7 +1179,6 @@ def apo_delete_constraint(cid: str, request: Request):
     get_col("apotheosis_constraints").delete_one({"id": cid})
     return {"status":"success","deleted":cid}
 
-# ---------- Apotheosis: compute (live preview) ----------
 @app.post("/apotheosis/compute")
 async def apo_compute(request: Request):
     body = await request.json()
@@ -1276,7 +1197,6 @@ async def apo_compute(request: Request):
     stats = compute_apotheosis_stats(char_val, stage, apo_type, constraints, p2s, p2a, s2a)
     return {"status":"success", **stats}
 
-# ---------- Apotheoses (create/browse/favorite) ----------
 @app.post("/apotheoses")
 async def create_apotheosis(request: Request):
     username, _ = require_auth(request, roles=["user","moderator","admin"])
@@ -1349,7 +1269,7 @@ def unfav_apotheosis(aid: str, request: Request):
     get_col("users").update_one({"_id": user["_id"]}, {"$pull": {"fav_apotheoses": str(aid)}})
     return {"status":"success","id":aid,"action":"removed"}
 
-# ---------- Spell Lists (own & manage) ----------
+# ---------- Spell Lists ----------
 def _can_access_list(doc, username, role):
     return (doc and (doc.get("owner") == username or role in ("admin","moderator")))
 
@@ -1475,6 +1395,7 @@ def remove_spell_from_list(list_id: str, spell_id: str, request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     col.update_one({"id": list_id}, {"$pull": {"spells": str(spell_id)}})
     return {"status":"success","removed": str(spell_id)}
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

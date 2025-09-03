@@ -1,11 +1,11 @@
 import hashlib
 import secrets
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 from fastapi import Request
 
 from db_mongo import get_col
-from main import SESSIONS
 
+SESSIONS: Dict[str, Tuple[str, str]] = {}
 
 def _sha256(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
