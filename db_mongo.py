@@ -1,4 +1,3 @@
-# server/db_mongo.py
 from functools import lru_cache
 from urllib.parse import urlparse
 from typing import List
@@ -6,6 +5,7 @@ from pymongo import MongoClient, ReturnDocument, ASCENDING
 from pymongo.database import Database
 from settings import settings
 import json, hashlib, re
+import os
 
 _client = MongoClient(settings.mongodb_uri)
 
@@ -33,17 +33,14 @@ def ensure_indexes() -> None:
     db.effects.create_index("id", unique=True)
     db.schools.create_index("id", unique=True)
     db.users.create_index("username", unique=True)
-    # helpful secondary
     db.spells.create_index("name_key")
     db.effects.create_index("name_key")
     db.schools.create_index("name_key")
-    # unique by parameters
     db.spells.create_index(
         "sig_v1",
         unique=True,
         partialFilterExpression={"sig_v1": {"$exists": True}},
     )
-    # effect uniqueness (name+school)
     db.effects.create_index(
         [("name_key", ASCENDING), ("school", ASCENDING)],
         unique=True,
