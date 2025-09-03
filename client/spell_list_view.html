@@ -6,15 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="/static/style.css" />
   <style>
-    /* =============================
-       ANTI-OVERLAP GUARD RAILS
-       - Scope almost everything under #sl
-       - Lock body scroll when any modal is open
-       - Prevent flex overflow by setting min-width:0
-       - Make tables scroll instead of squishing
-       - Give z-index ladder: topbar(1100) < modal(3001)
-       ============================= */
-
     html.modal-open, body.modal-open { overflow: hidden; }
 
     #sl, #sl * { box-sizing: border-box; }
@@ -29,15 +20,12 @@
     #sl .row > * { min-width:0; } /* critical for preventing flex children overflow */
     #sl .spacer{ flex:1; }
 
-    /* Cards */
     #sl .card{ border:1px solid #333; border-radius:14px; padding:16px; background:#0c0c0c; }
 
-    /* Responsive grid */
     #sl .grid{ display:grid; gap:16px; }
     #sl .grid.cols-2{ grid-template-columns:1fr 1fr; }
     @media (max-width:980px){ #sl .grid.cols-2{ grid-template-columns:1fr; } }
 
-    /* Chips & utilities */
     #sl .chips{ display:flex; gap:6px; flex-wrap:wrap; }
     #sl .pill{ border:1px solid #444; padding:2px 8px; border-radius:999px; }
     #sl .muted{ opacity:.8; }
@@ -49,20 +37,17 @@
     #sl .err{ border-color:#a33; }
     #sl .empty{ opacity:.75; padding:10px; }
 
-    /* Inputs */
     #sl input[type="text"],
     #sl input[type="number"],
     #sl input[type="password"],
     #sl select { width:auto; max-width:100%; padding:8px 10px; background:#0a0a0a; color:#eee; border:1px solid #333; border-radius:8px; }
 
-    /* Table: wrap in a scroll container to avoid layout collapse */
     #sl .table-wrap{ overflow:auto; -webkit-overflow-scrolling: touch; border-radius:10px; }
     #sl .table{ width:100%; border-collapse:collapse; min-width:760px; }
     #sl .table th, #sl .table td{ border-bottom:1px solid #222; padding:10px; text-align:left; vertical-align:top; }
     #sl .table th{ opacity:.85; position:sticky; top:0; background:#0c0c0c; }
     #sl .table td, #sl .table th{ word-break: break-word; overflow-wrap: anywhere; }
 
-    /* Modal system */
     #sl .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:3000; display:none; }
     #sl .modal{ position:fixed; inset:0; display:none; z-index:3001; align-items:center; justify-content:center; padding:16px; }
     #sl .modal.open, #sl .modal-backdrop.open{ display:flex; }
@@ -75,13 +60,11 @@
     #sl .modal-title{ font-weight:700; }
     #sl .modal-close{ border:0; background:transparent; color:inherit; cursor:pointer; font-size:18px; }
 
-    /* IV grid */
     #sl .grid-iv{ display:grid; gap:8px; grid-template-columns:repeat(4, minmax(120px,1fr)); }
     #sl .grid-iv label{ font-size:.9rem; opacity:.95 }
     #sl .grid-iv input{ width:100%; }
     @media (max-width:840px){ #sl .grid-iv{ grid-template-columns:repeat(2, minmax(120px,1fr)); } }
 
-    /* Ensure topbar (if globally positioned) won't fight with content */
     .topbar { position: sticky; top:0; z-index:1100; backdrop-filter: blur(4px); }
   </style>
 </head>
@@ -99,109 +82,102 @@
     </div>
   </div>
 
-  <!-- ROOT WRAPPER TO SCOPE STYLES -->
   <div id="sl">
     <div class="wrap">
       <div class="hero" id="list-name">Spell List</div>
       <div class="sub" id="list-meta">Loading…</div>
 
-      <!-- Auth Gate -->
       <div id="auth-gate" class="card" style="display:none;margin-top:12px;">
         <div style="margin-bottom:8px;">You must be logged in to view this spell list.</div>
         <button class="btn" id="gate-login">Log In</button>
       </div>
 
-      <!-- Content -->
       <div id="content" class="grid" style="display:none;margin-top:16px;">
-
-        <!-- IV card -->
-        <div class="card">
-          <div class="row">
-            <h2 style="margin:0;">Initial Values</h2>
-            <span class="spacer"></span>
-            <button class="btn btn-secondary" id="edit-iv">Edit Initial Values</button>
-          </div>
-          <div class="grid cols-2" style="margin-top:10px;">
-            <div>
-              <div class="muted" style="margin-bottom:6px;">Natures</div>
-              <div id="iv-natures" class="chips"></div>
-            </div>
-            <div>
-              <div class="muted" style="margin-bottom:6px;">Skills</div>
-              <div id="iv-skills" class="chips"></div>
-              <div class="muted" style="margin-top:10px;">MAG: <span id="iv-mag" class="k">0</span></div>
-            </div>
-          </div>
-          <div class="hint" style="margin-top:10px;">
-            MS = MAG + linked skill + (best of: top two linked intensities) or (top one intensity +2).
-          </div>
-        </div>
-
-        <!-- Schools card -->
-        <div class="card">
-          <div class="row" style="margin-bottom:8px;">
-            <h2 style="margin:0;">School Categories</h2>
-            <span class="spacer"></span>
-            <input id="filter-name" type="text" placeholder="Filter by school name…" style="min-width:220px;">
-            <select id="filter-min-cat">
-              <option value="">Min. Category: Any</option>
-            </select>
-            <select id="sort-by">
-              <option value="cat_desc">Sort: Category (high → low)</option>
-              <option value="name_asc">Sort: Name (A → Z)</option>
-            </select>
-            <button class="btn" id="recalc">Recalculate</button>
-          </div>
-
-          <div class="table-wrap">
-            <table class="table" id="schools-table">
-              <thead>
-                <tr>
-                  <th style="width:22%;">School</th>
-                  <th style="width:20%;">Linked</th>
-                  <th style="width:22%;">MS Breakdown</th>
-                  <th style="width:18%;">MS</th>
-                  <th style="width:18%;">Category</th>
-                </tr>
-              </thead>
-              <tbody id="schools-body">
-                <tr><td colspan="5" class="empty">Loading…</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="hint" style="margin-top:8px;">
-            Learning Time (days): Novice 2 • Apprentice 8 • Disciple 10 • Adept 14 • Mage 16 • Magister 20 • High Mage 22 • Master 28 • Grand Master 32 • Archmage 36 • Supreme Archmage 46 • Avant-Garde 50
-          </div>
-        </div>
-
-        <!-- My Spells card -->
-        <div class="card" id="my-spells-card" style="display:none;">
-          <div class="row" style="margin-bottom:8px;">
-            <h2 style="margin:0;">My Spells</h2>
-            <span class="spacer"></span>
-            <button class="btn" id="open-add-spells">Add Spells</button>
-          </div>
-          <div class="table-wrap">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th style="width:30%;">Name</th>
-                  <th>Schools</th>
-                  <th style="width:14%;">Category</th>
-                  <th style="width:18%;">Eligibility</th>
-                  <th style="width:10%;"></th>
-                </tr>
-              </thead>
-              <tbody id="my-spells-body">
-                <tr><td colspan="5" class="empty">Loading…</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
 
       </div><!-- /#content -->
     </div><!-- /.wrap -->
+  <div class="home-card">
+    <div class="row">
+      <h2 style="margin:0;">Initial Values</h2>
+      <span class="spacer"></span>
+      <button class="btn btn-secondary" id="edit-iv">Edit Initial Values</button>
+    </div>
+    <div class="grid cols-2" style="margin-top:10px;">
+      <div>
+        <div class="muted" style="margin-bottom:6px;">Natures</div>
+        <div id="iv-natures" class="chips"></div>
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">Skills</div>
+        <div id="iv-skills" class="chips"></div>
+        <div class="muted" style="margin-top:10px;">MAG: <span id="iv-mag" class="k">0</span></div>
+      </div>
+    </div>
+    <div class="hint" style="margin-top:10px;">
+      MS = MAG + linked skill + (best of: top two linked intensities) or (top one intensity +2).
+    </div>
+  </div>
+  
+  <div class="home-card">
+    <div class="row" style="margin-bottom:8px;">
+      <h2 style="margin:0;">School Categories</h2>
+      <span class="spacer"></span>
+      <input id="filter-name" type="text" placeholder="Filter by school name…" style="min-width:220px;">
+      <select id="filter-min-cat">
+        <option value="">Min. Category: Any</option>
+      </select>
+      <select id="sort-by">
+        <option value="cat_desc">Sort: Category (high → low)</option>
+        <option value="name_asc">Sort: Name (A → Z)</option>
+      </select>
+      <button class="btn" id="recalc">Recalculate</button>
+    </div>
 
+    <div class="home-card">
+      <table class="table" id="schools-table" class="scrollbox">
+        <thead>
+          <tr>
+            <th style="width:22%;">School</th>
+            <th style="width:20%;">Linked</th>
+            <th style="width:22%;">MS Breakdown</th>
+            <th style="width:18%;">MS</th>
+            <th style="width:18%;">Category</th>
+          </tr>
+        </thead>
+        <tbody id="schools-body">
+          <tr><td colspan="5" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="hint" style="margin-top:8px;">
+      Learning Time (days): Novice 2 • Apprentice 8 • Disciple 10 • Adept 14 • Mage 16 • Magister 20 • High Mage 22 • Master 28 • Grand Master 32 • Archmage 36 • Supreme Archmage 46 • Avant-Garde 50
+    </div>
+  </div>
+
+  <!-- My Spells card -->
+  <div class="card" id="my-spells-card" style="display:none;">
+    <div class="row" style="margin-bottom:8px;">
+      <h2 style="margin:0;">My Spells</h2>
+      <span class="spacer"></span>
+      <button class="btn" id="open-add-spells">Add Spells</button>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:30%;">Name</th>
+            <th>Schools</th>
+            <th style="width:14%;">Category</th>
+            <th style="width:18%;">Eligibility</th>
+            <th style="width:10%;"></th>
+          </tr>
+        </thead>
+        <tbody id="my-spells-body">
+          <tr><td colspan="5" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
     <!-- Login Modal -->
     <div id="login-backdrop" class="modal-backdrop" aria-hidden="true"></div>
     <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true">

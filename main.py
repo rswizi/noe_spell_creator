@@ -21,7 +21,7 @@ from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters
 from server.src.objects.effects import load_effect
 from server.src.objects.spells import Spell
 from server.src.modules.category_table import category_for_mp
-from server.src.modules.apotheosis_constants import P2S_COST, P2S_GAIN, P2A_COST, S2A_COST, apo_stage_stability, apo_type_bonus, tier_from_total_difficulty
+from server.src.modules.apotheosis_helpers import P2S_COST, P2S_GAIN, P2A_COST, S2A_COST, apo_stage_stability, apo_type_bonus, tier_from_total_difficulty
 
 
 # ---------- Logging ----------
