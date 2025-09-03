@@ -3,7 +3,8 @@ import secrets
 from typing import Optional, Tuple
 from fastapi import Request
 
-from db_mongo import get_col, SESSIONS
+from db_mongo import get_col
+from main import SESSIONS
 
 
 def _sha256(s: str) -> str:

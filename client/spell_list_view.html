@@ -766,13 +766,11 @@
         }
       }
 
-      // schools filters
       document.getElementById("filter-name").addEventListener("input", renderSchools);
       document.getElementById("filter-min-cat").addEventListener("change", renderSchools);
       document.getElementById("sort-by").addEventListener("change", renderSchools);
       document.getElementById("recalc").addEventListener("click", ()=>{ computed = computeAll(); renderSchools(); });
 
-      // add spells modal
       document.getElementById("open-add-spells").addEventListener("click", (e)=>{ e.preventDefault(); openAdd(); });
       document.getElementById("addspells-close").addEventListener("click", (e)=>{ e.preventDefault(); closeAdd(); });
       document.getElementById("addspells-cancel").addEventListener("click", (e)=>{ e.preventDefault(); closeAdd(); });
@@ -794,18 +792,15 @@
         closeAdd();
       });
 
-      // auth buttons
       document.getElementById("chip-logout").addEventListener("click", (e)=>{e.preventDefault();logout();});
       document.getElementById("open-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
       document.getElementById("gate-login").addEventListener("click", (e)=>{e.preventDefault();openLogin();});
       document.getElementById("login-btn").addEventListener("click", (e)=>{e.preventDefault();login();});
 
-      // expose IV modal helpers to outer scope handlers
       window.openIV = openIV;
       window.closeIV = closeIV;
       window.saveIV = saveIV;
 
-      // init
       init();
     });
   </script>
