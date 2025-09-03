@@ -450,6 +450,20 @@
     // ---------- State ----------
     let token = "", listId = "";
     let spellList = null, schools = [];
+    let upgradeIds = new Set();
+    let upgradeNames = new Set();
+
+    function refreshUpgradeSets(){
+    upgradeIds  = new Set((schools||[]).filter(s => s.upgrade).map(s => String(s.id||"").toLowerCase()));
+    upgradeNames= new Set((schools||[]).filter(s => s.upgrade).map(s => String(s.name||"").toLowerCase()));
+    }
+
+    function isUpgradeSchoolRef(ref){
+    const id   = (ref.id||"").toLowerCase();
+    const name = (ref.name||"").toLowerCase();
+    return upgradeIds.has(id) || upgradeNames.has(name);
+    }
+
     let computed = [];  // rows
     // variants & bonuses (localStorage)
     function vKey(){ return `sl_variants_${listId}`; }
@@ -699,7 +713,6 @@
       });
     }
 
-    // ---- Eligibility uses BEST category across rows (base+variants) WITH bonuses
     function eligibleForSpell(spell){
       const need = spell.category || "Novice";
       const reqOrd = catOrder(need);
@@ -710,6 +723,7 @@
         if (!(key in bestBySchool) || ord > bestBySchool[key]) bestBySchool[key] = ord;
       }
       return (spell.schools || []).every(s => {
+        if (isUpgradeSchoolRef(s)) return true;
         const k = (s.id || s.name || "").toLowerCase();
         return (bestBySchool[k] ?? -999) >= reqOrd;
       });
@@ -1074,6 +1088,7 @@
         buildMinCatSelect();
 
         schools = await fetchSchools();
+        refreshUpgradeSets();
         computed = computeAll();
 
         document.getElementById("content").style.display = "grid";
