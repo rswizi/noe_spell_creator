@@ -779,7 +779,7 @@
           <td><div class="k">${sp.name}</div><div class="muted">id: ${sp.id}</div></td>
           <td>${schTxt||"—"}</td>
           <td>${sp.category || "—"}</td>
-          <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Below requirement"}</span></td>
+          <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Insufficient Level"}</span></td>
           <td><button class="btn btn-secondary small" data-remove="${sp.id}">Remove</button></td>
         `;
         tbody.appendChild(tr);
@@ -821,7 +821,7 @@
           <td><div class="k">${sp.name}</div><div class="muted">id: ${sp.id}</div></td>
           <td>${(sp.schools||[]).map(s=>s.name).join(", ") || "—"}</td>
           <td>${sp.category || "—"}</td>
-          <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Below requirement"}</span></td>
+          <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Insufficient Level"}</span></td>
         `;
         body.appendChild(tr);
       }
