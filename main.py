@@ -1,12 +1,9 @@
 # main.py
-import logging
-import secrets
 import datetime
 import re
-import hashlib
 from pathlib import Path
 from contextlib import asynccontextmanager
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple
 
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Query, Body
@@ -17,104 +14,16 @@ from pymongo.errors import DuplicateKeyError
 
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
 
-# Domain imports
-from server.src.objects.effects import load_effect
-from server.src.objects.spells import Spell
-from server.src.modules.category_table import category_for_mp
 from server.src.modules.apotheosis_helpers import P2S_COST, P2S_GAIN, P2A_COST, S2A_COST, apo_stage_stability, apo_type_bonus, tier_from_total_difficulty
-
-
-# ---------- Logging ----------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    handlers=[logging.StreamHandler()]
-)
-logger = logging.getLogger("noe")
-
-# ---------- Helpers ----------
-def _sha256(s: str) -> str:
-    return hashlib.sha256(s.encode("utf-8")).hexdigest()
-
-def make_token() -> str:
-    return secrets.token_hex(16)
-
-def get_auth_token(request: Request) -> Optional[str]:
-    auth = request.headers.get("Authorization", "")
-    if auth.lower().startswith("bearer "):
-        return auth.split(" ", 1)[1].strip()
-    return None
-
-def verify_password(input_pw: str, user_doc: dict) -> bool:
-    # accept plaintext ('password') or sha256 hash ('password_hash')
-    return (
-        user_doc.get("password") == input_pw
-        or user_doc.get("password_hash") == _sha256(input_pw)
-    )
-
-def normalize_email(email: str) -> str:
-    return (email or "").strip().lower()
-
-_ALLOWED_ROLES = {"user", "moderator", "admin"}
-
-def find_user(username: str) -> Optional[dict]:
-    # always exclude _id when returning data to the app
-    return get_col("users").find_one({"username": username}, {"_id": 0})
-
-def require_auth(request: Request, roles: Optional[list[str]] = None) -> Tuple[str, str]:
-    """Return (username, role) or raise Exception."""
-    token = get_auth_token(request)
-    if not token or token not in SESSIONS:
-        raise Exception("Not authenticated")
-    username, role = SESSIONS[token]
-    if roles and role not in roles:
-        raise Exception("Forbidden")
-    return username, role
-
-def write_audit(action, username, spell_id, before, after):
-    get_col("audit_logs").insert_one({
-        "ts": datetime.datetime.utcnow().isoformat() + "Z",
-        "user": username, "action": action, "spell_id": spell_id,
-        "before": before, "after": after
-    })
-
-def compute_spell_costs(
-    activation: str, range_val: int, aoe: str, duration: int, effect_ids: list[str]
-) -> dict:
-    try:
-        effects = [load_effect(str(eid)) for eid in (effect_ids or [])]
-    except Exception:
-        docs = list(
-            get_col("effects").find(
-                {"id": {"$in": [str(eid) for eid in (effect_ids or [])]}},
-                {"_id": 0, "mp_cost": 1, "en_cost": 1},
-            )
-        )
-        class _E:
-            def __init__(self, mp, en):
-                self.mp_cost = int(mp or 0)
-                self.en_cost = int(en or 0)
-        effects = [_E(d.get("mp_cost", 0), d.get("en_cost", 0)) for d in docs]
-
-    mp_cost, en_cost, breakdown = Spell.compute_cost(
-        range_val, aoe, duration, activation, effects
-    )
-
-    return {
-        "mp_cost": mp_cost,
-        "en_cost": en_cost,
-        "category": category_for_mp(mp_cost),
-        "mp_to_next_category": mp_to_next_category_delta(mp_cost),
-        "breakdown": breakdown,
-    }
+from server.src.modules.authentification_helpers import find_user, require_auth, _ALLOWED_ROLES, make_token, verify_password, get_auth_token, normalize_email,_sha256
+from server.src.modules.logging_helpers import logger, write_audit
+from server.src.modules.spell_helpers import compute_spell_costs
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ensure indexes and counters are ready on boot
     ensure_indexes()
     sync_counters()
-    # ... seed admin ...
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -126,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SESSIONS: Dict[str, Tuple[str, str]] = {}  # token -> (username, role)
+SESSIONS: Dict[str, Tuple[str, str]] = {}
 
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
@@ -225,9 +134,8 @@ def get_effects(name: str | None = Query(default=None), school: str | None = Que
     return {"effects": docs}
 
 @app.post("/effects/bulk_create")
-@app.post("/admin/effects/bulk_create")  # alias; keeps old/new frontends working
+@app.post("/admin/effects/bulk_create")
 async def bulk_create_effects(request: Request):
-    # 1) Auth gate with clear errors
     try:
         require_auth(request, ["admin", "moderator"])
     except Exception as e:
@@ -235,7 +143,6 @@ async def bulk_create_effects(request: Request):
         code = 401 if "Not authenticated" in msg else 403
         return JSONResponse({"status": "error", "message": msg}, status_code=code)
 
-    # 2) Parse body outside the broad try so JSON errors are distinct
     try:
         body = await request.json()
     except Exception:
@@ -1025,42 +932,6 @@ async def admin_effect_duplicates_apply(request: Request):
         "total_groups": len(plan),
         "message": f"Removed {total_deleted} duplicate effects; updated {total_spells_touched} spell(s)."
     }
-
-# --- helper: how many MP until the next category threshold ---
-def mp_to_next_category_delta(current_mp: int) -> int:
-    """
-    Smallest non-negative delta MP so that category_for_mp(current_mp + delta)
-    is strictly higher than category_for_mp(current_mp).
-    Returns 0 if already at the top tier (no higher category).
-    """
-    cur_cat = category_for_mp(int(current_mp or 0))
-
-    # Exponential search to find an upper bound where category changes
-    step = 1
-    base = int(current_mp or 0)
-    MAX_MP = base + 100_000  # sane cap
-    hi = base + step
-    while hi <= MAX_MP and category_for_mp(hi) == cur_cat:
-        step *= 2
-        hi = base + step
-    if hi > MAX_MP:
-        # couldn't find a higher category within cap -> treat as top category
-        return 0
-
-    # Binary search for first MP where category changes
-    lo = max(base, hi - step)
-    ans = None
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        if category_for_mp(mid) == cur_cat:
-            lo = mid + 1
-        else:
-            ans = mid
-            hi = mid - 1
-
-    if ans is None:
-        return 0
-    return max(0, ans - base)
 
 # ---- Admin: list / edit / delete schools ------------------------------------
 

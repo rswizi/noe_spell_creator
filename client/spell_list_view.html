@@ -5,71 +5,10 @@
   <title>NoE — Spell List (Anti‑overlap Rewrite)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="/static/style.css" />
-  <style>
-    html.modal-open, body.modal-open { overflow: hidden; }
-
-    #sl, #sl * { box-sizing: border-box; }
-    #sl { color: #eee; }
-    #sl a { color: inherit; }
-
-    /* Layout */
-    #sl .wrap{ max-width:1120px; margin:24px auto; padding:0 16px; }
-    #sl .hero{ font-size:2rem; margin:12px 0 4px; line-height:1.2; }
-    #sl .sub{ opacity:.85; }
-    #sl .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    #sl .row > * { min-width:0; } /* critical for preventing flex children overflow */
-    #sl .spacer{ flex:1; }
-
-    #sl .card{ border:1px solid #333; border-radius:14px; padding:16px; background:#0c0c0c; }
-
-    #sl .grid{ display:grid; gap:16px; }
-    #sl .grid.cols-2{ grid-template-columns:1fr 1fr; }
-    @media (max-width:980px){ #sl .grid.cols-2{ grid-template-columns:1fr; } }
-
-    #sl .chips{ display:flex; gap:6px; flex-wrap:wrap; }
-    #sl .pill{ border:1px solid #444; padding:2px 8px; border-radius:999px; }
-    #sl .muted{ opacity:.8; }
-    #sl .k{ font-weight:600; }
-    #sl .hint{ font-size:.9rem; opacity:.85; }
-    #sl .badge{ border:1px solid #555; border-radius:6px; padding:2px 6px; white-space:nowrap; }
-    #sl .ok{ border-color:#2a6; }
-    #sl .warn{ border-color:#a62; }
-    #sl .err{ border-color:#a33; }
-    #sl .empty{ opacity:.75; padding:10px; }
-
-    #sl input[type="text"],
-    #sl input[type="number"],
-    #sl input[type="password"],
-    #sl select { width:auto; max-width:100%; padding:8px 10px; background:#0a0a0a; color:#eee; border:1px solid #333; border-radius:8px; }
-
-    #sl .table-wrap{ overflow:auto; -webkit-overflow-scrolling: touch; border-radius:10px; }
-    #sl .table{ width:100%; border-collapse:collapse; min-width:760px; }
-    #sl .table th, #sl .table td{ border-bottom:1px solid #222; padding:10px; text-align:left; vertical-align:top; }
-    #sl .table th{ opacity:.85; position:sticky; top:0; background:#0c0c0c; }
-    #sl .table td, #sl .table th{ word-break: break-word; overflow-wrap: anywhere; }
-
-    #sl .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:3000; display:none; }
-    #sl .modal{ position:fixed; inset:0; display:none; z-index:3001; align-items:center; justify-content:center; padding:16px; }
-    #sl .modal.open, #sl .modal-backdrop.open{ display:flex; }
-    #sl .modal-card{
-      width:100%; max-width:960px; background:#0e0e0e; border:1px solid #2a2a2a;
-      border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.6);
-      max-height:90vh; overflow:auto;
-    }
-    #sl .modal-card header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:12px; }
-    #sl .modal-title{ font-weight:700; }
-    #sl .modal-close{ border:0; background:transparent; color:inherit; cursor:pointer; font-size:18px; }
-
-    #sl .grid-iv{ display:grid; gap:8px; grid-template-columns:repeat(4, minmax(120px,1fr)); }
-    #sl .grid-iv label{ font-size:.9rem; opacity:.95 }
-    #sl .grid-iv input{ width:100%; }
-    @media (max-width:840px){ #sl .grid-iv{ grid-template-columns:repeat(2, minmax(120px,1fr)); } }
-
-    .topbar { position: sticky; top:0; z-index:1100; backdrop-filter: blur(4px); }
-  </style>
+  
 </head>
 <body>
-  <div class="topbar">
+  <div class="topbar sticky">
     <h1>NoE Manager</h1>
     <div class="auth-inline">
       <div id="user-chip" class="user-chip" style="display:none;">
