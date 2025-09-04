@@ -25,12 +25,12 @@
         <input id="f-name" type="text" placeholder="Filter by name…" />
         <select id="f-stage">
           <option value="">All Stages</option>
-          <option value="1">Stage I</option>
-          <option value="2">Stage II</option>
-          <option value="3">Stage III</option>
-          <option value="4">Stage IV</option>
-          <option value="5">Stage V</option>
-        </select>
+          <option value="Stage I">Stage I</option>
+          <option value="Stage II">Stage II</option>
+          <option value="Stage III">Stage III</option>
+          <option value="Stage IV">Stage IV</option>
+          <option value="Stage V">Stage V</option>
+        </select>        
         <label style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" id="f-star" />
           <span>Only starred</span>
@@ -93,9 +93,10 @@ function row(a){
         <div style="opacity:.85">${a.description||""}</div>
         <div class="small" style="margin-top:6px;">
           <span class="pill">Stage ${a.stage}</span>
-          <span class="pill">Power ${a.power}</span>
-          <span class="pill">Stability ${a.stability}</span>
-          <span class="pill">Amplitude ${a.amplitude}</span>
+          <span class="pill">Power ${a?.stats?.power ?? a.power ?? "—"}</span>
+          <span class="pill">Stability ${a?.stats?.stability ?? a.stability ?? "—"}</span>
+          <span class="pill">Amplitude ${a?.stats?.amplitude ?? a.amplitude ?? "—"}</span>
+
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
@@ -119,7 +120,7 @@ function render(list){
 }
 
 async function load(){
-  const res = await fetch(`${API_BASE}/apoth/list`);
+  const res = await fetch(`${API_BASE}/apotheoses`);
   const j = await res.json().catch(()=>({}));
   CACHE = j.apotheoses || [];
   render(CACHE);
@@ -131,13 +132,11 @@ function openDetails(id){
   $("#m-title").textContent = `${a.name} [${a.id}]`;
   $("#m-desc").textContent  = a.description || "—";
   $("#m-stage").textContent = a.stage;
-  $("#m-char").textContent  = a.characteristic;
-  $("#m-power").textContent = a.power;
-  $("#m-stab").textContent  = a.stability;
-  $("#m-amp").textContent   = a.amplitude;
-  const cs = (a.constraints||[]).map(c =>
-    `<span class="pill">${c.name||c.id} (${c.difficulty!=null?`diff ${c.difficulty}`:""})</span>`
-  ).join("");
+  $("#m-char").textContent  = a.characteristic_value ?? "—";
+  $("#m-power").textContent = a?.stats?.power ?? "—";
+  $("#m-stab").textContent  = a?.stats?.stability ?? "—";
+  $("#m-amp").textContent   = a?.stats?.amplitude ?? "—";
+  const cs = (a.constraints || []).map(id => `<span class="pill">${id}</span>`).join("");s
   $("#m-constraints").innerHTML = cs || "—";
   $("#modal").classList.remove("hidden");
   $("#modal").setAttribute("aria-hidden", "false");
