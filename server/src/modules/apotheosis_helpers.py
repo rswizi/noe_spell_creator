@@ -168,3 +168,6 @@ def compute_apotheosis_stats(
         "tier": tier_from_total_difficulty(total_difficulty),
         "flags": {"forbid_p2s": forbid_p2s, "p2s_applied": p2s_applied, "p2a_applied": p2a_applied, "s2a_applied": s2a_applied}
     }
+
+    def _can_edit_apotheosis(doc, username, role):
+    return bool(doc) and (doc.get("creator") == username or role in ("moderator", "admin"))

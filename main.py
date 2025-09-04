@@ -12,7 +12,7 @@ from pymongo.errors import DuplicateKeyError
 
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
 
-from server.src.modules.apotheosis_helpers import compute_apotheosis_stats
+from server.src.modules.apotheosis_helpers import compute_apotheosis_stats, _can_edit_apotheosis
 from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS, find_user, require_auth, make_token, verify_password, get_auth_token, normalize_email,_sha256
 from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect
@@ -1101,6 +1101,79 @@ def unfav_apotheosis(aid: str, request: Request):
     user, _ = require_user_doc(request)
     get_col("users").update_one({"_id": user["_id"]}, {"$pull": {"fav_apotheoses": str(aid)}})
     return {"status":"success","id":aid,"action":"removed"}
+
+# --- Apotheoses: edit / delete / duplicate ---
+
+@app.put("/apotheoses/{aid}")
+async def update_apotheosis(aid: str, request: Request):
+    username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    col = get_col("apotheoses")
+    doc = col.find_one({"id": aid})
+    if not doc:
+        return JSONResponse({"status": "error", "message": "Not found"}, status_code=404)
+    if not _can_edit_apotheosis(doc, username, role):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=401)
+
+    body = await request.json()
+    updates = {}
+
+    for k in ("name", "description", "type", "stage"):
+        if k in body:
+            v = body.get(k)
+            updates[k] = v.strip() if isinstance(v, str) else v
+
+    if "characteristic_value" in body:
+        updates["characteristic_value"] = int(body.get("characteristic_value") or 0)
+    if "constraints" in body:
+        updates["constraints"] = [str(x).strip() for x in (body.get("constraints") or []) if str(x).strip()]
+
+    trades = dict(doc.get("trades") or {})
+    for k_in, k_tr in (("trade_p2s", "p2s"), ("trade_p2a", "p2a"), ("trade_s2a", "s2a")):
+        if k_in in body:
+            trades[k_tr] = int(body.get(k_in) or 0)
+    if trades:
+        updates["trades"] = trades
+
+    from server.src.modules.apotheosis_helpers import compute_apotheosis_stats
+    cv = updates.get("characteristic_value", doc.get("characteristic_value", 0))
+    st = updates.get("stage", doc.get("stage", "Stage I"))
+    tp = updates.get("type", doc.get("type", "Personal"))
+    cs = updates.get("constraints", doc.get("constraints", []))
+    tr = updates.get("trades", doc.get("trades", {}))
+    stats = compute_apotheosis_stats(cv, st, tp, cs, int(tr.get("p2s", 0)), int(tr.get("p2a", 0)), int(tr.get("s2a", 0)))
+    updates["stats"] = stats
+    updates["updated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+
+    col.update_one({"id": aid}, {"$set": updates})
+    new_doc = col.find_one({"id": aid}, {"_id": 0})
+    return {"status": "success", "apotheosis": new_doc}
+
+@app.delete("/apotheoses/{aid}")
+def delete_apotheosis(aid: str, request: Request):
+    # Moderator (or admin) only
+    require_auth(request, roles=["moderator", "admin"])
+    r = get_col("apotheoses").delete_one({"id": aid})
+    if r.deleted_count == 0:
+        return JSONResponse({"status": "error", "message": "Not found"}, status_code=404)
+    return {"status": "success", "deleted": aid}
+
+@app.post("/apotheoses/{aid}/duplicate")
+def duplicate_apotheosis(aid: str, request: Request):
+    username, _ = require_auth(request, roles=["user", "moderator", "admin"])
+    col = get_col("apotheoses")
+    src = col.find_one({"id": aid}, {"_id": 0})
+    if not src:
+        return JSONResponse({"status": "error", "message": "Not found"}, status_code=404)
+
+    new_id = next_id_str("apotheoses", padding=4)
+    new_doc = dict(src)
+    new_doc["id"] = new_id
+    new_doc["name"] = f"{src.get('name','Untitled Apotheosis')} (copy)"
+    new_doc["creator"] = username
+    new_doc["created_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+
+    col.insert_one(dict(new_doc))
+    return {"status": "success", "apotheosis": new_doc}
 
 # ---------- Spell Lists ----------
 def _can_access_list(doc, username, role):

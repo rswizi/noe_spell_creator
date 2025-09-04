@@ -72,93 +72,183 @@
     </div>
   </div>
 
-<script>
-const API_BASE = "";
-const $=s=>document.querySelector(s);
-let CACHE = [];
-let STARS = new Set(JSON.parse(localStorage.getItem("apoth_stars")||"[]"));
-
-function starToggle(id){
-  if (STARS.has(id)) STARS.delete(id); else STARS.add(id);
-  localStorage.setItem("apoth_stars", JSON.stringify(Array.from(STARS)));
-  render(CACHE);
-}
-
-function row(a){
-  const starred = STARS.has(a.id);
-  return `
-    <div class="effect-entry">
-      <div style="flex:1;">
-        <div style="font-weight:bold">${a.name} <span style="opacity:.7">[${a.id}]</span></div>
-        <div style="opacity:.85">${a.description||""}</div>
-        <div class="small" style="margin-top:6px;">
-          <span class="pill">Stage ${a.stage}</span>
-          <span class="pill">Power ${a?.stats?.power ?? a.power ?? "—"}</span>
-          <span class="pill">Stability ${a?.stats?.stability ?? a.stability ?? "—"}</span>
-          <span class="pill">Amplitude ${a?.stats?.amplitude ?? a.amplitude ?? "—"}</span>
-
+  <script>
+    const API_BASE = "";
+    const $ = s => document.querySelector(s);
+    
+    let CACHE = [];
+    let STARS = new Set(JSON.parse(localStorage.getItem("apoth_stars") || "[]"));
+    let ME = null; // { username, role } or null
+    
+    function token() {
+      return localStorage.getItem("token") || "";
+    }
+    function authHeaders() {
+      const t = token();
+      return t ? { "Authorization": "Bearer " + t } : {};
+    }
+    
+    async function loadMe() {
+      if (!token()) { ME = null; return; }
+      try {
+        const r = await fetch(`/auth/me`, { headers: authHeaders() });
+        const j = await r.json();
+        ME = j.status === "success" ? { username: j.username, role: j.role } : null;
+      } catch { ME = null; }
+    }
+    
+    function starToggle(id){
+      if (STARS.has(id)) STARS.delete(id); else STARS.add(id);
+      localStorage.setItem("apoth_stars", JSON.stringify(Array.from(STARS)));
+      render(CACHE);
+    }
+    
+    function canEdit(a){
+      if (!ME) return false;
+      return (ME.username === a.creator) || ["moderator","admin"].includes(ME.role);
+    }
+    function canDelete(a){
+      if (!ME) return false;
+      return ["moderator","admin"].includes(ME.role);
+    }
+    
+    function row(a){
+      const s = a.stats || {};
+      const starred = STARS.has(a.id);
+    
+      const editBtn = canEdit(a)
+        ? `<button class="btn" onclick="editApotheosis('${a.id}')">Edit</button>`
+        : "";
+      const delBtn = canDelete(a)
+        ? `<button class="btn btn-danger" onclick="deleteApotheosis('${a.id}')">Delete</button>`
+        : "";
+      const dupBtn = `<button class="btn" onclick="duplicateApotheosis('${a.id}')">Duplicate</button>`;
+    
+      return `
+        <div class="effect-entry">
+          <div style="flex:1;">
+            <div style="font-weight:bold">${a.name} <span style="opacity:.7">[${a.id}]</span></div>
+            <div class="small" style="opacity:.85">${a.description||""}</div>
+            <div class="small" style="margin-top:6px;">
+              <span class="pill">${a.stage}</span>
+              <span class="pill">Power ${s.power ?? "—"}</span>
+              <span class="pill">Stability ${s.stability ?? "—"}</span>
+              <span class="pill">Amplitude ${s.amplitude ?? "—"}</span>
+            </div>
+            <div class="small" style="margin-top:4px;opacity:.7;">Creator: ${a.creator || "—"}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+            <button class="btn" onclick="openDetails('${a.id}')">Details</button>
+            ${dupBtn}
+            ${editBtn}
+            ${delBtn}
+            <button class="${starred?'btn btn-secondary':'btn'}" onclick="starToggle('${a.id}')">${starred?'Unstar':'Star'}</button>
+          </div>
         </div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="btn" onclick="openDetails('${a.id}')">Details</button>
-        <button class="${starred?'btn btn-secondary':'btn'}" onclick="starToggle('${a.id}')">${starred?'Unstar':'Star'}</button>
-      </div>
-    </div>
-  `;
-}
-
-function render(list){
-  const fName = $("#f-name").value.trim().toLowerCase();
-  const fStage = $("#f-stage").value;
-  const onlyStar = $("#f-star").checked;
-
-  let out = list.slice();
-  if (fName) out = out.filter(a => (a.name||"").toLowerCase().includes(fName));
-  if (fStage) out = out.filter(a => String(a.stage)===String(fStage));
-  if (onlyStar) out = out.filter(a => STARS.has(a.id));
-  $("#results").innerHTML = out.length ? out.map(row).join("") : `<p>No results.</p>`;
-}
-
-async function load(){
-  const res = await fetch(`${API_BASE}/apotheoses`);
-  const j = await res.json().catch(()=>({}));
-  CACHE = j.apotheoses || [];
-  render(CACHE);
-}
-
-function openDetails(id){
-  const a = CACHE.find(x=>String(x.id)===String(id));
-  if (!a) return;
-  $("#m-title").textContent = `${a.name} [${a.id}]`;
-  $("#m-desc").textContent  = a.description || "—";
-  $("#m-stage").textContent = a.stage;
-  $("#m-char").textContent  = a.characteristic_value ?? "—";
-  $("#m-power").textContent = a?.stats?.power ?? "—";
-  $("#m-stab").textContent  = a?.stats?.stability ?? "—";
-  $("#m-amp").textContent   = a?.stats?.amplitude ?? "—";
-  const cs = (a.constraints || []).map(id => `<span class="pill">${id}</span>`).join("");s
-  $("#m-constraints").innerHTML = cs || "—";
-  $("#modal").classList.remove("hidden");
-  $("#modal").setAttribute("aria-hidden", "false");
-}
-function closeModal(){
-  $("#modal").classList.add("hidden");
-  $("#modal").setAttribute("aria-hidden", "true");
-}
-
-function debounce(fn,ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms)}}
-
-document.addEventListener("DOMContentLoaded", async ()=>{
-  await load();
-  const run = debounce(()=>render(CACHE), 200);
-  $("#f-name").addEventListener("input", run);
-  $("#f-stage").addEventListener("change", run);
-  $("#f-star").addEventListener("change", run);
-  $("#f-reset").addEventListener("click", ()=>{ $("#f-name").value=""; $("#f-stage").value=""; $("#f-star").checked=false; render(CACHE); });
-  $("#modal-close").addEventListener("click", closeModal);
-  $("#modal").addEventListener("click", e=>{ if(e.target.id==="modal") closeModal(); });
-  document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
-});
-</script>
+      `;
+    }
+    
+    function render(list){
+      const fName = $("#f-name").value.trim().toLowerCase();
+    
+      // Normalize stage filter to match API values ("Stage I"…)
+      const fStage = $("#f-stage").value;
+      const stageText = fStage ? `Stage ${["I","II","III","IV","V"][parseInt(fStage,10)-1]}` : "";
+    
+      const onlyStar = $("#f-star").checked;
+    
+      let out = list.slice();
+      if (fName) out = out.filter(a => (a.name||"").toLowerCase().includes(fName));
+      if (stageText) out = out.filter(a => String(a.stage) === stageText);
+      if (onlyStar) out = out.filter(a => STARS.has(a.id));
+      $("#results").innerHTML = out.length ? out.map(row).join("") : `<p>No results.</p>`;
+    }
+    
+    async function load(){
+      const res = await fetch(`/apotheoses`);
+      const j = await res.json().catch(()=>({}));
+      CACHE = j.apotheoses || [];
+      render(CACHE);
+    }
+    
+    // ----- Details modal -----
+    function openDetails(id){
+      const a = CACHE.find(x => String(x.id) === String(id));
+      if (!a) return;
+      const s = a.stats || {};
+      $("#m-title").textContent = `${a.name} [${a.id}]`;
+      $("#m-desc").textContent  = a.description || "—";
+      $("#m-stage").textContent = a.stage;
+      $("#m-char").textContent  = String(a.characteristic_value ?? "—");
+      $("#m-power").textContent = String(s.power ?? "—");
+      $("#m-stab").textContent  = String(s.stability ?? "—");
+      $("#m-amp").textContent   = String(s.amplitude ?? "—");
+    
+      // constraints are stored as ids; show as pills
+      const cs = (a.constraints || []).map(cid => `<span class="pill">${cid}</span>`).join("");
+      $("#m-constraints").innerHTML = cs || "—";
+    
+      $("#modal").classList.remove("hidden");
+      $("#modal").setAttribute("aria-hidden", "false");
+    }
+    function closeModal(){
+      $("#modal").classList.add("hidden");
+      $("#modal").setAttribute("aria-hidden", "true");
+    }
+    
+    // ----- Actions -----
+    function editApotheosis(id){
+      // Reuse creator page as an editor if you want; pass ?edit=<id>
+      window.location.href = `apotheosis_create.html?edit=${encodeURIComponent(id)}`;
+    }
+    
+    async function duplicateApotheosis(id){
+      try{
+        const r = await fetch(`/apotheoses/${id}/duplicate`, { method: "POST", headers: { ...authHeaders() }});
+        const j = await r.json();
+        if (j.status !== "success") throw new Error(j.message || "Duplicate failed");
+        await load(); // refresh list
+        alert(`Duplicated as ${j.apotheosis.id}`);
+      }catch(e){
+        alert(e.message || "Duplicate failed.");
+      }
+    }
+    
+    async function deleteApotheosis(id){
+      if (!confirm(`Delete ${id}? This cannot be undone.`)) return;
+      try{
+        const r = await fetch(`/apotheoses/${id}`, { method: "DELETE", headers: { ...authHeaders() }});
+        const j = await r.json();
+        if (j.status !== "success") throw new Error(j.message || "Delete failed");
+        // update local cache quickly
+        CACHE = CACHE.filter(a => a.id !== id);
+        render(CACHE);
+      }catch(e){
+        alert(e.message || "Delete failed.");
+      }
+    }
+    
+    function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); } }
+    
+    document.addEventListener("DOMContentLoaded", async ()=>{
+      await loadMe();
+      await load();
+    
+      const run = debounce(()=>render(CACHE), 200);
+      $("#f-name").addEventListener("input", run);
+      $("#f-stage").addEventListener("change", run);
+      $("#f-star").addEventListener("change", run);
+      $("#f-reset").addEventListener("click", ()=>{
+        $("#f-name").value="";
+        $("#f-stage").value="";
+        $("#f-star").checked=false;
+        render(CACHE);
+      });
+    
+      $("#modal-close").addEventListener("click", closeModal);
+      $("#modal").addEventListener("click", e=>{ if(e.target.id==="modal") closeModal(); });
+      document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
+    });
+    </script>    
 </body>
 </html>
