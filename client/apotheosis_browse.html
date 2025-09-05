@@ -14,7 +14,13 @@
     .modal-card{ width:min(820px,96vw); max-height:90vh; overflow:auto; background:#111; color:#eee; border-radius:16px; padding:20px 22px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
     .modal-close{ float:right; font-size:28px; line-height:1; background:transparent; border:0; color:#aaa; cursor:pointer; }
     .modal-close:hover{ color:#fff; }
-  </style>
+    .effect-entry{ align-items:flex-start; }        /* top-align left text with the buttons */
+    .actions-col{ display:flex; flex-direction:column; gap:8px; align-items:stretch; }
+    .actions-col .btn{ width:160px; text-align:center; }  /* consistent width */
+    @media (max-width:700px){
+    .actions-col .btn{ width:100%; }
+    }
+      </style>
 </head>
 <body>
   <div class="container">
@@ -133,13 +139,13 @@
             </div>
             <div class="small" style="margin-top:4px;opacity:.7;">Creator: ${a.creator || "—"}</div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-            <button class="btn" onclick="openDetails('${a.id}')">Details</button>
-            ${dupBtn}
-            ${editBtn}
-            ${delBtn}
-            <button class="${starred?'btn btn-secondary':'btn'}" onclick="starToggle('${a.id}')">${starred?'Unstar':'Star'}</button>
-          </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+              <button class="btn" onclick="openDetails('${a.id}')">Details</button>
+              ${dupBtn}
+              ${editBtn}
+              ${delBtn}
+              <button class="${starred?'btn btn-secondary':'btn'}" onclick="starToggle('${a.id}')">${starred?'Unstar':'Star'}</button>
+            </div>
         </div>`;
     }
 

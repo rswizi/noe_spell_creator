@@ -297,6 +297,77 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
   $("#save").addEventListener("click", save);
 });
+(function(){
+  const qs = new URLSearchParams(location.search);
+  const EDIT_ID = qs.get('edit');
+  const token = () => localStorage.getItem('auth_token') || '';
+  const authHeaders = () => token() ? { 'Authorization':'Bearer '+token(), 'Content-Type':'application/json' } : { 'Content-Type':'application/json' };
+
+  // helper: set value if the element exists
+  const setVal = (sel, val) => { const el = document.querySelector(sel); if (el) el.value = val ?? ''; };
+
+  async function loadForEdit(){
+    if (!EDIT_ID) return;
+    // Get the doc
+    const res = await fetch(`/apotheoses/${EDIT_ID}`, { headers: { 'Accept':'application/json', ...authHeaders() }});
+    const j = await res.json().catch(()=>({}));
+    if (j.status !== 'success' || !j.apotheosis) return;
+
+    const a = j.apotheosis;
+    // Update page chrome
+    const title = document.querySelector('h1, h2');
+    if (title) title.textContent = `Edit Apotheosis — ${a.name} [${a.id}]`;
+    const submit = document.querySelector('button[type=submit], #submit-apoth, .submit-apoth');
+    if (submit) submit.textContent = 'Save changes';
+
+    // Fill common fields (adjust selectors to your form IDs if different)
+    setVal('#apoth-name', a.name);
+    setVal('#apoth-desc', a.description || '');
+    setVal('#apoth-stage', a.stage); // expects options: "Stage I"…"Stage V"
+    setVal('#apoth-type', a.type || 'Personal'); // if you have a type select
+
+    // characteristic & trades
+    setVal('#apoth-characteristic', a.characteristic_value ?? 0);
+    setVal('#trade-p2s', a.trades?.p2s ?? 0);
+    setVal('#trade-p2a', a.trades?.p2a ?? 0);
+    setVal('#trade-s2a', a.trades?.s2a ?? 0);
+
+    // constraints: if you use a textarea, dump as comma list
+    const cEl = document.querySelector('#apoth-constraints, textarea[name=constraints]');
+    if (cEl) cEl.value = (a.constraints || []).join(', ');
+
+    // Switch submit handler to PUT update
+    const form = document.querySelector('form');
+    (form || document).addEventListener('submit', async (e)=>{
+      if (form) e.preventDefault();
+      // Gather values (adjust if your field IDs differ)
+      const body = {
+        name:             document.querySelector('#apoth-name')?.value?.trim(),
+        description:      document.querySelector('#apoth-desc')?.value?.trim(),
+        stage:            document.querySelector('#apoth-stage')?.value,
+        type:             document.querySelector('#apoth-type')?.value,
+        characteristic_value: parseInt(document.querySelector('#apoth-characteristic')?.value || 0),
+        constraints:      (document.querySelector('#apoth-constraints')?.value || '')
+                            .split(',').map(s=>s.trim()).filter(Boolean),
+        trade_p2s:        parseInt(document.querySelector('#trade-p2s')?.value || 0),
+        trade_p2a:        parseInt(document.querySelector('#trade-p2a')?.value || 0),
+        trade_s2a:        parseInt(document.querySelector('#trade-s2a')?.value || 0),
+      };
+      try{
+        const r = await fetch(`/apotheoses/${EDIT_ID}`, { method:'PUT', headers: authHeaders(), body: JSON.stringify(body) });
+        const jr = await r.json().catch(async()=>({status:'error', message: await r.text()}));
+        if (jr.status !== 'success') throw new Error(jr.message || 'Update failed');
+        alert('Apotheosis updated.');
+        // optional: go back to browse or stay
+        // location.href = 'apotheosis_browse.html';
+      }catch(err){
+        alert(err.message || 'Update failed.');
+      }
+    }, { once:true });
+  }
+
+  document.addEventListener('DOMContentLoaded', loadForEdit);
+})();
 </script>
 </body>
 </html>

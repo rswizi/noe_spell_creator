@@ -1184,6 +1184,50 @@ def duplicate_apotheosis(aid: str, request: Request):
     col.insert_one(dict(new_doc))
     return {"status": "success", "apotheosis": new_doc}
 
+@app.put("/apotheoses/{aid}")
+async def update_apotheosis(aid: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col("apotheoses")
+    doc = col.find_one({"id": aid})
+    if not doc:
+        return JSONResponse({"status":"error","message":"Not found"}, status_code=404)
+    if not (doc.get("creator")==username or role in ("moderator","admin")):
+        return JSONResponse({"status":"error","message":"Forbidden"}, status_code=403)
+
+    body = await request.json()
+    updates = {}
+
+    for k in ("name","description","type","stage"):
+        if k in body:
+            v = body.get(k)
+            updates[k] = v.strip() if isinstance(v,str) else v
+
+    if "characteristic_value" in body:
+        updates["characteristic_value"] = int(body.get("characteristic_value") or 0)
+    if "constraints" in body:
+        updates["constraints"] = [str(x).strip() for x in (body.get("constraints") or []) if str(x).strip()]
+
+    trades = dict(doc.get("trades") or {})
+    for k_in, k_tr in (("trade_p2s","p2s"),("trade_p2a","p2a"),("trade_s2a","s2a")):
+        if k_in in body:
+            trades[k_tr] = int(body.get(k_in) or 0)
+    if trades: updates["trades"] = trades
+
+    # recompute stats
+    from server.src.modules.apotheosis_helpers import compute_apotheosis_stats
+    cv = updates.get("characteristic_value", doc.get("characteristic_value", 0))
+    st = updates.get("stage", doc.get("stage", "Stage I"))
+    tp = updates.get("type", doc.get("type", "Personal"))
+    cs = updates.get("constraints", doc.get("constraints", []))
+    tr = updates.get("trades", doc.get("trades", {}))
+    stats = compute_apotheosis_stats(cv, st, tp, cs, int(tr.get("p2s",0)), int(tr.get("p2a",0)), int(tr.get("s2a",0)))
+    updates["stats"] = stats
+    updates["updated_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+
+    col.update_one({"id": aid}, {"$set": updates})
+    new_doc = col.find_one({"id": aid}, {"_id":0})
+    return {"status":"success","apotheosis": new_doc}
+
 # ---------- Spell Lists ----------
 def _can_access_list(doc, username, role):
     return (doc and (doc.get("owner") == username or role in ("admin","moderator")))
