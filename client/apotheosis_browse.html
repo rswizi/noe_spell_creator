@@ -82,7 +82,7 @@
     let ME = null; // { username, role } or null
 
     // ---- auth helpers ----
-    const token = () => localStorage.getItem("token") || "";
+    const token = () => localStorage.getItem("auth_token") || "";
     const authHeaders = () => (token() ? { "Authorization": "Bearer " + token() } : {});
     const updateLoginInfo = () => {
       const el = document.getElementById("loginInfo");
