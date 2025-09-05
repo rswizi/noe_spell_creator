@@ -20,6 +20,7 @@
   <div class="container">
     <h1>Apotheoses</h1>
     <div id="loginInfo" class="small" style="opacity:.8;margin-top:-8px;margin-bottom:12px;"></div>
+
     <div class="home-card">
       <div class="filter-bar">
         <input id="f-name" type="text" placeholder="Filter by name…" />
@@ -30,7 +31,7 @@
           <option value="Stage III">Stage III</option>
           <option value="Stage IV">Stage IV</option>
           <option value="Stage V">Stage V</option>
-        </select>        
+        </select>
         <label style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" id="f-star" />
           <span>Only starred</span>
@@ -73,57 +74,52 @@
   </div>
 
   <script>
-    const API_BASE = "";
     const $ = s => document.querySelector(s);
-    
+
+    // ---- state ----
     let CACHE = [];
     let STARS = new Set(JSON.parse(localStorage.getItem("apoth_stars") || "[]"));
     let ME = null; // { username, role } or null
-    
-    function token() {
-      return localStorage.getItem("token") || "";
+
+    // ---- auth helpers ----
+    const token = () => localStorage.getItem("token") || "";
+    const authHeaders = () => (token() ? { "Authorization": "Bearer " + token() } : {});
+    const updateLoginInfo = () => {
+      const el = document.getElementById("loginInfo");
+      if (!el) return;
+      el.textContent = ME ? `Logged in as ${ME.username} (${ME.role})` : "Not logged in";
+    };
+    async function readJson(res){
+      const txt = await res.text();
+      try { return JSON.parse(txt); } catch {
+        return { status: res.ok ? "success":"error", message: txt };
+      }
     }
-    function authHeaders() {
-      const t = token();
-      return t ? { "Authorization": "Bearer " + t } : {};
-    }
-    
-    async function loadMe() {
-      if (!token()) { ME = null; return; }
+    async function loadMe(){
+      if (!token()) { ME = null; updateLoginInfo(); return; }
       try {
         const r = await fetch(`/auth/me`, { headers: authHeaders() });
-        const j = await r.json();
+        const j = await readJson(r);
         ME = j.status === "success" ? { username: j.username, role: j.role } : null;
       } catch { ME = null; }
+      updateLoginInfo();
     }
-    
+
+    // ---- UI helpers ----
     function starToggle(id){
       if (STARS.has(id)) STARS.delete(id); else STARS.add(id);
-      localStorage.setItem("apoth_stars", JSON.stringify(Array.from(STARS)));
+      localStorage.setItem("apoth_stars", JSON.stringify([...STARS]));
       render(CACHE);
     }
-    
-    function canEdit(a){
-      if (!ME) return false;
-      return (ME.username === a.creator) || ["moderator","admin"].includes(ME.role);
-    }
-    function canDelete(a){
-      if (!ME) return false;
-      return ["moderator","admin"].includes(ME.role);
-    }
-    
+    const canEdit   = a => ME && (ME.username === a.creator || ["moderator","admin"].includes(ME.role));
+    const canDelete = a => ME && ["moderator","admin"].includes(ME.role);
+
     function row(a){
       const s = a.stats || {};
       const starred = STARS.has(a.id);
-    
-      const editBtn = canEdit(a)
-        ? `<button class="btn" onclick="editApotheosis('${a.id}')">Edit</button>`
-        : "";
-      const delBtn = canDelete(a)
-        ? `<button class="btn btn-danger" onclick="deleteApotheosis('${a.id}')">Delete</button>`
-        : "";
-      const dupBtn = `<button class="btn" onclick="duplicateApotheosis('${a.id}')">Duplicate</button>`;
-    
+      const editBtn = canEdit(a)   ? `<button class="btn"            onclick="editApotheosis('${a.id}')">Edit</button>` : "";
+      const delBtn  = canDelete(a) ? `<button class="btn btn-danger"  onclick="deleteApotheosis('${a.id}')">Delete</button>` : "";
+      const dupBtn  = `<button class="btn" onclick="duplicateApotheosis('${a.id}')">Duplicate</button>`;
       return `
         <div class="effect-entry">
           <div style="flex:1;">
@@ -144,50 +140,43 @@
             ${delBtn}
             <button class="${starred?'btn btn-secondary':'btn'}" onclick="starToggle('${a.id}')">${starred?'Unstar':'Star'}</button>
           </div>
-        </div>
-      `;
+        </div>`;
     }
-    
+
     function render(list){
       const fName = $("#f-name").value.trim().toLowerCase();
-    
-      // Normalize stage filter to match API values ("Stage I"…)
       const fStage = $("#f-stage").value;
-      const stageText = fStage ? `Stage ${["I","II","III","IV","V"][parseInt(fStage,10)-1]}` : "";
-    
       const onlyStar = $("#f-star").checked;
-    
+
       let out = list.slice();
-      if (fName) out = out.filter(a => (a.name||"").toLowerCase().includes(fName));
-      if (stageText) out = out.filter(a => String(a.stage) === stageText);
+      if (fName)  out = out.filter(a => (a.name||"").toLowerCase().includes(fName));
+      if (fStage) out = out.filter(a => (a.stage||"") === fStage);
       if (onlyStar) out = out.filter(a => STARS.has(a.id));
+
       $("#results").innerHTML = out.length ? out.map(row).join("") : `<p>No results.</p>`;
     }
-    
+
     async function load(){
-      const res = await fetch(`/apotheoses`);
-      const j = await res.json().catch(()=>({}));
+      const r = await fetch(`/apotheoses`);
+      const j = await readJson(r);
       CACHE = j.apotheoses || [];
       render(CACHE);
     }
-    
-    // ----- Details modal -----
+
+    // ---- modal ----
     function openDetails(id){
-      const a = CACHE.find(x => String(x.id) === String(id));
+      const a = CACHE.find(x=>String(x.id)===String(id));
       if (!a) return;
-      const s = a.stats || {};
       $("#m-title").textContent = `${a.name} [${a.id}]`;
       $("#m-desc").textContent  = a.description || "—";
-      $("#m-stage").textContent = a.stage;
-      $("#m-char").textContent  = String(a.characteristic_value ?? "—");
-      $("#m-power").textContent = String(s.power ?? "—");
-      $("#m-stab").textContent  = String(s.stability ?? "—");
-      $("#m-amp").textContent   = String(s.amplitude ?? "—");
-    
-      // constraints are stored as ids; show as pills
-      const cs = (a.constraints || []).map(cid => `<span class="pill">${cid}</span>`).join("");
+      $("#m-stage").textContent = a.stage || "—";
+      $("#m-char").textContent  = a.characteristic_value ?? "—";
+      const s = a.stats || {};
+      $("#m-power").textContent = s.power ?? "—";
+      $("#m-stab").textContent  = s.stability ?? "—";
+      $("#m-amp").textContent   = s.amplitude ?? "—";
+      const cs = (a.constraints||[]).map(c => `<span class="pill">${c}</span>`).join("");
       $("#m-constraints").innerHTML = cs || "—";
-    
       $("#modal").classList.remove("hidden");
       $("#modal").setAttribute("aria-hidden", "false");
     }
@@ -195,76 +184,52 @@
       $("#modal").classList.add("hidden");
       $("#modal").setAttribute("aria-hidden", "true");
     }
-    
-    // ----- Actions -----
+
+    // ---- actions ----
     function editApotheosis(id){
-      // Reuse creator page as an editor if you want; pass ?edit=<id>
+      // reuse creator page as an editor
       window.location.href = `apotheosis_create.html?edit=${encodeURIComponent(id)}`;
     }
-    
     async function duplicateApotheosis(id){
       try{
         const r = await fetch(`/apotheoses/${id}/duplicate`, { method: "POST", headers: { ...authHeaders() }});
-        const j = await r.json();
-        if (j.status !== "success") throw new Error(j.message || "Duplicate failed");
-        await load(); // refresh list
+        const j = await readJson(r);
+        if (j.status !== "success") throw new Error(j.message || `Duplicate failed (${r.status})`);
+        await load();
         alert(`Duplicated as ${j.apotheosis.id}`);
-      }catch(e){
-        alert(e.message || "Duplicate failed.");
-      }
+      }catch(e){ alert(e.message || "Duplicate failed."); }
     }
-    
     async function deleteApotheosis(id){
       if (!confirm(`Delete ${id}? This cannot be undone.`)) return;
       try{
         const r = await fetch(`/apotheoses/${id}`, { method: "DELETE", headers: { ...authHeaders() }});
-        const j = await r.json();
-        if (j.status !== "success") throw new Error(j.message || "Delete failed");
-        // update local cache quickly
+        const j = await readJson(r);
+        if (j.status !== "success") throw new Error(j.message || `Delete failed (${r.status})`);
         CACHE = CACHE.filter(a => a.id !== id);
         render(CACHE);
-      }catch(e){
-        alert(e.message || "Delete failed.");
-      }
-    }
-    
-    function debounce(fn, ms = 300) {
-      let t;
-      return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+      }catch(e){ alert(e.message || "Delete failed."); }
     }
 
+    // util
+    function debounce(fn, ms=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
 
+    // boot
     document.addEventListener("DOMContentLoaded", async ()=>{
       await loadMe();
       await load();
-    
+
       const run = debounce(()=>render(CACHE), 200);
       $("#f-name").addEventListener("input", run);
       $("#f-stage").addEventListener("change", run);
       $("#f-star").addEventListener("change", run);
       $("#f-reset").addEventListener("click", ()=>{
-        $("#f-name").value="";
-        $("#f-stage").value="";
-        $("#f-star").checked=false;
-        render(CACHE);
+        $("#f-name").value=""; $("#f-stage").value=""; $("#f-star").checked=false; render(CACHE);
       });
-    
+
       $("#modal-close").addEventListener("click", closeModal);
       $("#modal").addEventListener("click", e=>{ if(e.target.id==="modal") closeModal(); });
       document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
     });
-
-    async function loadMe(){
-      try{
-        const r = await fetch(`/auth/me`, { headers: authHeaders() });
-        const j = await r.json();
-        ME = (j.status === "success") ? j : null;
-      }catch{ ME = null; }
-      // show who we are
-      document.getElementById("loginInfo").textContent =
-        ME ? `Logged in as ${ME.username} (${ME.role})` : "Not logged in";
-}
-
-    </script>    
+  </script>
 </body>
 </html>
