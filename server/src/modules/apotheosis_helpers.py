@@ -170,4 +170,4 @@ def compute_apotheosis_stats(
     }
 
     def _can_edit_apotheosis(doc, username, role):
-    return bool(doc) and (doc.get("creator") == username or role in ("moderator", "admin"))
+        return bool(doc) and (doc.get("creator") == username or role in ("moderator", "admin"))
