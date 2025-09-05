@@ -8,19 +8,14 @@
   <style>
     .hidden{display:none!important}
     .scroll-pad { max-height: 64vh; overflow:auto; }
-    .effect-entry{ display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid #222; }
+    .effect-entry{ display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid #222; align-items:flex-start; }
     .pill{ display:inline-block; padding:2px 8px; border:1px solid #444; border-radius:999px; margin-right:6px; }
-    .modal{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:1000; padding:16px; }
-    .modal-card{ width:min(820px,96vw); max-height:90vh; overflow:auto; background:#111; color:#eee; border-radius:16px; padding:20px 22px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
-    .modal-close{ float:right; font-size:28px; line-height:1; background:transparent; border:0; color:#aaa; cursor:pointer; }
-    .modal-close:hover{ color:#fff; }
-    .effect-entry{ align-items:flex-start; }        /* top-align left text with the buttons */
-    .actions-col{ display:flex; flex-direction:column; gap:8px; align-items:stretch; }
-    .actions-col .btn{ width:160px; text-align:center; }  /* consistent width */
+    .actions-col{ display:flex; flex-direction:column; gap:8px; align-items:stretch; min-width:180px; }
+    .actions-col .btn{ width:100%; text-align:center; }
     @media (max-width:700px){
-    .actions-col .btn{ width:100%; }
+      .actions-col{ min-width:unset; width:100%; }
     }
-      </style>
+  </style>
 </head>
 <body>
   <div class="container">
@@ -81,25 +76,24 @@
 
   <script>
     const $ = s => document.querySelector(s);
+    const API_BASE = "";
 
     // ---- state ----
     let CACHE = [];
     let STARS = new Set(JSON.parse(localStorage.getItem("apoth_stars") || "[]"));
     let ME = null; // { username, role } or null
 
-    // ---- auth helpers ----
+    // ---- auth helpers (use SAME keys as your working pages) ----
     const token = () => localStorage.getItem("auth_token") || "";
     const authHeaders = () => (token() ? { "Authorization": "Bearer " + token() } : {});
     const updateLoginInfo = () => {
-      const el = document.getElementById("loginInfo");
+      const el = $("#loginInfo");
       if (!el) return;
       el.textContent = ME ? `Logged in as ${ME.username} (${ME.role})` : "Not logged in";
     };
     async function readJson(res){
       const txt = await res.text();
-      try { return JSON.parse(txt); } catch {
-        return { status: res.ok ? "success":"error", message: txt };
-      }
+      try { return JSON.parse(txt); } catch { return { status: res.ok ? "success":"error", message: txt }; }
     }
     async function loadMe(){
       if (!token()) { ME = null; updateLoginInfo(); return; }
@@ -139,19 +133,20 @@
             </div>
             <div class="small" style="margin-top:4px;opacity:.7;">Creator: ${a.creator || "—"}</div>
           </div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-              <button class="btn" onclick="openDetails('${a.id}')">Details</button>
-              ${dupBtn}
-              ${editBtn}
-              ${delBtn}
-              <button class="${starred?'btn btn-secondary':'btn'}" onclick="starToggle('${a.id}')">${starred?'Unstar':'Star'}</button>
-            </div>
+          <div class="actions-col">
+            <button class="btn" onclick="openDetails('${a.id}')">Details</button>
+            ${editBtn}
+            ${dupBtn}
+            ${delBtn}
+            <button class="${starred?'btn btn-secondary':'btn'}" onclick="starToggle('${a.id}')">${starred?'Unstar':'Star'}</button>
+          </div>
         </div>`;
     }
 
     function render(list){
       const fName = $("#f-name").value.trim().toLowerCase();
-      const fStage = $("#f-stage").value;
+      const fStage = $("#f-stage").value; // already "Stage I"…"Stage V" or ""
+
       const onlyStar = $("#f-star").checked;
 
       let out = list.slice();
