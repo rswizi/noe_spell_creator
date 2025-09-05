@@ -28,6 +28,9 @@ _ROMAN = {
     "xi":11,"xii":12,"xiii":13,"xiv":14,"xv":15
 }
 
+def _can_edit_apotheosis(doc, username, role):
+    return bool(doc) and (doc.get("creator") == username or role in ("moderator", "admin"))
+
 def _stage_index_from_string(s: str) -> Optional[int]:
     """Extract a stage index (1-based) from things like 'Stage II', 'stage 2', 'II', '2'."""
     if not s:
@@ -168,6 +171,3 @@ def compute_apotheosis_stats(
         "tier": tier_from_total_difficulty(total_difficulty),
         "flags": {"forbid_p2s": forbid_p2s, "p2s_applied": p2s_applied, "p2a_applied": p2a_applied, "s2a_applied": s2a_applied}
     }
-
-    def _can_edit_apotheosis(doc, username, role):
-        return bool(doc) and (doc.get("creator") == username or role in ("moderator", "admin"))
