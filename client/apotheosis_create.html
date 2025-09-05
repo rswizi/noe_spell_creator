@@ -2,235 +2,393 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Create / Edit Apotheosis</title>
+  <title>Create an Apotheosis</title>
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    @media (max-width:900px){ .grid-2{ grid-template-columns:1fr; } }
-    .listbox{ min-height: 200px; }
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); }
+    .scroll-pad { max-height: 56vh; overflow:auto; border:1px solid #222; border-radius:10px; padding:10px; }
+    .kv { display:grid; grid-template-columns: auto 1fr; gap:8px 12px; align-items:center; }
+    .pill { display:inline-block; padding:2px 8px; border:1px solid #444; border-radius:999px; margin-left:6px; font-size:.85rem; }
+    .small { font-size:.9rem } .muted { opacity:.8 }
+    .row { display:flex; gap:8px; align-items:center; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1 id="page-title">Create an Apotheosis</h1>
+    <h1>Create an Apotheosis</h1>
+
     <div class="home-card">
-      <div class="grid-2">
+      <div class="grid">
         <div>
           <label>Name</label>
-          <input id="apo-name" type="text" placeholder="Untitled Apotheosis" />
+          <input id="apo-name" type="text" placeholder="e.g. Ascension of Thorns" />
         </div>
         <div>
           <label>Stage</label>
           <select id="apo-stage">
-            <option value="Stage I">Stage I</option>
-            <option value="Stage II">Stage II</option>
-            <option value="Stage III">Stage III</option>
-            <option value="Stage IV">Stage IV</option>
-            <option value="Stage V">Stage V</option>
+            <option>Stage I</option>
+            <option>Stage II</option>
+            <option>Stage III</option>
+            <option>Stage IV</option>
+            <option>Stage V</option>
           </select>
         </div>
         <div>
           <label>Type</label>
           <select id="apo-type">
-            <option value="Personal">Personal</option>
-            <option value="Territory">Territory</option>
-            <option value="Hybrid">Hybrid</option>
+            <option>Personal</option>
+            <option>Environmental</option>
+            <option>Ritual</option>
           </select>
         </div>
         <div>
           <label>Characteristic Value</label>
-          <input id="apo-char" type="number" min="0" step="1" value="0" />
+          <input id="apo-char" type="number" step="1" value="0" />
         </div>
       </div>
 
-      <div style="margin-top:12px;">
-        <label>Description</label>
-        <textarea id="apo-desc" rows="4" placeholder="What does this Apotheosis look like / do?"></textarea>
-      </div>
+      <label style="margin-top:10px;">Description</label>
+      <textarea id="apo-desc" rows="4" placeholder="Describe the Apotheosis..."></textarea>
     </div>
 
     <div class="home-card">
       <h3>Constraints</h3>
-      <div class="grid-2">
-        <div>
-          <label>Available</label>
-          <select id="c-available" class="listbox" multiple></select>
-        </div>
-        <div>
-          <label>Selected</label>
-          <select id="c-selected" class="listbox" multiple></select>
-        </div>
+
+      <div class="row">
+        <input id="c-filter" type="text" placeholder="Filter by name…" />
+        <button id="c-clear" class="btn btn-secondary small">Reset</button>
+        <span class="small muted" id="forbid-note" style="margin-left:auto;"></span>
       </div>
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-        <button class="btn" id="add-constraints">Add →</button>
-        <button class="btn" id="remove-constraints">← Remove</button>
+
+      <div class="grid" style="margin-top:10px;">
+        <div>
+          <div class="small muted" style="margin-bottom:4px;">Available</div>
+          <div class="scroll-pad">
+            <select id="c-available" size="12" style="width:100%;"></select>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button id="c-add" class="btn small">Add →</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="small muted" style="margin-bottom:4px;">Selected</div>
+          <div class="scroll-pad">
+            <select id="c-selected" size="12" style="width:100%;"></select>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button id="c-remove" class="btn btn-secondary small">← Remove</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="small muted" style="margin-bottom:4px;">Constraint Info</div>
+          <div id="c-info" class="scroll-pad small muted">Select a constraint to see details.</div>
+        </div>
       </div>
     </div>
 
     <div class="home-card">
-      <h3>Trades</h3>
-      <div class="grid-2">
+      <h3>Live Summary</h3>
+      <div class="grid">
         <div>
-          <label>p2s (Power→Stability)</label>
+          <div class="kv">
+            <div><strong>Total Difficulty</strong></div><div id="diff-sum">—</div>
+            <div><strong>Extra Stability Δ</strong></div><div id="stab-pen-sum">—</div>
+            <div><strong>Amplitude Bonus</strong></div><div id="amp-bonus-sum">—</div>
+          </div>
+        </div>
+        <div>
+          <div class="kv">
+            <div><strong>Power</strong></div><div id="out-power">—</div>
+            <div><strong>Stability</strong></div><div id="out-stab">—</div>
+            <div><strong>Amplitude</strong></div><div id="out-amp">—</div>
+            <div><strong>Diameter</strong></div><div id="out-dia">—</div>
+          </div>
+        </div>
+      </div>
+
+      <hr style="border:0;border-top:1px solid #222;margin:14px 0;">
+
+      <h4>Trading</h4>
+      <div class="small muted" style="margin-bottom:6px;">Allocate Power/Stability into Stability/Amplitude.</div>
+
+      <div class="kv">
+        <div>Power → Stability</div>
+        <div>
           <input id="trade-p2s" type="number" min="0" step="1" value="0" />
+          <span class="pill" id="pill-p2s">0</span>
         </div>
+
+        <div>Power → Amplitude</div>
         <div>
-          <label>p2a (Power→Amplitude)</label>
           <input id="trade-p2a" type="number" min="0" step="1" value="0" />
+          <span class="pill" id="pill-p2a">0</span>
         </div>
+
+        <div>Stability → Amplitude</div>
         <div>
-          <label>s2a (Stability→Amplitude)</label>
           <input id="trade-s2a" type="number" min="0" step="1" value="0" />
+          <span class="pill" id="pill-s2a">0</span>
         </div>
       </div>
     </div>
 
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <div class="home-card">
       <button id="save" class="btn">💾 Save</button>
-      <a class="btn btn-secondary" href="apotheosis_browse.html">← Back</a>
+      <a class="btn btn-secondary" href="apotheosis_home.html">← Back</a>
     </div>
   </div>
 
-  <script>
-    const $ = s => document.querySelector(s);
-    const API_BASE = "";
+<script>
+const API_BASE = "";
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const token = localStorage.getItem("auth_token") || "";
 
-    // ---- auth helpers (same keys as working pages) ----
-    const token = localStorage.getItem("auth_token") || "";
-    const authHeaders = () => (token ? { "Authorization": "Bearer " + token } : {});
-    const EDIT_ID = new URLSearchParams(location.search).get('edit');
+let ALL = [];
+let FILTER = "";
 
-    // ---- constraints cache ----
-    let ALL = []; // [{id,name,difficulty,...}]
+function authHeaders(){ return token ? { "Authorization": `Bearer ${token}` } : {}; }
 
-    function setVal(sel, val){ const el=$(sel); if(el) el.value = (val ?? ""); }
+/* ---------- Load constraints (AUTH REQUIRED by API) ---------- */
+async function loadConstraints(){
+  if(!token){ alert("Please log in to load constraints."); return; }
+  const name = $("#c-filter").value.trim();
+  const qs = new URLSearchParams();
+  if(name) qs.set("name", name);
+  const url = `${API_BASE}/apotheosis/constraints${qs.toString() ? `?${qs}` : ""}`;
+  const r = await fetch(url, { headers: { ...authHeaders() }});
+  const j = await r.json();
+  if(j.status==="success"){
+    ALL = (j.constraints || []);
+    refreshAvailable();
+  }else{
+    alert(j.message || "Failed to load constraints.");
+  }
+}
 
-    function selectedIds(){
-      const sel = $("#c-selected");
-      return [...sel.options].map(o=>o.value);
+function refreshAvailable(){
+  const av = $("#c-available");
+  const selectedIds = new Set($$("#c-selected option").map(o=>o.value));
+  const list = ALL.filter(c => (!FILTER || (c.name||"").toLowerCase().includes(FILTER)) && !selectedIds.has(c.id));
+  av.innerHTML = list.map(c => `<option value="${c.id}">[${c.id}] ${c.name}</option>`).join("");
+  $("#c-info").innerHTML = "Select a constraint to see details.";
+}
+
+function addSelected(){
+  const av = $("#c-available");
+  const sel = $("#c-selected");
+  Array.from(av.selectedOptions).forEach(opt=>{
+    const id = opt.value;
+    if ($$(`#c-selected option[value="${CSS.escape(id)}"]`).length) return;
+    const o = document.createElement("option");
+    o.value = id; o.textContent = opt.textContent;
+    sel.appendChild(o);
+  });
+  refreshAvailable();
+  recalc();
+}
+function removeSelected(){
+  const sel = $("#c-selected");
+  Array.from(sel.selectedOptions).forEach(opt=>opt.remove());
+  refreshAvailable();
+  recalc();
+}
+function selectedIds(){ return $$("#c-selected option").map(o=>o.value); }
+function selectedDocs(){ const ids = new Set(selectedIds()); return ALL.filter(c=>ids.has(c.id)); }
+
+function showInfoFrom(el){
+  const id = el.value;
+  const c = ALL.find(x=>x.id===id);
+  const w = $("#c-info");
+  if(!c){ w.textContent="—"; return; }
+  w.innerHTML = `
+    <div><strong>${c.name}</strong></div>
+    <div class="small muted">${c.description || "(No description)"}</div>
+    <div style="margin-top:6px;">
+      <span class="pill">Diff: ${c.difficulty}</span>
+      <span class="pill">Stab Δ: ${c.stability_delta||0}</span>
+      <span class="pill">Amp +: ${c.amplitude_bonus||0}</span>
+      ${c.forbid_p2s ? '<span class="pill" title="Power→Stability trade forbidden">forbid P→S</span>' : ''}
+    </div>`;
+}
+
+/* ---------- Live compute via backend ---------- */
+async function recalc(){
+  // reflect pill counts from inputs
+  $("#pill-p2s").textContent = Number($("#trade-p2s").value||0);
+  $("#pill-p2a").textContent = Number($("#trade-p2a").value||0);
+  $("#pill-s2a").textContent = Number($("#trade-s2a").value||0);
+
+  const payload = {
+    characteristic_value: Number($("#apo-char").value||0),
+    stage: $("#apo-stage").value,       // e.g. "Stage II"
+    type: $("#apo-type").value,         // e.g. "Personal"
+    constraints: selectedIds(),
+    trade_p2s: Number($("#trade-p2s").value||0),
+    trade_p2a: Number($("#trade-p2a").value||0),
+    trade_s2a: Number($("#trade-s2a").value||0)
+  };
+
+  try{
+    const r = await fetch(`${API_BASE}/apotheosis/compute`, {
+      method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if(j.status==="success"){
+      $("#diff-sum").textContent = j.total_difficulty;
+      $("#stab-pen-sum").textContent = selectedDocs().reduce((s,c)=>s + (c.stability_delta||0), 0);
+      $("#amp-bonus-sum").textContent = selectedDocs().reduce((s,c)=>s + (c.amplitude_bonus||0), 0);
+
+      $("#out-power").textContent = j.power;
+      $("#out-stab").textContent  = j.stability;
+      $("#out-amp").textContent   = j.amplitude;
+      $("#out-dia").textContent   = j.diameter;
+
+      const forbid = j.flags?.forbid_p2s;
+      $("#forbid-note").textContent = forbid ? "One or more selected constraints forbid Power→Stability." : "";
+      $("#trade-p2s").disabled = !!forbid;
+      if(forbid){ $("#trade-p2s").value = 0; $("#pill-p2s").textContent = 0; }
     }
-    function addSelectedConstraint(id, label){
-      const sel = $("#c-selected");
-      if ([...sel.options].some(o=>o.value===id)) return;
-      const o = document.createElement("option");
-      o.value = id;
-      o.textContent = label || `[${id}]`;
-      sel.appendChild(o);
-    }
-    function refreshAvailable(){
-      const avail = $("#c-available");
-      const taken = new Set(selectedIds());
-      avail.innerHTML = "";
-      ALL.forEach(c=>{
-        if (!taken.has(c.id)){
-          const o = document.createElement("option");
-          o.value = c.id;
-          o.textContent = `[${c.id}] ${c.name || ""}`;
-          avail.appendChild(o);
+  }catch(e){ /* ignore transient errors */ }
+}
+
+async function save(){
+  if(!token){ alert("Please log in to save."); return; }
+  const body = {
+    name: ($("#apo-name").value||"Untitled Apotheosis").trim(),
+    description: $("#apo-desc").value.trim(),
+    type: $("#apo-type").value,
+    stage: $("#apo-stage").value,
+    characteristic_value: Number($("#apo-char").value||0),
+    constraints: selectedIds(),
+    trade_p2s: Number($("#trade-p2s").value||0),
+    trade_p2a: Number($("#trade-p2a").value||0),
+    trade_s2a: Number($("#trade-s2a").value||0)
+  };
+  const r = await fetch(`${API_BASE}/apotheoses`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify(body)
+  });
+  const j = await r.json().catch(()=>({}));
+  if(r.ok && j.status==="success"){ alert("Saved."); location.href = "apotheosis_browse.html"; }
+  else alert(j.message || "Save failed.");
+}
+
+/* ---------- Boot & events ---------- */
+document.addEventListener("DOMContentLoaded", async ()=>{
+  await loadConstraints();
+  recalc();
+
+  $("#c-filter").addEventListener("input", ()=>{ FILTER = $("#c-filter").value.trim().toLowerCase(); refreshAvailable(); });
+  $("#c-clear").addEventListener("click", ()=>{ $("#c-filter").value=""; FILTER=""; refreshAvailable(); });
+
+  $("#c-available").addEventListener("change", e=>showInfoFrom(e.target));
+  $("#c-selected").addEventListener("change", e=>showInfoFrom(e.target));
+  $("#c-add").addEventListener("click", addSelected);
+  $("#c-remove").addEventListener("click", removeSelected);
+
+  ["apo-stage","apo-type","apo-char","trade-p2s","trade-p2a","trade-s2a"].forEach(id=>{
+    document.getElementById(id).addEventListener("input", recalc);
+  });
+
+  $("#save").addEventListener("click", save);
+});
+(function(){
+  const qs = new URLSearchParams(location.search);
+  const EDIT_ID = qs.get('edit');
+  const token = () => localStorage.getItem('auth_token') || '';
+  const authHeaders = () => token() ? { 'Authorization':'Bearer '+token(), 'Content-Type':'application/json' } : { 'Content-Type':'application/json' };
+
+  // helper: set value if the element exists
+  const setVal = (sel, val) => { const el = document.querySelector(sel); if (el) el.value = val ?? ''; };
+
+  async function loadForEdit(){
+    if (!window.ALL || !window.ALL.length) { await loadConstraints(); }
+    if (!EDIT_ID) return;
+    // Get the doc
+    const res = await fetch(`/apotheoses/${EDIT_ID}`, { headers: { 'Accept':'application/json', ...authHeaders() }});
+    const j = await res.json().catch(()=>({}));
+    if (j.status !== 'success' || !j.apotheosis) return;
+
+    const a = j.apotheosis;
+    // Update page chrome
+    const title = document.querySelector('h1, h2');
+    if (title) title.textContent = `Edit Apotheosis — ${a.name} [${a.id}]`;
+    const submit = document.querySelector('button[type=submit], #submit-apoth, .submit-apoth');
+    if (submit) submit.textContent = 'Save changes';
+
+    // Fill common fields (adjust selectors to your form IDs if different)
+    setVal('#apo-name', a.name);
+    setVal('#apo-desc', a.description || '');
+    setVal('#apo-stage', a.stage);
+    setVal('#apo-type', a.type || 'Personal');
+    setVal('#apo-char', a.characteristic_value ?? 0);
+    setVal('#trade-p2s', a.trades?.p2s ?? 0);
+    setVal('#trade-p2a', a.trades?.p2a ?? 0);
+    setVal('#trade-s2a', a.trades?.s2a ?? 0);
+
+    // constraints: if you use a textarea, dump as comma list
+    const byId = new Map((window.ALL || []).map(c => [c.id, c]));
+    const cSel = document.getElementById('c-selected');
+    if (cSel) {
+      (a.constraints || []).forEach(id => {
+        if (![...cSel.options].some(o => o.value === id)) {
+          const o = document.createElement('option');
+          const label = byId.get(id) ? `[${id}] ${byId.get(id).name || ''}` : `[${id}]`;
+          o.value = id; o.textContent = label;
+          cSel.appendChild(o);
         }
       });
-    }
-    async function loadConstraints(){
-      try{
-        const r = await fetch(`/apotheosis/constraints`, { headers: { ...authHeaders() }});
-        const j = await r.json().catch(()=>({}));
-        ALL = j.constraints || [];
-      }catch{ ALL = []; }
-      refreshAvailable();
+      if (typeof window.refreshAvailable === 'function') refreshAvailable();
     }
 
-    // ---- Save (POST create or PUT update) ----
-    async function save(){
-      if(!token){ alert("Please log in to save."); return; }
-      const body = {
-        name: ($("#apo-name").value||"Untitled Apotheosis").trim(),
-        description: $("#apo-desc").value.trim(),
-        type: $("#apo-type").value,
-        stage: $("#apo-stage").value,
-        characteristic_value: Number($("#apo-char").value||0),
-        constraints: selectedIds(),
-        trade_p2s: Number($("#trade-p2s").value||0),
-        trade_p2a: Number($("#trade-p2a").value||0),
-        trade_s2a: Number($("#trade-s2a").value||0)
-      };
-
-      const method = EDIT_ID ? "PUT" : "POST";
-      const url    = EDIT_ID ? `${API_BASE}/apotheoses/${EDIT_ID}` : `${API_BASE}/apotheoses`;
-
-      const r = await fetch(url, {
-        method,
-        headers:{ "Content-Type":"application/json", ...authHeaders() },
+    // Switch submit handler to PUT update
+    const form = document.querySelector('form');
+    (form || document).addEventListener('submit', async (e)=>{
+const saveBtn = document.getElementById('save');
+if (saveBtn) {
+  saveBtn.textContent = '💾 Save changes';
+  saveBtn.onclick = async (e) => {
+    e.preventDefault();
+    const body = {
+      name: ($("#apo-name").value || "Untitled Apotheosis").trim(),
+      description: $("#apo-desc").value.trim(),
+      stage: $("#apo-stage").value,
+      type: $("#apo-type").value,
+      characteristic_value: Number($("#apo-char").value || 0),
+      // ← récupère bien les contraintes depuis la liste "Selected"
+      constraints: (() => {
+        const sel = document.getElementById('c-selected');
+        return sel ? [...sel.options].map(o => o.value) : [];
+      })(),
+      trade_p2s: Number($("#trade-p2s").value || 0),
+      trade_p2a: Number($("#trade-p2a").value || 0),
+      trade_s2a: Number($("#trade-s2a").value || 0),
+    };
+    try {
+      const r  = await fetch(`/apotheoses/${EDIT_ID}`, {
+        method: 'PUT',
+        headers: authHeaders(),           // ← déjà défini en haut de l’IIFE
         body: JSON.stringify(body)
       });
-      const j = await r.json().catch(async()=>({status:'error', message: await r.text()}));
-      if(r.ok && j.status==="success"){
-        alert(EDIT_ID ? "Updated." : "Saved.");
-        location.href = "apotheosis_browse.html";
-      } else {
-        alert(j.message || (EDIT_ID ? "Update failed." : "Save failed."));
-      }
+      const jr = await r.json().catch(async()=>({status:'error', message: await r.text()}));
+      if (jr.status !== 'success') throw new Error(jr.message || 'Update failed');
+      alert('Apotheosis updated.');
+      location.href = 'apotheosis_browse.html';
+    } catch (err) {
+      alert(err.message || 'Update failed.');
     }
+  };
+}
+    }, { once:true });
+  }
 
-    // ---- Edit loader ----
-    async function loadForEdit(){
-      if (!EDIT_ID) return;
-      // Ensure constraints first (so the picker shows nicely)
-      if (!ALL.length) await loadConstraints();
-
-      const res = await fetch(`/apotheoses/${EDIT_ID}`, { headers: { 'Accept':'application/json', ...authHeaders() }});
-      const j = await res.json().catch(()=>({}));
-      if (j.status !== 'success' || !j.apotheosis) return;
-
-      const a = j.apotheosis;
-
-      // Update header & save button
-      const title = $('#page-title');
-      if (title) title.textContent = `Edit an Apotheosis — ${a.name} [${a.id}]`;
-      const saveBtn = $('#save');
-      if (saveBtn) saveBtn.textContent = '💾 Save changes';
-
-      // Fill fields
-      setVal('#apo-name', a.name);
-      setVal('#apo-desc', a.description || '');
-      setVal('#apo-stage', a.stage);
-      setVal('#apo-type', a.type || 'Personal');
-      setVal('#apo-char', a.characteristic_value ?? 0);
-
-      // Preselect constraints by id (use nice labels if we have them)
-      const byId = new Map(ALL.map(c=>[c.id, c]));
-      (a.constraints || []).forEach(id => {
-        const c = byId.get(id);
-        addSelectedConstraint(id, c ? `[${c.id}] ${c.name}` : `[${id}]`);
-      });
-      refreshAvailable();
-
-      // Trades
-      setVal('#trade-p2s', a.trades?.p2s ?? 0);
-      setVal('#trade-p2a', a.trades?.p2a ?? 0);
-      setVal('#trade-s2a', a.trades?.s2a ?? 0);
-    }
-
-    // ---- boot ----
-    document.addEventListener("DOMContentLoaded", async ()=>{
-      await loadConstraints();
-      await loadForEdit();
-
-      $("#save").addEventListener("click", save);
-
-      $("#add-constraints").addEventListener("click", ()=>{
-        const avail = $("#c-available");
-        [...avail.selectedOptions].forEach(o=>{
-          addSelectedConstraint(o.value, o.textContent);
-        });
-        refreshAvailable();
-      });
-      $("#remove-constraints").addEventListener("click", ()=>{
-        const sel = $("#c-selected");
-        [...sel.selectedOptions].forEach(o=>o.remove());
-        refreshAvailable();
-      });
-    });
-  </script>
+  document.addEventListener('DOMContentLoaded', loadForEdit);
+})();
+</script>
 </body>
 </html>
