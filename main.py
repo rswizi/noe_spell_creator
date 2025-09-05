@@ -36,11 +36,11 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
 
+# ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
 ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view"}
 
-# ---------- Pages ----------
 @app.get("/", include_in_schema=False)
 def root():
     return RedirectResponse("/portal.html")
@@ -87,7 +87,7 @@ async def auth_logout(request: Request):
     return {"status": "success"}
 
 
-# ---------- Reference Data ----------
+# ---------- School Data ----------
 @app.get("/schools")
 def list_schools():
     sch_col = get_col("schools")
@@ -1150,8 +1150,13 @@ async def update_apotheosis(aid: str, request: Request):
 
 @app.delete("/apotheoses/{aid}")
 def delete_apotheosis(aid: str, request: Request):
-    # Moderator (or admin) only
-    require_auth(request, roles=["moderator", "admin"])
+    try:
+        # Moderator (or admin) only
+        require_auth(request, roles=["moderator", "admin"])
+    except Exception as e:
+        # Never leak an HTML 500; always JSON
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=401)
+
     r = get_col("apotheoses").delete_one({"id": aid})
     if r.deleted_count == 0:
         return JSONResponse({"status": "error", "message": "Not found"}, status_code=404)
@@ -1159,7 +1164,11 @@ def delete_apotheosis(aid: str, request: Request):
 
 @app.post("/apotheoses/{aid}/duplicate")
 def duplicate_apotheosis(aid: str, request: Request):
-    username, _ = require_auth(request, roles=["user", "moderator", "admin"])
+    try:
+        username, _ = require_auth(request, roles=["user", "moderator", "admin"])
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=401)
+
     col = get_col("apotheoses")
     src = col.find_one({"id": aid}, {"_id": 0})
     if not src:

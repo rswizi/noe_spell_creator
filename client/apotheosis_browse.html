@@ -19,7 +19,7 @@
 <body>
   <div class="container">
     <h1>Apotheoses</h1>
-
+    <div id="loginInfo" class="small" style="opacity:.8;margin-top:-8px;margin-bottom:12px;"></div>
     <div class="home-card">
       <div class="filter-bar">
         <input id="f-name" type="text" placeholder="Filter by name…" />
@@ -249,6 +249,18 @@
       $("#modal").addEventListener("click", e=>{ if(e.target.id==="modal") closeModal(); });
       document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
     });
+
+    async function loadMe(){
+      try{
+        const r = await fetch(`/auth/me`, { headers: authHeaders() });
+        const j = await r.json();
+        ME = (j.status === "success") ? j : null;
+      }catch{ ME = null; }
+      // show who we are
+      document.getElementById("loginInfo").textContent =
+        ME ? `Logged in as ${ME.username} (${ME.role})` : "Not logged in";
+}
+
     </script>    
 </body>
 </html>
