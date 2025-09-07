@@ -9,7 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import DuplicateKeyError
-
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
 
 from server.src.modules.apotheosis_helpers import compute_apotheosis_stats, _can_edit_apotheosis
@@ -17,6 +19,7 @@ from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS
 from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect
 from wiki_router import router as wiki_router
+import os
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -36,8 +39,25 @@ app.add_middleware(
 
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
 app.include_router(wiki_router, prefix="/api")
+
+if os.path.isdir(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+# --- Portal Wiki pages ---
+@app.get("/portal/wiki", response_class=HTMLResponse)
+def portal_wiki_home(request: Request):
+    return templates.TemplateResponse("wiki.html", {"request": request})
+
+@app.get("/portal/wiki/{slug}", response_class=HTMLResponse)
+def portal_wiki_page(request: Request, slug: str):
+    # `slug` is used by wiki.js via window.__WIKI_SLUG (see template below)
+    return templates.TemplateResponse("wiki_page.html", {"request": request, "slug": slug})
 
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
