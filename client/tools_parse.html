@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tools — Parse (Moderator)</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    .scroll{max-height:420px;overflow:auto}
+    table.table td,table.table th{padding:8px;border-bottom:1px solid #2a2a2a}
+    input[type="number"]{width:92px}.muted{opacity:.8}.danger{color:#ff6b6b}
+    .row{display:flex;gap:8px;align-items:center}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Parse Tools</h1>
+
+  <div class="home-card">
+    <div class="row">
+      <div>
+        <label class="small muted">Method</label><br/>
+        <label><input type="radio" name="method" value="crafting" checked> Crafting</label>
+        <label style="margin-left:12px;"><input type="radio" name="method" value="alchemy"> Alchemy</label>
+      </div>
+    </div>
+
+    <p class="muted">Each tool uses 4 lines: <em>Name</em>, <em>Tier</em>, <em>Enc.</em>, <em>Description</em>.</p>
+    <textarea id="raw" rows="12" placeholder="Shuriken
+1
+0.2
+Make an attack roll to inflict 1d6 Neutral Damage on a target within a Range of 6.
+Triple Shuriken
+2
+0.5
+Make an attack roll to inflict 3d6 Neutral Damage to a target within a Range of 6.
+Giant Shuriken
+4
+1
+Make an attack roll to deal 4d6 Neutral Damage to a target within a Range of 6."></textarea>
+    <div style="margin-top:8px" class="row">
+      <button id="parse" class="btn">Parse</button>
+      <button id="clear" class="btn btn-secondary">Clear</button>
+      <span id="msg" class="muted"></span>
+    </div>
+  </div>
+
+  <div id="preview-card" class="home-card" style="display:none;">
+    <h3 style="margin:0 0 8px;">Preview &amp; Edit <span class="chip"><span id="count">0</span> row(s)</span></h3>
+    <div id="errors" class="danger" style="min-height:1.2em;"></div>
+    <div class="scroll">
+      <table class="table" style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Name</th>
+            <th>Tier</th>
+            <th>Enc.</th>
+            <th style="text-align:left;">Description</th>
+            <th>Price</th>
+            <th>DC</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button id="save" class="btn">Save to Database</button>
+      <button id="reparse" class="btn btn-secondary">Re-parse</button>
+    </div>
+  </div>
+
+  <a class="btn btn-secondary" href="tools_home.html" style="margin-top:12px;">← Back</a>
+</div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization":"Bearer "+token } : {};
+
+const TABLE = {
+  "1": { price:50,  dc:6,  time:"1 hour"  },
+  "2": { price:100, dc:8,  time:"1 hour"  },
+  "3": { price:200, dc:10, time:"1 hour"  },
+  "4": { price:1000,dc:12, time:"2 hours" },
+  "5": { price:2000,dc:14, time:"3 hours" },
+  "special": { price:10000, dc:16, time:"6 hours" },
+};
+
+let PREVIEW = [];
+
+function method(){ return (document.querySelector('input[name="method"]:checked')||{}).value || "crafting"; }
+
+function derive(tierStr){
+  const key = String(tierStr).trim().toLowerCase();
+  const row = TABLE[key] || TABLE[String(parseInt(key,10))] || null;
+  return row ? { price: row.price, dc: row.dc, time: row.time } : { price:0, dc:0, time:"" };
+}
+
+function parseRaw(txt){
+  const lines = txt.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if (lines.length % 4 !== 0) throw new Error(`Expected multiples of 4 lines, got ${lines.length}.`);
+  const out = [];
+  for (let i=0;i<lines.length;i+=4){
+    const name = lines[i];
+    const tier = lines[i+1];
+    const enc  = Number(lines[i+2]);
+    const desc = lines[i+3];
+    if (!name) throw new Error(`Row ${i/4+1}: empty name.`);
+    if (!tier) throw new Error(`Row ${i/4+1}: empty tier.`);
+    if (!Number.isFinite(enc)) throw new Error(`Row ${i/4+1}: enc must be a number.`);
+    const d = derive(tier);
+    out.push({ name, tier, enc: +enc, description: desc || "", ...d });
+  }
+  return out;
+}
+
+function renderPreview(list){
+  const tbody = document.getElementById("tbody");
+  const dcLabel = method()==="alchemy" ? "Alchemy DC" : "Crafting DC";
+  tbody.innerHTML = list.map((e,i)=>`
+    <tr>
+      <td><input value="${e.name.replace(/"/g,'&quot;')}" data-i="${i}" data-k="name" /></td>
+      <td><input value="${e.tier}" data-i="${i}" data-k="tier" /></td>
+      <td style="text-align:center;"><input type="number" value="${e.enc}" data-i="${i}" data-k="enc" step="0.1" /></td>
+      <td><input value="${(e.description||'').replace(/"/g,'&quot;')}" data-i="${i}" data-k="description" /></td>
+      <td style="text-align:center;">${e.price}</td>
+      <td style="text-align:center;" title="${dcLabel}">${e.dc}</td>
+      <td style="text-align:center;">${e.time}</td>
+    </tr>
+  `).join("");
+  document.getElementById("count").textContent = String(list.length);
+  document.getElementById("preview-card").style.display = "block";
+  document.getElementById("errors").textContent = "";
+}
+document.addEventListener("input",(ev)=>{
+  const t = ev.target; if (!t || t.dataset.i===undefined) return;
+  const i=+t.dataset.i, k=t.dataset.k, v=t.value;
+  PREVIEW[i][k] = (k==="enc") ? Number(v||0) : v;
+  if (k==="tier"){ Object.assign(PREVIEW[i], derive(v)); }
+  renderPreview(PREVIEW);
+});
+
+document.getElementById("parse").addEventListener("click", ()=>{
+  try{ PREVIEW = parseRaw(document.getElementById("raw").value); renderPreview(PREVIEW); }
+  catch(err){ document.getElementById("preview-card").style.display="block"; document.getElementById("tbody").innerHTML=""; document.getElementById("count").textContent="0"; document.getElementById("errors").textContent=err.message||String(err); }
+});
+document.getElementById("clear").addEventListener("click", ()=>{ document.getElementById("raw").value=""; document.getElementById("preview-card").style.display="none"; PREVIEW=[]; });
+document.getElementById("reparse").addEventListener("click", ()=>document.getElementById("parse").click());
+document.addEventListener("change", (e)=>{ if (e.target.name==="method" && PREVIEW.length) renderPreview(PREVIEW); });
+
+document.getElementById("save").addEventListener("click", async ()=>{
+  if (!PREVIEW.length) return;
+  try{
+    const res = await fetch(`/tools/bulk_create`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify({ method: method(), items: PREVIEW.map(({name,tier,enc,description})=>({name,tier,enc,description})) })
+    });
+    const j = await res.json().catch(()=>({}));
+    if (j.status!=="success") throw new Error(j.message||"Save failed.");
+    alert(`Created ${j.created.length} item(s). Skipped ${j.skipped.length} duplicate(s).`);
+    PREVIEW=[]; document.getElementById("preview-card").style.display="none"; document.getElementById("raw").value="";
+  }catch(err){ document.getElementById("errors").textContent = err.message||String(err); }
+});
+</script>
+</body>
+</html>

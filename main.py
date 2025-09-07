@@ -40,7 +40,9 @@ CLIENT_DIR = BASE_DIR / "client"
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit",}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit",     "tools_home",
+    "tools_parse",
+    "tools_edit",}
 
 @app.get("/", include_in_schema=False)
 def root():
@@ -1430,3 +1432,118 @@ def bulk_create_objects(request: Request, payload: dict = Body(...)):
         created.append({k:v for k,v in doc.items() if k != "_id"})
 
     return {"status":"success","created": created}
+
+# ---------- Tools (inventory) ----------
+from fastapi import Body
+
+_TIER_TABLE = {
+    "1": {"price": 50, "dc": 6, "time": "1 hour"},
+    "2": {"price": 100, "dc": 8, "time": "1 hour"},
+    "3": {"price": 200, "dc": 10, "time": "1 hour"},
+    "4": {"price": 1000, "dc": 12, "time": "2 hours"},
+    "5": {"price": 2000, "dc": 14, "time": "3 hours"},
+    "special": {"price": 10000, "dc": 16, "time": "6 hours"},
+}
+def _tier_key(tier: str | int) -> str:
+    s = str(tier).strip().lower()
+    if s in _TIER_TABLE: return s
+    try:
+        n = int(float(s))
+        return str(n) if str(n) in _TIER_TABLE else "special"
+    except Exception:
+        return "special"
+
+def _derive_for(method: str, tier: str | int) -> dict:
+    key = _tier_key(tier)
+    base = _TIER_TABLE[key]
+    # label differs, values same
+    return {
+        "price": base["price"],
+        "creation_time": base["time"],
+        ("alchemy_dc" if method == "alchemy" else "crafting_dc"): base["dc"],
+    }
+
+def _tool_from_body(b: dict) -> dict:
+    name = (b.get("name") or "").strip() or "Unnamed"
+    tier = b.get("tier", "1")
+    enc  = float(b.get("enc") or 0)
+    method = (b.get("method") or "crafting").strip().lower()
+    if method not in ("crafting","alchemy"): method = "crafting"
+    desc = (b.get("description") or "").strip()
+    out = {
+        "name": name,
+        "name_key": norm_key(name),
+        "tier": str(tier),
+        "enc": enc,
+        "method": method,
+        "description": desc,
+    }
+    out.update(_derive_for(method, tier))
+    return out
+
+@app.get("/tools")
+def list_tools(q: str | None = Query(None)):
+    col = get_col("tools")
+    filt = {}
+    if q: filt["name_key"] = {"$regex": norm_key(q)}
+    return {"status":"success","tools": list(col.find(filt, {"_id":0}))}
+
+@app.post("/tools")
+def create_tool(request: Request, body: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("tools")
+    doc = _tool_from_body(body)
+    # duplicate protection by name_key
+    if col.find_one({"name_key": doc["name_key"]}):
+        raise HTTPException(status_code=409, detail="Tool with same name already exists")
+    doc["id"] = next_id_str("tools", padding=4)
+    doc["created_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    col.insert_one(dict(doc))
+    return {"status":"success","tool": {k:v for k,v in doc.items() if k!="_id"}}
+
+@app.put("/tools/{tid}")
+def update_tool(tid: str, request: Request, body: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("tools")
+    old = col.find_one({"id": tid})
+    if not old: raise HTTPException(status_code=404, detail="Not found")
+    upd = _tool_from_body(body)
+    # if name changed, ensure no duplicate
+    if upd["name_key"] != old.get("name_key"):
+        if col.find_one({"name_key": upd["name_key"]}):
+            raise HTTPException(status_code=409, detail="Tool with same name already exists")
+    upd["updated_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    col.update_one({"id": tid}, {"$set": upd})
+    return {"status":"success","tool": col.find_one({"id": tid},{"_id":0})}
+
+@app.delete("/tools/{tid}")
+def delete_tool(tid: str, request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("tools")
+    r = col.delete_one({"id": tid})
+    if r.deleted_count == 0: raise HTTPException(status_code=404, detail="Not found")
+    return {"status":"success","deleted": tid}
+
+@app.post("/tools/bulk_create")
+def bulk_create_tools(request: Request, payload: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    method = (payload.get("method") or "crafting").strip().lower()
+    if method not in ("crafting","alchemy"): method = "crafting"
+    items = payload.get("items") or []
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="items must be a non-empty list")
+
+    col = get_col("tools")
+    created, skipped = [], []
+    for b in items:
+        b = dict(b)
+        b["method"] = method
+        doc = _tool_from_body(b)
+        if col.find_one({"name_key": doc["name_key"]}):
+            skipped.append(doc["name"])  # duplicate protection
+            continue
+        doc["id"] = next_id_str("tools", padding=4)
+        doc["created_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+        col.insert_one(dict(doc))
+        created.append({k:v for k,v in doc.items() if k!="_id"})
+    return {"status":"success","created": created, "skipped": skipped}

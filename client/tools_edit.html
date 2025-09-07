@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tools — Edit</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .row{display:flex;gap:8px;align-items:center}
+    .grid{display:grid;gap:8px;grid-template-columns:1fr 90px 90px 110px 90px auto;align-items:center}
+    .muted{opacity:.8}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Edit Tools</h1>
+
+  <div class="home-card">
+    <div class="row">
+      <input id="q" type="text" placeholder="Filter by name..." />
+      <button id="refresh" class="btn small">Refresh</button>
+      <span id="info" class="muted" style="margin-left:auto;"></span>
+    </div>
+  </div>
+
+  <div class="home-card" id="list">Loading…</div>
+
+  <a class="btn btn-secondary" href="tools_home.html" style="margin-top:12px;">← Back</a>
+</div>
+
+<!-- modal -->
+<div id="modal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card" style="min-width:520px;">
+    <button id="close" class="modal-close" aria-label="Close">&times;</button>
+    <h3 id="m-title">Edit Tool</h3>
+    <div class="row" style="gap:12px;flex-wrap:wrap;">
+      <label>Name <input id="m-name" style="min-width:260px"/></label>
+      <label>Tier <input id="m-tier" style="width:90px"/></label>
+      <label>Enc. <input id="m-enc" type="number" step="0.1" style="width:90px"/></label>
+      <label>Method
+        <select id="m-method">
+          <option value="crafting">Crafting</option>
+          <option value="alchemy">Alchemy</option>
+        </select>
+      </label>
+    </div>
+    <div class="row" style="margin-top:6px;">
+      <label style="flex:1">Description<br/><textarea id="m-desc" rows="4" style="width:100%"></textarea></label>
+    </div>
+    <div class="row muted" style="margin-top:8px;gap:12px;">
+      <span class="pill">Price <span id="m-price">—</span></span>
+      <span class="pill"><span id="m-dc-label">Crafting DC</span> <span id="m-dc">—</span></span>
+      <span class="pill">Time <span id="m-time">—</span></span>
+    </div>
+    <div class="row" style="margin-top:10px;justify-content:flex-end;">
+      <button id="save" class="btn">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization":"Bearer "+token } : {};
+let CACHE=[], EDIT_ID=null;
+
+function row(t){
+  return `
+    <div class="grid" style="border-bottom:1px solid #222;padding:6px 0;">
+      <div><strong>${t.name}</strong> <span class="muted">[${t.id}]</span><div class="muted small">${t.description||""}</div></div>
+      <div style="text-align:center;">${t.tier}</div>
+      <div style="text-align:center;">${t.enc}</div>
+      <div style="text-align:center;">${t.method||"crafting"}</div>
+      <div style="text-align:center;">${t.price}</div>
+      <div style="display:flex;gap:6px;justify-content:flex-end;">
+        <button class="btn" onclick="openEdit('${t.id}')">Edit</button>
+        <button class="btn btn-danger" onclick="delOne('${t.id}')">Delete</button>
+      </div>
+    </div>`;
+}
+
+function render(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  let list = CACHE.slice();
+  if (q) list = list.filter(o => (o.name||"").toLowerCase().includes(q));
+  document.getElementById("list").innerHTML = list.length ? list.map(row).join("") : "<p>No results.</p>";
+  document.getElementById("info").textContent = `${list.length}/${CACHE.length}`;
+}
+async function load(){
+  const r = await fetch(`${API_BASE}/tools`);
+  const j = await r.json().catch(()=>({}));
+  CACHE = j.tools || [];
+  render();
+}
+
+/* modal */
+const TABLE = {
+  "1":{price:50,dc:6,time:"1 hour"},
+  "2":{price:100,dc:8,time:"1 hour"},
+  "3":{price:200,dc:10,time:"1 hour"},
+  "4":{price:1000,dc:12,time:"2 hours"},
+  "5":{price:2000,dc:14,time:"3 hours"},
+  "special":{price:10000,dc:16,time:"6 hours"},
+};
+function derive(tier){ const k=String(tier).trim().toLowerCase(); return TABLE[k]||TABLE[String(parseInt(k,10))]||{price:0,dc:0,time:""}; }
+
+function syncDerived(){
+  const d = derive(document.getElementById("m-tier").value);
+  document.getElementById("m-price").textContent = d.price;
+  document.getElementById("m-dc").textContent = d.dc;
+  document.getElementById("m-time").textContent = d.time;
+  document.getElementById("m-dc-label").textContent =
+    (document.getElementById("m-method").value==="alchemy") ? "Alchemy DC" : "Crafting DC";
+}
+
+function openEdit(id){
+  const t = CACHE.find(x=>x.id===id); if(!t) return;
+  EDIT_ID=id;
+  document.getElementById("m-name").value = t.name||"";
+  document.getElementById("m-tier").value = t.tier||"";
+  document.getElementById("m-enc").value  = t.enc ?? 0;
+  document.getElementById("m-method").value = t.method || "crafting";
+  document.getElementById("m-desc").value = t.description||"";
+  document.getElementById("m-title").textContent = `Edit Tool — ${t.name} [${t.id}]`;
+  syncDerived();
+  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("modal").setAttribute("aria-hidden","false");
+}
+function closeEdit(){
+  document.getElementById("modal").classList.add("hidden");
+  document.getElementById("modal").setAttribute("aria-hidden","true");
+  EDIT_ID=null;
+}
+document.getElementById("close").addEventListener("click", closeEdit);
+["m-tier","m-method"].forEach(id=>document.getElementById(id).addEventListener("input", syncDerived));
+
+document.getElementById("save").addEventListener("click", async ()=>{
+  if(!EDIT_ID) return;
+  const body={
+    name: document.getElementById("m-name").value.trim() || "Unnamed",
+    tier: document.getElementById("m-tier").value,
+    enc:  Number(document.getElementById("m-enc").value||0),
+    method: document.getElementById("m-method").value,
+    description: document.getElementById("m-desc").value.trim(),
+  };
+  const r=await fetch(`/tools/${EDIT_ID}`,{method:"PUT",headers:{ "Content-Type":"application/json", ...authHeaders() },body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));
+  if(j.status!=="success"){ alert(j.message||"Update failed."); return; }
+  await load(); closeEdit();
+});
+
+async function delOne(id){
+  if(!confirm(`Delete tool ${id}?`)) return;
+  const r=await fetch(`/tools/${id}`,{method:"DELETE",headers:{...authHeaders()}});
+  const j=await r.json().catch(()=>({}));
+  if(j.status!=="success"){ alert(j.message||"Delete failed."); return; }
+  CACHE=CACHE.filter(o=>o.id!==id); render();
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{ load(); document.getElementById("refresh").addEventListener("click", load); document.getElementById("q").addEventListener("input", render); });
+</script>
+</body>
+</html>
