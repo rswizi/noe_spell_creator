@@ -1201,8 +1201,27 @@
       document.getElementById("addspells-backdrop").addEventListener("click", closeAdd);
       document.getElementById("as-search").addEventListener("click", (e)=>{ e.preventDefault(); runSearch(); });
       document.getElementById("as-check-all").addEventListener("change", (e)=>{ document.querySelectorAll(".as-chk").forEach(c => c.checked = e.target.checked); });
+      document.getElementById("as-add-selected").addEventListener("click", async (e)=>{
+        e.preventDefault();
+        const status = document.getElementById("as-status");
+        const ids = [...document.querySelectorAll(".as-chk:checked")].map(c => c.value);
+        if (!ids.length){ status.textContent = "Select at least one spell."; return; }
 
-      // variants
+        status.textContent = "Adding…";
+        try{
+          const res = await addSpells(ids);
+          if (res.status === "success"){
+            status.textContent = `Added ${res.added?.length ?? ids.length} spell(s).`;
+            await loadMySpells();
+            closeAdd();
+          }else{
+            status.textContent = res.message || "Failed to add.";
+          }
+        }catch(err){
+          status.textContent = err.message || "Failed to add.";
+        }
+      });
+            // variants
       document.getElementById("var-close").addEventListener("click", (e)=>{ e.preventDefault(); closeVariant(); });
       document.getElementById("var-cancel").addEventListener("click", (e)=>{ e.preventDefault(); closeVariant(); });
       document.getElementById("var-backdrop").addEventListener("click", closeVariant);
