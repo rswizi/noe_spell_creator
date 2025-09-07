@@ -16,7 +16,6 @@ from server.src.modules.apotheosis_helpers import compute_apotheosis_stats, _can
 from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS, find_user, require_auth, make_token, verify_password, get_auth_token, normalize_email,_sha256
 from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect
-from wiki_router import router as wiki_router
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -37,12 +36,10 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
 
-app.include_router(wiki_router, prefix="/api")
-
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view","wiki"}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view"}
 
 @app.get("/", include_in_schema=False)
 def root():
