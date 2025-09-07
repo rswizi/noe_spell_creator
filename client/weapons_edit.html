@@ -159,7 +159,11 @@ document.addEventListener("keydown", (e) => {
     closeEdit();
   }
 });
-["m-tier","m-method"].forEach(id=>document.getElementById(id).addEventListener("input", syncDerived));;
+const r = await fetch(`/weapons/${EDIT_ID}`, {
+   method: "PUT",
+   headers: { "Content-Type": "application/json", ...authHeaders() },
+   body: JSON.stringify(body)
+});
 
 document.getElementById("save").addEventListener("click", async ()=>{
   if(!EDIT_ID) return;

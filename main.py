@@ -40,7 +40,7 @@ CLIENT_DIR = BASE_DIR / "client"
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit", "tools_home", "tools_parse", "tools_edit", "weapons_home", "weapon_parse", "weapons_edit"}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit", "tools_home", "tools_parse", "tools_edit", "weapons_home", "weapons_parse", "weapons_edit"}
 
 @app.get("/", include_in_schema=False)
 def root():
