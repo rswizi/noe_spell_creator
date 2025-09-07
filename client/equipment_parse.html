@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Equipment — Parse (Moderator)</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .scroll{max-height:420px;overflow:auto}
+    table.table{width:100%;border-collapse:collapse}
+    table.table td,table.table th{padding:8px;border-bottom:1px solid #2a2a2a}
+    .muted{opacity:.8}.danger{color:#ff6b6b}
+    .card-title{margin:0 0 8px}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Parse Equipment</h1>
+
+  <!-- SPECIAL EQUIPMENT -->
+  <div class="home-card">
+    <h3 class="card-title">Special Equipment</h3>
+    <p class="muted">Format: <em>Name</em>, one or more lines of <em>Description</em>, then headings and values for: Damage / Range / Hands / Effects / Price (Jelly) / Enc.  
+    Supports both “heading→value→heading→value” and “all headings then all values”.</p>
+    <textarea id="raw-special" rows="10" placeholder="The Heavy Shield
+...description lines...
+Damage
+0
+Range
+0
+Hands
+1
+Effects
+Defense, Protection, Ferm
+Price (Jelly)
+1530
+Enc.
+10"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button id="parse-special" class="btn">Parse</button>
+      <button id="clear-special" class="btn btn-secondary">Clear</button>
+      <span id="msg-special" class="muted"></span>
+    </div>
+
+    <div id="prev-special" class="home-card" style="display:none;margin-top:10px;">
+      <h4 class="card-title">Preview (Special)</h4>
+      <div id="err-special" class="danger" style="min-height:1.2em;"></div>
+      <div class="scroll">
+        <table class="table">
+          <thead><tr>
+            <th>Name</th><th>Damage</th><th>Range</th><th>Hands</th><th>Effects</th><th>Price</th><th>Enc.</th>
+          </tr></thead>
+          <tbody id="tbody-special"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="save-special" class="btn">Save Special</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLOT EQUIPMENT -->
+  <div class="home-card">
+    <h3 class="card-title">Slot Equipment (Head / Arm / Leg / Accessory)</h3>
+    <p class="muted">For each section paste blocks like:  
+      <strong>Head Equipment</strong> then columns <em>Style / Price (Jelly) / Enc. / Description</em> followed by repeated 4-line rows for each Style.  
+      Repeat for Arm/Leg/Accessory sections.</p>
+    <textarea id="raw-slot" rows="16" placeholder="Head Equipment
+Style
+Price (Jelly)
+Enc.
+Description
+Metalic
+2528
+2
++1 for a WIS skill...
+Fairy
+2528
+2
++1 for a PRE skill ...
+... (Arm Equipment), (Leg Equipment), (Accessory Equipment) ..."></textarea>
+    <div class="row" style="margin-top:8px">
+      <button id="parse-slot" class="btn">Parse</button>
+      <button id="clear-slot" class="btn btn-secondary">Clear</button>
+      <span id="msg-slot" class="muted"></span>
+    </div>
+
+    <div id="prev-slot" class="home-card" style="display:none;margin-top:10px;">
+      <h4 class="card-title">Preview (Slot Equipment)</h4>
+      <div id="err-slot" class="danger" style="min-height:1.2em;"></div>
+      <div class="scroll">
+        <table class="table">
+          <thead><tr>
+            <th>Slot</th><th>Style</th><th>Price</th><th>Enc.</th><th>Description</th>
+          </tr></thead>
+          <tbody id="tbody-slot"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="save-slot" class="btn">Save Slot Equipment</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARMOR -->
+  <div class="home-card">
+    <h3 class="card-title">Chest Equipment (Armor)</h3>
+    <p class="muted">Paste the table with columns <em>Type / Enc. / Receptacle / HP Bonus / Effect / MO Penalty</em>.  
+    (Base price at Adequate quality is 2528 for all armors.)</p>
+    <textarea id="raw-armor" rows="14" placeholder="Type
+Enc.
+Receptacle
+HP Bonus
+Effect
+MO Penalty
+Outfit
+2
+A necklace, a belt buckle
+12
+Hidable, Modifier (2)
+0
+Protection
+5
+Integral protections...
+36
+Hidable, Modifier (1)
+0
+..."></textarea>
+    <div class="row" style="margin-top:8px">
+      <button id="parse-armor" class="btn">Parse</button>
+      <button id="clear-armor" class="btn btn-secondary">Clear</button>
+      <span id="msg-armor" class="muted"></span>
+    </div>
+
+    <div id="prev-armor" class="home-card" style="display:none;margin-top:10px;">
+      <h4 class="card-title">Preview (Armor)</h4>
+      <div id="err-armor" class="danger" style="min-height:1.2em;"></div>
+      <div class="scroll">
+        <table class="table">
+          <thead><tr>
+            <th>Type</th><th>Enc.</th><th>Receptacle</th><th>HP Bonus</th><th>Effect</th><th>MO Penalty</th><th>Price</th>
+          </tr></thead>
+          <tbody id="tbody-armor"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="save-armor" class="btn">Save Armor</button>
+      </div>
+    </div>
+  </div>
+
+  <a class="btn btn-secondary" href="equipment_home.html" style="margin-top:12px;">← Back</a>
+</div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+
+const q = s => document.querySelector(s);
+
+/* ---------- helpers ---------- */
+const safeNum = (v) => { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+const esc = (s="") => s.replace(/"/g,'&quot;');
+
+function parseHeadValBlocks(lines, startIdx, labels){
+  // supports “all headings then all values” OR “heading/value pairs”
+  let i = startIdx;
+  const norm = s => (s||"").trim().toLowerCase();
+  const LABELS = labels.map(x=>x.toLowerCase());
+
+  const nextIsHeadingsBlock = () => {
+    if (i + LABELS.length > lines.length) return false;
+    for (let k=0;k<LABELS.length;k++) if (norm(lines[i+k]) !== LABELS[k]) return false;
+    return true;
+  };
+
+  const need = (label) => {
+    if (i>=lines.length || norm(lines[i]) !== label) throw new Error(`Expected heading "${label}" near line ${i+1}, found "${(lines[i]||'').trim()}"`);
+    i++;
+    if (i>=lines.length) throw new Error(`Missing value for "${label}"`);
+    const v = (lines[i]||"").trim(); i++;
+    return v;
+  };
+
+  let values = {};
+  if (nextIsHeadingsBlock()){
+    i += LABELS.length;
+    for (const L of LABELS){
+      if (i>=lines.length) throw new Error(`Missing value for "${L}"`);
+      values[L] = (lines[i++]||"").trim();
+    }
+  } else {
+    for (const L of LABELS){
+      values[L] = need(L);
+    }
+  }
+  return { values, next: i };
+}
+
+/* ---------- SPECIAL ---------- */
+let PREV_SPECIAL = [];
+document.getElementById("parse-special").addEventListener("click", ()=>{
+  try{
+    const lines = q("#raw-special").value.split(/\r?\n/);
+    let i = 0, out = [];
+    const norm = s => (s||"").trim();
+    while (i < lines.length){
+      while (i<lines.length && !norm(lines[i])) i++;
+      if (i>=lines.length) break;
+      const name = norm(lines[i++]);
+      const desc = [];
+      while (i<lines.length && norm(lines[i]).toLowerCase()!=="damage"){
+        const s = norm(lines[i++]); if (s) desc.push(s);
+      }
+      const { values, next } = parseHeadValBlocks(lines, i, ["Damage","Range","Hands","Effects","Price (Jelly)","Enc."]);
+      i = next;
+      const price = safeNum(values["price (jelly)"]);
+      const enc   = safeNum(values["enc."]);
+      const hands = safeNum(values["hands"]);
+      const effects = String(values["effects"]||"").split(",").map(s=>s.trim()).filter(Boolean);
+      out.push({ name, description: desc.join(" "), damage: values["damage"]||"", range: String(values["range"]||""), hands, effects, price, enc });
+    }
+    PREV_SPECIAL = out;
+    q("#tbody-special").innerHTML = out.map((e,idx)=>`
+      <tr>
+        <td><input value="${esc(e.name)}" data-i="${idx}" data-k="name"/></td>
+        <td><input value="${esc(e.damage)}" data-i="${idx}" data-k="damage"/></td>
+        <td><input value="${esc(e.range)}" data-i="${idx}" data-k="range"/></td>
+        <td style="text-align:center"><input type="number" value="${e.hands}" data-i="${idx}" data-k="hands"/></td>
+        <td><input value="${esc(e.effects.join(', '))}" data-i="${idx}" data-k="effects"/></td>
+        <td style="text-align:center"><input type="number" value="${e.price}" data-i="${idx}" data-k="price"/></td>
+        <td style="text-align:center"><input type="number" step="0.1" value="${e.enc}" data-i="${idx}" data-k="enc"/></td>
+      </tr>`).join("");
+    q("#prev-special").style.display = "block";
+    q("#err-special").textContent = "";
+  }catch(err){ q("#prev-special").style.display = "block"; q("#tbody-special").innerHTML=""; q("#err-special").textContent = err.message||String(err); }
+});
+document.getElementById("clear-special").addEventListener("click", ()=>{ q("#raw-special").value=""; q("#prev-special").style.display="none"; PREV_SPECIAL=[]; });
+document.getElementById("tbody-special").addEventListener("input",(ev)=>{
+  const t=ev.target; const i=+t.dataset.i; const k=t.dataset.k;
+  if (k==="hands"||k==="price"||k==="enc") PREV_SPECIAL[i][k]=safeNum(t.value);
+  else if (k==="effects") PREV_SPECIAL[i][k]=t.value.split(",").map(s=>s.trim()).filter(Boolean);
+  else PREV_SPECIAL[i][k]=t.value;
+});
+document.getElementById("save-special").addEventListener("click", async ()=>{
+  if (!PREV_SPECIAL.length) return;
+  const items = PREV_SPECIAL.map(x=>({ category:"special", name:x.name, description:x.description, damage:x.damage, range:String(x.range), hands:+x.hands, effects:x.effects, price:+x.price, enc:+x.enc }));
+  const r = await fetch(`/equipment/bulk_create`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify({ kind:"special", items }) });
+  const j = await r.json().catch(()=>({})); if (j.status!=="success") return alert(j.message||"Save failed");
+  alert(`Created ${j.created.length} and skipped ${j.skipped.length}.`);
+});
+
+/* ---------- SLOT ---------- */
+let PREV_SLOT = [];
+document.getElementById("parse-slot").addEventListener("click", ()=>{
+  try{
+    const lines = q("#raw-slot").value.split(/\r?\n/);
+    let i=0, out=[], curSlot=null;
+    const norm = s => (s||"").trim();
+    const SLOT_RE=/^(Head|Arm|Leg|Accessory)\s+Equipment$/i;
+
+    while (i<lines.length){
+      while (i<lines.length && !norm(lines[i])) i++;
+      if (i>=lines.length) break;
+      const head = norm(lines[i++]);
+      const m = head.match(SLOT_RE);
+      if (!m) throw new Error(`Expected "<Slot> Equipment" near line ${i}, found "${head}"`);
+      curSlot = m[1].toLowerCase();
+
+      // expect 4 column labels
+      const labels = ["Style","Price (Jelly)","Enc.","Description"];
+      for (const L of labels){
+        if (norm(lines[i]||"").toLowerCase()!==L.toLowerCase()) throw new Error(`Expected heading "${L}" near line ${i+1}`);
+        i++;
+      }
+      // rows of 4 until next section or EOF
+      while (i<lines.length){
+        if (SLOT_RE.test(norm(lines[i]||""))) break;
+        if (!norm(lines[i])) { i++; continue; }
+        const style = norm(lines[i++]);
+        if (!style) break;
+        const price = safeNum(lines[i++]);
+        const enc   = safeNum(lines[i++]);
+        const desc  = (lines[i++]||"").trim();
+        out.push({ slot:curSlot, style, price, enc, description:desc });
+      }
+    }
+    PREV_SLOT = out;
+    q("#tbody-slot").innerHTML = out.map((e,idx)=>`
+      <tr>
+        <td>${e.slot}</td>
+        <td><input value="${esc(e.style)}" data-i="${idx}" data-k="style"/></td>
+        <td style="text-align:center;"><input type="number" value="${e.price}" data-i="${idx}" data-k="price"/></td>
+        <td style="text-align:center;"><input type="number" step="0.1" value="${e.enc}" data-i="${idx}" data-k="enc"/></td>
+        <td><input value="${esc(e.description)}" data-i="${idx}" data-k="description"/></td>
+      </tr>`).join("");
+    q("#prev-slot").style.display="block"; q("#err-slot").textContent="";
+  }catch(err){ q("#prev-slot").style.display="block"; q("#tbody-slot").innerHTML=""; q("#err-slot").textContent=err.message||String(err); }
+});
+document.getElementById("clear-slot").addEventListener("click", ()=>{ q("#raw-slot").value=""; q("#prev-slot").style.display="none"; PREV_SLOT=[]; });
+document.getElementById("tbody-slot").addEventListener("input",(ev)=>{
+  const t=ev.target; const i=+t.dataset.i; const k=t.dataset.k;
+  if (k==="price"||k==="enc") PREV_SLOT[i][k]=safeNum(t.value); else PREV_SLOT[i][k]=t.value;
+});
+document.getElementById("save-slot").addEventListener("click", async ()=>{
+  if (!PREV_SLOT.length) return;
+  const items = PREV_SLOT.map(x=>({ category:"slot", slot:x.slot, style:x.style, price:+x.price, enc:+x.enc, description:x.description }));
+  const r = await fetch(`/equipment/bulk_create`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify({ kind:"slot", items }) });
+  const j = await r.json().catch(()=>({})); if (j.status!=="success") return alert(j.message||"Save failed");
+  alert(`Created ${j.created.length} and skipped ${j.skipped.length}.`);
+});
+
+/* ---------- ARMOR ---------- */
+let PREV_ARMOR = [];
+document.getElementById("parse-armor").addEventListener("click", ()=>{
+  try{
+    const lines = q("#raw-armor").value.split(/\r?\n/);
+    let i=0, out=[];
+    const norm = s => (s||"").trim();
+
+    const labels = ["Type","Enc.","Receptacle","HP Bonus","Effect","MO Penalty"];
+    for (const L of labels){
+      while (i<lines.length && !norm(lines[i])) i++;
+      if (norm(lines[i]||"").toLowerCase()!==L.toLowerCase()) throw new Error(`Expected heading "${L}" near line ${i+1}`);
+      i++;
+    }
+    while (i<lines.length){
+      while (i<lines.length && !norm(lines[i])) i++;
+      if (i>=lines.length) break;
+      const type = norm(lines[i++]);
+      const enc  = safeNum(lines[i++]);
+      const rec  = (lines[i++]||"").trim();
+      const hp   = safeNum(lines[i++]);
+      const eff  = (lines[i++]||"").trim();
+      const mo   = safeNum(lines[i++]);
+      out.push({ type, enc, receptacle:rec, hp_bonus:hp, effect:eq(eff), mo_penalty:mo, price:2528 });
+    }
+    function eq(s){ return s; } // keep as string; edit later if needed
+    PREV_ARMOR = out;
+    q("#tbody-armor").innerHTML = out.map((e,idx)=>`
+      <tr>
+        <td><input value="${esc(e.type)}" data-i="${idx}" data-k="type"/></td>
+        <td style="text-align:center;"><input type="number" step="0.1" value="${e.enc}" data-i="${idx}" data-k="enc"/></td>
+        <td><input value="${esc(e.receptacle)}" data-i="${idx}" data-k="receptacle"/></td>
+        <td style="text-align:center;"><input type="number" value="${e.hp_bonus}" data-i="${idx}" data-k="hp_bonus"/></td>
+        <td><input value="${esc(e.effect)}" data-i="${idx}" data-k="effect"/></td>
+        <td style="text-align:center;"><input type="number" value="${e.mo_penalty}" data-i="${idx}" data-k="mo_penalty"/></td>
+        <td style="text-align:center;">2528</td>
+      </tr>`).join("");
+    q("#prev-armor").style.display="block"; q("#err-armor").textContent="";
+  }catch(err){ q("#prev-armor").style.display="block"; q("#tbody-armor").innerHTML=""; q("#err-armor").textContent=err.message||String(err); }
+});
+document.getElementById("clear-armor").addEventListener("click", ()=>{ q("#raw-armor").value=""; q("#prev-armor").style.display="none"; PREV_ARMOR=[]; });
+document.getElementById("tbody-armor").addEventListener("input",(ev)=>{
+  const t=ev.target; const i=+t.dataset.i; const k=t.dataset.k;
+  if (["enc","hp_bonus","mo_penalty"].includes(k)) PREV_ARMOR[i][k]=safeNum(t.value); else PREV_ARMOR[i][k]=t.value;
+});
+document.getElementById("save-armor").addEventListener("click", async ()=>{
+  if (!PREV_ARMOR.length) return;
+  const items = PREV_ARMOR.map(x=>({ category:"armor", type:x.type, enc:+x.enc, receptacle:x.receptacle, hp_bonus:+x.hp_bonus, effect:x.effect, mo_penalty:+x.mo_penalty, price:2528 }));
+  const r = await fetch(`/equipment/bulk_create`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify({ kind:"armor", items }) });
+  const j = await r.json().catch(()=>({})); if (j.status!=="success") return alert(j.message||"Save failed");
+  alert(`Created ${j.created.length} and skipped ${j.skipped.length}.`);
+});
+</script>
+</body>
+</html>

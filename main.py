@@ -40,7 +40,7 @@ CLIENT_DIR = BASE_DIR / "client"
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit", "tools_home", "tools_parse", "tools_edit", "weapons_home", "weapons_parse", "weapons_edit"}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit", "tools_home", "tools_parse", "tools_edit", "weapons_home", "weapons_parse", "weapons_edit","equipment_home","equipment_parse","equipement_edit",}
 
 @app.get("/", include_in_schema=False)
 def root():
@@ -1691,5 +1691,131 @@ def bulk_create_weapons(request: Request, payload: dict = Body(...)):
             anim["created_at"] = now
             col.insert_one(dict(anim))
             created.append({k:v for k,v in anim.items() if k!="_id"})
+
+    return {"status":"success","created": created, "skipped": skipped}
+
+# ---------- Equipment ----------
+from fastapi import Body
+
+def _eq_norm_name(name: str, fallback: str = "Unnamed") -> tuple[str, str]:
+    nm = (name or "").strip() or fallback
+    return nm, norm_key(nm)
+
+def _equipment_from_body(b: dict) -> dict:
+    cat = (b.get("category") or "").strip().lower()
+    if cat not in ("special","slot","armor"):
+        raise HTTPException(status_code=400, detail="category must be special | slot | armor")
+
+    if cat == "special":
+        name, key = _eq_norm_name(b.get("name"))
+        eff = b.get("effects")
+        if isinstance(eff, str): effects = [s for s in (x.strip() for x in eff.split(",")) if s]
+        else: effects = [str(x).strip() for x in (eff or []) if str(x).strip()]
+        doc = {
+            "category":"special",
+            "name": name, "name_key": key,
+            "description": (b.get("description") or "").strip(),
+            "damage": (b.get("damage") or "").strip(),
+            "range": str(b.get("range") or "").strip(),
+            "hands": int(b.get("hands") or 1),
+            "effects": effects,
+            "price": int(b.get("price") or 0),
+            "enc": float(b.get("enc") or 0),
+        }
+        return doc
+
+    if cat == "slot":
+        slot = (b.get("slot") or "head").strip().lower()
+        style = (b.get("style") or "").strip() or "Unnamed"
+        name = f"{slot}:{style}"
+        doc = {
+            "category":"slot",
+            "slot": slot,
+            "style": style,
+            "name": name, "name_key": norm_key(name),
+            "description": (b.get("description") or "").strip(),
+            "price": int(b.get("price") or 0),
+            "enc": float(b.get("enc") or 0),
+        }
+        return doc
+
+    # armor
+    tname, key = _eq_norm_name(b.get("type"), "Armor")
+    doc = {
+        "category":"armor",
+        "type": tname,
+        "name": f"armor:{tname}", "name_key": norm_key(f"armor:{tname}"),
+        "enc": float(b.get("enc") or 0),
+        "receptacle": (b.get("receptacle") or "").strip(),
+        "hp_bonus": int(b.get("hp_bonus") or 0),
+        "effect": (b.get("effect") or "").strip(),
+        "mo_penalty": int(b.get("mo_penalty") or 0),
+        "price": int(b.get("price") or 2528),
+    }
+    return doc
+
+@app.get("/equipment")
+def list_equipment(q: str | None = Query(None), category: str | None = Query(None)):
+    col = get_col("equipment")
+    filt = {}
+    if q: filt["name_key"] = {"$regex": norm_key(q)}
+    if category: filt["category"] = category
+    return {"status":"success","equipment": list(col.find(filt, {"_id":0}))}
+
+@app.post("/equipment")
+def create_equipment(request: Request, body: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("equipment")
+    doc = _equipment_from_body(body)
+    if col.find_one({"category": doc["category"], "name_key": doc["name_key"]}):
+        raise HTTPException(status_code=409, detail="Duplicate equipment")
+    doc["id"] = next_id_str("equipment", padding=4)
+    doc["created_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    col.insert_one(dict(doc))
+    return {"status":"success","equipment": {k:v for k,v in doc.items() if k!="_id"}}
+
+@app.put("/equipment/{eid}")
+def update_equipment(eid: str, request: Request, body: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("equipment")
+    old = col.find_one({"id": eid})
+    if not old: raise HTTPException(status_code=404, detail="Not found")
+    upd = _equipment_from_body(body)
+    if upd["name_key"] != old.get("name_key") or upd["category"] != old.get("category"):
+        if col.find_one({"category": upd["category"], "name_key": upd["name_key"]}):
+            raise HTTPException(status_code=409, detail="Duplicate equipment")
+    upd["updated_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    col.update_one({"id": eid}, {"$set": upd})
+    return {"status":"success","equipment": col.find_one({"id": eid}, {"_id":0})}
+
+@app.delete("/equipment/{eid}")
+def delete_equipment(eid: str, request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("equipment")
+    r = col.delete_one({"id": eid})
+    if r.deleted_count == 0: raise HTTPException(status_code=404, detail="Not found")
+    return {"status":"success","deleted": eid}
+
+@app.post("/equipment/bulk_create")
+def bulk_create_equipment(request: Request, payload: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    kind = (payload.get("kind") or "").strip().lower()
+    items = payload.get("items") or []
+    if kind not in ("special","slot","armor") or not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="Provide kind (special|slot|armor) and items[]")
+
+    col = get_col("equipment")
+    created, skipped = [], []
+    now = datetime.datetime.utcnow().isoformat()+"Z"
+
+    for b in items:
+        b = dict(b); b["category"] = kind
+        doc = _equipment_from_body(b)
+        if col.find_one({"category": doc["category"], "name_key": doc["name_key"]}):
+            skipped.append(doc.get("name") or doc.get("type") or doc.get("style")); continue
+        doc["id"] = next_id_str("equipment", padding=4)
+        doc["created_at"] = now
+        col.insert_one(dict(doc))
+        created.append({k:v for k,v in doc.items() if k!="_id"})
 
     return {"status":"success","created": created, "skipped": skipped}

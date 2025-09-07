@@ -42,6 +42,8 @@ def ensure_indexes() -> None:
     db.tools.create_index("name_key", unique=True)
     db.weapons.create_index("id", unique=True)
     db.weapons.create_index("name_key", unique=True)
+    db.equipment.create_index("id", unique=True)
+    db.equipment.create_index([("category", 1), ("name_key", 1)], unique=True)
     db.spells.create_index(
         "sig_v1",
         unique=True,

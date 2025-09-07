@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Equipment — Edit</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .row{display:flex;gap:8px;align-items:center}
+    .muted{opacity:.8}
+    .pill{display:inline-block;padding:2px 8px;border:1px solid #444;border-radius:999px}
+    .grid{display:grid;gap:8px;grid-template-columns:1fr 110px 90px 120px auto;align-items:center}
+    /* Modal hardening */
+    .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:9999}
+    .modal.hidden{display:none!important}
+    .modal-card{position:relative;max-width:90vw;max-height:85vh;overflow:auto;background:#111;border:1px solid #333;border-radius:12px;padding:16px}
+    .modal-close{position:absolute;top:8px;right:12px;background:transparent;border:0;font-size:1.6rem;line-height:1;cursor:pointer}
+    label>span{display:inline-block;width:140px}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Edit Equipment</h1>
+
+  <div class="home-card">
+    <div class="row">
+      <input id="q" type="text" placeholder="Filter by name/style/type..." />
+      <select id="f-cat">
+        <option value="">All categories</option>
+        <option value="special">Special</option>
+        <option value="slot">Slot</option>
+        <option value="armor">Armor</option>
+      </select>
+      <button id="refresh" class="btn small">Refresh</button>
+      <span id="info" class="muted" style="margin-left:auto;"></span>
+    </div>
+  </div>
+
+  <div class="home-card" id="list">Loading…</div>
+
+  <a class="btn btn-secondary" href="equipment_home.html" style="margin-top:12px;">← Back</a>
+</div>
+
+<!-- modal -->
+<div id="modal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card" style="min-width:560px;">
+    <button id="close" class="modal-close" aria-label="Close">&times;</button>
+    <h3 id="m-title">Edit Equipment</h3>
+
+    <!-- SPECIAL -->
+    <div id="form-special" style="display:none">
+      <div class="row" style="gap:12px;flex-wrap:wrap;">
+        <label><span>Name</span><input id="sp-name" style="min-width:280px"></label>
+        <label><span>Price</span><input id="sp-price" type="number" style="width:120px"></label>
+        <label><span>Enc.</span><input id="sp-enc" type="number" step="0.1" style="width:100px"></label>
+      </div>
+      <div class="row" style="gap:12px;flex-wrap:wrap;margin-top:6px;">
+        <label><span>Damage</span><input id="sp-dmg" style="min-width:260px"></label>
+        <label><span>Range</span><input id="sp-range" style="width:100px"></label>
+        <label><span>Hands</span><input id="sp-hands" type="number" style="width:100px"></label>
+      </div>
+      <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Effects</span><input id="sp-effects" style="width:100%"></label></div>
+      <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Description</span><textarea id="sp-desc" rows="3" style="width:100%"></textarea></label></div>
+    </div>
+
+    <!-- SLOT -->
+    <div id="form-slot" style="display:none">
+      <div class="row" style="gap:12px;flex-wrap:wrap;">
+        <label><span>Slot</span>
+          <select id="sl-slot"><option>head</option><option>arm</option><option>leg</option><option>accessory</option></select>
+        </label>
+        <label><span>Style</span><input id="sl-style" style="min-width:200px"></label>
+        <label><span>Price</span><input id="sl-price" type="number" style="width:120px"></label>
+        <label><span>Enc.</span><input id="sl-enc" type="number" step="0.1" style="width:100px"></label>
+      </div>
+      <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Description</span><textarea id="sl-desc" rows="3" style="width:100%"></textarea></label></div>
+    </div>
+
+    <!-- ARMOR -->
+    <div id="form-armor" style="display:none">
+      <div class="row" style="gap:12px;flex-wrap:wrap;">
+        <label><span>Type</span><input id="ar-type" style="min-width:240px"></label>
+        <label><span>Enc.</span><input id="ar-enc" type="number" step="0.1" style="width:100px"></label>
+        <label><span>HP Bonus</span><input id="ar-hp" type="number" style="width:120px"></label>
+        <label><span>MO Penalty</span><input id="ar-mo" type="number" style="width:100px"></label>
+      </div>
+      <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Receptacle</span><input id="ar-receptacle" style="width:100%"></label></div>
+      <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Effect</span><input id="ar-effect" style="width:100%"></label></div>
+      <div class="row muted" style="margin-top:6px;"><span class="pill">Base price (Adequate): 2528</span></div>
+    </div>
+
+    <div class="row" style="margin-top:10px;justify-content:flex-end;">
+      <button id="save" class="btn">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization":"Bearer "+token } : {};
+const $ = s=>document.querySelector(s);
+
+let CACHE=[], EDIT=null;
+
+function row(e){
+  const name = e.category==="special" ? e.name
+             : e.category==="slot"    ? `${e.slot}: ${e.style}`
+             : /* armor */              `Armor — ${e.type}`;
+  const price = e.price ?? 0;
+  const enc = e.enc ?? 0;
+  const cat = e.category;
+  return `
+    <div class="grid" style="border-bottom:1px solid #222;padding:6px 0;">
+      <div><strong>${name}</strong> <span class="muted">[${e.id}]</span>
+        <div class="muted small">${(e.description||e.effect||"").slice(0,240)}</div></div>
+      <div style="text-align:center;">${cat}</div>
+      <div style="text-align:center;">${enc}</div>
+      <div style="text-align:center;">${price}</div>
+      <div style="display:flex;gap:6px;justify-content:flex-end;">
+        <button class="btn" onclick="openEdit('${e.id}')">Edit</button>
+        <button class="btn btn-danger" onclick="delOne('${e.id}')">Delete</button>
+      </div>
+    </div>`;
+}
+
+function render(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const cat = document.getElementById("f-cat").value;
+  let list = CACHE.slice();
+  if (q) list = list.filter(e =>
+    ((e.name||"").toLowerCase().includes(q)) ||
+    ((e.style||"").toLowerCase().includes(q)) ||
+    ((e.type||"").toLowerCase().includes(q))
+  );
+  if (cat) list = list.filter(e => e.category===cat);
+  document.getElementById("list").innerHTML = list.length ? list.map(row).join("") : "<p>No results.</p>";
+  document.getElementById("info").textContent = `${list.length}/${CACHE.length}`;
+}
+
+async function load(){
+  const r = await fetch(`${API_BASE}/equipment`);
+  const j = await r.json().catch(()=>({}));
+  CACHE = j.equipment || [];
+  render();
+}
+
+function openEdit(id){
+  const e = CACHE.find(x=>x.id===id); if(!e) return;
+  EDIT = e;
+  document.getElementById("m-title").textContent = `Edit — ${e.id}`;
+  document.getElementById("form-special").style.display = e.category==="special" ? "block":"none";
+  document.getElementById("form-slot").style.display    = e.category==="slot"    ? "block":"none";
+  document.getElementById("form-armor").style.display   = e.category==="armor"   ? "block":"none";
+
+  if (e.category==="special"){
+    $("#sp-name").value = e.name||"";
+    $("#sp-price").value = e.price ?? 0;
+    $("#sp-enc").value   = e.enc ?? 0;
+    $("#sp-dmg").value   = e.damage||"";
+    $("#sp-range").value = e.range||"";
+    $("#sp-hands").value = e.hands ?? 1;
+    $("#sp-effects").value = (e.effects||[]).join(", ");
+    $("#sp-desc").value  = e.description||"";
+  } else if (e.category==="slot"){
+    $("#sl-slot").value  = e.slot||"head";
+    $("#sl-style").value = e.style||"";
+    $("#sl-price").value = e.price ?? 0;
+    $("#sl-enc").value   = e.enc ?? 0;
+    $("#sl-desc").value  = e.description||"";
+  } else {
+    $("#ar-type").value = e.type||"";
+    $("#ar-enc").value  = e.enc ?? 0;
+    $("#ar-hp").value   = e.hp_bonus ?? 0;
+    $("#ar-mo").value   = e.mo_penalty ?? 0;
+    $("#ar-receptacle").value = e.receptacle||"";
+    $("#ar-effect").value     = e.effect||"";
+  }
+
+  const MODAL=document.getElementById("modal");
+  MODAL.classList.remove("hidden"); MODAL.setAttribute("aria-hidden","false");
+  document.getElementById("close").focus();
+}
+function closeEdit(){
+  const MODAL=document.getElementById("modal");
+  MODAL.classList.add("hidden"); MODAL.setAttribute("aria-hidden","true");
+  EDIT=null;
+}
+document.getElementById("close").addEventListener("click", closeEdit);
+const MODAL=document.getElementById("modal");
+MODAL.addEventListener("click",(e)=>{ if(e.target===MODAL) closeEdit(); });
+document.addEventListener("keydown",(e)=>{ if(e.key==="Escape" && !MODAL.classList.contains("hidden")) closeEdit(); });
+
+document.getElementById("save").addEventListener("click", async ()=>{
+  if (!EDIT) return;
+  let body={};
+  if (EDIT.category==="special"){
+    body = {
+      category:"special",
+      name: $("#sp-name").value.trim()||"Unnamed",
+      price: Number($("#sp-price").value||0),
+      enc:   Number($("#sp-enc").value||0),
+      damage: $("#sp-dmg").value.trim(),
+      range:  $("#sp-range").value.trim(),
+      hands:  Number($("#sp-hands").value||1),
+      effects: $("#sp-effects").value.split(",").map(s=>s.trim()).filter(Boolean),
+      description: $("#sp-desc").value.trim(),
+    };
+  } else if (EDIT.category==="slot"){
+    body = {
+      category:"slot",
+      slot: $("#sl-slot").value,
+      style: $("#sl-style").value.trim()||"Unnamed",
+      price: Number($("#sl-price").value||0),
+      enc:   Number($("#sl-enc").value||0),
+      description: $("#sl-desc").value.trim(),
+    };
+  } else {
+    body = {
+      category:"armor",
+      type: $("#ar-type").value.trim()||"Armor",
+      enc:  Number($("#ar-enc").value||0),
+      hp_bonus: Number($("#ar-hp").value||0),
+      mo_penalty: Number($("#ar-mo").value||0),
+      receptacle: $("#ar-receptacle").value.trim(),
+      effect: $("#ar-effect").value.trim(),
+      price: 2528,
+    };
+  }
+  const r = await fetch(`/equipment/${EDIT.id}`, { method:"PUT", headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify(body) });
+  const j = await r.json().catch(()=>({})); if (j.status!=="success") return alert(j.message||"Update failed");
+  await load(); closeEdit();
+});
+
+async function delOne(id){
+  if(!confirm(`Delete ${id}?`)) return;
+  const r=await fetch(`/equipment/${id}`,{ method:"DELETE", headers:{ ...authHeaders() }});
+  const j=await r.json().catch(()=>({})); if (j.status!=="success") return alert(j.message||"Delete failed");
+  CACHE=CACHE.filter(x=>x.id!==id); render();
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  load();
+  document.getElementById("refresh").addEventListener("click", load);
+  document.getElementById("q").addEventListener("input", render);
+  document.getElementById("f-cat").addEventListener("change", render);
+});
+</script>
+</body>
+</html>
