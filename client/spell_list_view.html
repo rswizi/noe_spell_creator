@@ -153,7 +153,7 @@
         <h2 style="margin:0;">My Spells</h2>
         <span class="spacer"></span>
         <span id="count-simple-spells" class="badge">Simple Spells: 0</span>
-        <span id="count-complex-schools" class="badge">Complex Schools: 0</span>
+        <span id="count-complex-spells" class="badge">Complex Spells: 0</span>
         <button class="btn" id="open-add-spells">Add Spells</button>
       </div>
       <div class="table-wrap">
@@ -758,14 +758,19 @@
     return (schools||[]).filter(s => !s.upgrade && lc(s.school_type)==="complex").length;
   }
 
+  function isComplexSpell(sp){
+    const t = spellPrimaryTypes(sp);              // excludes upgrade schools already
+    return t.length > 0 && t.includes("complex"); // any complex ⇒ complex spell
+  }
+
   function updateCounts(){
     try{
-      const simple = (mySpells||[]).filter(isSimpleOnlySpell).length;
-      const complexSch = countComplexSchools();
+      const simpleOnly = (mySpells||[]).filter(isSimpleOnlySpell).length;
+      const complex    = (mySpells||[]).filter(isComplexSpell).length;
       const a = document.getElementById("count-simple-spells");
-      const b = document.getElementById("count-complex-schools");
-      if (a) a.textContent = `Simple Spells: ${simple}`;
-      if (b) b.textContent = `Complex Schools: ${complexSch}`;
+      const b = document.getElementById("count-complex-spells");
+      if (a) a.textContent = `Simple Spells: ${simpleOnly}`;
+      if (b) b.textContent = `Complex Spells: ${complex}`;
     }catch{}
   }
 
