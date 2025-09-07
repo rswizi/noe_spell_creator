@@ -101,6 +101,18 @@ function closeEdit(){
 }
 
 document.getElementById("close").addEventListener("click", closeEdit);
+const MODAL = document.getElementById("modal");
+MODAL.addEventListener("click", (e) => {
+  if (e.target === MODAL) closeEdit();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !MODAL.classList.contains("hidden")) {
+    closeEdit();
+  }
+});
+["m-tier","m-method"].forEach(id=>document.getElementById(id).addEventListener("input", syncDerived));
+
 document.getElementById("save").addEventListener("click", async ()=>{
   if (!EDIT_ID) return;
   const body = {

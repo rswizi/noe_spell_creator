@@ -534,3 +534,38 @@ html.modal-open, body.modal-open { overflow: hidden; }
 #sl .table-wrap { overflow: auto; -webkit-overflow-scrolling: touch; }
 /* Give sticky topbar a background to avoid text overlap under blur-only backdrops */
 .topbar.sticky { background: rgba(10,10,10,0.6); }
+
+/* Modal hardening */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;                 /* show by default; we'll hide via .hidden */
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.55);
+  z-index: 9999;                 /* above everything */
+  pointer-events: auto;          /* allow clicks inside */
+}
+.modal.hidden { display: none !important; }
+
+.modal-card {
+  position: relative;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow: auto;
+  background: #111;              /* match your theme */
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: transparent;
+  border: 0;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
