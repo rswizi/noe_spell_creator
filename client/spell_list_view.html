@@ -152,6 +152,8 @@
       <div class="row" style="margin-bottom:8px;">
         <h2 style="margin:0;">My Spells</h2>
         <span class="spacer"></span>
+        <span id="count-simple-spells" class="badge">Simple Spells: 0</span>
+        <span id="count-complex-schools" class="badge">Complex Schools: 0</span>
         <button class="btn" id="open-add-spells">Add Spells</button>
       </div>
       <div class="table-wrap">
@@ -729,6 +731,44 @@
       });
     }
 
+  function findSchoolByRef(ref){
+    const id = lc(ref.id||"");
+    const name = lc(ref.name||"");
+    return (schools||[]).find(s => lc(s.id||"")===id || lc(s.name||"")===name);
+  }
+
+  function spellPrimaryTypes(sp){
+    const refs = sp.schools || [];
+    const types = [];
+    for (const ref of refs){
+      const s = findSchoolByRef(ref);
+      if (!s || s.upgrade) continue;               // ignore upgrades
+      types.push(lc(s.school_type||""));
+    }
+    return types; // e.g. ["simple"] or ["simple","complex"]
+  }
+
+  function isSimpleOnlySpell(sp){
+    const t = spellPrimaryTypes(sp);
+    if (!t.length) return false;                   // no main schools → don’t count
+    return t.every(x => x==="simple");
+  }
+
+  function countComplexSchools(){
+    return (schools||[]).filter(s => !s.upgrade && lc(s.school_type)==="complex").length;
+  }
+
+  function updateCounts(){
+    try{
+      const simple = (mySpells||[]).filter(isSimpleOnlySpell).length;
+      const complexSch = countComplexSchools();
+      const a = document.getElementById("count-simple-spells");
+      const b = document.getElementById("count-complex-schools");
+      if (a) a.textContent = `Simple Spells: ${simple}`;
+      if (b) b.textContent = `Complex Schools: ${complexSch}`;
+    }catch{}
+  }
+
     // ---- List spells
     async function fetchListSpells(){
       const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells`, { headers:{Authorization:`Bearer ${token}`}});
@@ -791,6 +831,7 @@
           await loadMySpells();
         });
       });
+      updateCounts();
     }
 
     // ---- Add Spells modal helpers
