@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Inventory — Manage Items</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Manage Items</h1>
+
+    <div class="home-card">
+      <div class="grid">
+        <a class="btn" href="#" id="btn-weapons">Weapons</a>
+        <a class="btn" href="#" id="btn-equipment">Equipment</a>
+        <a class="btn" href="#" id="btn-tools">Tools</a>
+        <a class="btn" href="objects_home.html" id="btn-objects">Objects</a>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="inventory_home.html">← Back</a>
+    </div>
+  </div>
+
+<script>
+/* Stubs for now; wire these to real pages/routes later */
+document.addEventListener("DOMContentLoaded", () => {
+  const notice = (label)=>()=>alert(`${label} — not implemented yet`);
+  document.getElementById("btn-weapons").addEventListener("click", notice("Weapons"));
+  document.getElementById("btn-equipment").addEventListener("click", notice("Equipment"));
+  document.getElementById("btn-tools").addEventListener("click", notice("Tools"));
+  document.getElementById("btn-objects").addEventListener("click", notice("Objects"));
+});
+</script>
+</body>
+</html>

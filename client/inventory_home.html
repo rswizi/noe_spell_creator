@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Inventory Manager</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); }
+    .muted { opacity:.8 }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Inventory Manager</h1>
+
+    <div class="home-card">
+      <div class="grid">
+        <a id="btn-create" class="btn" href="#" aria-disabled="true">Create Inventory</a>
+        <a id="btn-browse" class="btn" href="#" aria-disabled="true">Browse Items</a>
+
+        <!-- Focus now: Manage Items goes to the categories screen -->
+        <a id="btn-manage" class="btn" href="inventory_manage.html">Manage Items (Moderator)</a>
+      </div>
+      <p class="muted" style="margin-top:10px;">(“Create” and “Browse” are placeholders for now.)</p>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="portal.html">← Back to Portal</a>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+
+async function gate(){
+  try{
+    const r = await fetch(`${API_BASE}/auth/me`, {
+      headers: token ? { "Authorization": `Bearer ${token}` } : {}
+    });
+    const j = await r.json();
+    const role = j.role || "user";
+    const isMod = (role === "moderator" || role === "admin");
+
+    // Hide the manage button if not mod/admin
+    if (!isMod) {
+      const el = document.getElementById("btn-manage");
+      if (el) {
+        el.textContent = "Manage Items (Moderator only)";
+        el.classList.add("btn-secondary");
+        el.setAttribute("aria-disabled", "true");
+        el.href = "#";
+      }
+    }
+  }catch(e){}
+}
+
+document.addEventListener("DOMContentLoaded", gate);
+</script>
+</body>
+</html>

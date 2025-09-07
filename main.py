@@ -16,6 +16,7 @@ from server.src.modules.apotheosis_helpers import compute_apotheosis_stats, _can
 from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS, find_user, require_auth, make_token, verify_password, get_auth_token, normalize_email,_sha256
 from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect
+from server.src.modules.objects_helpers import _object_from_body
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -39,7 +40,7 @@ CLIENT_DIR = BASE_DIR / "client"
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view"}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_maange", "objects_home", "objects_parse", "objects_edit",}
 
 @app.get("/", include_in_schema=False)
 def root():
@@ -1369,3 +1370,63 @@ def delete_spell_list(list_id: str, request: Request):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
+
+# ---------- Objects (inventory) ----------
+@app.get("/objects")
+def list_objects(q: str | None = Query(None)):
+    col = get_col("objects")
+    filt = {}
+    if q:
+        filt["name_key"] = {"$regex": norm_key(q)}
+    return {"status": "success", "objects": list(col.find(filt, {"_id": 0}))}
+
+@app.post("/objects")
+def create_object(request: Request, body: dict = Body(...)):
+    # creator must be moderator/admin
+    username, role = require_auth(request, roles=["moderator","admin"])
+    col = get_col("objects")
+    doc = _object_from_body(body)
+    doc["id"] = next_id_str("objects", padding=4)
+    doc["created_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+    col.insert_one(dict(doc))
+    return {"status": "success", "object": {k:v for k,v in doc.items() if k != "_id"}}
+
+@app.put("/objects/{oid}")
+def update_object(oid: str, request: Request, body: dict = Body(...)):
+    username, role = require_auth(request, roles=["moderator","admin"])
+    col = get_col("objects")
+    old = col.find_one({"id": oid})
+    if not old:
+        raise HTTPException(status_code=404, detail="Not found")
+    upd = _object_from_body(body)
+    upd["updated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+    col.update_one({"id": oid}, {"$set": upd})
+    new = col.find_one({"id": oid}, {"_id": 0})
+    return {"status": "success", "object": new}
+
+@app.delete("/objects/{oid}")
+def delete_object(oid: str, request: Request):
+    username, role = require_auth(request, roles=["moderator","admin"])
+    col = get_col("objects")
+    r = col.delete_one({"id": oid})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"status": "success", "deleted": oid}
+
+@app.post("/objects/bulk_create")
+def bulk_create_objects(request: Request, payload: dict = Body(...)):
+    username, role = require_auth(request, roles=["moderator","admin"])
+    items = payload.get("items") or []
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="items must be a non-empty list")
+
+    col = get_col("objects")
+    created = []
+    for b in items:
+        doc = _object_from_body(b)
+        doc["id"] = next_id_str("objects", padding=4)
+        doc["created_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+        col.insert_one(dict(doc))
+        created.append({k:v for k,v in doc.items() if k != "_id"})
+
+    return {"status":"success","created": created}

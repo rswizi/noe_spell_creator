@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Objects — Parse (Moderator)</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); }
+    .scroll { max-height:420px; overflow:auto; }
+    table.table td, table.table th { padding:8px; border-bottom:1px solid #2a2a2a; }
+    input[type="number"]{ width:92px; }
+    .muted{opacity:.8}
+    .danger{color:#ff6b6b}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Parse Objects</h1>
+
+  <div class="home-card">
+    <p class="muted">Paste your list. Each object is 4 lines: <em>Name</em>, <em>Price (Jelly)</em>, <em>Enc.</em>, <em>Description</em>.</p>
+    <textarea id="raw" rows="12" placeholder="Nom
+Price (Jelly)
+Enc.
+Description
+..."></textarea>
+    <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+      <button id="parse" class="btn">Parse</button>
+      <button id="clear" class="btn btn-secondary">Clear</button>
+      <span id="msg" class="muted"></span>
+    </div>
+  </div>
+
+  <div id="preview-card" class="home-card" style="display:none;">
+    <h3 style="margin:0 0 8px;">Preview &amp; Edit <span class="chip"><span id="count">0</span> row(s)</span></h3>
+    <div id="errors" class="danger" style="min-height:1.2em;"></div>
+    <div class="scroll">
+      <table class="table" style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Name</th>
+            <th>Price</th>
+            <th>Enc.</th>
+            <th style="text-align:left;">Description</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button id="save" class="btn">Save to Database</button>
+      <button id="reparse" class="btn btn-secondary">Re-parse</button>
+    </div>
+  </div>
+
+  <a class="btn btn-secondary" href="objects_home.html" style="margin-top:12px;">← Back</a>
+</div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+
+let PREVIEW = [];
+
+function parseRaw(txt){
+  const lines = txt.split(/\r?\n/).map(s=>s.trim()).filter(s=>s.length>0);
+  if (lines.length % 4 !== 0) {
+    throw new Error(`Expected multiples of 4 lines, got ${lines.length}.`);
+  }
+  const out = [];
+  for (let i=0;i<lines.length;i+=4){
+    const name = lines[i];
+    const price = Number(lines[i+1]);
+    const enc   = Number(lines[i+2]);
+    const desc  = lines[i+3];
+    if (!name) throw new Error(`Row ${i/4+1}: name is empty.`);
+    if (!Number.isFinite(price)) throw new Error(`Row ${i/4+1}: price must be a number.`);
+    if (!Number.isFinite(enc))   throw new Error(`Row ${i/4+1}: enc must be a number.`);
+    out.push({ name, price: Math.trunc(price), enc: Math.trunc(enc), description: desc || "" });
+  }
+  return out;
+}
+
+function renderPreview(list){
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = list.map((e,idx)=>`
+    <tr>
+      <td><input value="${e.name.replace(/"/g,'&quot;')}" data-i="${idx}" data-k="name" /></td>
+      <td style="text-align:center;"><input type="number" value="${e.price}" data-i="${idx}" data-k="price" /></td>
+      <td style="text-align:center;"><input type="number" value="${e.enc}" data-i="${idx}" data-k="enc" /></td>
+      <td><input value="${(e.description||'').replace(/"/g,'&quot;')}" data-i="${idx}" data-k="description" /></td>
+    </tr>
+  `).join("");
+  document.getElementById("count").textContent = String(list.length);
+  document.getElementById("preview-card").style.display = "block";
+}
+
+function validatePreview(){
+  const errs = [];
+  PREVIEW.forEach((e,i)=>{
+    if (!e.name?.trim()) errs.push(`Row ${i+1}: empty name.`);
+    if (!Number.isFinite(+e.price)) errs.push(`Row ${i+1}: invalid price.`);
+    if (!Number.isFinite(+e.enc))   errs.push(`Row ${i+1}: invalid enc.`);
+  });
+  return errs;
+}
+
+document.addEventListener("input", (ev)=>{
+  const t = ev.target;
+  if (!t || t.dataset.i === undefined) return;
+  const i = +t.dataset.i, k = t.dataset.k;
+  PREVIEW[i][k] = (k==="price"||k==="enc") ? Number(t.value||0) : t.value;
+});
+
+document.getElementById("parse").addEventListener("click", ()=>{
+  document.getElementById("errors").textContent = "";
+  try{
+    PREVIEW = parseRaw(document.getElementById("raw").value);
+    renderPreview(PREVIEW);
+  }catch(err){
+    document.getElementById("preview-card").style.display = "block";
+    document.getElementById("tbody").innerHTML = "";
+    document.getElementById("count").textContent = "0";
+    document.getElementById("errors").textContent = err.message || String(err);
+  }
+});
+
+document.getElementById("clear").addEventListener("click", ()=>{
+  document.getElementById("raw").value = "";
+  document.getElementById("preview-card").style.display = "none";
+  PREVIEW = [];
+});
+
+document.getElementById("reparse").addEventListener("click", ()=>{
+  document.getElementById("parse").click();
+});
+
+document.getElementById("save").addEventListener("click", async ()=>{
+  const errs = validatePreview();
+  if (errs.length){
+    document.getElementById("errors").innerHTML = errs.join("<br>");
+    return;
+  }
+  try{
+    const res = await fetch(`${API_BASE}/objects/bulk_create`, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify({ items: PREVIEW })
+    });
+    const j = await res.json().catch(()=>({}));
+    if (j.status !== "success") throw new Error(j.message || "Save failed.");
+    alert(`Created ${j.created.length} item(s).`);
+    PREVIEW = [];
+    document.getElementById("preview-card").style.display = "none";
+    document.getElementById("raw").value = "";
+  }catch(err){
+    document.getElementById("errors").textContent = err.message || String(err);
+  }
+});
+</script>
+</body>
+</html>

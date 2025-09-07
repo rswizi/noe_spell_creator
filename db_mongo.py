@@ -30,6 +30,8 @@ def get_col(name: str):
 def ensure_indexes() -> None:
     db = get_db()
     db.spells.create_index("id", unique=True)
+    db.objects.create_index("id", unique=True)
+    db.objects.create_index("name_key")
     db.effects.create_index("id", unique=True)
     db.schools.create_index("id", unique=True)
     db.users.create_index("username", unique=True)

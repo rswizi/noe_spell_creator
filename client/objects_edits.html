@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Objects — Edit</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .grid { display:grid; gap:8px; grid-template-columns: 1fr 120px 80px auto; align-items:center; }
+    .row  { display:flex; gap:8px; align-items:center; }
+    .muted{opacity:.8}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Edit Objects</h1>
+
+  <div class="home-card">
+    <div class="row">
+      <input id="q" type="text" placeholder="Filter by name..." />
+      <button id="refresh" class="btn small">Refresh</button>
+      <span id="info" class="muted" style="margin-left:auto;"></span>
+    </div>
+  </div>
+
+  <div class="home-card" id="list">Loading…</div>
+
+  <a class="btn btn-secondary" href="objects_home.html" style="margin-top:12px;">← Back</a>
+</div>
+
+<!-- quick editor modal -->
+<div id="modal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card" style="min-width:420px;">
+    <button id="close" class="modal-close" aria-label="Close">&times;</button>
+    <h3 id="m-title">Edit Object</h3>
+    <div class="grid">
+      <label>Name</label><input id="m-name" />
+      <label>Price</label><input id="m-price" type="number" />
+      <label>Enc.</label><input id="m-enc" type="number" />
+      <label>Description</label><textarea id="m-desc" rows="4"></textarea>
+    </div>
+    <div class="row" style="margin-top:10px;justify-content:flex-end;">
+      <button id="save" class="btn">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+
+let CACHE = [];
+let EDIT_ID = null;
+
+function row(o){
+  return `
+    <div class="grid" style="border-bottom:1px solid #222;padding:6px 0;">
+      <div><strong>${o.name}</strong> <span class="muted">[${o.id}]</span><div class="muted small">${o.description||""}</div></div>
+      <div style="text-align:center;">${o.price}</div>
+      <div style="text-align:center;">${o.enc}</div>
+      <div style="display:flex;gap:6px;justify-content:flex-end;">
+        <button class="btn" onclick="openEdit('${o.id}')">Edit</button>
+        <button class="btn btn-danger" onclick="delOne('${o.id}')">Delete</button>
+      </div>
+    </div>`;
+}
+
+function render(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  let list = CACHE.slice();
+  if (q) list = list.filter(o => (o.name||"").toLowerCase().includes(q));
+  document.getElementById("list").innerHTML = list.length ? list.map(row).join("") : "<p>No results.</p>";
+  document.getElementById("info").textContent = `${list.length}/${CACHE.length}`;
+}
+
+async function load(){
+  const r = await fetch(`${API_BASE}/objects`);
+  const j = await r.json().catch(()=>({}));
+  CACHE = j.objects || [];
+  render();
+}
+
+/* modal */
+function openEdit(id){
+  const o = CACHE.find(x => x.id === id);
+  if (!o) return;
+  EDIT_ID = id;
+  document.getElementById("m-title").textContent = `Edit — ${o.name} [${o.id}]`;
+  document.getElementById("m-name").value  = o.name || "";
+  document.getElementById("m-price").value = o.price ?? 0;
+  document.getElementById("m-enc").value   = o.enc ?? 0;
+  document.getElementById("m-desc").value  = o.description || "";
+  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("modal").setAttribute("aria-hidden","false");
+}
+function closeEdit(){
+  document.getElementById("modal").classList.add("hidden");
+  document.getElementById("modal").setAttribute("aria-hidden","true");
+  EDIT_ID = null;
+}
+
+document.getElementById("close").addEventListener("click", closeEdit);
+document.getElementById("save").addEventListener("click", async ()=>{
+  if (!EDIT_ID) return;
+  const body = {
+    name: document.getElementById("m-name").value.trim() || "Unnamed",
+    price: Number(document.getElementById("m-price").value || 0),
+    enc:   Number(document.getElementById("m-enc").value || 0),
+    description: document.getElementById("m-desc").value.trim(),
+  };
+  const r = await fetch(`${API_BASE}/objects/${EDIT_ID}`, {
+    method:"PUT", headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify(body)
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success") { alert(j.message || "Update failed."); return; }
+  await load();
+  closeEdit();
+});
+
+async function delOne(id){
+  if (!confirm(`Delete object ${id}?`)) return;
+  const r = await fetch(`${API_BASE}/objects/${id}`, { method:"DELETE", headers: { ...authHeaders() }});
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success") { alert(j.message || "Delete failed."); return; }
+  CACHE = CACHE.filter(o => o.id !== id);
+  render();
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  load();
+  document.getElementById("refresh").addEventListener("click", load);
+  document.getElementById("q").addEventListener("input", render);
+});
+</script>
+</body>
+</html>
