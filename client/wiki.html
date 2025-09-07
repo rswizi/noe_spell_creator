@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wiki — Home</title>
+  <style>
+    :root {
+      --bg: #0d1117; --panel:#0f172a; --muted:#94a3b8; --text:#e5e7eb; --accent:#60a5fa; --chip:#1f2937; --chip-b:#334155;
+      --border:#1f2937; --card:#111827; --ok:#16a34a; --warn:#f59e0b; --err:#ef4444;
+    }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .header { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .badge { font-size:12px; padding:4px 8px; border:1px solid var(--border); border-radius:999px; background:var(--chip); color:var(--muted); }
+    .searchbar { margin:16px 0; display:flex; gap:8px; }
+    .searchbar input { flex:1; padding:12px 14px; border-radius:10px; border:1px solid var(--border); background:#0b1220; color:var(--text); outline:none; }
+    .searchbar button { padding:12px 14px; border-radius:10px; border:1px solid var(--border); background:#0b1220; color:var(--text); cursor:pointer; }
+    .grid { display:grid; grid-template-columns: 1fr; gap:16px; }
+    @media (min-width: 1000px) { .grid { grid-template-columns: 2fr 1fr; } }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:14px; }
+    .card h3 { margin:0; padding:14px 16px; border-bottom:1px solid var(--border); font-size:16px; color:#cbd5e1; }
+    .card .body { padding:16px; }
+    .list { display:flex; flex-direction:column; gap:14px; }
+    .page { display:flex; flex-direction:column; gap:6px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:var(--panel); }
+    .page h4 { margin:0; font-size:15px; }
+    .meta { font-size:12px; color: var(--muted); display:flex; gap:8px; flex-wrap:wrap; }
+    .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:2px; }
+    .chip { background:var(--chip); border:1px solid var(--chip-b); color:#cbd5e1; font-size:12px; padding:3px 8px; border-radius:999px; display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+    .chip:hover { filter:brightness(1.1); }
+    .tree { list-style:none; padding-left:0; }
+    .tree li { margin:6px 0; }
+    .tree .cat { cursor:pointer; color:#cbd5e1; }
+    .tree .cat:hover { text-decoration: underline; }
+    .status { font-size:13px; color: var(--muted); margin: 8px 0 0; }
+    .empty { text-align:center; color:var(--muted); padding:18px; }
+    .err { color: var(--err); }
+    .footer { margin-top:24px; font-size:12px; color:var(--muted); text-align:center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1 style="margin:0;font-size:20px;">Wiki</h1>
+      <span class="badge">curated</span>
+      <span class="badge">mobile-friendly</span>
+    </div>
+
+    <div class="searchbar">
+      <input id="q" type="search" placeholder="Search published pages…" aria-label="Search" />
+      <button id="clearBtn" title="Clear">Clear</button>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="grid">
+      <section class="card">
+        <h3 id="resultsTitle">Recent pages</h3>
+        <div class="body">
+          <div id="pages" class="list" role="list"></div>
+          <div id="pagesEmpty" class="empty" style="display:none;">No pages found.</div>
+        </div>
+      </section>
+
+      <aside class="stack">
+        <section class="card">
+          <h3>Categories</h3>
+          <div class="body">
+            <ul id="cats" class="tree"></ul>
+          </div>
+        </section>
+
+        <section class="card" style="margin-top:16px;">
+          <h3>Popular tags</h3>
+          <div class="body">
+            <div id="tags" class="chips"></div>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <div class="footer">Powered by your curated wiki • Only moderator/administrator approved pages are published.</div>
+  </div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const $el = (tag, props = {}, children = []) => {
+      const n = document.createElement(tag);
+      Object.entries(props).forEach(([k, v]) => {
+        if (k === "class") n.className = v;
+        else if (k.startsWith("on") && typeof v === "function") n.addEventListener(k.substring(2).toLowerCase(), v);
+        else if (v !== undefined && v !== null) n.setAttribute(k, v);
+      });
+      children.forEach(c => n.append(typeof c === "string" ? document.createTextNode(c) : c));
+      return n;
+    };
+
+    const api = {
+      async get(url) {
+        const res = await fetch(url, { headers: { "Accept": "application/json" } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      },
+      recentPages(limit = 20) {
+        return this.get(`/api/wiki/pages?status=published&limit=${limit}`);
+      },
+      searchPages(q) {
+        const u = new URL(location.origin + "/api/wiki/pages");
+        u.searchParams.set("status", "published");
+        u.searchParams.set("q", q);
+        return this.get(u.pathname + u.search);
+      },
+      categoriesTree() { return this.get("/api/wiki/categories/tree"); },
+      tags(limit = 50) { return this.get(`/api/wiki/tags?limit=${limit}`); }
+    };
+
+    function fmtDate(d) {
+      try { return new Date(d).toLocaleString(); } catch { return ""; }
+    }
+
+    function renderPages(items) {
+      const pages = $("#pages");
+      const empty = $("#pagesEmpty");
+      pages.innerHTML = "";
+      if (!items || !items.length) {
+        empty.style.display = "";
+        return;
+      }
+      empty.style.display = "none";
+
+      items.forEach(p => {
+        const title = p.title || p.name || "Untitled";
+        const href = p.url || (p.slug ? `/wiki/page/${encodeURIComponent(p.slug)}` : "#");
+        const excerpt = p.summary || p.excerpt || (p.content ? String(p.content).replace(/<[^>]+>/g, "").slice(0, 160) + "…" : "");
+        const tags = Array.isArray(p.tags) ? p.tags : [];
+        const catPath = p.category_path || p.categoryPath || p.category || null;
+
+        const chipEls = tags.slice(0, 8).map(tag =>
+          $el("span", { class: "chip", onclick: () => runTagFilter(tag) }, [ "#" + tag ])
+        );
+
+        const metaBits = [];
+        if (catPath) metaBits.push(typeof catPath === "string" ? catPath : (catPath.join ? catPath.join(" › ") : String(catPath)));
+        if (p.updated_at || p.updatedAt) metaBits.push("updated " + fmtDate(p.updated_at || p.updatedAt));
+
+        const node = $el("div", { class: "page", role: "listitem" }, [
+          $el("h4", {}, [ $el("a", { href }, [title]) ]),
+          excerpt ? $el("div", { class: "meta" }, [excerpt]) : null,
+          metaBits.length ? $el("div", { class: "meta" }, [ metaBits.join(" • ") ]) : null,
+          chipEls.length ? $el("div", { class: "chips" }, chipEls) : null
+        ].filter(Boolean));
+
+        pages.append(node);
+      });
+    }
+
+    function renderTags(list) {
+      const cont = $("#tags");
+      cont.innerHTML = "";
+      (list || []).forEach(t => {
+        const label = typeof t === "string" ? t : (t.tag || t.name || t._id || "tag");
+        const count = typeof t === "object" && (t.count || t.total) ? ` (${t.count || t.total})` : "";
+        cont.append($el("span", { class: "chip", title: "Filter by tag", onclick: () => runTagFilter(label) }, [`#${label}${count}`]));
+      });
+    }
+
+    function buildTreeUl(nodes) {
+      const ul = $el("ul", { class: "tree" });
+      (nodes || []).forEach(n => {
+        const name = n.name || n.title || n.slug || "category";
+        const li = $el("li", {}, [
+          $el("span", { class: "cat", onclick: () => runCategoryFilter(n) }, [name])
+        ]);
+        if (n.children && n.children.length) {
+          li.append(buildTreeUl(n.children));
+        }
+        ul.append(li);
+      });
+      return ul;
+    }
+
+    function renderCategories(tree) {
+      const root = $("#cats");
+      root.innerHTML = "";
+      root.append(buildTreeUl(tree || []));
+    }
+
+    // Filters / Search
+    let searchTimer = null;
+
+    async function loadHome() {
+      $("#resultsTitle").textContent = "Recent pages";
+      $("#status").textContent = "Loading…";
+      try {
+        const [pages, cats, tags] = await Promise.all([
+          api.recentPages(20),
+          api.categoriesTree(),
+          api.tags(50)
+        ]);
+        renderPages(pages.items || pages || []);
+        renderCategories(cats.tree || cats || []);
+        renderTags(tags.items || tags || []);
+        $("#status").textContent = "";
+      } catch (e) {
+        $("#status").innerHTML = `<span class="err">Failed to load wiki home (${e.message}).</span>`;
+      }
+    }
+
+    async function runSearch(q) {
+      if (!q || !q.trim()) { loadHome(); return; }
+      $("#resultsTitle").textContent = `Results for “${q}”`;
+      $("#status").textContent = "Searching…";
+      try {
+        const res = await api.searchPages(q.trim());
+        renderPages(res.items || res || []);
+        $("#status").textContent = "";
+      } catch (e) {
+        $("#status").innerHTML = `<span class="err">Search failed (${e.message}).</span>`;
+      }
+    }
+
+    function runTagFilter(tag) {
+      $("#q").value = `tag:${tag}`;
+      runSearch(`tag:${tag}`);
+    }
+
+    function runCategoryFilter(node) {
+      // Prefer ID; fall back to slug/name in the query.
+      const id = node.id || node._id;
+      const token = id ? `cat:${id}` : `category:${(node.slug || node.name || "").toString()}`;
+      $("#q").value = token;
+      runSearch(token);
+    }
+
+    // Debounced input
+    $("#q").addEventListener("input", () => {
+      const v = $("#q").value;
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(() => runSearch(v), 350);
+    });
+    $("#clearBtn").addEventListener("click", () => { $("#q").value = ""; loadHome(); });
+
+    // Load initial data
+    loadHome();
+  </script>
+</body>
+</html>
