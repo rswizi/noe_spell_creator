@@ -9,19 +9,28 @@
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
     .muted{opacity:.8}
+    .small{font-size:.9rem}
     .pill{display:inline-block;border:1px solid #444;border-radius:999px;padding:2px 8px;font-size:.85rem}
+    .box{border:1px solid #222;border-radius:10px;padding:10px}
     .table{width:100%;border-collapse:collapse}
     .table td,.table th{padding:8px;border-bottom:1px solid #222}
-    .small{font-size:.9rem}
-    .box{border:1px solid #222;border-radius:10px;padding:10px}
+
+    /* Modal */
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
+    .modal.hidden{display:none!important}
+    .modal-card{background:#111;border:1px solid #333;border-radius:12px;max-width:900px;max-height:85vh;overflow:auto;padding:16px;position:relative}
+    .modal-close{position:absolute;right:12px;top:8px;background:transparent;border:0;font-size:1.6rem;line-height:1;cursor:pointer}
     .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center}
+    .col{display:flex;flex-direction:column;gap:8px}
+    .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #444;border-radius:999px;padding:2px 8px}
+    .sep{border:0;border-top:1px solid #222;margin:12px 0}
   </style>
 </head>
 <body>
 <div class="container">
   <h1 id="title">Inventory</h1>
 
-  <!-- balances -->
+  <!-- money -->
   <div class="home-card">
     <h3>Money</h3>
     <div id="balances" class="row"></div>
@@ -64,7 +73,7 @@
     <div id="buy-form" class="box" style="margin-top:10px;display:none;">
       <div class="row">
         <div class="pill" id="sel-name">—</div>
-        <div class="pill" id="sel-base">Base: <span id="sel-price">0</span> J</div>
+        <div class="pill">Base <span id="sel-price">0</span> J</div>
         <div class="pill">Enc. <span id="sel-enc">0</span></div>
       </div>
       <div class="row" style="margin-top:8px;">
@@ -118,6 +127,42 @@
   </div>
 </div>
 
+<!-- Modify modal -->
+<div id="mod-modal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card">
+    <button class="modal-close" id="mod-close" aria-label="Close">&times;</button>
+    <h3 id="mod-title">Modify Item</h3>
+    <div class="row small muted" id="mod-subtitle"></div>
+    <hr class="sep">
+
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+      <div class="col">
+        <label><b>Quality</b>
+          <select id="mod-quality">
+            <option>Mediocre</option><option>Adequate</option><option>Good</option><option>Very Good</option>
+            <option>Excellent</option><option>Legendary</option><option>Mythical</option><option>Epic</option>
+            <option>Divine</option><option>Unreal</option>
+          </select>
+        </label>
+        <div class="small muted">Slots from quality: <span id="mod-slots">0</span></div>
+      </div>
+
+      <div class="col">
+        <b>Upgrades</b>
+        <div id="mod-upg" class="row"></div>
+        <div class="small muted">Used: <span id="mod-used">0</span> / <span id="mod-allowed">0</span></div>
+      </div>
+    </div>
+
+    <hr class="sep">
+    <div class="row">
+      <div class="pill">Estimated cost <span id="mod-cost">0</span> J</div>
+      <span class="muted small" id="mod-msg"></span>
+      <button class="btn" id="mod-save" style="margin-left:auto;">Apply</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ===========================
    Inventory View — Full Script
@@ -126,7 +171,7 @@
 const $  = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-/* ---- auth helpers ---- */
+/* ---- auth & fetch ---- */
 const token = localStorage.getItem("auth_token") || "";
 const authHeaders = () => (token ? { Authorization: "Bearer " + token } : {});
 async function fetchJSON(url, opts = {}) {
@@ -134,7 +179,7 @@ async function fetchJSON(url, opts = {}) {
   try { return await r.json(); } catch { return {}; }
 }
 
-/* ---- constants: qualities & upgrades ---- */
+/* ---- constants ---- */
 const QDIFF = {
   Mediocre: -100, Adequate: 0, Good: 167, "Very Good": 1390,
   Excellent: 5280, Legendary: 15300, Mythical: 38760,
@@ -158,22 +203,21 @@ const A_UPGRADES = [
   { key:"enchant", name:"Enchantement (+1 EN +1 FO)", unique:false },
 ];
 
-/* ---- state ---- */
-let INV_ID = new URLSearchParams(location.search).get("inv");
-let INV = null;                 // loaded inventory
-let DB_CACHE = { weapons: [], equipment: [], tools: [], objects: [] };
-let SEL = null;                 // current selection in “Buy” form
+// fees table (client-side estimate; server is source of truth)
+const UPGRADE_STEPS = [
+  {n:1, fee:7}, {n:2, fee:14}, {n:3, fee:28}, {n:4, fee:200}, {n:5, fee:400},
+  {n:6, fee:1440}, {n:7, fee:3968}, {n:8, fee:10240}, {n:9, fee:30000},
+];
 
-/* ---- tiny utils ---- */
-const cap = (s="") => s.charAt(0).toUpperCase() + s.slice(1);
-const qualitySlots = (q) => SLOTS[q] || 0;
-const priceAtQuality = (base, q) => Math.max(0, Number(base || 0) + (QDIFF[q] || 0));
-const fmtUpgrades = (u) => {
-  if (!u || !u.length) return "";
-  const m = new Map();
-  u.forEach(x => m.set(x.name, (m.get(x.name) || 0) + 1));
-  return [...m].map(([k, v]) => (v > 1 ? `${k}×${v}` : k)).join(", ");
-};
+let INV_ID = new URLSearchParams(location.search).get("inv");
+let INV = null;
+let DB_CACHE = { weapons:[], equipment:[], tools:[], objects:[] };
+let SEL = null; // current selection for buying
+
+/* ---- utils ---- */
+const cap = (s="") => s.charAt(0).toUpperCase()+s.slice(1);
+const priceAtQuality = (base, q) => Math.max(0, Number(base||0) + (QDIFF[q]||0));
+const slotsFor = (q) => SLOTS[q] || 0;
 function ensureContainerOptions() {
   const sel = $("#bf-container");
   if (!sel) return;
@@ -181,99 +225,111 @@ function ensureContainerOptions() {
     sel.innerHTML = INV.containers.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
   }
 }
+function usedUpgrades(list){ return (list||[]).length; }
+function summarizeUpgrades(list){
+  if(!list || !list.length) return "";
+  const m = new Map();
+  list.forEach(u => m.set(u.name, (m.get(u.name)||0)+1));
+  return [...m].map(([k,v]) => v>1?`${k}×${v}`:k).join(", ");
+}
+function estimateUpgradeFee(currentCount, addCount){
+  let total = 0;
+  for(let i=currentCount+1;i<=currentCount+addCount;i++){
+    const step = UPGRADE_STEPS.find(s=>s.n===i);
+    if (step) total += step.fee;
+  }
+  return total;
+}
 
 /* ===========================
    RENDER
    =========================== */
-function renderBalances() {
+function renderBalances(){
   const cur = INV?.currencies || {};
-  const row = Object.entries(cur).map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join(" ");
-  $("#balances").innerHTML = row || `<span class="muted">No money yet.</span>`;
+  $("#balances").innerHTML = Object.entries(cur)
+    .map(([k,v]) => `<span class="pill">${k}: ${v}</span>`).join(" ") || `<span class="muted">No money yet.</span>`;
 }
-
-function renderContainers() {
+function renderContainers(){
   const cs = INV?.containers || [];
-  $("#containers").innerHTML = cs.map(c => `<span class="pill">${c.name} [${c.id}]</span>`).join(" ");
-  const opts = cs.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+  $("#containers").innerHTML = cs.map(c=>`<span class="pill">${c.name} [${c.id}]</span>`).join(" ");
+  const opts = cs.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
   $("#bf-container").innerHTML = opts;
   $("#it-filter").innerHTML = `<option value="">All</option>${opts}`;
 }
-
-function renderItems() {
-  const q = ($("#it-q").value || "").trim().toLowerCase();
+function renderItems(){
+  const q = ($("#it-q").value||"").trim().toLowerCase();
   const cid = $("#it-filter").value;
-  let list = (INV?.items || []).slice();
-  if (cid) list = list.filter(x => x.container_id === cid);
-  if (q) list = list.filter(x => (x.name || "").toLowerCase().includes(q));
-
+  let list = (INV?.items||[]).slice();
+  if (cid) list = list.filter(x=>x.container_id===cid);
+  if (q) list = list.filter(x => (x.name||"").toLowerCase().includes(q));
   $("#it-body").innerHTML = list.map(it => `
     <tr>
       <td>${it.name}</td>
       <td>${it.kind}</td>
       <td>${it.quantity}</td>
       <td>${it.quality || "-"}</td>
-      <td>${fmtUpgrades(it.upgrades)}</td>
-      <td>${(INV.containers.find(c => c.id === it.container_id) || {}).name || "-"}</td>
+      <td>${summarizeUpgrades(it.upgrades)}</td>
+      <td>${(INV.containers.find(c=>c.id===it.container_id)||{}).name||"-"}</td>
       <td>
-        ${ (it.kind === "weapon" || (it.kind === "equipment" && it.subcategory === "armor"))
-            ? `<button class="btn small" onclick="openUpgrade('${it.item_id}')">Upgrades/Quality</button>` : "" }
+        ${(it.kind==="weapon" || (it.kind==="equipment" && it.subcategory==="armor"))
+          ? `<button class="btn small" data-mod="${it.item_id}">Modify</button>` : ""}
       </td>
     </tr>`).join("");
+  // bind modify buttons
+  $$("#it-body [data-mod]").forEach(btn => btn.addEventListener("click", () => openModify(btn.dataset.mod)));
 }
 
 /* ===========================
    LOAD INVENTORY
    =========================== */
-async function loadInventory() {
-  if (!token) { alert("Please log in first."); return; }
-  if (!INV_ID) { alert("Missing inventory id (?inv=...)"); return; }
+async function loadInventory(){
+  if (!token){ alert("Please log in first."); return; }
+  if (!INV_ID){ alert("Missing inventory id (?inv=...)"); return; }
   const j = await fetchJSON(`/inventories/${INV_ID}`);
-  if (j.status !== "success") { alert(j.message || "Failed to load"); return; }
+  if (j.status!=="success"){ alert(j.message||"Failed to load"); return; }
   INV = j.inventory;
   $("#title").textContent = `Inventory — ${INV.name} [${INV.id}]`;
   renderBalances(); renderContainers(); renderItems();
 }
 
 /* ===========================
-   MONEY: manual transaction
+   MONEY
    =========================== */
-$("#tx-add").addEventListener("click", async () => {
-  const currency = ($("#tx-cur").value || "Jelly").trim();
-  const amount = Number($("#tx-amt").value || 0);
+$("#tx-add").addEventListener("click", async ()=>{
+  const currency = ($("#tx-cur").value||"Jelly").trim();
+  const amount = Number($("#tx-amt").value||0);
   const note = $("#tx-note").value.trim();
   $("#tx-msg").textContent = "Saving…";
-  const j = await fetchJSON(`/inventories/${INV_ID}/money/transaction`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ currency, amount, note, source: "manual" })
+  const j = await fetchJSON(`/inventories/${INV_ID}/money/transaction`,{
+    method:"POST", headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ currency, amount, note, source:"manual" })
   });
-  $("#tx-msg").textContent = j.status === "success" ? "Saved." : (j.message || "Failed");
-  if (j.status === "success") { INV.currencies = j.currencies; renderBalances(); }
+  $("#tx-msg").textContent = j.status==="success" ? "Saved." : (j.message||"Failed");
+  if (j.status==="success"){ INV.currencies=j.currencies; renderBalances(); }
 });
 
 /* ===========================
    CONTAINERS
    =========================== */
-$("#ct-add").addEventListener("click", async () => {
-  const name = ($("#ct-name").value || "Container").trim();
+$("#ct-add").addEventListener("click", async ()=>{
+  const name = ($("#ct-name").value||"Container").trim();
   $("#ct-msg").textContent = "Adding…";
-  const j = await fetchJSON(`/inventories/${INV_ID}/containers`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+  const j = await fetchJSON(`/inventories/${INV_ID}/containers`,{
+    method:"POST", headers:{ "Content-Type":"application/json" },
     body: JSON.stringify({ name })
   });
-  $("#ct-msg").textContent = j.status === "success" ? "Added." : (j.message || "Failed");
-  if (j.status === "success") { INV.containers.push(j.container); renderContainers(); ensureContainerOptions(); }
+  $("#ct-msg").textContent = j.status==="success" ? "Added." : (j.message||"Failed");
+  if (j.status==="success"){ INV.containers.push(j.container); renderContainers(); ensureContainerOptions(); }
 });
 
 /* ===========================
-   BUY FROM DATABASE
+   BUY — catalog
    =========================== */
-function itemCard(src, kind) {
-  const title = src.name || (src.category === "armor" ? `Armor — ${src.type}` : src.style || src.type || "Item");
-  const desc = (src.description || src.effect || "").slice(0, 160);
+function itemCard(src, kind){
+  const title = src.name || (src.category==="armor" ? `Armor — ${src.type}` : src.style || src.type || "Item");
+  const desc  = (src.description || src.effect || "").slice(0,160);
   const price = src.price ?? 0;
-  const enc = src.enc ?? 0;
+  const enc   = src.enc ?? 0;
   return `
     <div class="box">
       <div><strong>${title}</strong></div>
@@ -281,18 +337,16 @@ function itemCard(src, kind) {
       <div class="row">
         <span class="pill">Price ${price}</span>
         <span class="pill">Enc. ${enc}</span>
-        <button class="btn small" onclick="selectBuy('${kind}','${src.id}')">Select</button>
+        <button class="btn small" data-select='${kind}:${src.id}'>Select</button>
       </div>
     </div>`;
 }
+async function refreshCatalog(){
+  $("#buy-info").textContent="Loading…";
+  const kind = $("#buy-kind").value;
+  const q = ($("#buy-q").value||"").trim().toLowerCase();
 
-async function refreshCatalog() {
-  $("#buy-info").textContent = "Loading…";
-  const kind = $("#buy-kind").value;           // weapon | equipment | tool | object
-  const q = ($("#buy-q").value || "").trim().toLowerCase();
-
-  // lazy-load caches once
-  if (!DB_CACHE.weapons.length && !DB_CACHE.equipment.length && !DB_CACHE.tools.length && !DB_CACHE.objects.length) {
+  if (!DB_CACHE.weapons.length && !DB_CACHE.equipment.length && !DB_CACHE.tools.length && !DB_CACHE.objects.length){
     const [jw, je, jt, jo] = await Promise.all([
       fetchJSON(`/weapons`), fetchJSON(`/equipment`), fetchJSON(`/tools`), fetchJSON(`/objects`)
     ]);
@@ -302,143 +356,236 @@ async function refreshCatalog() {
     DB_CACHE.objects   = jo.objects || [];
   }
 
-  let list = DB_CACHE[kind + "s"] || [];
-  if (q) list = list.filter(x => (x.name || x.type || x.style || "").toLowerCase().includes(q));
+  let list = DB_CACHE[kind+"s"] || [];
+  if (q) list = list.filter(x => (x.name||x.type||x.style||"").toLowerCase().includes(q));
   $("#buy-list").innerHTML = list.map(x => itemCard(x, kind)).join("");
   $("#buy-info").textContent = `${list.length} item(s)`;
-}
 
+  // bind selects
+  $$("#buy-list [data-select]").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      const [k,id] = b.dataset.select.split(":");
+      selectBuy(k,id);
+    });
+  });
+}
 $("#buy-refresh").addEventListener("click", refreshCatalog);
 $("#buy-kind").addEventListener("change", refreshCatalog);
 
-/* choose an item for purchase */
-function selectBuy(kind, id) {
-  const src = (DB_CACHE[kind + "s"] || []).find(x => x.id === id);
+/* BUY — selection & totals */
+function buildUpgradeInputs(container, list){
+  container.innerHTML = "";
+  list.forEach(u=>{
+    const id = `up-${u.key}`;
+    container.insertAdjacentHTML("beforeend",
+      `<label class="chip small">
+        <input type="number" id="${id}" value="0" min="0" ${u.unique?'max="1"':''} style="width:70px">
+        ${u.name}
+      </label>`);
+  });
+}
+function countSelectedUpgrades(){
+  const ups = [];
+  $$("#upg-wrap input[type=number]").forEach(inp=>{
+    const n = Math.max(0, Number(inp.value||0));
+    if (!n) return;
+    const key = inp.id.slice(3);
+    const meta = W_UPGRADES.find(x=>x.key===key) || A_UPGRADES.find(x=>x.key===key);
+    for (let i=0;i<n;i++) ups.push({ key, name: meta.name, unique: !!meta.unique });
+  });
+  return ups;
+}
+function recalcBuyTotal(){
+  if (!SEL) return;
+  const qty  = Math.max(1, Number($("#bf-qty").value||1));
+  const qual = $("#bf-quality").value;
+  const kind = SEL.kind;
+  const base = (kind==="weapon" || kind==="equipment") ? priceAtQuality(SEL.base, qual) : SEL.base;
+
+  const upgrades = countSelectedUpgrades();
+  const slots = slotsFor(qual);
+  $("#bf-msg").textContent = ((kind==="weapon") || (kind==="equipment" && SEL.src.category==="armor")) && upgrades.length>slots
+    ? `Too many upgrades for ${qual} (slots ${slots}).` : "";
+
+  $("#bf-total").textContent = base * qty; // server adds upgrade fees
+}
+function selectBuy(kind, id){
+  const src = (DB_CACHE[kind+"s"]||[]).find(x=>x.id===id);
   if (!src) return;
 
-  const name = src.name || (src.category === "armor" ? `Armor — ${src.type}` : src.style);
-  const enc  = src.enc ?? 0;
-  const base = src.price ?? 0;
+  SEL = { kind, id, base: src.price ?? 0, enc: src.enc ?? 0, src };
 
-  SEL = { kind, id, base, enc, src };
+  $("#sel-name").textContent = src.name || (src.category==="armor" ? `Armor — ${src.type}` : src.style);
+  $("#sel-price").textContent = SEL.base;
+  $("#sel-enc").textContent = SEL.enc;
 
-  $("#sel-name").textContent  = name;
-  $("#sel-enc").textContent   = enc;
-  $("#sel-price").textContent = base;
-
-  // Quality selection only for weapons/equipment
+  // quality control
   const qSel = $("#bf-quality");
-  if (kind === "weapon" || kind === "equipment") {
+  if (kind==="weapon" || kind==="equipment"){
     qSel.disabled = false;
   } else {
-    qSel.value = "Adequate";
-    qSel.disabled = true;
+    qSel.value = "Adequate"; qSel.disabled = true;
   }
 
-  // Upgrades for weapons & armor
+  // upgrades
   const upgBox = $("#bf-upgrades");
-  const wrap   = $("#upg-wrap");
-  wrap.innerHTML = "";
-  if (kind === "weapon" || (kind === "equipment" && src.category === "armor")) {
-    const list = (kind === "weapon") ? W_UPGRADES : A_UPGRADES;
-    list.forEach(u => {
-      const id = `u-${u.key}`;
-      wrap.insertAdjacentHTML("beforeend",
-        `<label class="small"><input type="number" id="${id}" value="0" min="0" ${u.unique ? 'max="1"' : ""} style="width:70px" /> ${u.name}</label>`);
-    });
+  const wrap = $("#upg-wrap");
+  if (kind==="weapon" || (kind==="equipment" && src.category==="armor")){
+    buildUpgradeInputs(wrap, kind==="weapon" ? W_UPGRADES : A_UPGRADES);
     upgBox.style.display = "block";
   } else {
-    upgBox.style.display = "none";
+    wrap.innerHTML = ""; upgBox.style.display = "none";
   }
 
   ensureContainerOptions();
   $("#buy-form").style.display = "block";
-  recalcTotal();
+  recalcBuyTotal();
 }
 
-function countUpgrades() {
-  const list = [];
-  $$("#upg-wrap input[type=number]").forEach(inp => {
-    const n = Math.max(0, Number(inp.value || 0));
-    if (n > 0) {
-      const key = inp.id.slice(2);
-      const base = W_UPGRADES.find(x => x.key === key) || A_UPGRADES.find(x => x.key === key);
-      for (let i = 0; i < n; i++) list.push({ key, name: base.name, unique: !!base.unique });
-    }
-  });
-  return list;
-}
+["bf-qty","bf-quality"].forEach(id=>document.getElementById(id).addEventListener("input", recalcBuyTotal));
+document.getElementById("upg-wrap").addEventListener("input", recalcBuyTotal);
 
-function recalcTotal() {
-  if (!SEL) return;
-  const qty = Math.max(1, Number($("#bf-qty").value || 1));
-  const qual = $("#bf-quality").value;
-  const base = (SEL.kind === "weapon" || SEL.kind === "equipment") ? priceAtQuality(SEL.base, qual) : SEL.base;
-
-  // slot check (client-side message only — server validates too)
-  const upgrades = countUpgrades();
-  const slots = qualitySlots(qual);
-  $("#bf-msg").textContent = (SEL.kind === "weapon" || (SEL.kind === "equipment" && SEL.src.category === "armor")) &&
-                             (upgrades.length > slots)
-                             ? `Too many upgrades for ${qual} (slots ${slots}).` : "";
-
-  $("#bf-total").textContent = base * qty;   // server adds upgrade fees on top and returns final transaction
-}
-
-["bf-qty","bf-quality"].forEach(id => document.getElementById(id).addEventListener("input", recalcTotal));
-document.getElementById("upg-wrap").addEventListener("input", recalcTotal);
-
-/* commit purchase */
-$("#bf-buy").addEventListener("click", async () => {
+/* BUY — submit */
+$("#bf-buy").addEventListener("click", async ()=>{
   if (!SEL) return;
   const body = {
     kind: SEL.kind,
     ref_id: SEL.id,
-    quantity: Math.max(1, Number($("#bf-qty").value || 1)),
+    quantity: Math.max(1, Number($("#bf-qty").value||1)),
     quality: $("#bf-quality").value,
     container_id: $("#bf-container").value,
-    upgrades: countUpgrades(),
+    upgrades: countSelectedUpgrades(),
     currency: "Jelly"
   };
   $("#bf-msg").textContent = "Purchasing…";
   const j = await fetchJSON(`/inventories/${INV_ID}/purchase`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
+    method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
   });
-  if (j.status !== "success") { $("#bf-msg").textContent = j.message || "Purchase failed"; return; }
+  if (j.status!=="success"){ $("#bf-msg").textContent = j.message || "Purchase failed"; return; }
   $("#bf-msg").textContent = `Purchased for ${j.transaction.amount * -1} Jelly.`;
   INV = j.inventory; renderBalances(); renderItems();
 });
 
 /* ===========================
-   ITEM: improve quality / add upgrades
+   MODIFY (quality / upgrades after purchase)
    =========================== */
-window.openUpgrade = async (item_id) => {
-  const item = (INV.items || []).find(x => x.item_id === item_id);
-  if (!item) return;
+let MOD_ITEM = null;
 
-  const newQ = prompt(`Upgrade quality for "${item.name}" (current: ${item.quality || "-"})\nEnter quality (Adequate..Unreal), or leave blank to skip:`, "");
-  const upgrades = prompt(`Add upgrades? Comma-separated keys (e.g., lethality,acuity). Leave blank for none:`, "");
+function openModify(item_id){
+  const it = (INV.items||[]).find(x=>x.item_id===item_id);
+  if (!it) return;
+  MOD_ITEM = it;
+
+  $("#mod-title").textContent = `Modify — ${it.name}`;
+  $("#mod-subtitle").textContent = `Current quality: ${it.quality || "-"} | Upgrades: ${summarizeUpgrades(it.upgrades) || "none"} | Qty: ${it.quantity}`;
+
+  // quality
+  const qSel = $("#mod-quality");
+  qSel.value = it.quality || "Adequate";
+  $("#mod-allowed").textContent = slotsFor(qSel.value);
+  $("#mod-slots").textContent   = slotsFor(qSel.value);
+
+  // upgrades list
+  const wrap = $("#mod-upg");
+  const isWeapon = it.kind==="weapon";
+  const isArmor  = it.kind==="equipment" && it.subcategory==="armor";
+  wrap.innerHTML = "";
+  if (isWeapon || isArmor){
+    const defs = isWeapon ? W_UPGRADES : A_UPGRADES;
+
+    // current counts by key
+    const cnt = {};
+    (it.upgrades||[]).forEach(u=>cnt[u.key]=(cnt[u.key]||0)+1);
+
+    defs.forEach(u=>{
+      const id = `mu-${u.key}`;
+      const cur = cnt[u.key] || 0;
+      wrap.insertAdjacentHTML("beforeend",
+        `<label class="chip small">
+           <span style="min-width:140px;display:inline-block">${u.name}</span>
+           <input type="number" id="${id}" value="${cur}" min="${cur}" ${u.unique?'max="1"':''} style="width:80px">
+         </label>`);
+    });
+  } else {
+    wrap.innerHTML = `<span class="muted small">Upgrades only apply to Weapons and Armor.</span>`;
+  }
+
+  updateModifyHUD();
+  showModal(true);
+}
+function showModal(open){
+  const m = $("#mod-modal");
+  if (open){ m.classList.remove("hidden"); m.setAttribute("aria-hidden","false"); $("#mod-close").focus(); }
+  else { m.classList.add("hidden"); m.setAttribute("aria-hidden","true"); MOD_ITEM=null; }
+}
+$("#mod-close").addEventListener("click", ()=>showModal(false));
+$("#mod-modal").addEventListener("click", (e)=>{ if(e.target===e.currentTarget) showModal(false); });
+document.addEventListener("keydown", (e)=>{ if (e.key==="Escape" && !$("#mod-modal").classList.contains("hidden")) showModal(false); });
+
+function updateModifyHUD(){
+  if (!MOD_ITEM) return;
+  const newQ = $("#mod-quality").value;
+  const allowed = slotsFor(newQ);
+  $("#mod-allowed").textContent = allowed;
+  $("#mod-slots").textContent   = allowed;
+
+  // count desired upgrades (cannot go below current; inputs min=cur enforce)
+  let desired = 0;
+  $$("#mod-upg input[type=number]").forEach(inp=>{
+    desired += Number(inp.value||0);
+  });
+  $("#mod-used").textContent = desired;
+
+  // cost estimate
+  const base = MOD_ITEM.base_price || 0;
+  const oldQ = MOD_ITEM.quality || "Adequate";
+  const deltaPerUnit = Math.max(0, priceAtQuality(base, newQ) - priceAtQuality(base, oldQ));
+  const qCost = deltaPerUnit * Number(MOD_ITEM.quantity||1);
+
+  // additional upgrades to buy
+  const currentCount = usedUpgrades(MOD_ITEM.upgrades||[]);
+  const addCount = Math.max(0, desired - currentCount);
+  const upgCost = estimateUpgradeFee(currentCount, addCount);
+
+  $("#mod-cost").textContent = qCost + upgCost;
+  $("#mod-msg").textContent  = desired>allowed ? `Too many upgrades for ${newQ} (max ${allowed}).` : "";
+}
+$("#mod-quality").addEventListener("change", updateModifyHUD);
+$("#mod-upg").addEventListener("input", updateModifyHUD);
+
+$("#mod-save").addEventListener("click", async ()=>{
+  if (!MOD_ITEM) return;
+  const newQ = $("#mod-quality").value;
+
+  // figure out which upgrades to add (server only accepts *added* keys)
+  const current = {};
+  (MOD_ITEM.upgrades||[]).forEach(u => current[u.key]=(current[u.key]||0)+1);
+
+  const toAdd = [];
+  $$("#mod-upg input[type=number]").forEach(inp=>{
+    const key = inp.id.slice(3);
+    const want = Number(inp.value||0);
+    const have = current[key] || 0;
+    for(let i=0;i<Math.max(0, want - have);i++) toAdd.push(key);
+  });
 
   const body = {
-    new_quality: newQ ? newQ.trim() : null,
-    add_upgrades: (upgrades || "").split(",").map(s => s.trim()).filter(Boolean)
+    new_quality: newQ && newQ !== (MOD_ITEM.quality||"Adequate") ? newQ : null,
+    add_upgrades: toAdd
   };
 
-  const j = await fetchJSON(`/inventories/${INV_ID}/items/${item_id}/improve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
+  $("#mod-msg").textContent = "Applying…";
+  const j = await fetchJSON(`/inventories/${INV_ID}/items/${MOD_ITEM.item_id}/improve`,{
+    method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
   });
-  if (j.status !== "success") { alert(j.message || "Operation failed"); return; }
-  INV = j.inventory; renderBalances(); renderItems();
-};
+  if (j.status!=="success"){ $("#mod-msg").textContent = j.message || "Operation failed"; return; }
+  INV = j.inventory; renderBalances(); renderItems(); showModal(false);
+});
 
 /* ===========================
    BOOT
    =========================== */
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", ()=>{
   loadInventory();
   refreshCatalog();
   $("#it-q").addEventListener("input", renderItems);
