@@ -56,7 +56,6 @@ const extraWrap = $("#extra-wrap");
 const contWrap  = $("#cont-wrap");
 
 function addCurrencyRow(name="", value=0){
-  const id = `c-${Math.random().toString(36).slice(2,8)}`;
   const div = document.createElement("div");
   div.className = "row";
   div.innerHTML = `
@@ -67,7 +66,6 @@ function addCurrencyRow(name="", value=0){
   extraWrap.appendChild(div);
 }
 function addContainerRow(name="Backpack"){
-  const id = `t-${Math.random().toString(36).slice(2,8)}`;
   const div = document.createElement("div");
   div.className = "row";
   div.innerHTML = `
@@ -86,13 +84,13 @@ document.getElementById("create").onclick = async ()=>{
   const jelly = Number($("#cur-jelly").value||0);
 
   const currencies = { Jelly: jelly };
-  [...extraWrap.querySelectorAll(".row")].forEach(r=>{
+  extraWrap.querySelectorAll(".row").forEach(r=>{
     const n = r.querySelector('[data-k="name"]').value.trim();
     const v = Number(r.querySelector('[data-k="val"]').value||0);
     if (n) currencies[n] = v;
   });
 
-  const containers = [...contWrap.querySelectorAll(".row")].map(r=>({
+  const containers = Array.from(contWrap.querySelectorAll(".row")).map(r=>({
     name: r.querySelector('[data-k="name"]').value.trim() || "Container"
   }));
 
