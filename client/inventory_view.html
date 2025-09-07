@@ -152,7 +152,14 @@ function qualitySlots(q){ return SLOTS[q] || 0; }
 function priceAtQuality(base, q){ return Math.max(0, Number(base||0) + (QDIFF[q]||0)); }
 function sum(arr){ return arr.reduce((a,b)=>a+b,0); }
 
-async function fetchJSON(url){ try{ const r = await fetch(url); return await r.json(); } catch { return {}; } }
+async function fetchJSON(url, opts = {}){
+  try{
+    const r = await fetch(url, { headers: { ...authHeaders(), ...(opts.headers||{}) }, ...opts });
+    return await r.json();
+  }catch{
+    return {};
+  }
+}
 
 function renderBalances(){
   const row = Object.entries(INV.currencies||{}).map(([k,v])=>`<span class="pill">${k}: ${v}</span>`).join(" ");
