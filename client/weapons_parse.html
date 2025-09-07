@@ -107,49 +107,90 @@ const isHead = s => H.includes(norm(s).toLowerCase());
 function parseBlocks(txt){
   const lines = txt.split(/\r?\n/);
   let i = 0, out = [];
+  const LABELS = ["damage","range","hands","effects","price (jelly)","enc."];
 
-  const need = label => {
-    if (i>=lines.length || norm(lines[i]).toLowerCase() !== label) {
-      throw new Error(`Expected heading "${label}" near line ${i+1}, found "${(lines[i]||'').trim()}"`);
+  const norm = s => (s||"").trim();
+  const skipBlanks = () => { while (i < lines.length && !norm(lines[i])) i++; };
+
+  const nextIsHeadingsBlock = () => {
+    if (i + LABELS.length > lines.length) return false;
+    for (let k = 0; k < LABELS.length; k++){
+      if (norm(lines[i + k]).toLowerCase() !== LABELS[k]) return false;
     }
-    i++;
-    if (i>=lines.length) throw new Error(`Missing value for "${label}"`);
+    return true;
+  };
+
+  const needPair = (label) => {
+    skipBlanks();
+    if (i >= lines.length || norm(lines[i]).toLowerCase() !== label) {
+      throw new Error(`Expected heading "${label}" near line ${i+1}, found "${norm(lines[i]||"")}"`);
+    }
+    i++; skipBlanks();
+    if (i >= lines.length) throw new Error(`Missing value for "${label}"`);
     return norm(lines[i++]);
   };
 
+  const readValuesBlock = () => {
+    const vals = {};
+    // consume the 6 heading lines
+    i += LABELS.length;
+    for (const label of LABELS){
+      skipBlanks();
+      if (i >= lines.length) throw new Error(`Missing value for "${label}"`);
+      vals[label] = norm(lines[i++]);
+    }
+    return vals;
+  };
+
   while (i < lines.length){
-    // skip blanks
-    while (i<lines.length && !norm(lines[i])) i++;
-    if (i>=lines.length) break;
+    // skip blanks before a record
+    skipBlanks();
+    if (i >= lines.length) break;
 
     // Name
     const name = norm(lines[i++]);
     if (!name) throw new Error(`Line ${i}: missing weapon name`);
 
-    // Description — collect until we hit "Damage"
+    // Description (until we meet the first "Damage")
     const descLines = [];
-    while (i<lines.length && !/^damage$/i.test(norm(lines[i]))){
+    while (i < lines.length && norm(lines[i]).toLowerCase() !== "damage"){
       const s = norm(lines[i++]);
       if (s) descLines.push(s);
     }
     const description = descLines.join(" ");
 
-    // Now the 6 headings in order
-    const dmg = need("damage");
-    const rng = need("range");
-    const hands = need("hands");
-    const effects = need("effects");
-    const priceStr = need("price (jelly)");
-    const encStr   = need("enc.");
+    // Two supported layouts:
+    // A) headings block then 6 values
+    // B) heading→value repeated 6 times
+    let vals;
+    if (nextIsHeadingsBlock()){
+      vals = readValuesBlock();
+    } else {
+      vals = {};
+      for (const label of LABELS){
+        vals[label] = needPair(label);
+      }
+    }
 
-    const pr = Number(priceStr);
-    const enc = Number(encStr);
-
+    const pr  = Number(vals["price (jelly)"]);
+    const enc = Number(vals["enc."]);
+    const hands = Number(vals["hands"]);
     if (!Number.isFinite(pr))  throw new Error(`Invalid price for "${name}"`);
     if (!Number.isFinite(enc)) throw new Error(`Invalid enc. for "${name}"`);
-    const fx = effects.split(",").map(s=>s.trim()).filter(Boolean);
+    if (!Number.isFinite(hands)) throw new Error(`Invalid hands for "${name}"`);
 
-    out.push({ name, description, damage: dmg, range: String(rng), hands: Number(hands), effects: fx, price: Math.trunc(pr), enc: enc });
+    const fx = String(vals["effects"]||"").split(",").map(s=>s.trim()).filter(Boolean);
+
+    out.push({
+      name,
+      description,
+      damage: String(vals["damage"]||""),
+      range: String(vals["range"]||""),
+      hands,
+      effects: fx,
+      price: Math.trunc(pr),
+      enc
+    });
   }
   return out;
 }
