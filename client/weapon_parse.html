@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Weapons — Parse (Moderator)</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .scroll{max-height:440px;overflow:auto}
+    table.table td,table.table th{padding:8px;border-bottom:1px solid #2a2a2a}
+    input[type="number"]{width:92px}.muted{opacity:.8}.danger{color:#ff6b6b}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Parse Weapons</h1>
+
+  <div class="home-card">
+    <div class="row">
+      <div>
+        <label class="small muted">Targeting Skill</label><br/>
+        <label><input type="radio" name="skill" value="Technicity" checked> Technicity</label>
+        <label><input type="radio" name="skill" value="Brutality"> Brutality</label>
+        <label><input type="radio" name="skill" value="Accuracy"> Accuracy</label>
+        <label><input type="radio" name="skill" value="Aura"> Aura</label>
+      </div>
+    </div>
+
+    <p class="muted">For each weapon, provide:
+      <em>Name</em>, a paragraph of <em>Description</em>, then the headings and values exactly in this order:
+      Damage / Range / Hands / Effects / Price (Jelly) / Enc.</p>
+
+<textarea id="raw" rows="16" placeholder="Chokuto
+An ancient sword from the East, with a straight blade sharpened on one side. Simple but effective, it is the legacy of ancient martial traditions.
+Damage
+2d6+4+M(REF)
+Range
+1
+Hands
+1
+Effects
+Destruction, Speed
+Price (Jelly)
+1530
+Enc.
+5
+
+Rapier
+An elegant and elongated sword from the Central Continent, designed for refined duels. Its complex grip provides superior protection, favoring Technicity over strength.
+Damage
+2d6+4+M(REF)
+Range
+1
+Hands
+1
+Effects
+Armor Piercing, Speed
+Price (Jelly)
+1530
+Enc.
+5"></textarea>
+
+    <div class="row" style="margin-top:8px">
+      <button id="parse" class="btn">Parse</button>
+      <button id="clear" class="btn btn-secondary">Clear</button>
+      <span id="msg" class="muted"></span>
+    </div>
+  </div>
+
+  <div id="preview-card" class="home-card" style="display:none;">
+    <h3 style="margin:0 0 8px;">Preview &amp; Edit <span class="chip"><span id="count">0</span> row(s)</span></h3>
+    <div id="errors" class="danger" style="min-height:1.2em;"></div>
+    <div class="scroll">
+      <table class="table" style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th>Name</th><th>Skill</th><th>Damage</th><th>Range</th><th>Hands</th>
+            <th>Effects</th><th>Price</th><th>Enc.</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button id="save" class="btn">Save to Database</button>
+      <button id="reparse" class="btn btn-secondary">Re-parse</button>
+    </div>
+  </div>
+
+  <a class="btn btn-secondary" href="weapons_home.html" style="margin-top:12px;">← Back</a>
+</div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization":"Bearer "+token } : {};
+let PREVIEW = [];
+
+const H = ["damage","range","hands","effects","price (jelly)","enc."];
+
+function skill(){ return (document.querySelector('input[name="skill"]:checked')||{}).value || "Technicity"; }
+const norm = s => (s||"").trim();
+const isHead = s => H.includes(norm(s).toLowerCase());
+
+function parseBlocks(txt){
+  const lines = txt.split(/\r?\n/);
+  let i = 0, out = [];
+
+  const need = label => {
+    if (i>=lines.length || norm(lines[i]).toLowerCase() !== label) {
+      throw new Error(`Expected heading "${label}" near line ${i+1}, found "${(lines[i]||'').trim()}"`);
+    }
+    i++;
+    if (i>=lines.length) throw new Error(`Missing value for "${label}"`);
+    return norm(lines[i++]);
+  };
+
+  while (i < lines.length){
+    // skip blanks
+    while (i<lines.length && !norm(lines[i])) i++;
+    if (i>=lines.length) break;
+
+    // Name
+    const name = norm(lines[i++]);
+    if (!name) throw new Error(`Line ${i}: missing weapon name`);
+
+    // Description — collect until we hit "Damage"
+    const descLines = [];
+    while (i<lines.length && !/^damage$/i.test(norm(lines[i]))){
+      const s = norm(lines[i++]);
+      if (s) descLines.push(s);
+    }
+    const description = descLines.join(" ");
+
+    // Now the 6 headings in order
+    const dmg = need("damage");
+    const rng = need("range");
+    const hands = need("hands");
+    const effects = need("effects");
+    const priceStr = need("price (jelly)");
+    const encStr   = need("enc.");
+
+    const pr = Number(priceStr);
+    const enc = Number(encStr);
+
+    if (!Number.isFinite(pr))  throw new Error(`Invalid price for "${name}"`);
+    if (!Number.isFinite(enc)) throw new Error(`Invalid enc. for "${name}"`);
+    const fx = effects.split(",").map(s=>s.trim()).filter(Boolean);
+
+    out.push({ name, description, damage: dmg, range: String(rng), hands: Number(hands), effects: fx, price: Math.trunc(pr), enc: enc });
+  }
+  return out;
+}
+
+function renderPreview(list){
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = list.map((e,i)=>`
+    <tr>
+      <td><input value="${e.name.replace(/"/g,'&quot;')}" data-i="${i}" data-k="name" /></td>
+      <td>${skill()}</td>
+      <td><input value="${e.damage.replace(/"/g,'&quot;')}" data-i="${i}" data-k="damage" /></td>
+      <td style="text-align:center;"><input value="${e.range}" data-i="${i}" data-k="range" /></td>
+      <td style="text-align:center;"><input type="number" value="${e.hands}" data-i="${i}" data-k="hands" /></td>
+      <td><input value="${(e.effects||[]).join(', ').replace(/"/g,'&quot;')}" data-i="${i}" data-k="effects" /></td>
+      <td style="text-align:center;"><input type="number" value="${e.price}" data-i="${i}" data-k="price" /></td>
+      <td style="text-align:center;"><input type="number" step="0.1" value="${e.enc}" data-i="${i}" data-k="enc" /></td>
+    </tr>
+  `).join("");
+  document.getElementById("count").textContent = String(list.length);
+  document.getElementById("preview-card").style.display = "block";
+  document.getElementById("errors").textContent = "";
+}
+
+document.addEventListener("input",(ev)=>{
+  const t = ev.target; if (!t || t.dataset.i===undefined) return;
+  const i=+t.dataset.i, k=t.dataset.k, v=t.value;
+  if (k==="hands" || k==="price" || k==="enc") PREVIEW[i][k] = Number(v||0);
+  else if (k==="effects") PREVIEW[i][k] = v.split(",").map(s=>s.trim()).filter(Boolean);
+  else PREVIEW[i][k] = v;
+});
+
+document.getElementById("parse").addEventListener("click", ()=>{
+  try{ PREVIEW = parseBlocks(document.getElementById("raw").value); renderPreview(PREVIEW); }
+  catch(err){
+    document.getElementById("preview-card").style.display="block";
+    document.getElementById("tbody").innerHTML="";
+    document.getElementById("count").textContent="0";
+    document.getElementById("errors").textContent=err.message||String(err);
+  }
+});
+document.getElementById("clear").addEventListener("click", ()=>{ document.getElementById("raw").value=""; document.getElementById("preview-card").style.display="none"; PREVIEW=[]; });
+document.getElementById("reparse").addEventListener("click", ()=>document.getElementById("parse").click());
+
+document.getElementById("save").addEventListener("click", async ()=>{
+  if (!PREVIEW.length) return;
+  try{
+    const items = PREVIEW.map(x=>({
+      name:x.name, description:x.description, damage:x.damage, range:String(x.range),
+      hands:Number(x.hands), effects:x.effects, price:Number(x.price), enc:Number(x.enc)
+    }));
+    const res = await fetch(`/weapons/bulk_create`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify({ skill: skill(), items })
+    });
+    const j = await res.json().catch(()=>({}));
+    if (j.status!=="success") throw new Error(j.message||"Save failed.");
+    alert(`Created ${j.created.length} weapon(s) (+ Animarma). Skipped ${j.skipped.length} duplicate(s).`);
+    PREVIEW=[]; document.getElementById("preview-card").style.display="none"; document.getElementById("raw").value="";
+  }catch(err){ document.getElementById("errors").textContent = err.message||String(err); }
+});
+</script>
+</body>
+</html>

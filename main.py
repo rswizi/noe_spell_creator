@@ -40,7 +40,7 @@ CLIENT_DIR = BASE_DIR / "client"
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "object_parse", "objects_edits", "tools_home", "tools_parse", "tools_edit",}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit", "tools_home", "tools_parse", "tools_edit", "weapons_home", "weapon_parse", "weapons_edit"}
 
 @app.get("/", include_in_schema=False)
 def root():
@@ -1544,4 +1544,152 @@ def bulk_create_tools(request: Request, payload: dict = Body(...)):
         doc["created_at"] = datetime.datetime.utcnow().isoformat()+"Z"
         col.insert_one(dict(doc))
         created.append({k:v for k,v in doc.items() if k!="_id"})
+    return {"status":"success","created": created, "skipped": skipped}
+
+# ---------- Weapons (inventory) ----------
+from fastapi import Body
+
+QUAL_PRICE_DIFF = {
+    "Mediocre": -100, "Adequate": 0, "Good": 167, "Very Good": 1390,
+    "Excellent": 5280, "Legendary": 15300, "Mythical": 38760,
+    "Epic": 128000, "Divine": 614400, "Unreal": 921600,
+}
+
+def _damage_to_animarma(expr: str) -> str:
+    # "2d6+4+M(REF)" -> "2 ID+4+M(MAG)"
+    import re
+    s = expr or ""
+    s = re.sub(r'(\d+)\s*d6', r'\1 ID', s, flags=re.I)
+    s = re.sub(r'M\(\s*[^)]+\)', 'M(MAG)', s)
+    return s
+
+def _as_list(x):
+    if isinstance(x, list): return [str(v).strip() for v in x if str(v).strip()]
+    if isinstance(x, str):  return [s for s in (v.strip() for v in x.split(",")) if s]
+    return []
+
+def _weapon_from_body(b: dict) -> dict:
+    name  = (b.get("name") or "").strip() or "Unnamed"
+    skill = (b.get("skill") or "Technicity").strip().title()
+    desc  = (b.get("description") or "").strip()
+    dmg   = (b.get("damage") or "").strip()
+    rng   = str(b.get("range") or "").strip()
+    hands = int(b.get("hands") or 1)
+    price = int(b.get("price") or 0)
+    enc   = float(b.get("enc") or 0)
+    fx    = _as_list(b.get("effects"))
+
+    doc = {
+        "name": name,
+        "name_key": norm_key(name),
+        "skill": skill,                 # Technicity | Brutality | Accuracy | Aura
+        "description": desc,
+        "damage": dmg,
+        "range": rng,
+        "hands": hands,
+        "effects": fx,
+        "price": price,                 # base price (quality applied client-side when needed)
+        "enc": enc,
+        "is_animarma": bool(b.get("is_animarma") or False),
+        "nature": (b.get("nature") or "").strip(),  # optional, can be edited later
+    }
+    return doc
+
+def _make_animarma(base: dict) -> dict:
+    a = dict(base)
+    a["is_animarma"] = True
+    a["name"] = f'{base["name"]} (Animarma)'
+    a["name_key"] = norm_key(a["name"])
+    a["damage"] = _damage_to_animarma(base.get("damage",""))
+    a["price"] = int(base.get("price",0)) + 100
+    a["enc"] = round(float(base.get("enc",0)) / 2.0, 2)
+    # same skill, hands, range, effects, nature
+    return a
+
+@app.get("/weapons")
+def list_weapons(q: str | None = Query(None)):
+    col = get_col("weapons")
+    filt = {}
+    if q:
+        filt["name_key"] = {"$regex": norm_key(q)}
+    return {"status":"success","weapons": list(col.find(filt, {"_id":0}))}
+
+@app.post("/weapons")
+def create_weapon(request: Request, body: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("weapons")
+
+    base = _weapon_from_body(body)
+    if col.find_one({"name_key": base["name_key"]}):
+        raise HTTPException(status_code=409, detail="Weapon with same name already exists")
+
+    base["id"] = next_id_str("weapons", padding=4)
+    now = datetime.datetime.utcnow().isoformat()+"Z"
+    base["created_at"] = now
+    col.insert_one(dict(base))
+
+    # auto-create animarma
+    anim = _make_animarma(base)
+    if not col.find_one({"name_key": anim["name_key"]}):
+        anim["id"] = next_id_str("weapons", padding=4)
+        anim["created_at"] = now
+        col.insert_one(dict(anim))
+
+    out = {k:v for k,v in base.items() if k!="_id"}
+    return {"status":"success","weapon": out}
+
+@app.put("/weapons/{wid}")
+def update_weapon(wid: str, request: Request, body: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("weapons")
+    old = col.find_one({"id": wid})
+    if not old: raise HTTPException(status_code=404, detail="Not found")
+
+    upd = _weapon_from_body(body)
+    # if renaming, prevent duplicates
+    if upd["name_key"] != old.get("name_key"):
+        if col.find_one({"name_key": upd["name_key"]}):
+            raise HTTPException(status_code=409, detail="Weapon with same name already exists")
+    upd["updated_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    col.update_one({"id": wid}, {"$set": upd})
+    return {"status":"success","weapon": col.find_one({"id": wid},{"_id":0})}
+
+@app.delete("/weapons/{wid}")
+def delete_weapon(wid: str, request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("weapons")
+    r = col.delete_one({"id": wid})
+    if r.deleted_count == 0: raise HTTPException(status_code=404, detail="Not found")
+    return {"status":"success","deleted": wid}
+
+@app.post("/weapons/bulk_create")
+def bulk_create_weapons(request: Request, payload: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    skill = (payload.get("skill") or "Technicity").strip().title()
+    items = payload.get("items") or []
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="items must be a non-empty list")
+
+    col = get_col("weapons")
+    created, skipped = [], []
+    now = datetime.datetime.utcnow().isoformat()+"Z"
+
+    for b in items:
+        base = _weapon_from_body({**b, "skill": skill, "is_animarma": False})
+        if col.find_one({"name_key": base["name_key"]}):
+            skipped.append(base["name"]); continue
+
+        base["id"] = next_id_str("weapons", padding=4)
+        base["created_at"] = now
+        col.insert_one(dict(base))
+        created.append({k:v for k,v in base.items() if k!="_id"})
+
+        # auto-create animarma twin
+        anim = _make_animarma(base)
+        if not col.find_one({"name_key": anim["name_key"]}):
+            anim["id"] = next_id_str("weapons", padding=4)
+            anim["created_at"] = now
+            col.insert_one(dict(anim))
+            created.append({k:v for k,v in anim.items() if k!="_id"})
+
     return {"status":"success","created": created, "skipped": skipped}
