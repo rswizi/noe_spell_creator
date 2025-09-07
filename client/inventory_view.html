@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Inventory</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+    .muted{opacity:.8}
+    .pill{display:inline-block;border:1px solid #444;border-radius:999px;padding:2px 8px;font-size:.85rem}
+    .table{width:100%;border-collapse:collapse}
+    .table td,.table th{padding:8px;border-bottom:1px solid #222}
+    .small{font-size:.9rem}
+    .box{border:1px solid #222;border-radius:10px;padding:10px}
+    .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1 id="title">Inventory</h1>
+
+  <!-- balances -->
+  <div class="home-card">
+    <h3>Money</h3>
+    <div id="balances" class="row"></div>
+    <div class="row" style="margin-top:8px;">
+      <input id="tx-cur" placeholder="Currency (e.g. Jelly)" style="width:160px"/>
+      <input id="tx-amt" type="number" placeholder="Amount (+/-)" style="width:160px"/>
+      <input id="tx-note" placeholder="Note (optional)" style="min-width:260px"/>
+      <button id="tx-add" class="btn">Add Transaction</button>
+      <span id="tx-msg" class="muted"></span>
+    </div>
+  </div>
+
+  <!-- containers -->
+  <div class="home-card">
+    <h3>Containers</h3>
+    <div id="containers" class="row"></div>
+    <div class="row" style="margin-top:8px;">
+      <input id="ct-name" placeholder="New container name"/>
+      <button id="ct-add" class="btn small">+ Add</button>
+      <span id="ct-msg" class="muted"></span>
+    </div>
+  </div>
+
+  <!-- buy -->
+  <div class="home-card">
+    <h3>Buy from Database</h3>
+    <div class="row">
+      <select id="buy-kind">
+        <option value="weapon">Weapon</option>
+        <option value="equipment">Equipment</option>
+        <option value="tool">Tool</option>
+        <option value="object">Object</option>
+      </select>
+      <input id="buy-q" placeholder="Filter by name…" />
+      <button id="buy-refresh" class="btn small">Search</button>
+      <span id="buy-info" class="muted"></span>
+    </div>
+    <div class="grid" id="buy-list" style="margin-top:10px;"></div>
+
+    <div id="buy-form" class="box" style="margin-top:10px;display:none;">
+      <div class="row">
+        <div class="pill" id="sel-name">—</div>
+        <div class="pill" id="sel-base">Base: <span id="sel-price">0</span> J</div>
+        <div class="pill">Enc. <span id="sel-enc">0</span></div>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <label>Qty <input id="bf-qty" type="number" min="1" value="1" style="width:100px"></label>
+        <label>Quality
+          <select id="bf-quality">
+            <option>Mediocre</option><option selected>Adequate</option><option>Good</option><option>Very Good</option>
+            <option>Excellent</option><option>Legendary</option><option>Mythical</option><option>Epic</option>
+            <option>Divine</option><option>Unreal</option>
+          </select>
+        </label>
+        <label>Container
+          <select id="bf-container"></select>
+        </label>
+      </div>
+
+      <div id="bf-upgrades" style="display:none;margin-top:6px;">
+        <div class="small muted">Upgrades (Weapons & Armor only). Slots = quality level (Adequate=1 … Unreal=9). “Unique” can be taken once.</div>
+        <div class="row" id="upg-wrap"></div>
+      </div>
+
+      <div class="row" style="margin-top:8px;">
+        <div class="pill">Total <span id="bf-total">0</span> J</div>
+        <span id="bf-msg" class="muted"></span>
+        <button id="bf-buy" class="btn" style="margin-left:auto;">Buy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- items -->
+  <div class="home-card">
+    <h3>Items</h3>
+    <div class="row">
+      <label>Show container
+        <select id="it-filter"></select>
+      </label>
+      <input id="it-q" placeholder="Filter by name…" />
+    </div>
+    <div class="box" style="margin-top:8px;">
+      <table class="table">
+        <thead><tr>
+          <th>Name</th><th>Kind</th><th>Qty</th><th>Quality</th><th>Upgrades</th><th>Container</th><th></th>
+        </tr></thead>
+        <tbody id="it-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="margin-top:12px;">
+    <a class="btn btn-secondary" href="inventory_manage.html">← Back</a>
+  </div>
+</div>
+
+<script>
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization":"Bearer "+token } : {};
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+const QDIFF = { "Mediocre":-100,"Adequate":0,"Good":167,"Very Good":1390,"Excellent":5280,"Legendary":15300,"Mythical":38760,"Epic":128000,"Divine":614400,"Unreal":921600 };
+const SLOTS = { "Adequate":1,"Good":2,"Very Good":3,"Excellent":4,"Legendary":5,"Mythical":6,"Epic":7,"Divine":8,"Unreal":9 };
+
+const W_UPGRADES = [
+  { key:"lethality", name:"Lethality", unique:false },
+  { key:"increase",  name:"Increase",  unique:false },
+  { key:"acuity",    name:"[Unique] Acuity", unique:true },
+  { key:"rune",      name:"[Unique] Rune",   unique:true },
+  { key:"magazine",  name:"Magazine", unique:false },
+  { key:"silver",    name:"[Unique] Silver Plating", unique:true },
+  { key:"range",     name:"Range", unique:false },
+  { key:"blessing",  name:"Blessing", unique:false },
+  { key:"defense",   name:"[Unique] Defense", unique:true },
+];
+const A_UPGRADES = [
+  { key:"defense", name:"Defense (+12 HP)", unique:false },
+  { key:"enchant", name:"Enchantement (+1 EN +1 FO)", unique:false },
+];
+
+let INV = null;   // current inventory document (server format)
+let INV_ID = new URLSearchParams(location.search).get("inv");
+
+// ---------- helpers ----------
+function fmtUpgrades(u){ if(!u||!u.length) return ""; const m=new Map(); u.forEach(x=>m.set(x.name,(m.get(x.name)||0)+1)); return [...m].map(([k,v])=> v>1?`${k}×${v}`:k).join(", "); }
+function qualitySlots(q){ return SLOTS[q] || 0; }
+function priceAtQuality(base, q){ return Math.max(0, Number(base||0) + (QDIFF[q]||0)); }
+function sum(arr){ return arr.reduce((a,b)=>a+b,0); }
+
+async function fetchJSON(url){ try{ const r = await fetch(url); return await r.json(); } catch { return {}; } }
+
+function renderBalances(){
+  const row = Object.entries(INV.currencies||{}).map(([k,v])=>`<span class="pill">${k}: ${v}</span>`).join(" ");
+  $("#balances").innerHTML = row || "<span class='muted'>No money yet.</span>";
+}
+function renderContainers(){
+  const cs = INV.containers || [];
+  $("#containers").innerHTML = cs.map(c=>`<span class="pill">${c.name} [${c.id}]</span>`).join(" ");
+  // fill selects
+  const opts = cs.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+  $("#bf-container").innerHTML = opts;
+  $("#it-filter").innerHTML = `<option value="">All</option>`+opts;
+}
+function renderItems(){
+  const q = ($("#it-q").value||"").trim().toLowerCase();
+  const cid = $("#it-filter").value;
+  let list = (INV.items||[]).slice();
+  if (cid) list = list.filter(x=>x.container_id===cid);
+  if (q) list = list.filter(x => (x.name||"").toLowerCase().includes(q));
+  $("#it-body").innerHTML = list.map(it=>`
+    <tr>
+      <td>${it.name}</td>
+      <td>${it.kind}</td>
+      <td>${it.quantity}</td>
+      <td>${it.quality||"-"}</td>
+      <td>${fmtUpgrades(it.upgrades)}</td>
+      <td>${(INV.containers.find(c=>c.id===it.container_id)||{}).name||"-"}</td>
+      <td>
+        ${(it.kind==="weapon" || (it.kind==="equipment" && it.subcategory==="armor")) ? `<button class="btn small" onclick="openUpgrade('${it.item_id}')">Upgrades/Quality</button>`:""}
+      </td>
+    </tr>
+  `).join("");
+}
+
+// ---------- load inventory ----------
+async function loadInventory(){
+  const j = await fetchJSON(`/inventories/${INV_ID}`);
+  if (j.status!=="success"){ alert(j.message||"Failed to load"); return; }
+  INV = j.inventory;
+  $("#title").textContent = `Inventory — ${INV.name} [${INV.id}]`;
+  renderBalances(); renderContainers(); renderItems();
+}
+document.addEventListener("DOMContentLoaded", loadInventory);
+
+// ---------- manual transaction ----------
+document.getElementById("tx-add").onclick = async ()=>{
+  const currency = ($("#tx-cur").value || "Jelly").trim();
+  const amount = Number($("#tx-amt").value||0);
+  const note = $("#tx-note").value.trim();
+  $("#tx-msg").textContent = "Saving…";
+  const r = await fetch(`/inventories/${INV_ID}/money/transaction`,{
+    method:"POST", headers:{"Content-Type":"application/json", ...authHeaders()},
+    body: JSON.stringify({ currency, amount, note, source:"manual" })
+  });
+  const j = await r.json().catch(()=>({})); 
+  $("#tx-msg").textContent = j.status==="success" ? "Saved." : (j.message||"Failed");
+  if (j.status==="success"){ INV.currencies = j.currencies; renderBalances(); }
+};
+
+// ---------- containers ----------
+document.getElementById("ct-add").onclick = async ()=>{
+  const name = ($("#ct-name").value||"Container").trim();
+  $("#ct-msg").textContent="Adding…";
+  const r = await fetch(`/inventories/${INV_ID}/containers`,{
+    method:"POST", headers:{"Content-Type":"application/json", ...authHeaders()},
+    body: JSON.stringify({ name })
+  });
+  const j = await r.json().catch(()=>({}));
+  $("#ct-msg").textContent = j.status==="success" ? "Added." : (j.message||"Failed");
+  if (j.status==="success"){ INV.containers.push(j.container); renderContainers(); }
+};
+
+// ---------- buy area ----------
+let DB_CACHE = { weapons:[], equipment:[], tools:[], objects:[] };
+function card(it, kind){
+  const desc = (it.description || it.effect || "").slice(0,160);
+  const price = it.price ?? 0; const enc = it.enc ?? 0;
+  return `
+    <div class="box">
+      <div><strong>${it.name || it.type || it.style}</strong></div>
+      <div class="small muted">${desc}</div>
+      <div class="row">
+        <span class="pill">Price ${price}</span>
+        <span class="pill">Enc. ${enc}</span>
+        <button class="btn small" onclick="selectBuy('${kind}','${it.id}')">Select</button>
+      </div>
+    </div>`;
+}
+async function refreshCatalog(){
+  $("#buy-info").textContent = "Loading…";
+  const kind = $("#buy-kind").value;
+  const q = ($("#buy-q").value||"").trim().toLowerCase();
+  if (DB_CACHE.weapons.length===0){
+    const [jw, je, jt, jo] = await Promise.all([
+      fetchJSON(`/weapons`), fetchJSON(`/equipment`), fetchJSON(`/tools`), fetchJSON(`/objects`)
+    ]);
+    DB_CACHE.weapons   = jw.weapons || [];
+    DB_CACHE.equipment = je.equipment || [];
+    DB_CACHE.tools     = jt.tools || [];
+    DB_CACHE.objects   = jo.objects || [];
+  }
+  let list = DB_CACHE[kind+"s"] || [];
+  if (q) list = list.filter(x => (x.name||x.type||x.style||"").toLowerCase().includes(q));
+  $("#buy-list").innerHTML = list.map(x => card(x, kind)).join("");
+  $("#buy-info").textContent = `${list.length} item(s)`;
+}
+document.getElementById("buy-refresh").onclick = refreshCatalog;
+document.getElementById("buy-kind").onchange = refreshCatalog;
+document.addEventListener("DOMContentLoaded", refreshCatalog);
+
+// current selection
+let SEL = null;
+function selectBuy(kind, id){
+  const src = (DB_CACHE[kind+"s"]||[]).find(x=>x.id===id);
+  if (!src) return;
+  const name = src.name || (src.category==="armor" ? `Armor — ${src.type}` : src.style);
+  const enc  = src.enc ?? 0; const base = src.price ?? 0;
+  SEL = { kind, id, base, enc, src };
+  $("#sel-name").textContent = name;
+  $("#sel-enc").textContent  = enc;
+  $("#sel-price").textContent= base;
+
+  // quality only for weapon or equipment
+  const qSel = $("#bf-quality");
+  if (kind==="weapon" || kind==="equipment"){
+    qSel.disabled = false;
+  } else {
+    qSel.value = "Adequate"; qSel.disabled = true;
+  }
+
+  // upgrades only for weapons & armor
+  const upg = $("#bf-upgrades");
+  const wrap= $("#upg-wrap");
+  wrap.innerHTML = "";
+  if (kind==="weapon" || (kind==="equipment" && src.category==="armor")){
+    const list = kind==="weapon" ? W_UPGRADES : A_UPGRADES;
+    list.forEach(u=>{
+      const id=`u-${u.key}`;
+      wrap.insertAdjacentHTML("beforeend", `
+        <label class="small"><input type="number" id="${id}" value="0" min="0" ${u.unique?'max="1"':''} style="width:70px" /> ${u.name}</label>
+      `);
+    });
+    upg.style.display = "block";
+  } else { upg.style.display = "none"; }
+
+  $("#buy-form").style.display = "block";
+  recalcTotal();
+}
+
+function countUpgrades(){
+  const list = [];
+  $$("#upg-wrap input[type=number]").forEach(inp=>{
+    const n = Math.max(0, Number(inp.value||0));
+    if (n>0){
+      const key = inp.id.slice(2);
+      const base = (W_UPGRADES.find(x=>x.key===key) || A_UPGRADES.find(x=>x.key===key));
+      for(let i=0;i<n;i++) list.push({ key, name: base.name, unique: !!base.unique });
+    }
+  });
+  return list;
+}
+function recalcTotal(){
+  if (!SEL) return;
+  const qty = Math.max(1, Number($("#bf-qty").value||1));
+  const qual= $("#bf-quality").value;
+  const base = priceAtQuality(SEL.base, qual);
+  const upgrades = countUpgrades();
+  const slots = qualitySlots(qual);
+  if (upgrades.length > slots){
+    $("#bf-msg").textContent = `Too many upgrades for ${qual} (slots ${slots}).`;
+  } else {
+    $("#bf-msg").textContent = "";
+  }
+  // server will recompute exact fee; here just show base (user sees final after save)
+  $("#bf-total").textContent = base * qty;
+}
+["bf-qty","bf-quality"].forEach(id => document.getElementById(id).addEventListener("input", recalcTotal));
+document.getElementById("upg-wrap").addEventListener?.("input", recalcTotal);
+
+document.getElementById("bf-buy").onclick = async ()=>{
+  if (!SEL) return;
+  const body = {
+    kind: SEL.kind, ref_id: SEL.id,
+    quantity: Math.max(1, Number($("#bf-qty").value||1)),
+    quality: $("#bf-quality").value,
+    container_id: $("#bf-container").value,
+    upgrades: countUpgrades(),
+    currency: "Jelly"
+  };
+  $("#bf-msg").textContent = "Purchasing…";
+  const r = await fetch(`/inventories/${INV_ID}/purchase`,{
+    method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify(body)
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status!=="success"){ $("#bf-msg").textContent = j.message||"Purchase failed"; return; }
+  $("#bf-msg").textContent = `Purchased for ${j.transaction.amount*-1} Jelly.`;
+  INV = j.inventory; renderBalances(); renderItems();
+};
+
+// ---------- item upgrades / quality ----------
+window.openUpgrade = async (item_id)=>{
+  const item = (INV.items||[]).find(x=>x.item_id===item_id);
+  if (!item) return;
+  const newQ = prompt(`Upgrade quality for "${item.name}" (current: ${item.quality}). Enter new quality (Adequate..Unreal), or leave blank to add upgrades only:`);
+  const upgrades = prompt(`Add upgrades now? Comma separated keys (e.g., lethality,acuity). Leave blank for none.`);
+
+  const body = { new_quality: newQ || null, add_upgrades: (upgrades||"").split(",").map(s=>s.trim()).filter(Boolean) };
+  const r = await fetch(`/inventories/${INV_ID}/items/${item_id}/improve`,{
+    method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify(body)
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status!=="success"){ alert(j.message||"Operation failed"); return; }
+  INV = j.inventory; renderBalances(); renderItems();
+};
+
+// filters
+$("#it-q").addEventListener("input", renderItems);
+$("#it-filter").addEventListener("change", renderItems);
+</script>
+</body>
+</html>

@@ -17,6 +17,7 @@ from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS
 from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect
 from server.src.modules.objects_helpers import _object_from_body
+from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -40,7 +41,7 @@ CLIENT_DIR = BASE_DIR / "client"
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit", "tools_home", "tools_parse", "tools_edit", "weapons_home", "weapons_parse", "weapons_edit","equipment_home","equipment_parse","equipement_edit","inventory_browse",}
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit", "tools_home", "tools_parse", "tools_edit", "weapons_home", "weapons_parse", "weapons_edit","equipment_home","equipment_parse","equipement_edit","inventory_browse","inventory_create","inventory_view",}
 
 @app.get("/", include_in_schema=False)
 def root():
@@ -1819,3 +1820,220 @@ def bulk_create_equipment(request: Request, payload: dict = Body(...)):
         created.append({k:v for k,v in doc.items() if k!="_id"})
 
     return {"status":"success","created": created, "skipped": skipped}
+
+# ---------- Inventories ----------
+from fastapi import Body
+
+def _new_container(name: str) -> dict:
+    return {"id": next_id_str("container", padding=3), "name": (name or "Container").strip()}
+
+@app.post("/inventories")
+def create_inventory(request: Request, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    name = (payload.get("name") or "Inventory").strip()
+    currencies = payload.get("currencies") or {}
+    containers = payload.get("containers") or []
+    containers = [ _new_container(c.get("name")) for c in containers ] or [ _new_container("Backpack") ]
+    inv = {
+        "id": next_id_str("inventory", padding=4),
+        "name": name,
+        "owner": user,
+        "currencies": { k: int(v) for k,v in currencies.items() },
+        "containers": containers,
+        "items": [],
+        "transactions": [],
+        "created_at": datetime.datetime.utcnow().isoformat()+"Z",
+    }
+    db.inventories.insert_one(dict(inv))
+    return {"status":"success","inventory": inv}
+
+@app.get("/inventories")
+def list_inventories(request: Request):
+    user, role = require_auth(request)
+    db = get_db()
+    invs = list(db.inventories.find({"owner": user}, {"_id":0}))
+    return {"status":"success","inventories": invs}
+
+@app.get("/inventories/{inv_id}")
+def read_inventory(request: Request, inv_id: str):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user}, {"_id":0})
+    if not inv: raise HTTPException(404, "Not found")
+    return {"status":"success","inventory": inv}
+
+@app.post("/inventories/{inv_id}/containers")
+def add_container(request: Request, inv_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv: raise HTTPException(404, "Not found")
+    c = _new_container(payload.get("name"))
+    db.inventories.update_one({"id": inv_id}, {"$push": {"containers": c}})
+    inv = db.inventories.find_one({"id": inv_id}, {"_id":0})
+    return {"status":"success","container": c, "inventory": inv}
+
+@app.post("/inventories/{inv_id}/money/transaction")
+def add_transaction(request: Request, inv_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv: raise HTTPException(404, "Not found")
+    currency = (payload.get("currency") or "Jelly").strip()
+    amount   = int(payload.get("amount") or 0)
+    note     = (payload.get("note") or "").strip()
+    source   = (payload.get("source") or "manual").strip()
+    cur = inv.get("currencies", {})
+    cur[currency] = int(cur.get(currency,0)) + amount
+    tx = {"ts": datetime.datetime.utcnow().isoformat()+"Z","currency":currency,"amount":amount,"note":note,"source":source}
+    db.inventories.update_one({"id":inv_id},
+        {"$set":{"currencies": cur}, "$push":{"transactions": tx}})
+    return {"status":"success","currencies": cur, "transaction": tx}
+
+def _fetch_catalog_item(kind: str, ref_id: str) -> dict | None:
+    db = get_db()
+    col = {"weapon":"weapons","equipment":"equipment","tool":"tools","object":"objects"}.get(kind)
+    if not col: return None
+    return db[col].find_one({"id": ref_id})
+
+def _validate_upgrades(kind: str, subcat: str | None, quality: str, existing: list[dict], add: list[dict]) -> tuple[list[dict], int, list[dict]]:
+    """Validate and compute fees. Returns (new_upgrades_list, total_fee, steps)"""
+    exist = existing or []
+    add = add or []
+    # allowed only for weapon or armor
+    allow = (kind == "weapon") or (kind == "equipment" and subcat == "armor")
+    if not allow: return (exist, 0, [])
+    # unique rules and slots
+    slots = _slots_for_quality(quality)
+    # current counts per key
+    from collections import Counter
+    cnt = Counter([u["key"] for u in exist])
+    new = exist[:]
+    for u in add:
+        key = u.get("key")
+        table = WEAPON_UPGRADES if kind=="weapon" else ARMOR_UPGRADES
+        meta = next((x for x in table if x["key"]==key), None)
+        if not meta: continue
+        if meta["unique"] and cnt.get(key,0)>=1:  # unique already there
+            continue
+        new.append({"key": key, "name": meta["name"], "unique": meta["unique"]})
+        cnt[key]+=1
+        if len(new) >= slots: break
+    # fees according to final number
+    fee, steps = _upgrade_fee_for_range(len(exist), len(new)-len(exist))
+    return (new, fee, steps)
+
+@app.post("/inventories/{inv_id}/purchase")
+def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv: raise HTTPException(404, "Not found")
+
+    kind = (payload.get("kind") or "").strip().lower()
+    ref_id = (payload.get("ref_id") or "").strip()
+    qty = max(1, int(payload.get("quantity") or 1))
+    quality = (payload.get("quality") or "Adequate").strip()
+    container_id = (payload.get("container_id") or (inv["containers"][0]["id"] if inv.get("containers") else None))
+    upgrades_req = payload.get("upgrades") or []
+    currency = (payload.get("currency") or "Jelly").strip()
+
+    src = _fetch_catalog_item(kind, ref_id)
+    if not src: raise HTTPException(404, "Catalog item not found")
+
+    base_price = int(src.get("price") or 0)
+    enc = float(src.get("enc") or 0)
+    subcat = src.get("category") if kind=="equipment" else None
+    name = src.get("name") or (subcat=="armor" and f"Armor — {src.get('type')}") or src.get("style") or "Item"
+
+    # compute quality price (weapons & equipment only)
+    unit_price = base_price
+    if kind in ("weapon","equipment"):
+        unit_price = _qprice(base_price, quality)
+
+    # apply upgrades (only weapon/armor)
+    upgrades, fee, steps = _validate_upgrades(kind, subcat, quality, existing=[], add=upgrades_req)
+    unit_price += fee
+
+    total = unit_price * qty
+
+    # update money (negative transaction)
+    cur = inv.get("currencies", {})
+    cur[currency] = int(cur.get(currency,0)) - total
+
+    # store item
+    item = {
+        "item_id": next_id_str("invitem", padding=5),
+        "kind": kind,
+        "subcategory": subcat,   # for equipment
+        "ref_id": ref_id,
+        "name": name,
+        "quantity": qty,
+        "quality": quality if kind in ("weapon","equipment") else None,
+        "enc": enc,
+        "base_price": base_price,
+        "paid_unit": unit_price,
+        "upgrades": upgrades,
+        "container_id": container_id,
+    }
+    tx = {"ts": datetime.datetime.utcnow().isoformat()+"Z", "currency":currency, "amount": -total, "note": f"Purchase {name} x{qty}", "source":"purchase"}
+
+    db.inventories.update_one({"id": inv_id}, {
+        "$set": {"currencies": cur},
+        "$push": {"transactions": tx, "items": item}
+    })
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id":0})
+    return {"status":"success","inventory": inv2, "transaction": tx}
+
+@app.post("/inventories/{inv_id}/items/{item_id}/improve")
+def improve_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv: raise HTTPException(404, "Not found")
+    currency = "Jelly"
+
+    items = inv.get("items", [])
+    idx = next((i for i,x in enumerate(items) if x["item_id"]==item_id), -1)
+    if idx < 0: raise HTTPException(404, "Item not found")
+    it = items[idx]
+    kind = it["kind"]; subcat = it.get("subcategory")
+
+    # quality upgrade cost = (newQ - oldQ) diff per unit * qty
+    new_q = payload.get("new_quality")
+    add_keys = payload.get("add_upgrades") or []
+
+    total_cost = 0
+    note_parts = []
+
+    # quality
+    if new_q and kind in ("weapon","equipment"):
+      old_q = it.get("quality") or "Adequate"
+      base = it.get("base_price") or 0
+      delta = _qprice(base, new_q) - _qprice(base, old_q)
+      if delta < 0: delta = 0  # no refund by default
+      total_cost += delta * int(it.get("quantity") or 1)
+      it["quality"] = new_q
+      note_parts.append(f"quality → {new_q}")
+
+    # upgrades
+    add_list = [{"key": k} for k in add_keys]
+    new_upgrades, fee, steps = _validate_upgrades(kind, subcat, it.get("quality") or "Adequate", it.get("upgrades") or [], add_list)
+    if len(new_upgrades) > len(it.get("upgrades") or []):
+        it["upgrades"] = new_upgrades
+        total_cost += fee
+        note_parts.append(f"+{len(new_upgrades)-(len(it.get('upgrades') or []))} upgrade(s)")
+
+    # persist + money
+    if total_cost > 0:
+        cur = inv.get("currencies", {})
+        cur[currency] = int(cur.get(currency,0)) - total_cost
+        tx = {"ts": datetime.datetime.utcnow().isoformat()+"Z","currency":currency,"amount":-total_cost,"note":f"Improve {it['name']}: "+", ".join(note_parts),"source":"upgrade"}
+        items[idx] = it
+        db.inventories.update_one({"id": inv_id}, {"$set":{"items": items, "currencies": cur}, "$push":{"transactions": tx}})
+    else:
+        db.inventories.update_one({"id": inv_id}, {"$set":{"items": items}})
+
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id":0})
+    return {"status":"success","inventory": inv2}

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Create Inventory</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    .muted{opacity:.8}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Create Inventory</h1>
+
+  <div class="home-card">
+    <div class="grid">
+      <div>
+        <label>Name</label>
+        <input id="inv-name" placeholder="e.g. Aria’s Pack" />
+      </div>
+      <div>
+        <label>Initial Currency (Jelly)</label>
+        <input id="cur-jelly" type="number" value="0" />
+      </div>
+    </div>
+
+    <h4 style="margin-top:10px;">Extra currencies (optional)</h4>
+    <div id="extra-wrap"></div>
+    <div class="row">
+      <button id="add-cur" class="btn small">+ Currency</button>
+    </div>
+
+    <h4 style="margin-top:14px;">First containers</h4>
+    <div id="cont-wrap"></div>
+    <div class="row">
+      <button id="add-cont" class="btn small">+ Container</button>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:10px;">
+    <button id="create" class="btn">Create</button>
+    <a class="btn btn-secondary" href="inventory_manage.html">← Back</a>
+    <span id="msg" class="muted" style="margin-left:auto;"></span>
+  </div>
+</div>
+
+<script>
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization":"Bearer "+token } : {};
+const $ = s => document.querySelector(s);
+
+const extraWrap = $("#extra-wrap");
+const contWrap  = $("#cont-wrap");
+
+function addCurrencyRow(name="", value=0){
+  const id = `c-${Math.random().toString(36).slice(2,8)}`;
+  const div = document.createElement("div");
+  div.className = "row";
+  div.innerHTML = `
+    <input placeholder="Currency name" value="${name}" data-k="name"/>
+    <input type="number" value="${value}" data-k="val" style="width:120px"/>
+    <button class="btn btn-secondary small" type="button">Remove</button>`;
+  div.querySelector("button").onclick = ()=> div.remove();
+  extraWrap.appendChild(div);
+}
+function addContainerRow(name="Backpack"){
+  const id = `t-${Math.random().toString(36).slice(2,8)}`;
+  const div = document.createElement("div");
+  div.className = "row";
+  div.innerHTML = `
+    <input placeholder="Container name" value="${name}" data-k="name"/>
+    <button class="btn btn-secondary small" type="button">Remove</button>`;
+  div.querySelector("button").onclick = ()=> div.remove();
+  contWrap.appendChild(div);
+}
+
+document.getElementById("add-cur").onclick = ()=> addCurrencyRow("",0);
+document.getElementById("add-cont").onclick = ()=> addContainerRow("Pouch");
+addContainerRow("Backpack");
+
+document.getElementById("create").onclick = async ()=>{
+  const name = ($("#inv-name").value || "Inventory").trim();
+  const jelly = Number($("#cur-jelly").value||0);
+
+  const currencies = { Jelly: jelly };
+  [...extraWrap.querySelectorAll(".row")].forEach(r=>{
+    const n = r.querySelector('[data-k="name"]').value.trim();
+    const v = Number(r.querySelector('[data-k="val"]').value||0);
+    if (n) currencies[n] = v;
+  });
+
+  const containers = [...contWrap.querySelectorAll(".row")].map(r=>({
+    name: r.querySelector('[data-k="name"]').value.trim() || "Container"
+  }));
+
+  $("#msg").textContent = "Creating…";
+  try{
+    const r = await fetch("/inventories", {
+      method:"POST",
+      headers: { "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify({ name, currencies, containers })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success") throw new Error(j.message || "Create failed");
+    location.href = `inventory_view.html?inv=${encodeURIComponent(j.inventory.id)}`;
+  }catch(err){ $("#msg").textContent = err.message || "Create failed"; }
+};
+</script>
+</body>
+</html>
