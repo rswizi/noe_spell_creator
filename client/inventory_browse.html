@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Inventory — Browse Items</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .muted{opacity:.8}
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+    .card{border:1px solid #222;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+    .pill{display:inline-block;border:1px solid #444;border-radius:999px;padding:2px 8px;font-size:.85rem}
+    .tags{display:flex;gap:6px;flex-wrap:wrap}
+    .top{display:flex;justify-content:space-between;gap:8px}
+    .price{font-variant-numeric:tabular-nums}
+    /* Modal hardening */
+    .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:9999}
+    .modal.hidden{display:none!important}
+    .modal-card{position:relative;max-width:90vw;max-height:85vh;overflow:auto;background:#111;border:1px solid #333;border-radius:12px;padding:16px}
+    .modal-close{position:absolute;top:8px;right:12px;background:transparent;border:0;font-size:1.6rem;line-height:1;cursor:pointer}
+    .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center}
+    .small{font-size:.9rem}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Browse Items</h1>
+
+  <div class="home-card">
+    <div class="row">
+      <label>Type
+        <select id="type">
+          <option value="">All</option>
+          <option value="weapon">Weapons</option>
+          <option value="equipment">Equipment</option>
+          <option value="tool">Tools</option>
+          <option value="object">Objects</option>
+        </select>
+      </label>
+      <input id="q" type="text" placeholder="Filter by name…" />
+      <button id="refresh" class="btn small">Refresh</button>
+      <span id="info" class="muted" style="margin-left:auto;"></span>
+    </div>
+  </div>
+
+  <div id="list" class="grid"></div>
+
+  <div style="margin-top:16px;">
+    <a class="btn btn-secondary" href="inventory_home.html">← Back</a>
+  </div>
+</div>
+
+<!-- details modal -->
+<div id="modal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card" style="min-width:520px;">
+    <button id="close" class="modal-close" aria-label="Close">&times;</button>
+    <h3 id="m-title">Item</h3>
+    <div id="m-tags" class="tags" style="margin:6px 0 10px;"></div>
+    <div id="m-body"></div>
+  </div>
+</div>
+
+<script>
+const API_BASE = "";
+const $ = s => document.querySelector(s);
+
+let ITEMS = [];   // unified cache
+let FILTER = { type:"", q:"" };
+
+function cap(s){ return (s||"").charAt(0).toUpperCase() + (s||"").slice(1); }
+function asList(x){ if (Array.isArray(x)) return x; if (!x) return []; return String(x).split(",").map(s=>s.trim()).filter(Boolean); }
+
+function mapWeapons(arr){
+  return (arr||[]).map(w => ({
+    id: w.id, kind: "weapon",
+    name: w.name, desc: w.description||"",
+    price: w.price ?? 0, enc: w.enc ?? 0,
+    tags: [w.skill, w.is_animarma ? "Animarma" : null, ...(w.effects||[])].filter(Boolean),
+    details: {
+      Damage: w.damage, Range: w.range, Hands: w.hands,
+      Skill: w.skill, Effects: (w.effects||[]).join(", ")
+    }
+  }));
+}
+function mapTools(arr){
+  return (arr||[]).map(t => ({
+    id: t.id, kind:"tool",
+    name: t.name, desc: t.description||"",
+    price: t.price ?? 0, enc: t.enc ?? 0,
+    tags: [cap(t.method||"crafting"), `Tier ${t.tier}`],
+    details: {
+      "Craft/Alchemy": cap(t.method||"crafting"),
+      Tier: t.tier, "Deriv. DC": (t.alchemy_dc ?? t.crafting_dc ?? t.dc ?? "—"),
+      "Creation Time": t.creation_time || "—"
+    }
+  }));
+}
+function mapObjects(arr){
+  return (arr||[]).map(o => ({
+    id: o.id, kind:"object",
+    name: o.name, desc: o.description||"",
+    price: o.price ?? 0, enc: o.enc ?? 0,
+    tags: [], details: {}
+  }));
+}
+function mapEquipment(arr){
+  return (arr||[]).map(e => {
+    if (e.category === "special"){
+      return {
+        id: e.id, kind:"equipment",
+        name: e.name, desc: e.description||"",
+        price: e.price ?? 0, enc: e.enc ?? 0,
+        tags: ["Special", ...(e.effects||[])],
+        details: { Damage:e.damage, Range:e.range, Hands:e.hands, Effects:(e.effects||[]).join(", ") }
+      };
+    } else if (e.category === "slot"){
+      return {
+        id: e.id, kind:"equipment",
+        name: `${cap(e.slot)}: ${e.style}`, desc: e.description||"",
+        price: e.price ?? 0, enc: e.enc ?? 0,
+        tags: ["Slot", cap(e.slot)],
+        details: { Slot: cap(e.slot), Style: e.style }
+      };
+    } else { // armor
+      return {
+        id: e.id, kind:"equipment",
+        name: `Armor — ${e.type}`, desc: e.effect || "",
+        price: e.price ?? 2528, enc: e.enc ?? 0,
+        tags: ["Armor"],
+        details: { Type: e.type, Receptacle: e.receptacle, "HP Bonus": e.hp_bonus, "MO Penalty": e.mo_penalty }
+      };
+    }
+  });
+}
+
+async function fetchJSON(url){
+  try { const r = await fetch(url); return await r.json(); }
+  catch { return {}; }
+}
+
+async function loadAll(){
+  $("#list").innerHTML = "";
+  $("#info").textContent = "Loading…";
+  const [jw, je, jt, jo] = await Promise.all([
+    fetchJSON(`${API_BASE}/weapons`),
+    fetchJSON(`${API_BASE}/equipment`),
+    fetchJSON(`${API_BASE}/tools`),
+    fetchJSON(`${API_BASE}/objects`)
+  ]);
+  const data = [
+    ...mapWeapons(jw.weapons),
+    ...mapEquipment(je.equipment),
+    ...mapTools(jt.tools),
+    ...mapObjects(jo.objects),
+  ];
+  ITEMS = data;
+  render();
+}
+
+function render(){
+  const q = ($("#q").value || "").trim().toLowerCase();
+  const type = $("#type").value; // "", weapon, equipment, tool, object
+  let list = ITEMS.slice();
+  if (type) list = list.filter(x => x.kind === type);
+  if (q){
+    list = list.filter(x =>
+      (x.name||"").toLowerCase().includes(q) ||
+      (x.desc||"").toLowerCase().includes(q) ||
+      x.tags.some(t => (t||"").toLowerCase().includes(q))
+    );
+  }
+
+  $("#list").innerHTML = list.map(item => `
+    <div class="card">
+      <div class="top">
+        <div><strong>${item.name}</strong></div>
+        <div class="tags">
+          <span class="pill">${cap(item.kind)}</span>
+          ${item.tags.map(t => `<span class="pill">${t}</span>`).join("")}
+        </div>
+      </div>
+      <div class="small muted">${item.desc ? item.desc : ""}</div>
+      <div class="top">
+        <div class="muted small"><span class="pill price">Price ${item.price}</span> <span class="pill">Enc. ${item.enc}</span></div>
+        <button class="btn small" onclick="openDetails('${item.kind}','${item.id}')">Details</button>
+      </div>
+    </div>
+  `).join("");
+
+  $("#info").textContent = `${list.length}/${ITEMS.length}`;
+}
+
+function openDetails(kind, id){
+  const it = ITEMS.find(x => x.kind===kind && x.id===id);
+  if (!it) return;
+  $("#m-title").textContent = it.name;
+  $("#m-tags").innerHTML = [
+    `<span class="pill">${cap(kind)}</span>`,
+    ...it.tags.map(t => `<span class="pill">${t}</span>`)
+  ].join("");
+
+  const kv = Object.entries(it.details||{});
+  const rows = kv.length ? kv.map(([k,v]) => `<div>${k}</div><div>${v ?? "—"}</div>`).join("") : `<div class="muted">No extra details.</div>`;
+  $("#m-body").innerHTML = `
+    <div class="kv small">${rows}</div>
+    <hr style="border:0;border-top:1px solid #222;margin:12px 0">
+    <div class="small muted">${it.desc || ""}</div>
+  `;
+
+  const MODAL = $("#modal");
+  MODAL.classList.remove("hidden");
+  MODAL.setAttribute("aria-hidden","false");
+}
+function closeDetails(){
+  const MODAL = $("#modal");
+  MODAL.classList.add("hidden");
+  MODAL.setAttribute("aria-hidden","true");
+}
+$("#close").addEventListener("click", closeDetails);
+const MODAL = $("#modal");
+MODAL.addEventListener("click", (e)=>{ if (e.target===MODAL) closeDetails(); });
+document.addEventListener("keydown", (e)=>{ if (e.key==="Escape" && !MODAL.classList.contains("hidden")) closeDetails(); });
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  $("#refresh").addEventListener("click", loadAll);
+  $("#type").addEventListener("change", render);
+  $("#q").addEventListener("input", render);
+  loadAll();
+});
+</script>
+</body>
+</html>
