@@ -163,6 +163,7 @@
               <th style="width:30%;">Name</th>
               <th>Schools</th>
               <th style="width:14%;">Category</th>
+              <th style="width:12%;">Status</th>
               <th style="width:18%;">Eligibility</th>
               <th style="width:10%;"></th>
             </tr>
@@ -284,28 +285,85 @@
       </div>
     </div>
 
-    <!-- Variant Modal -->
-    <div id="var-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-    <div id="var-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
-      <div class="modal-card" style="max-width:720px;">
-        <header>
-          <div class="modal-title">Add Variant</div>
-          <button class="modal-close" id="var-close" aria-label="Close">✕</button>
-        </header>
-        <div class="sub" id="var-school-title"></div>
-        <div class="hint" id="var-rule" style="margin:6px 0 10px;"></div>
-        <div id="var-choices" class="chips" style="gap:10px;"></div>
-        <div style="margin-top:10px;">
-          <label for="var-name" class="k">Variant Name</label>
-          <input id="var-name" type="text" placeholder="e.g. Storm Weaving" style="min-width:240px;">
-        </div>
-        <div id="var-status" class="hint" style="margin-top:8px;"></div>
-        <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
-          <button class="btn btn-secondary" id="var-cancel">Cancel</button>
-          <button class="btn" id="var-save">Save Variant</button>
+      <!-- Variant Modal -->
+      <div id="var-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+      <div id="var-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-card" style="max-width:720px;">
+          <header>
+            <div class="modal-title">Add Variant</div>
+            <button class="modal-close" id="var-close" aria-label="Close">✕</button>
+          </header>
+          <div class="sub" id="var-school-title"></div>
+          <div class="hint" id="var-rule" style="margin:6px 0 10px;"></div>
+          <div id="var-choices" class="chips" style="gap:10px;"></div>
+          <div style="margin-top:10px;">
+            <label for="var-name" class="k">Variant Name</label>
+            <input id="var-name" type="text" placeholder="e.g. Storm Weaving" style="min-width:240px;">
+          </div>
+          <div id="var-status" class="hint" style="margin-top:8px;"></div>
+          <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+            <button class="btn btn-secondary" id="var-cancel">Cancel</button>
+            <button class="btn" id="var-save">Save Variant</button>
+          </div>
         </div>
       </div>
+
+  <!-- Spell Meta Modal -->
+  <div id="meta-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+  <div id="meta-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-card" style="max-width:720px;">
+      <header>
+        <div class="modal-title">Edit Spell Meta</div>
+        <button class="modal-close" id="meta-close" aria-label="Close">✕</button>
+      </header>
+
+      <div class="row" style="gap:10px; margin-bottom:8px;">
+        <div style="flex:1;">
+          <label class="k">Alternative Name</label>
+          <input id="meta-altname" type="text" placeholder="Optional alternative display name" style="width:100%;">
+        </div>
+      </div>
+
+      <div class="hint" style="margin:6px 0 8px;">Flavour (basic formatting OK: bold/italic/underline, bullets)</div>
+      <div style="display:flex; gap:8px; margin-bottom:6px;">
+        <button class="btn btn-secondary small" onclick="document.execCommand('bold',false,null)"><b>B</b></button>
+        <button class="btn btn-secondary small" onclick="document.execCommand('italic',false,null)"><i>I</i></button>
+        <button class="btn btn-secondary small" onclick="document.execCommand('underline',false,null)"><u>U</u></button>
+        <button class="btn btn-secondary small" onclick="document.execCommand('insertUnorderedList',false,null)">• List</button>
+      </div>
+      <div id="meta-flavour" contenteditable="true" style="min-height:140px; padding:12px; background:#101010; border:1px solid #2a2a2a; border-radius:8px;"></div>
+
+      <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn btn-secondary" id="meta-cancel">Cancel</button>
+        <button class="btn" id="meta-save">Save</button>
+      </div>
     </div>
+  </div>
+
+  <!-- Export Modal -->
+  <div id="exp-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+  <div id="exp-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-card" style="max-width:960px;">
+      <header>
+        <div class="modal-title" id="exp-title">Export</div>
+        <button class="modal-close" id="exp-close" aria-label="Close">✕</button>
+      </header>
+
+      <div id="exp-fields" style="display:grid; gap:10px;"></div>
+
+      <div style="margin-top:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;">Description</h3>
+          <button class="btn btn-secondary" id="copy-description">Copy Description</button>
+        </div>
+        <div id="description-preview" style="margin-top:8px; padding:12px; background:#121212; border:1px solid #2a2a2a; border-radius:10px;"></div>
+      </div>
+
+      <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn btn-secondary" id="exp-cancel">Close</button>
+      </div>
+    </div>
+  </div>
 
     <!-- Bonuses Manager -->
     <div id="bon-backdrop" class="modal-backdrop" aria-hidden="true"></div>
@@ -764,16 +822,17 @@
   }
 
   function updateCounts(){
-    try{
-      const simpleOnly = (mySpells||[]).filter(isSimpleOnlySpell).length;
-      const complex    = (mySpells||[]).filter(isComplexSpell).length;
-      const a = document.getElementById("count-simple-spells");
-      const b = document.getElementById("count-complex-spells");
-      if (a) a.textContent = `Simple Spells: ${simpleOnly}`;
-      if (b) b.textContent = `Complex Spells: ${complex}`;
-    }catch{}
+  try{
+    const meta = loadMeta();
+    const KNOWN = (mySpells||[]).filter(sp => (meta[sp.id]?.status || "known") === "known");
+    const simpleOnly = KNOWN.filter(isSimpleOnlySpell).length;
+    const complex    = KNOWN.filter(isComplexSpell).length;
+    const a = document.getElementById("count-simple-spells");
+    const b = document.getElementById("count-complex-spells");
+    if (a) a.textContent = `Simple Spells: ${simpleOnly}`;
+    if (b) b.textContent = `Complex Spells: ${complex}`;
+  }catch{}
   }
-
     // ---- List spells
     async function fetchListSpells(){
       const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/spells`, { headers:{Authorization:`Bearer ${token}`}});
@@ -820,23 +879,55 @@
         const tr = document.createElement("tr");
         const schTxt = (sp.schools||[]).map(s=>s.name).join(", ");
         const ok = eligibleForSpell(sp);
+        const meta = loadMeta(); // NEW: get per-spell meta (defined below)
+        const m = meta[sp.id] || {};
+        const status = (m.status || "known"); // default known so old counters still make sense
+        const displayName = m.altName ? `${m.altName} <span class="muted">(${sp.name})</span>` : sp.name;
+
         tr.innerHTML = `
-          <td><div class="k">${sp.name}</div><div class="muted">id: ${sp.id}</div></td>
+          <td>
+            <div class="k">${displayName}</div>
+            <div class="muted">id: ${sp.id}</div>
+          </td>
           <td>${schTxt||"—"}</td>
           <td>${sp.category || "—"}</td>
+          <td>
+            <select class="sp-status" data-id="${sp.id}">
+              <option value="known" ${status==="known"?"selected":""}>Known</option>
+              <option value="learnt" ${status==="learnt"?"selected":""}>Learnt</option>
+            </select>
+          </td>
           <td><span class="badge ${ok?"ok":"warn"}">${ok?"Eligible":"Insufficient Level"}</span></td>
-          <td><button class="btn btn-secondary small" data-remove="${sp.id}">Remove</button></td>
+          <td>
+            <button class="btn btn-secondary small" data-edit="${sp.id}">Edit Meta</button>
+            <button class="btn small" data-export="${sp.id}">Export</button>
+            <button class="btn btn-flag small" data-remove="${sp.id}">Remove</button>
+          </td>
         `;
         tbody.appendChild(tr);
       }
-      tbody.querySelectorAll("[data-remove]").forEach(btn=>{
-        btn.addEventListener("click", async ()=>{
-          const id = btn.getAttribute("data-remove");
-          await removeSpell(id);
-          await loadMySpells();
-        });
+      tbody.querySelectorAll(".sp-status").forEach(sel=>{
+      sel.addEventListener("change", ()=>{
+        const id = sel.getAttribute("data-id");
+        const meta = loadMeta();
+        meta[id] = meta[id] || {};
+        meta[id].status = sel.value;
+        saveMeta(meta);
+        updateCounts(); // counters only consider Known
       });
-      updateCounts();
+    });
+
+    // NEW: open “Edit Meta” (alt name + flavour)
+    tbody.querySelectorAll("[data-edit]").forEach(btn=>{
+      btn.addEventListener("click", ()=> openMetaEditor(btn.getAttribute("data-edit")));
+    });
+
+    // NEW: open inline Export
+    tbody.querySelectorAll("[data-export]").forEach(btn=>{
+      btn.addEventListener("click", ()=> openExport(btn.getAttribute("data-export")));
+    });
+
+    updateCounts();
     }
 
     // ---- Add Spells modal helpers
@@ -883,6 +974,35 @@
       const anyOpen = document.querySelector('#sl .modal.open');
       if (!anyOpen){ document.documentElement.classList.remove("modal-open"); document.body.classList.remove("modal-open"); }
     }
+
+    function metaKey(){ return `sl_spellmeta_${listId}`; }
+    function loadMeta(){ try{return JSON.parse(localStorage.getItem(metaKey())||"{}");}catch{return{};} }
+    function saveMeta(obj){ localStorage.setItem(metaKey(), JSON.stringify(obj)); }
+
+   // modal helpers (reuse your open/closeModal)
+    const metaModal = document.getElementById("meta-modal");
+    const metaBackdrop = document.getElementById("meta-backdrop");
+    let META_EDIT_ID = null;
+
+    function openMetaEditor(spellId){
+      META_EDIT_ID = spellId;
+      const meta = loadMeta()[spellId] || {};
+      document.getElementById("meta-altname").value = meta.altName || "";
+      document.getElementById("meta-flavour").innerHTML = meta.flavour || "";
+      openModal(metaModal, metaBackdrop);
+    }
+    function closeMetaEditor(){ closeModal(metaModal, metaBackdrop); }
+    document.getElementById("meta-close").addEventListener("click", closeMetaEditor);
+    document.getElementById("meta-cancel").addEventListener("click", closeMetaEditor);
+    document.getElementById("meta-save").addEventListener("click", ()=>{
+      const meta = loadMeta();
+      meta[META_EDIT_ID] = meta[META_EDIT_ID] || {};
+      meta[META_EDIT_ID].altName = document.getElementById("meta-altname").value.trim();
+      meta[META_EDIT_ID].flavour = document.getElementById("meta-flavour").innerHTML.trim();
+      saveMeta(meta);
+      closeMetaEditor();
+      loadMySpells(); // refresh shown name if altName set
+    });
 
     // ---------- Variant Modal ----------
     const varModal = document.getElementById("var-modal");
@@ -1134,6 +1254,7 @@
         buildMinCatSelect();
 
         schools = await fetchSchools();
+        await loadEffectsForExport();
         refreshUpgradeSets();
         computed = computeAll();
 
@@ -1267,6 +1388,112 @@
           status.textContent = err.message || "Failed to add.";
         }
       });
+      let ALL_EFFECTS = [];
+let SCHOOL_BY_ID = {};
+async function loadEffectsForExport(){
+  try{
+    // build school map once (you already have "schools")
+    SCHOOL_BY_ID = Object.fromEntries((schools||[]).map(s => [String(s.id), s]));
+    const res = await fetch(`${API_BASE}/effects`);
+    const data = await res.json();
+    ALL_EFFECTS = (data.effects || []).map(e=>{
+      const sid = String(e.school || "").trim();
+      const sch = SCHOOL_BY_ID[sid] || { id: sid, name: sid };
+      return { ...e, school: { id: sch.id, name: sch.name } };
+    });
+  }catch(e){ ALL_EFFECTS = []; }
+}
+
+function copyRich(html){
+  const blobHtml = new Blob([html], { type: "text/html" });
+  const tmp = document.createElement("div"); tmp.innerHTML = html;
+  const plain = tmp.innerText;
+  return navigator.clipboard.write([
+    new ClipboardItem({
+      "text/html": blobHtml,
+      "text/plain": new Blob([plain], { type: "text/plain" })
+    })
+  ]).catch(()=>{
+    // fallback
+    const el = document.getElementById("description-preview");
+    const range = document.createRange(); range.selectNodeContents(el);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    document.execCommand("copy"); sel.removeAllRanges();
+  });
+}
+function copyTextSpan(spanId){
+  const text = document.getElementById(spanId).innerText;
+  return navigator.clipboard.writeText(String(text));
+}
+
+// export modal hooks
+const expModal = document.getElementById("exp-modal");
+const expBackdrop = document.getElementById("exp-backdrop");
+document.getElementById("exp-close").addEventListener("click", ()=> closeModal(expModal, expBackdrop));
+document.getElementById("exp-cancel").addEventListener("click", ()=> closeModal(expModal, expBackdrop));
+
+async function openExport(spellId){
+  try{
+    if (!ALL_EFFECTS.length) await loadEffectsForExport();
+
+    const res = await fetch(`${API_BASE}/spells/${encodeURIComponent(spellId)}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const sp = data.spell || data;
+
+    // meta: alt name + flavour saved per list
+    const meta = loadMeta()[spellId] || {};
+    const displayName = meta.altName || sp.name;
+
+    // top title
+    document.getElementById("exp-title").textContent = `${displayName} [${sp.id}]`;
+
+    // fields
+    const fields = [
+      ["MP Cost", sp.mp_cost ?? 0],
+      ["EN Cost", sp.en_cost ?? 0],
+      ["Activation", sp.activation ?? "—"],
+      ["Range", sp.range ?? "—"],
+      ["AoE", sp.aoe ?? "—"],
+      ["Duration", sp.duration ?? "—"],
+      ["Category", sp.category ?? "—"]
+    ];
+    const fieldsWrap = document.getElementById("exp-fields");
+    fieldsWrap.innerHTML = "";
+    fields.forEach(([label, val])=>{
+      const id = `copy-${label.replace(/\s+/g,'-').toLowerCase()}`;
+      fieldsWrap.insertAdjacentHTML("beforeend", `
+        <div style="display:flex; justify-content:space-between; align-items:center; border:1px solid #2a2a2a; padding:10px; border-radius:10px;">
+          <div><strong>${label}:</strong> <span id="${id}-val">${val}</span></div>
+          <button class="btn btn-secondary" onclick="copyTextSpan('${id}-val')">Copy</button>
+        </div>
+      `);
+    });
+
+    // description (flavour + deduped effects)
+    const byId = Object.fromEntries(ALL_EFFECTS.map(e => [String(e.id), e]));
+    const counts = {};
+    (sp.effects || []).forEach(eid => {
+      const k = String(eid);
+      counts[k] = (counts[k] || 0) + 1;
+    });
+    const effectLines = Object.entries(counts).map(([eid, count]) => {
+      const e = byId[eid] || { name: `[${eid}]`, description: "" };
+      const suffix = count > 1 ? ` [x${count}]` : "";
+      const desc = (e.description || "").trim();
+      return `<div><b>${e.name}${suffix}</b>: ${desc}</div>`;
+    }).join("");
+    const sep = `<hr style="border:0;border-top:1px solid #2a2a2a;margin:10px 0;">`;
+    const flavourHTML = (meta.flavour || "").trim();
+    const descHTML = (flavourHTML ? `${flavourHTML}${sep}` : "") + `<div style="font-style:italic">${effectLines}</div>`;
+    document.getElementById("description-preview").innerHTML = descHTML;
+    document.getElementById("copy-description").onclick = ()=> copyRich(descHTML);
+
+    openModal(expModal, expBackdrop);
+  }catch(e){
+    alert("Export failed: " + e.message);
+  }
+}
             // variants
       document.getElementById("var-close").addEventListener("click", (e)=>{ e.preventDefault(); closeVariant(); });
       document.getElementById("var-cancel").addEventListener("click", (e)=>{ e.preventDefault(); closeVariant(); });
