@@ -1371,7 +1371,7 @@
       document.getElementById("as-add-selected").addEventListener("click", async (e)=>{
         e.preventDefault();
         const status = document.getElementById("as-status");
-        const ids = [...document.querySelectorAll(".as-chk:checked")].map(c => c.value);
+        const ids = Array.from(document.querySelectorAll(".as-chk:checked")).map(c => c.value);
         if (!ids.length){ status.textContent = "Select at least one spell."; return; }
 
         status.textContent = "Adding…";
