@@ -317,20 +317,40 @@ function addEffectRow(prefillId="") {
 
 /* ---------- Type chips & preview ---------- */
 function recomputeKnobTypes() {
-  const selectedIds = $$('#effects-container select[name="effects[]"]').map(s => s.value).filter(Boolean);
+  // collect selected effect IDs
+  const selectedIds = $$('#effects-container select[name="effects[]"]')
+    .map(s => s.value)
+    .filter(Boolean);
+
+  // map to each effect’s school’s types
   const types = selectedIds.map(id => {
     const eff = EFFECTS_BY_ID[String(id)];
     const sch = eff?.school_obj;
-    return { r: sch?.range_type || "A", a: sch?.aoe_type || "A" };
+    return { r: (sch?.range_type || "A").toUpperCase(), a: (sch?.aoe_type || "A").toUpperCase() };
   });
 
-  const rType = maxType(types.map(t => t.r));
-  const aType = maxType(types.map(t => t.a));
+  // compute max types (A < B < C)
+  const TYPE_ORDER = { A:1, B:2, C:3 };
+  const maxOf = (arr, key) => {
+    let best = "A";
+    for (const t of arr) {
+      const v = (t?.[key] || "A").toUpperCase();
+      if (TYPE_ORDER[v] > TYPE_ORDER[best]) best = v;
+    }
+    return best;
+  };
 
+  const rangeType = types.length ? maxOf(types, "r") : "A";
+  const aoeType   = types.length ? maxOf(types, "a") : "A";
+
+  // paint chips
   const rChip = $("#range-type-chip");
   const aChip = $("#aoe-type-chip");
-  if (rChip) rChip.textContent = `Type ${rType}`;
-  if (aChip) aChip.textContent = `Type ${aType}`;
+  if (rChip) rChip.textContent = `Type ${rangeType}`;
+  if (aChip) aChip.textContent = `Type ${aoeType}`;
+
+  // return the types so callers can include them in the payload
+  return { range_type: rangeType, aoe_type: aoeType };
 }
 
 function updateKnobCostChipsFromBreakdown(br) {
@@ -353,12 +373,19 @@ function updatePreview() {
   const fd = new FormData($("#spell-form"));
   const selected = fd.getAll("effects[]").filter(v => v && v.trim() !== "");
 
+  // compute & paint chips, and ALSO capture types for the payload
+  const { range_type, aoe_type } = recomputeKnobTypes();
+
   const payload = {
     activation: fd.get("activation"),
     range: parseInt(fd.get("range") || "0", 10),
     aoe: fd.get("aoe"),
     duration: parseInt(fd.get("duration") || "1", 10),
-    effects: selected
+    effects: selected,
+
+    // >>> IMPORTANT: tell the backend which cost tables to use
+    range_type,
+    aoe_type,
   };
 
   fetch(`${API_BASE}/costs`, {
@@ -378,7 +405,7 @@ function updatePreview() {
     $("#mp_cost").textContent = "--";
     $("#en_cost").textContent = "--";
     $("#category").textContent = "--";
-    $("#mp_to_next").textContent = "--"; 
+    $("#mp_to_next").textContent = "--";
     updateKnobCostChipsFromBreakdown(null);
   });
 }
