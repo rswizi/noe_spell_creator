@@ -657,7 +657,37 @@ async function fetchListMeta(){
   const m = j.meta || {};
   variantsCache  = Array.isArray(m.variants) ? m.variants : [];
   bonusesCache   = Array.isArray(m.bonuses) ? m.bonuses : [];
-  spellMetaCache = (m.spell_meta && typeof m.spell_meta==="object") ? m.spell_meta : {};
+
+  // Normalize server spell_meta ({alt_name}) to UI shape ({altName})
+  const raw = (m.spell_meta && typeof m.spell_meta==="object") ? m.spell_meta : {};
+  spellMetaCache = {};
+  for (const [id, meta] of Object.entries(raw)){
+    spellMetaCache[id] = {
+      status : meta.status || "learnt",
+      altName: (meta.altName ?? meta.alt_name ?? ""),
+      flavor : meta.flavor ?? ""
+    };
+  }
+}
+
+// Spell meta read: always return UI shape (camelCase)
+function getSpellMeta(spId){
+  const m = spellMetaCache[spId] || { status:"learnt", altName:"", flavor:"" };
+  return { status: m.status || "learnt", altName: m.altName || "", flavor: m.flavor || "" };
+}
+
+// Spell meta write: keep UI cache in camelCase, but send snake_case to server
+function setSpellMeta(spId, partial){
+  const cur = getSpellMeta(spId);
+  const next = { ...cur, ...partial };
+  spellMetaCache = { ...spellMetaCache, [spId]: next };
+
+  // Build server payload with alt_name
+  const serverMeta = {};
+  for (const [id, m] of Object.entries(spellMetaCache)){
+    serverMeta[id] = { status: m.status || "learnt", alt_name: m.altName || "", flavor: m.flavor || "" };
+  }
+  saveListMeta({ spell_meta: serverMeta }).catch(()=>{});
 }
 
 async function saveListMeta(patch){
@@ -686,17 +716,6 @@ function loadBonuses(){ return bonusesCache; }
 function saveBonuses(list){
   bonusesCache = Array.isArray(list) ? list : [];
   saveListMeta({bonuses: bonusesCache}).catch(()=>{});
-}
-
-// spell-specific meta helpers (used by “Known/Learnt + alt name + flavor” UI)
-function getSpellMeta(spId){
-  return spellMetaCache[spId] || { status:"known", alt_name:"", flavor:"" };
-}
-function setSpellMeta(spId, partial){
-  const cur = getSpellMeta(spId);
-  const next = { ...cur, ...partial };
-  spellMetaCache = { ...spellMetaCache, [spId]: next };
-  saveListMeta({spell_meta: spellMetaCache}).catch(()=>{});
 }
 
 /* =========================
@@ -844,14 +863,13 @@ async function loadMySpells(){
     return;
   }
   tbody.innerHTML = "";
-  const meta = loadMeta();
 
   for (const sp of mySpells){
     const tr = document.createElement("tr");
     const schTxt = (sp.schools||[]).map(s=>s.name).join(", ");
     const ok = eligibleForSpell(sp);
 
-    const m = meta[sp.id] || { status:"learnt", altName:"", flavor:"" };
+    const m = getSpellMeta(sp.id);
     const displayAlt = m.altName || "";
 
     // Row cells
