@@ -643,18 +643,59 @@ function eligibleForSpell(spell){
 /* =========================
    Variants & Bonuses (kept in localStorage)
 ========================= */
-function vKey(){ return `sl_variants_${listId}`; }
-function bKey(){ return `sl_bonuses_${listId}`; }
-function loadVariants(){ try{return JSON.parse(localStorage.getItem(vKey())||"[]");}catch{return[];} }
-function saveVariants(v){ localStorage.setItem(vKey(), JSON.stringify(v)); }
-function addVariant(sid, name, natures){
-  const v = loadVariants();
-  const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `v_${Date.now().toString(36)}`;
-  v.push({id, schoolId: sid, name: name.trim(), natures: natures.map(lc)});
-  saveVariants(v);
+// --- Server-backed list meta (variants, bonuses, per-spell meta) ---
+let variantsCache = [];
+let bonusesCache = [];
+let spellMetaCache = {};  // { [spellId]: { status: "known"|"learnt", alt_name: "", flavor: "" } }
+
+async function fetchListMeta(){
+  const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/meta`,
+    { headers:{Authorization:`Bearer ${token}`}} );
+  const j = await r.json();
+  const m = j.meta || {};
+  variantsCache  = Array.isArray(m.variants) ? m.variants : [];
+  bonusesCache   = Array.isArray(m.bonuses) ? m.bonuses : [];
+  spellMetaCache = (m.spell_meta && typeof m.spell_meta==="object") ? m.spell_meta : {};
 }
-function loadBonuses(){ try{return JSON.parse(localStorage.getItem(bKey())||"[]");}catch{return[];} }
-function saveBonuses(list){ localStorage.setItem(bKey(), JSON.stringify(list)); }
+
+async function saveListMeta(patch){
+  // patch: {variants?, bonuses?, spell_meta?}
+  await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/meta`, {
+    method:"PUT",
+    headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` },
+    body: JSON.stringify(patch)
+  });
+}
+
+// keep the same function names the rest of the file uses:
+function loadVariants(){ return variantsCache; }
+function saveVariants(v){
+  variantsCache = Array.isArray(v) ? v : [];
+  saveListMeta({variants: variantsCache}).catch(()=>{});
+}
+function addVariant(sid, name, natures){
+  const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `v_${Date.now().toString(36)}`;
+  const v = { id, schoolId: sid, name: (name||"").trim(), natures: (natures||[]).map(lc) };
+  variantsCache = [...variantsCache, v];
+  saveListMeta({variants: variantsCache}).catch(()=>{});
+}
+
+function loadBonuses(){ return bonusesCache; }
+function saveBonuses(list){
+  bonusesCache = Array.isArray(list) ? list : [];
+  saveListMeta({bonuses: bonusesCache}).catch(()=>{});
+}
+
+// spell-specific meta helpers (used by “Known/Learnt + alt name + flavor” UI)
+function getSpellMeta(spId){
+  return spellMetaCache[spId] || { status:"known", alt_name:"", flavor:"" };
+}
+function setSpellMeta(spId, partial){
+  const cur = getSpellMeta(spId);
+  const next = { ...cur, ...partial };
+  spellMetaCache = { ...spellMetaCache, [spId]: next };
+  saveListMeta({spell_meta: spellMetaCache}).catch(()=>{});
+}
 
 /* =========================
    NEW: Per-spell Meta (status/alt/flavor) per list
@@ -791,10 +832,11 @@ function renderSchools(){
 ========================= */
 function updateCounts(){
   try{
-    const meta = loadMeta();
-    const knownOnly = mySpells.filter(sp => (meta[sp.id]?.status || "learnt") === "known");
-    const simpleOnly = knownOnly.filter(isSimpleOnlySpell).length;
-    const complex    = knownOnly.filter(isComplexSpell).length;
+    const knownSpells = (mySpells||[]).filter(sp => (getSpellMeta(sp.id).status || "known") === "known");
+
+    const simpleOnly = knownSpells.filter(isSimpleOnlySpell).length;
+    const complex    = knownSpells.filter(isComplexSpell).length;
+
     const a = document.getElementById("count-simple-spells");
     const b = document.getElementById("count-complex-spells");
     if (a) a.textContent = `Simple Spells: ${simpleOnly}`;
@@ -1145,9 +1187,12 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   refreshUpgradeSets();
   computed = computeAll();
   buildMinCatSelect();
+  document.getElementById("content").style.display = "grid";  
   renderSchools();
 
-  // My spells
+  await fetchListMeta();
+
+  fillSchoolSelect();
   await loadMySpells();
 
   // Add modal — fill school select

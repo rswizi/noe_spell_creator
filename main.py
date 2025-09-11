@@ -1547,6 +1547,50 @@ def bulk_create_tools(request: Request, payload: dict = Body(...)):
         created.append({k:v for k,v in doc.items() if k!="_id"})
     return {"status":"success","created": created, "skipped": skipped}
 
+# --- NEW: Spell list meta (variants, bonuses, per-spell meta) ---
+@app.get("/spell_lists/{list_id}/meta")
+def get_spell_list_meta(list_id: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col("spell_lists")
+    doc = col.find_one({"id": list_id}, {"_id":0})
+    if not _can_access_list(doc, username, role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return {
+        "status": "success",
+        "meta": {
+            "variants": doc.get("variants", []),
+            "bonuses": doc.get("bonuses", []),
+            "spell_meta": doc.get("spell_meta", {})  # {spellId:{status,alt_name,flavor}}
+        }
+    }
+
+@app.put("/spell_lists/{list_id}/meta")
+async def put_spell_list_meta(list_id: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    body = await request.json()
+    col = get_col("spell_lists")
+    doc = col.find_one({"id": list_id})
+    if not _can_access_list(doc, username, role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    updates = {}
+    if "variants" in body:   updates["variants"]   = body.get("variants") or []
+    if "bonuses" in body:    updates["bonuses"]    = body.get("bonuses") or []
+    if "spell_meta" in body: updates["spell_meta"] = body.get("spell_meta") or {}
+
+    if updates:
+        col.update_one({"id": list_id}, {"$set": updates})
+        doc = col.find_one({"id": list_id}, {"_id":0})
+
+    return {
+        "status": "success",
+        "meta": {
+            "variants": doc.get("variants", []),
+            "bonuses": doc.get("bonuses", []),
+            "spell_meta": doc.get("spell_meta", {})
+        }
+    }
+
 # ---------- Weapons (inventory) ----------
 from fastapi import Body
 
