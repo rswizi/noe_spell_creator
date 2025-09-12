@@ -364,7 +364,14 @@ async def get_costs(request: Request):
 
     effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
 
-    cc = compute_spell_costs(activation, range_val, aoe_val, duration_val, effect_ids)
+    # NEW: accept front-end override for the tables
+    range_type = (body.get("range_type") or "").strip().upper() or None
+    aoe_type   = (body.get("aoe_type") or "").strip().upper() or None
+
+    cc = compute_spell_costs(
+        activation, range_val, aoe_val, duration_val, effect_ids,
+        range_type=range_type, aoe_type=aoe_type
+    )
     return {
         "mp_cost": cc["mp_cost"],
         "en_cost": cc["en_cost"],

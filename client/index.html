@@ -427,6 +427,7 @@ function handleSubmit(e) {
     aoe: fd.get("aoe"),
     duration: parseInt(fd.get("duration") || "1", 10),
     effects
+
   };
 
   const url = editId ? `${API_BASE}/spells/${encodeURIComponent(editId)}` : `${API_BASE}/submit_spell`;

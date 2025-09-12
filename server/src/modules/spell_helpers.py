@@ -2,29 +2,96 @@ from server.src.objects.effects import load_effect
 from db_mongo import get_col
 from server.src.objects.spells import Spell
 from server.src.modules.category_table import category_for_mp
+from cost_tables import ACTIVATION_COSTS, RANGE_COSTS, AOE_COSTS, DURATION_COSTS
 import re
 
-def compute_spell_costs(
-    activation: str, range_val: int, aoe: str, duration: int, effect_ids: list[str]
-) -> dict:
+TYPE_ORDER = {"A": 1, "B": 2, "C": 3}
+
+def _norm_text(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+def _pick_max_type(types):
+    best = "A"
+    for t in (types or []):
+        tt = (t or "A").upper()
+        if TYPE_ORDER.get(tt, 1) > TYPE_ORDER.get(best, 1):
+            best = tt
+    return best
+
+def _derive_types_from_effects(effect_ids):
+    # Look up schools of selected effects; choose the max A/B/C across them.
+    eff_col = get_col("effects")
+    sch_col = get_col("schools")
+    effs = list(eff_col.find({"id": {"$in": [str(e) for e in (effect_ids or [])]}} , {"_id":0,"school":1}))
+    sch_ids = sorted({ str(e.get("school","")) for e in effs if e.get("school") })
+    if not sch_ids:
+        return ("A", "A")
+    # fetch only needed fields
+    sch_docs = list(sch_col.find({"id": {"$in": sch_ids}}, {"_id":0,"id":1,"range_type":1,"aoe_type":1}))
+    r_types = [ (s.get("range_type") or "A").upper() for s in sch_docs ]
+    a_types = [ (s.get("aoe_type") or "A").upper()   for s in sch_docs ]
+    return (_pick_max_type(r_types), _pick_max_type(a_types))
+
+def _sum_effect_costs(effect_ids):
+    """Return (mp_sum, en_sum). Pulls minimal fields if load_effect is unavailable."""
+    mp_sum = 0
+    en_sum = 0
     try:
-        effects = [load_effect(str(eid)) for eid in (effect_ids or [])]
+        # Preferred path: use object loader (may include other metadata)
+        for eid in (effect_ids or []):
+            ef = load_effect(str(eid))
+            mp_sum += int(getattr(ef, "mp_cost", 0) or 0)
+            en_sum += int(getattr(ef, "en_cost", 0) or 0)
+        return mp_sum, en_sum
     except Exception:
+        # Fallback: read from DB
         docs = list(
             get_col("effects").find(
                 {"id": {"$in": [str(eid) for eid in (effect_ids or [])]}},
                 {"_id": 0, "mp_cost": 1, "en_cost": 1},
             )
         )
-        class _E:
-            def __init__(self, mp, en):
-                self.mp_cost = int(mp or 0)
-                self.en_cost = int(en or 0)
-        effects = [_E(d.get("mp_cost", 0), d.get("en_cost", 0)) for d in docs]
+        for d in docs:
+            mp_sum += int(d.get("mp_cost", 0) or 0)
+            en_sum += int(d.get("en_cost", 0) or 0)
+        return mp_sum, en_sum
 
-    mp_cost, en_cost, breakdown = Spell.compute_cost(
-        range_val, aoe, duration, activation, effects
-    )
+def compute_spell_costs(
+    activation: str,
+    range_val: int,
+    aoe: str,
+    duration: int,
+    effect_ids: list[str],
+    *,
+    range_type: str | None = None,
+    aoe_type: str | None = None,
+) -> dict:
+    # 1) Decide cost table types
+    if not range_type or range_type.upper() not in ("A","B","C"):
+        rt, at = _derive_types_from_effects(effect_ids)
+    else:
+        rt = range_type.upper()
+        at = (aoe_type or "A").upper() if aoe_type else _derive_types_from_effects(effect_ids)[1]
+
+    # 2) Sum effect costs
+    eff_mp, eff_en = _sum_effect_costs(effect_ids)
+
+    # 3) Knob costs (tables)
+    act_mp, act_en = ACTIVATION_COSTS.get(activation, (0,0))
+    rng_mp, rng_en = RANGE_COSTS.get(rt, RANGE_COSTS["A"]).get(int(range_val), (0,0))
+    aoe_mp, aoe_en = AOE_COSTS.get(at, AOE_COSTS["A"]).get(str(aoe), (0,0))
+    dur_mp, dur_en = DURATION_COSTS.get(int(duration), (0,0))
+
+    mp_cost = eff_mp + act_mp + rng_mp + aoe_mp + dur_mp
+    en_cost = eff_en + act_en + rng_en + aoe_en + dur_en
+
+    breakdown = {
+        "activation": {"mp": act_mp, "en": act_en},
+        "range":      {"mp": rng_mp, "en": rng_en, "type": rt},
+        "aoe":        {"mp": aoe_mp, "en": aoe_en, "type": at},
+        "duration":   {"mp": dur_mp, "en": dur_en},
+        "effects":    {"mp": eff_mp, "en": eff_en},
+    }
 
     return {
         "mp_cost": mp_cost,
@@ -36,17 +103,14 @@ def compute_spell_costs(
 
 def mp_to_next_category_delta(current_mp: int) -> int:
     cur_cat = category_for_mp(int(current_mp or 0))
-
     step = 1
     base = int(current_mp or 0)
-    MAX_MP = base + 100_000  # sane cap
+    MAX_MP = base + 100_000
     hi = base + step
     while hi <= MAX_MP and category_for_mp(hi) == cur_cat:
         step *= 2
         hi = base + step
-    if hi > MAX_MP:
-        return 0
-
+    if hi > MAX_MP: return 0
     lo = max(base, hi - step)
     ans = None
     while lo <= hi:
@@ -56,10 +120,7 @@ def mp_to_next_category_delta(current_mp: int) -> int:
         else:
             ans = mid
             hi = mid - 1
-
-    if ans is None:
-        return 0
-    return max(0, ans - base)
+    return 0 if ans is None else max(0, ans - base)
 
 def _norm_text(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
