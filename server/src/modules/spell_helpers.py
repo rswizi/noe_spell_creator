@@ -2,7 +2,7 @@ from server.src.objects.effects import load_effect
 from db_mongo import get_col
 from server.src.objects.spells import Spell
 from server.src.modules.category_table import category_for_mp
-from cost_tables import ACTIVATION_COSTS, RANGE_COSTS, AOE_COSTS, DURATION_COSTS
+from server.src.modules.cost_tables import ACTIVATION_COSTS, RANGE_COSTS, AOE_COSTS, DURATION_COSTS
 import re
 
 TYPE_ORDER = {"A": 1, "B": 2, "C": 3}
