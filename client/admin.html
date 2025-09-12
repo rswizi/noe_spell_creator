@@ -5,13 +5,26 @@
   <title>Spell Creator — Modify Database</title>
   <link rel="stylesheet" href="/static/style.css">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .pill{display:inline-block;border:1px solid #444;border-radius:999px;padding:2px 8px;font-size:.85rem}
+    .pill-green{background:#123d12;border-color:#1f7a1f}
+    .pill-yellow{background:#3d3a12;border-color:#a88f1e}
+    .pill-red{background:#3d1212;border-color:#7a1f1f}
+    .scrollbox{max-height:60vh;overflow:auto}
+    .effect-entry{display:flex;gap:12px;border:1px solid #222;border-radius:10px;padding:10px;margin:10px 0}
+    .btn-approve{background:#1f7a1f;border:1px solid #145814}
+    .btn-review{background:#a88f1e;border:1px solid #7a6716}
+    .btn-flag{background:#7a1f1f;border:1px solid #5a1515}
+    .btn-ghost{background:transparent;border:1px dashed #444}
+  </style>
 </head>
 <body>
   <div class="container">
     <h1>Modify Database</h1>
 
     <div class="home-card" style="margin-bottom:18px;">
-      <div class="filter-bar">
+      <div class="filter-bar row">
         <input id="filter-name" type="text" placeholder="Filter by name..." />
         <select id="filter-category">
           <option value="">All Categories</option>
@@ -29,11 +42,31 @@
           <option value="yellow">Review</option>
           <option value="red">Flagged</option>
         </select>
+
         <button id="clear-filters">Reset</button>
-        <button id="delete-flagged" class="btn btn-flag" style="margin-left:auto;">
-          Delete All Flagged
-        </button>
+
+        <span style="flex:1"></span>
+
+        <!-- NEW: Recompute all + Delete flagged -->
+        <button id="recompute-all" class="btn">Recompute All</button>
+        <button id="delete-flagged" class="btn btn-flag">Delete All Flagged</button>
       </div>
+    </div>
+
+    <!-- NEW: Patch note card -->
+    <div id="patch-card" class="home-card" style="display:none;margin-bottom:18px;">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <strong>Patch Notes</strong>
+          <span class="pill" id="patch-summary"></span>
+        </div>
+        <div class="row">
+          <button id="patch-copy" class="btn btn-secondary">Copy</button>
+          <button id="patch-dl" class="btn btn-secondary">Download</button>
+          <button id="patch-hide" class="btn btn-ghost">Hide</button>
+        </div>
+      </div>
+      <pre id="patch-text" class="scrollbox" style="white-space:pre-wrap;"></pre>
     </div>
 
     <div class="home-card">
@@ -44,7 +77,7 @@
       <a class="btn btn-secondary" href="home.html">← Back Home</a>
     </div>
   </div>
-</body>
+
 <script>
 (() => {
   const API_BASE = "";
@@ -59,9 +92,19 @@
   const nameEl     = $("#filter-name");
   const categoryEl = $("#filter-category");
   const schoolEl   = $("#filter-school");
-  const statusEl   = $("#filter-status");      // NEW
+  const statusEl   = $("#filter-status");
   const clearBtn   = $("#clear-filters");
-  const delFlagBtn = $("#delete-flagged");     // NEW
+
+  const delFlagBtn = $("#delete-flagged");
+  const recomputeBtn = $("#recompute-all");
+
+  // Patch UI
+  const patchCard = $("#patch-card");
+  const patchText = $("#patch-text");
+  const patchSummary = $("#patch-summary");
+  const patchCopy = $("#patch-copy");
+  const patchDL = $("#patch-dl");
+  const patchHide = $("#patch-hide");
 
   // Gate access
   document.addEventListener("DOMContentLoaded", () => {
@@ -81,17 +124,81 @@
     nameEl.addEventListener("input", run);
     categoryEl.addEventListener("change", run);
     schoolEl.addEventListener("change", run);
-    if (statusEl) statusEl.addEventListener("change", run);
+    statusEl.addEventListener("change", run);
 
     clearBtn.addEventListener("click", () => {
       nameEl.value = "";
       categoryEl.value = "";
       schoolEl.value = "";
-      if (statusEl) statusEl.value = "";
+      statusEl.value = "";
       fetchSpells();
     });
 
-    if (delFlagBtn) delFlagBtn.addEventListener("click", deleteFlagged);
+    delFlagBtn.addEventListener("click", deleteFlagged);
+
+    // NEW: recompute-all handler
+    recomputeBtn.addEventListener("click", async () => {
+      if (!token){ alert("You must be logged in."); return; }
+      if (role !== "admin" && role !== "moderator"){ alert("Forbidden."); return; }
+      if (!confirm("Recompute costs for ALL spells and generate patch notes?")) return;
+
+      try {
+        recomputeBtn.disabled = true;
+        const txtBefore = recomputeBtn.textContent;
+        recomputeBtn.textContent = "Recomputing…";
+
+        const res = await fetch(`${API_BASE}/admin/spells/recompute_all`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const data = await res.json().catch(()=>({}));
+
+        if (data.status !== "success") {
+          alert(data.message || "Recompute failed.");
+        } else {
+          // Show patch note
+          const lines = Array.isArray(data.lines) ? data.lines : (data.note ? String(data.note).split("\n") : []);
+          const changed = Number(data.changed || 0);
+          const total   = Number(data.total   || 0);
+
+          patchText.textContent = lines.join("\n") || "No MP/EN/category changes after recompute.";
+          patchSummary.textContent = `${changed} changed / ${total} total`;
+          patchCard.style.display = "block";
+
+          // refresh list to reflect updated costs/categories
+          await fetchSpells();
+        }
+        recomputeBtn.textContent = txtBefore;
+        recomputeBtn.disabled = false;
+      } catch (e) {
+        console.error("recompute_all error:", e);
+        recomputeBtn.disabled = false;
+        recomputeBtn.textContent = "Recompute All";
+        alert("Request failed.");
+      }
+    });
+
+    // Patch actions
+    patchHide.addEventListener("click", ()=> { patchCard.style.display = "none"; });
+    patchCopy.addEventListener("click", async ()=>{
+      try {
+        await navigator.clipboard.writeText(patchText.textContent || "");
+        patchCopy.textContent = "Copied!";
+        setTimeout(()=> patchCopy.textContent = "Copy", 900);
+      } catch { /* ignore */ }
+    });
+    patchDL.addEventListener("click", ()=>{
+      const blob = new Blob([patchText.textContent || ""], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const ts = new Date().toISOString().replace(/[:.]/g,"-");
+      a.href = url;
+      a.download = `spell_patch_notes_${ts}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
   }
 
   function debounce(fn, ms = 300) {
@@ -121,12 +228,12 @@
     const name = (nameEl.value || "").trim();
     const cat  = categoryEl.value || "";
     const sch  = schoolEl.value || "";
-    const st   = statusEl ? (statusEl.value || "") : "";
+    const st   = statusEl.value || "";
 
     if (name) params.set("name", name);
     if (cat)  params.set("category", cat);
     if (sch)  params.set("school", sch);
-    if (st)   params.set("status", st);   // NEW
+    if (st)   params.set("status", st);
 
     return params.toString();
   }
@@ -175,7 +282,6 @@
       status === "red"   ? "pill pill-red"   :
                            "pill pill-yellow";
 
-    // Inline handlers call functions exposed on window below
     return `
       <div class="effect-entry" style="justify-content:space-between; align-items:flex-start;">
         <div style="flex:1; min-width:0;">
@@ -283,4 +389,5 @@
   }
 })();
 </script>
+</body>
 </html>

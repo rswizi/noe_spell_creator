@@ -4,6 +4,7 @@ from server.src.objects.spells import Spell
 from server.src.modules.category_table import category_for_mp
 from server.src.modules.cost_tables import ACTIVATION_COSTS, RANGE_COSTS, AOE_COSTS, DURATION_COSTS
 import re
+from typing import Tuple
 
 TYPE_ORDER = {"A": 1, "B": 2, "C": 3}
 
@@ -235,3 +236,45 @@ def _recompute_spells_for_effect(effect_id: str) -> tuple[str, int]:
     if not lines:
         lines.append("No MP/EN/category changes after recompute.")
     return ("\n".join(lines), changed)
+
+def recompute_all_spells() -> Tuple[str, int, int]:
+    """
+    Recalculate costs/category for ALL spells.
+    Returns (note_text, changed_count, total_count).
+    """
+    sp_col = get_col("spells")
+    spells = list(sp_col.find({}, {"_id": 0}))
+    total = len(spells)
+    changed = 0
+    lines: list[str] = ["Recompute ALL spells:", ""]
+
+    for sp in spells:
+        old_mp = int(sp.get("mp_cost", 0))
+        old_en = int(sp.get("en_cost", 0))
+        old_cat = sp.get("category", "")
+
+        cc = compute_spell_costs(
+            sp.get("activation", "Action"),
+            int(sp.get("range", 0)),
+            sp.get("aoe", "A Square"),
+            int(sp.get("duration", 1)),
+            [str(x) for x in (sp.get("effects") or [])],
+        )
+        new_mp, new_en, new_cat = cc["mp_cost"], cc["en_cost"], cc["category"]
+
+        if (old_mp, old_en, old_cat) != (new_mp, new_en, new_cat):
+            sp_col.update_one({"id": sp["id"]}, {"$set": {
+                "mp_cost": new_mp,
+                "en_cost": new_en,
+                "category": new_cat
+            }})
+            changed += 1
+            lines.append(
+                f"[{sp['id']}] {sp.get('name','(unnamed)')}: "
+                f"MP {old_mp} → {new_mp}, EN {old_en} → {new_en}, Category {old_cat} → {new_cat}"
+            )
+
+    if changed == 0:
+        lines.append("No MP/EN/category changes after recompute.")
+    note = "\n".join(lines)
+    return (note, changed, total)

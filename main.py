@@ -15,7 +15,7 @@ from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters
 from server.src.modules.apotheosis_helpers import compute_apotheosis_stats, _can_edit_apotheosis
 from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS, find_user, require_auth, make_token, verify_password, get_auth_token, normalize_email,_sha256
 from server.src.modules.logging_helpers import logger, write_audit
-from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect
+from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect, recompute_all_spells
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice
 
@@ -364,7 +364,6 @@ async def get_costs(request: Request):
 
     effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
 
-    # NEW: accept front-end override for the tables
     range_type = (body.get("range_type") or "").strip().upper() or None
     aoe_type   = (body.get("aoe_type") or "").strip().upper() or None
 
@@ -544,7 +543,30 @@ async def set_spell_status(spell_id: str, request: Request, payload: dict = Body
 def delete_flagged_spells(request: Request):
     require_auth(request, ["admin", "moderator"])
     r = get_col("spells").delete_many({"status": "red"})
-    return {"status": "success", "deleted": r.deleted_count}
+
+
+
+@app.post("/admin/spells/recompute_all")
+def admin_recompute_all_spells(request: Request):
+    user, role = require_auth(request)
+    if role not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    try:
+        note, changed, total = recompute_all_spells()
+        # Return both a text note and an array of lines for convenience
+        return {
+            "status": "success",
+            "changed": changed,
+            "total": total,
+            "note": note,
+            "lines": note.split("\n"),
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"status": "error", "message": f"Recompute failed: {e}"},
+            status_code=500
+        )
 
 # ---------- Ops ----------
 @app.get("/health")
