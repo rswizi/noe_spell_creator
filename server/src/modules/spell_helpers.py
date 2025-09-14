@@ -173,7 +173,7 @@ def _recompute_spells_for_school(school_id: str) -> tuple[str, int]:
             int(sp.get("range",0)),
             sp.get("aoe","A Square"),
             int(sp.get("duration",1)),
-            [str(x) for x in (sp.get("effects") or [])]
+            _unique_preserve([str(x) for x in (sp.get("effects") or [])])
         )
 
         new_mp, new_en, new_cat = cc["mp_cost"], cc["en_cost"], cc["category"]
@@ -215,7 +215,7 @@ def _recompute_spells_for_effect(effect_id: str) -> tuple[str, int]:
             int(sp.get("range", 0)),
             sp.get("aoe", "A Square"),
             int(sp.get("duration", 1)),
-            [str(x) for x in (sp.get("effects") or [])]
+            _unique_preserve([str(x) for x in (sp.get("effects") or [])])
         )
 
         new_mp, new_en, new_cat = cc["mp_cost"], cc["en_cost"], cc["category"]
@@ -278,3 +278,13 @@ def recompute_all_spells() -> Tuple[str, int, int]:
         lines.append("No MP/EN/category changes after recompute.")
     note = "\n".join(lines)
     return (note, changed, total)
+
+def _unique_preserve(seq):
+    seen = set()
+    out = []
+    for x in (seq or []):
+        s = str(x)
+        if s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
