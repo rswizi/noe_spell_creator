@@ -134,10 +134,6 @@ def get_effects(name: str | None = Query(default=None), school: str | None = Que
 @app.post("/effects/bulk_create")
 @app.post("/admin/effects/bulk_create")
 async def bulk_create_effects(request: Request):
-    
-    replace_duplicates = bool(body.get("replace_duplicates", False))
-    updated = []
-    patch_lines = []
 
     try:
         require_auth(request, ["admin", "moderator"])
@@ -150,6 +146,10 @@ async def bulk_create_effects(request: Request):
         body = await request.json()
     except Exception:
         return JSONResponse({"status": "error", "message": "Invalid JSON"}, status_code=400)
+    
+    replace_duplicates = bool(body.get("replace_duplicates", False))
+    updated = []
+    patch_lines = []
 
     try:
         school_name = (body.get("school_name") or "").strip()

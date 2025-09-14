@@ -247,6 +247,8 @@ $("#confirm-btn").addEventListener("click", async ()=>{
   const school_name = schoolNameInput.value.trim();
   if (!school_name){ alert("School Name is required."); return; }
 
+  const replaceDupes = document.querySelector("#replace-duplicates").checked;
+
   const payload = {
     school_name: school_name,
     school_type: schoolTypeSelect.value,
