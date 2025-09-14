@@ -247,14 +247,13 @@ $("#confirm-btn").addEventListener("click", async ()=>{
   const school_name = schoolNameInput.value.trim();
   if (!school_name){ alert("School Name is required."); return; }
 
-  // Build payload — negatives are preserved
   const payload = {
     school_name: school_name,
     school_type: schoolTypeSelect.value,
     range_type:  rangeTypeSelect.value,
     aoe_type:    aoeTypeSelect.value,
     upgrade:     upgradeCheckbox.checked,
-    replace_duplicates: replaceDupes,  // <-- NEW
+    replace_duplicates: replaceDupes,
     effects: PREVIEW.map(e => ({
       name: e.name,
       description: e.description || "",

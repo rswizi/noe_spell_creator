@@ -5,8 +5,19 @@ from server.src.modules.category_table import category_for_mp
 from server.src.modules.cost_tables import ACTIVATION_COSTS, RANGE_COSTS, AOE_COSTS, DURATION_COSTS
 import re
 from typing import Tuple
+from collections import Counter
 
 TYPE_ORDER = {"A": 1, "B": 2, "C": 3}
+
+def _unique_preserve(seq):
+    seen = set()
+    out = []
+    for x in (seq or []):
+        s = str(x)
+        if s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
 
 def _norm_text(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
@@ -34,28 +45,59 @@ def _derive_types_from_effects(effect_ids):
     return (_pick_max_type(r_types), _pick_max_type(a_types))
 
 def _sum_effect_costs(effect_ids):
-    """Return (mp_sum, en_sum). Pulls minimal fields if load_effect is unavailable."""
+    """
+    Return (mp_sum, en_sum) using a multiplicity-aware DB lookup.
+    - Does NOT call load_effect() to avoid side-effects during recompute.
+    - Respects intentional duplicates: same effect ID counted N times if present N times.
+    """
+    ids = [str(e) for e in (effect_ids or []) if str(e)]
+    if not ids:
+        return (0, 0)
+
+    counts = Counter(ids)
+    eff_col = get_col("effects")
+
+    # fetch minimal fields for all unique ids
+    docs = list(
+        eff_col.find(
+            {"id": {"$in": list(counts.keys())}},
+            {"_id": 0, "id": 1, "mp_cost": 1, "en_cost": 1},
+        )
+    )
+
     mp_sum = 0
     en_sum = 0
-    try:
-        # Preferred path: use object loader (may include other metadata)
-        for eid in (effect_ids or []):
-            ef = load_effect(str(eid))
-            mp_sum += int(getattr(ef, "mp_cost", 0) or 0)
-            en_sum += int(getattr(ef, "en_cost", 0) or 0)
-        return mp_sum, en_sum
-    except Exception:
-        # Fallback: read from DB
-        docs = list(
-            get_col("effects").find(
-                {"id": {"$in": [str(eid) for eid in (effect_ids or [])]}},
-                {"_id": 0, "mp_cost": 1, "en_cost": 1},
-            )
+    for d in docs:
+        c = counts.get(d["id"], 0)
+        if c:
+            mp_sum += c * int(d.get("mp_cost", 0) or 0)
+            en_sum += c * int(d.get("en_cost", 0) or 0)
+
+def _sum_effect_costs(effect_ids):
+
+    ids = [str(e) for e in (effect_ids or []) if str(e)]
+    if not ids:
+        return (0, 0)
+
+    counts = Counter(ids)
+    eff_col = get_col("effects")
+
+    docs = list(
+        eff_col.find(
+            {"id": {"$in": list(counts.keys())}},
+            {"_id": 0, "id": 1, "mp_cost": 1, "en_cost": 1},
         )
-        for d in docs:
-            mp_sum += int(d.get("mp_cost", 0) or 0)
-            en_sum += int(d.get("en_cost", 0) or 0)
-        return mp_sum, en_sum
+    )
+
+    mp_sum = 0
+    en_sum = 0
+    for d in docs:
+        c = counts.get(d["id"], 0)
+        if c:
+            mp_sum += c * int(d.get("mp_cost", 0) or 0)
+            en_sum += c * int(d.get("en_cost", 0) or 0)
+
+    return mp_sum, en_sum
 
 def compute_spell_costs(
     activation: str,
@@ -67,21 +109,29 @@ def compute_spell_costs(
     range_type: str | None = None,
     aoe_type: str | None = None,
 ) -> dict:
+    """
+    Compute total MP/EN and category for a spell.
+    Defensive normalization: effect_ids are order-deduped here so all callers are safe.
+    """
+    # Defensive sanitize: order-preserving dedupe of effect ids
+    effect_ids = _unique_preserve([str(e).strip() for e in (effect_ids or []) if str(e).strip()])
+
     # 1) Decide cost table types
-    if not range_type or range_type.upper() not in ("A","B","C"):
+    if not range_type or range_type.upper() not in ("A", "B", "C"):
         rt, at = _derive_types_from_effects(effect_ids)
     else:
         rt = range_type.upper()
+        # if aoe_type is not provided, fall back to derivation; else normalize
         at = (aoe_type or "A").upper() if aoe_type else _derive_types_from_effects(effect_ids)[1]
 
-    # 2) Sum effect costs
+    # 2) Sum effect costs (already deduped above)
     eff_mp, eff_en = _sum_effect_costs(effect_ids)
 
     # 3) Knob costs (tables)
-    act_mp, act_en = ACTIVATION_COSTS.get(activation, (0,0))
-    rng_mp, rng_en = RANGE_COSTS.get(rt, RANGE_COSTS["A"]).get(int(range_val), (0,0))
-    aoe_mp, aoe_en = AOE_COSTS.get(at, AOE_COSTS["A"]).get(str(aoe), (0,0))
-    dur_mp, dur_en = DURATION_COSTS.get(int(duration), (0,0))
+    act_mp, act_en = ACTIVATION_COSTS.get(activation, (0, 0))
+    rng_mp, rng_en = RANGE_COSTS.get(rt, RANGE_COSTS["A"]).get(int(range_val), (0, 0))
+    aoe_mp, aoe_en = AOE_COSTS.get(at, AOE_COSTS["A"]).get(str(aoe), (0, 0))
+    dur_mp, dur_en = DURATION_COSTS.get(int(duration), (0, 0))
 
     mp_cost = eff_mp + act_mp + rng_mp + aoe_mp + dur_mp
     en_cost = eff_en + act_en + rng_en + aoe_en + dur_en
@@ -101,6 +151,7 @@ def compute_spell_costs(
         "mp_to_next_category": mp_to_next_category_delta(mp_cost),
         "breakdown": breakdown,
     }
+
 
 def mp_to_next_category_delta(current_mp: int) -> int:
     cur_cat = category_for_mp(int(current_mp or 0))
@@ -240,6 +291,8 @@ def _recompute_spells_for_effect(effect_id: str) -> tuple[str, int]:
 def recompute_all_spells() -> Tuple[str, int, int]:
     """
     Recalculate costs/category for ALL spells.
+    - Persistently dedupes each spell's `effects` list before recomputing
+    - Marks log lines with '(deduped effects)' when a list was repaired
     Returns (note_text, changed_count, total_count).
     """
     sp_col = get_col("spells")
@@ -253,12 +306,21 @@ def recompute_all_spells() -> Tuple[str, int, int]:
         old_en = int(sp.get("en_cost", 0))
         old_cat = sp.get("category", "")
 
+        # Normalize the effects list and persist if it changed
+        old_list = [str(x) for x in (sp.get("effects") or [])]
+        eff_list = _unique_preserve(old_list)
+        dedup_note = ""
+        if eff_list != old_list:
+            sp_col.update_one({"id": sp["id"]}, {"$set": {"effects": eff_list}})
+            dedup_note = " (deduped effects)"
+
+        # Recompute using the cleaned list
         cc = compute_spell_costs(
             sp.get("activation", "Action"),
             int(sp.get("range", 0)),
             sp.get("aoe", "A Square"),
             int(sp.get("duration", 1)),
-            [str(x) for x in (sp.get("effects") or [])],
+            eff_list,
         )
         new_mp, new_en, new_cat = cc["mp_cost"], cc["en_cost"], cc["category"]
 
@@ -271,20 +333,11 @@ def recompute_all_spells() -> Tuple[str, int, int]:
             changed += 1
             lines.append(
                 f"[{sp['id']}] {sp.get('name','(unnamed)')}: "
-                f"MP {old_mp} → {new_mp}, EN {old_en} → {new_en}, Category {old_cat} → {new_cat}"
+                f"MP {old_mp} → {new_mp}, EN {old_en} → {new_en}, "
+                f"Category {old_cat} → {new_cat}{dedup_note}"
             )
 
     if changed == 0:
         lines.append("No MP/EN/category changes after recompute.")
     note = "\n".join(lines)
     return (note, changed, total)
-
-def _unique_preserve(seq):
-    seen = set()
-    out = []
-    for x in (seq or []):
-        s = str(x)
-        if s not in seen:
-            seen.add(s)
-            out.append(s)
-    return out

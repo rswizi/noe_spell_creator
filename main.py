@@ -232,12 +232,6 @@ async def bulk_create_effects(request: Request):
                         continue
                     # else fall through to create as a new effect
 
-            # (unchanged) create branch:
-            eff_id = next_id_str("effects", padding=4)
-            rec = {"id": eff_id, "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school["id"]}
-            eff_col.insert_one(rec)
-            created.append(eff_id)
-
             eff_id = next_id_str("effects", padding=4)
             rec = {"id": eff_id, "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school["id"]}
             eff_col.insert_one(rec)
