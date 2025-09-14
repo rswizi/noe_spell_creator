@@ -18,12 +18,16 @@
     .container-head { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .container-head input[type="text"]{ min-width:180px; }
     .list { border:1px solid #222; border-radius:10px; padding:8px; }
+    .searchbar { display:grid; gap:8px; grid-template-columns: 1fr; }
+    .search-controls { display:grid; gap:8px; grid-template-columns: 1fr 1fr 1fr 1fr; }
+    .purchase-controls { display:grid; gap:8px; grid-template-columns: 1fr 1fr; }
     .modal { position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:1000; padding:16px; }
     .modal.hidden{ display:none; }
-    .modal-card { width:min(720px, 94vw); background:#0b0b0b; border:1px solid #222; border-radius:14px; padding:16px; }
+    .modal-card { width:min(760px, 96vw); background:#0b0b0b; border:1px solid #222; border-radius:14px; padding:16px; }
     .modal-close { float:right; font-size:22px; border:none; background:transparent; color:#ccc; cursor:pointer; }
     @media (min-width: 1100px){
       .container-wide { max-width: 1100px; margin: 0 auto; }
+      .searchbar { grid-template-columns: 2fr 1fr; align-items:end; }
     }
   </style>
 </head>
@@ -37,6 +41,15 @@
       <h3>Overview</h3>
       <div id="money"></div>
       <div class="row muted">Total Encumbrance: <strong id="enc-total">0</strong></div>
+
+      <!-- Add Funds -->
+      <div class="row" style="margin-top:10px;">
+        <label class="muted">Add Funds</label>
+        <select id="fund-cur" style="min-width:120px;"></select>
+        <input id="fund-amt" type="number" step="1" placeholder="Amount" style="width:140px;">
+        <input id="fund-note" placeholder="Note (optional)" style="flex:1; min-width:200px;">
+        <button id="fund-add" class="btn small">+ Add</button>
+      </div>
     </div>
 
     <!-- Containers + Items -->
@@ -56,13 +69,61 @@
       <div id="tx" class="list"></div>
     </div>
 
-    <!-- Catalog (add objects) -->
+    <!-- Catalog (add items) -->
     <div class="home-card">
-      <h3>Add from Objects DB</h3>
-      <div class="row">
-        <input id="q" placeholder="Search objects…" style="flex:1">
-        <button id="search" class="btn small">Search</button>
+      <h3>Add from Catalog</h3>
+
+      <div class="searchbar">
+        <div>
+          <div class="row">
+            <input id="q" placeholder="Search name…" style="flex:1">
+            <button id="search" class="btn small">Search</button>
+          </div>
+          <div class="search-controls">
+            <div>
+              <label class="muted">Kind</label>
+              <select id="kind">
+                <option value="object">Objects</option>
+                <option value="weapon">Weapons</option>
+                <option value="equipment">Equipment</option>
+                <option value="tool">Tools</option>
+              </select>
+            </div>
+            <div>
+              <label class="muted">Category</label>
+              <select id="cat-select" disabled>
+                <option value="__all">All</option>
+              </select>
+            </div>
+            <div>
+              <label class="muted">Results</label>
+              <select id="limit">
+                <option>25</option>
+                <option selected>50</option>
+                <option>100</option>
+              </select>
+            </div>
+            <div class="row" style="align-items:end;">
+              <button id="clear" class="btn btn-secondary small">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="purchase-controls">
+            <div>
+              <label class="muted">Container</label>
+              <select id="global-cont"></select>
+            </div>
+            <div>
+              <label class="muted">Currency</label>
+              <select id="global-cur"></select>
+            </div>
+          </div>
+          <div class="muted" style="margin-top:8px;">Selected container/currency apply to all “Add” actions below.</div>
+        </div>
       </div>
+
       <div id="results" class="list" style="margin-top:8px;"></div>
     </div>
 
@@ -78,6 +139,9 @@
     <button class="modal-close" id="item-close" aria-label="Close">&times;</button>
     <h2 id="item-title">Item</h2>
     <div id="item-body" class="list" style="margin-top:10px;"></div>
+
+    <!-- Actions for weapons/equipment -->
+    <div id="item-actions" style="margin-top:12px;"></div>
   </div>
 </div>
 
@@ -88,17 +152,22 @@ const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
 const invId = new URLSearchParams(location.search).get("inv");
 
 let INV = null;
+let LAST_RESULTS = [];
+let FILTERED = [];
+
+const KIND_PLURAL = { object: "objects", weapon: "weapons", equipment: "equipment", tool: "tools" };
+const QUALITIES = ["Adequate","Good","Very Good","Excellent","Legendary","Mythical","Epic","Divine","Unreal"];
 
 document.addEventListener("DOMContentLoaded", () => {
   loadInventory();
-  $("#search").addEventListener("click", search);
-  $("#q").addEventListener("keydown", e=>{ if (e.key==="Enter") search(); });
+  $("#search").addEventListener("click", doSearch);
+  $("#q").addEventListener("keydown", e=>{ if (e.key==="Enter") doSearch(); });
+  $("#clear").addEventListener("click", clearSearch);
   $("#add-cont").addEventListener("click", addContainer);
   $("#item-close").addEventListener("click", closeItemModal);
-  // click outside modal to close
-  $("#item-modal").addEventListener("click", (e)=>{
-    if (e.target === $("#item-modal")) closeItemModal();
-  });
+  $("#item-modal").addEventListener("click", (e)=>{ if (e.target === $("#item-modal")) closeItemModal(); });
+  $("#cat-select").addEventListener("change", applyCategoryFilter);
+  $("#fund-add").addEventListener("click", addFunds);
 });
 
 async function loadInventory(){
@@ -107,6 +176,7 @@ async function loadInventory(){
   if (j.status !== "success") { alert(j.message || "Load failed"); return; }
   INV = j.inventory;
   renderInventory();
+  populateGlobals();
 }
 
 function renderInventory(){
@@ -117,6 +187,17 @@ function renderInventory(){
   $("#money").innerHTML = Object.keys(cur).length
     ? Object.entries(cur).map(([k,v])=>`<span class="pill">${k}: <b>${v}</b></span>`).join(" ")
     : `<span class="muted">No currency set.</span>`;
+
+  // add-funds currency
+  const selFund = $("#fund-cur");
+  selFund.innerHTML = "";
+  const currencies = Object.keys(INV.currencies || {Jelly:0});
+  if (!currencies.length) currencies.push("Jelly");
+  currencies.forEach(k=>{
+    const opt = document.createElement("option");
+    opt.value = k; opt.textContent = k;
+    selFund.appendChild(opt);
+  });
 
   // enc totals
   $("#enc-total").textContent = Number(INV.enc_total || 0).toFixed(1);
@@ -162,10 +243,11 @@ function renderInventory(){
       for (const it of items){
         const row = document.createElement("div");
         row.className = "item-row";
+        const displayName = it.alt_name ? `${escapeHtml(it.alt_name)} <span class="muted">(${escapeHtml(it.name||"Item")})</span>` : escapeHtml(it.name||"Item");
         const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
         row.innerHTML = `
           <div class="grow">
-            <div><b>${escapeHtml(it.name || "Item")}</b></div>
+            <div><b>${displayName}</b></div>
             <div class="muted">x${it.quantity||1} • enc: ${totalEnc.toFixed(1)}</div>
           </div>
           <button class="btn small view" data-id="${it.item_id}">Details</button>
@@ -212,6 +294,30 @@ function renderInventory(){
   }
 }
 
+function populateGlobals(){
+  // Container selector (global)
+  const selC = $("#global-cont");
+  selC.innerHTML = "";
+  (INV.containers || []).forEach(c=>{
+    const opt = document.createElement("option");
+    opt.value = c.id; opt.textContent = c.name;
+    selC.appendChild(opt);
+  });
+
+  // Currency selector (global)
+  const selCur = $("#global-cur");
+  selCur.innerHTML = "";
+  const currencies = Object.keys(INV.currencies || {Jelly:0});
+  if (!currencies.length){ currencies.push("Jelly"); }
+  currencies.forEach(k=>{
+    const opt = document.createElement("option");
+    opt.value = k; opt.textContent = k;
+    selCur.appendChild(opt);
+  });
+
+  // Add-funds currency already populated in renderInventory
+}
+
 async function patchContainer(cid, body){
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/containers/${encodeURIComponent(cid)}`, {
     method: "PATCH",
@@ -222,6 +328,7 @@ async function patchContainer(cid, body){
   if (j.status !== "success") { alert(j.message || "Update failed"); return; }
   INV = j.inventory;
   renderInventory();
+  populateGlobals();
 }
 
 async function addContainer(){
@@ -236,88 +343,178 @@ async function addContainer(){
   INV = j.inventory;
   $("#new-cont-name").value = "";
   renderInventory();
+  populateGlobals();
 }
 
-// search objects
-async function search(){
-  const q = ($("#q").value || "").trim();
-  const r = await fetch(`/catalog/objects?q=${encodeURIComponent(q)}`, { headers: authHeaders() });
+/* ------------- Add Funds ------------- */
+async function addFunds(){
+  const currency = $("#fund-cur").value || "Jelly";
+  const amount = parseInt($("#fund-amt").value || "0", 10);
+  const note = ($("#fund-note").value || "Top up").trim();
+  if (!amount || amount <= 0){ alert("Enter a positive amount."); return; }
+  if (!confirm(`Add +${amount} ${currency} to this inventory?`)) return;
+
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/deposit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ currency, amount, note })
+  });
   const j = await r.json();
+  if (j.status !== "success"){ alert(j.message || "Deposit failed"); return; }
+  $("#fund-amt").value = "";
+  $("#fund-note").value = "";
+  INV = j.inventory;
+  renderInventory();
+  populateGlobals();
+}
+
+/* ------------- Catalog search & filter ------------- */
+
+async function doSearch(){
+  const q = ($("#q").value || "").trim();
+  const kind = $("#kind").value;
+  const limit = parseInt($("#limit").value || "50", 10);
+
+  const rows = await fetchCatalog(kind, q, limit);
+  LAST_RESULTS = rows || [];
+
+  // build category options from results
+  buildCategoryOptions(LAST_RESULTS);
+  applyCategoryFilter(); // sets FILTERED and renders
+}
+
+function getRowCategory(row){
+  return row.category || row.subcategory || row.type || "Uncategorized";
+}
+
+function buildCategoryOptions(rows){
+  const sel = $("#cat-select");
+  const set = new Set(rows.map(getRowCategory));
+  const cats = ["__all", ...Array.from(set).sort((a,b)=>String(a).localeCompare(String(b)))];
+
+  sel.innerHTML = "";
+  for (const c of cats){
+    const opt = document.createElement("option");
+    opt.value = c;
+    opt.textContent = (c === "__all") ? "All" : c;
+    sel.appendChild(opt);
+  }
+  sel.disabled = rows.length === 0;
+  sel.value = "__all";
+}
+
+function applyCategoryFilter(){
+  const cat = $("#cat-select").value || "__all";
+  FILTERED = (cat === "__all")
+    ? LAST_RESULTS.slice()
+    : LAST_RESULTS.filter(r => getRowCategory(r) === cat);
+  renderResults();
+}
+
+async function fetchCatalog(kind, q, limit){
+  const plural = KIND_PLURAL[kind] || "objects";
+  const tryPaths = [
+    `/catalog/search?kind=${encodeURIComponent(kind)}&q=${encodeURIComponent(q)}&limit=${limit}`,
+    `/catalog/${encodeURIComponent(plural)}?q=${encodeURIComponent(q)}&limit=${limit}`
+  ];
+  for (const path of tryPaths){
+    try{
+      const r = await fetch(path, { headers: authHeaders() });
+      const j = await r.json();
+      if (j && j.status === "success"){
+        const key = (j.objects && "objects") || (j.weapons && "weapons") || (j.equipment && "equipment") || (j.tools && "tools") || "rows";
+        const rows = j[key] || j.rows || [];
+        return rows.map(x => ({ ...x, __kind: kind }));
+      }
+    }catch(e){}
+  }
+  return [];
+}
+
+function renderResults(){
   const list = $("#results");
   list.innerHTML = "";
-  const rows = (j && j.objects) || [];
-  if (!rows.length){ list.textContent = "No results."; return; }
 
-  for (const o of rows){
+  if (!FILTERED.length){
+    list.textContent = "No results.";
+    return;
+  }
+
+  const globalContainer = $("#global-cont").value;
+  const globalCurrency  = $("#global-cur").value || "Jelly";
+
+  for (const r of FILTERED){
     const line = document.createElement("div");
     line.className = "row";
     line.style.borderBottom = "1px solid #222";
     line.style.padding = "6px 0";
+
+    const cat = getRowCategory(r);
+    const price = (r.price != null) ? `Price: ${r.price}` : "";
+    const enc = (r.enc != null) ? `Enc: ${Number(r.enc||0).toFixed(1)}` : "";
+
     line.innerHTML = `
-      <div style="flex:1;min-width:240px;">
-        <div><b>${escapeHtml(o.name)}</b></div>
-        <div class="muted">Price: ${o.price ?? 0} — Enc: ${Number(o.enc||0).toFixed(1)}</div>
+      <div style="flex:1;min-width:260px;">
+        <div><b>${escapeHtml(r.name || r.title || "Item")}</b></div>
+        <div class="muted">${escapeHtml(cat)} ${price ? " • "+price : ""} ${enc ? " • "+enc : ""}</div>
       </div>
-      <input type="number" min="1" value="1" style="width:80px" class="qty">
-      <select class="cont"></select>
-      <select class="cur"></select>
+      <input type="number" min="1" value="1" style="width:90px" class="qty">
       <button class="btn small buy">Add</button>
     `;
-    // populate containers + currencies for each row
-    const selC = line.querySelector(".cont");
-    (INV.containers || []).forEach(c=>{
-      const opt = document.createElement("option");
-      opt.value = c.id; opt.textContent = c.name;
-      selC.appendChild(opt);
-    });
-    const selCur = line.querySelector(".cur");
-    const currencies = Object.keys(INV.currencies || {Jelly:0});
-    if (!currencies.length){ currencies.push("Jelly"); }
-    currencies.forEach(k=>{
-      const opt = document.createElement("option");
-      opt.value = k; opt.textContent = k;
-      selCur.appendChild(opt);
-    });
 
     line.querySelector(".buy").addEventListener("click", async ()=>{
       const qty = Math.max(1, parseInt(line.querySelector(".qty").value||"1", 10));
-      const container_id = selC.value;
-      const currency = selCur.value || "Jelly";
-      await buyObject(o.id, qty, container_id, currency);
+      await buyItem(r.__kind || "object", r.id, qty, globalContainer, globalCurrency);
     });
 
-    $("#results").appendChild(line);
+    list.appendChild(line);
   }
 }
 
-async function buyObject(ref_id, quantity, container_id, currency){
+function clearSearch(){
+  $("#q").value = "";
+  LAST_RESULTS = [];
+  FILTERED = [];
+  buildCategoryOptions([]);
+  renderResults();
+}
+
+/* ------------- Purchase ------------- */
+
+async function buyItem(kind, ref_id, quantity, container_id, currency){
+  const payload = { kind, ref_id, quantity, container_id, currency };
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/purchase`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ kind: "object", ref_id, quantity, container_id, currency })
+    body: JSON.stringify(payload)
   });
   const j = await r.json();
   if (j.status !== "success") { alert(j.message || "Purchase failed"); return; }
   INV = j.inventory;
   renderInventory();
+  populateGlobals();
 }
 
-/* ------- Item Details Modal ------- */
+/* ------- Item Details Modal (incl. upgrades/quality/alt name) ------- */
 function openItemModal(it){
-  $("#item-title").textContent = it.name || "Item";
-  const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
+  $("#item-title").textContent = it.alt_name ? `${it.alt_name} (${it.name || "Item"})` : (it.name || "Item");
+  const totalEnc  = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
   const totalPaid = (Number(it.paid_unit||0) * Number(it.quantity||1)) || 0;
 
   $("#item-body").innerHTML = `
-    <div class="row"><span class="pill">Kind: <b>${escapeHtml(it.kind || "object")}</b></span>
+    <div class="row">
+      <span class="pill">Kind: <b>${escapeHtml(it.kind || "object")}</b></span>
       ${it.subcategory ? `<span class="pill">Sub: <b>${escapeHtml(it.subcategory)}</b></span>` : "" }
       ${it.quality ? `<span class="pill">Quality: <b>${escapeHtml(it.quality)}</b></span>` : "" }
+      ${it.variant ? `<span class="pill">Variant: <b>${escapeHtml(it.variant)}</b></span>` : "" }
     </div>
-    <div class="row"><span class="pill">Quantity: <b>${it.quantity||1}</b></span>
+    <div class="row">
+      <span class="pill">Quantity: <b>${it.quantity||1}</b></span>
       <span class="pill">Enc (unit): <b>${Number(it.enc||0).toFixed(1)}</b></span>
       <span class="pill">Enc (total): <b>${totalEnc.toFixed(1)}</b></span>
     </div>
-    <div class="row"><span class="pill">Base price (unit): <b>${Number(it.base_price||0)}</b></span>
+    <div class="row">
+      <span class="pill">Base price (unit): <b>${Number(it.base_price||0)}</b></span>
       <span class="pill">Paid (unit): <b>${Number(it.paid_unit||0)}</b></span>
       <span class="pill">Paid (total): <b>${totalPaid}</b></span>
     </div>
@@ -325,13 +522,118 @@ function openItemModal(it){
       ? `<div class="row">Upgrades: ${it.upgrades.map(u=>`<span class="pill">${escapeHtml(u.name||u)}</span>`).join(" ")}</div>`
       : ""
     }
+
+    <!-- Alt name edit -->
+    <div class="row" style="margin-top:8px;">
+      <label class="muted">Alternative name</label>
+      <input id="alt-name" value="${escapeAttr(it.alt_name || "")}" style="flex:1; min-width:200px;">
+      <button class="btn small" id="save-alt">Save</button>
+    </div>
     <div class="muted" style="margin-top:8px;">Ref ID: ${escapeHtml(it.ref_id || "")}</div>
     <div class="muted">Item ID: ${escapeHtml(it.item_id || "")}</div>
   `;
+
+  const actions = $("#item-actions");
+  actions.innerHTML = "";
+
+  // Only for weapons/equipment: show Upgrade Quality + Install Upgrade
+  if (it.kind === "weapon" || it.kind === "equipment"){
+    const wrap = document.createElement("div");
+    wrap.className = "row";
+    wrap.style.marginTop = "10px";
+
+    // Quality selector
+    const qlab = document.createElement("label");
+    qlab.className = "muted"; qlab.textContent = "Upgrade quality to";
+    const qsel = document.createElement("select"); qsel.id = "qual-target";
+    for (const q of QUALITIES){
+      const o = document.createElement("option");
+      o.value = q; o.textContent = q;
+      if (it.quality && it.quality === q) o.disabled = true;
+      qsel.appendChild(o);
+    }
+    const qbtn = document.createElement("button");
+    qbtn.className = "btn small";
+    qbtn.textContent = "Upgrade Quality";
+    qbtn.addEventListener("click", async ()=>{
+      const to = qsel.value;
+      if (!to || to === it.quality){ alert("Select a higher/different quality."); return; }
+      if (!confirm(`Upgrade ${it.name} to quality "${to}"? This will create a transaction.`)) return;
+      await upgradeQuality(it.item_id, to);
+    });
+
+    // Install upgrade controls
+    const ulab = document.createElement("label");
+    ulab.className = "muted"; ulab.textContent = "Install upgrade";
+    const uinput = document.createElement("input");
+    uinput.id = "upgrade-key";
+    uinput.placeholder = "Upgrade code / name";
+    const ubtn = document.createElement("button");
+    ubtn.className = "btn small";
+    ubtn.textContent = "Install";
+    ubtn.addEventListener("click", async ()=>{
+      const key = (uinput.value || "").trim();
+      if (!key){ alert("Enter upgrade code/name."); return; }
+      if (!confirm(`Install upgrade "${key}" on ${it.name}? This will create a transaction.`)) return;
+      await installUpgrade(it.item_id, key);
+    });
+
+    wrap.appendChild(qlab); wrap.appendChild(qsel); wrap.appendChild(qbtn);
+    wrap.appendChild(ulab); wrap.appendChild(uinput); wrap.appendChild(ubtn);
+    actions.appendChild(wrap);
+  }
+
+  // save alt name handler
+  $("#save-alt").addEventListener("click", async ()=>{
+    const alt = ($("#alt-name").value || "").trim();
+    await saveAltName(it.item_id, alt);
+  });
+
   $("#item-modal").classList.remove("hidden");
 }
+
 function closeItemModal(){
   $("#item-modal").classList.add("hidden");
+}
+
+/* ------- Item actions API ------- */
+async function saveAltName(item_id, alt_name){
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ alt_name })
+  });
+  const j = await r.json();
+  if (j.status !== "success"){ alert(j.message || "Save failed"); return; }
+  INV = j.inventory;
+  closeItemModal();
+  renderInventory();
+}
+
+async function upgradeQuality(item_id, to){
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/upgrade_quality`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ to })
+  });
+  const j = await r.json();
+  if (j.status !== "success"){ alert(j.message || "Upgrade failed"); return; }
+  INV = j.inventory;
+  closeItemModal();
+  renderInventory();
+}
+
+async function installUpgrade(item_id, upgrade){
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/install_upgrade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ upgrade })
+  });
+  const j = await r.json();
+  if (j.status !== "success"){ alert(j.message || "Install failed"); return; }
+  INV = j.inventory;
+  closeItemModal();
+  renderInventory();
 }
 
 /* ------- utils ------- */
@@ -340,6 +642,7 @@ function escapeHtml(s){
     .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
     .replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
+function escapeAttr(s){ return escapeHtml(s).replaceAll('"',"&quot;"); }
 </script>
 </body>
 </html>
