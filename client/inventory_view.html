@@ -6,36 +6,57 @@
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    .grid{display:grid;gap:16px;grid-template-columns:1fr 1fr}
-    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .pill{display:inline-block;border:1px solid #444;border-radius:999px;padding:2px 8px;margin-right:6px}
-    .list{max-height:58vh;overflow:auto;border:1px solid #222;border-radius:10px;padding:8px}
-    .muted{opacity:.8}
+    /* Vertical, comfy layout */
+    .stack { display: grid; gap: 18px; grid-template-columns: 1fr; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
+    .pill{ display:inline-block; border:1px solid #444; border-radius:999px; padding:2px 8px; margin-right:6px }
+    .muted{ opacity:.8 }
+    .items { display:block; margin-top:8px; }
+    .item-row { display:flex; align-items:center; gap:10px; padding:6px 8px; border:1px solid #222; border-radius:10px; margin:6px 0; }
+    .item-row .grow { flex:1; min-width:200px; }
+    .container-card { padding:10px; border:1px solid #222; border-radius:12px; margin:10px 0; }
+    .container-head { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .container-head input[type="text"]{ min-width:180px; }
+    .list { border:1px solid #222; border-radius:10px; padding:8px; }
+    .modal { position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:1000; padding:16px; }
+    .modal.hidden{ display:none; }
+    .modal-card { width:min(720px, 94vw); background:#0b0b0b; border:1px solid #222; border-radius:14px; padding:16px; }
+    .modal-close { float:right; font-size:22px; border:none; background:transparent; color:#ccc; cursor:pointer; }
+    @media (min-width: 1100px){
+      .container-wide { max-width: 1100px; margin: 0 auto; }
+    }
   </style>
 </head>
 <body>
-<div class="container">
+<div class="container container-wide">
   <h1 id="inv-title">Inventory</h1>
 
-  <div class="grid">
-    <!-- LEFT: Inventory info -->
+  <div class="stack">
+    <!-- Inventory Overview -->
     <div class="home-card">
       <h3>Overview</h3>
       <div id="money"></div>
       <div class="row muted">Total Encumbrance: <strong id="enc-total">0</strong></div>
+    </div>
 
-      <h3 style="margin-top:10px;">Containers</h3>
+    <!-- Containers + Items -->
+    <div class="home-card">
+      <h3>Containers & Items</h3>
       <div id="containers"></div>
+
       <div class="row" style="margin-top:8px;">
         <input id="new-cont-name" placeholder="New container name">
         <button id="add-cont" class="btn small">+ Add Container</button>
       </div>
+    </div>
 
-      <h3 style="margin-top:10px;">Recent Transactions</h3>
+    <!-- Recent Transactions -->
+    <div class="home-card">
+      <h3>Recent Transactions</h3>
       <div id="tx" class="list"></div>
     </div>
 
-    <!-- RIGHT: Catalog -->
+    <!-- Catalog (add objects) -->
     <div class="home-card">
       <h3>Add from Objects DB</h3>
       <div class="row">
@@ -44,10 +65,19 @@
       </div>
       <div id="results" class="list" style="margin-top:8px;"></div>
     </div>
-  </div>
 
-  <div style="margin-top:16px;">
-    <a class="btn btn-secondary" href="inventory_create.html">← Back</a>
+    <div>
+      <a class="btn btn-secondary" href="inventory_create.html">← Back</a>
+    </div>
+  </div>
+</div>
+
+<!-- Item Details Modal -->
+<div id="item-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="item-title">
+  <div class="modal-card">
+    <button class="modal-close" id="item-close" aria-label="Close">&times;</button>
+    <h2 id="item-title">Item</h2>
+    <div id="item-body" class="list" style="margin-top:10px;"></div>
   </div>
 </div>
 
@@ -59,10 +89,22 @@ const invId = new URLSearchParams(location.search).get("inv");
 
 let INV = null;
 
+document.addEventListener("DOMContentLoaded", () => {
+  loadInventory();
+  $("#search").addEventListener("click", search);
+  $("#q").addEventListener("keydown", e=>{ if (e.key==="Enter") search(); });
+  $("#add-cont").addEventListener("click", addContainer);
+  $("#item-close").addEventListener("click", closeItemModal);
+  // click outside modal to close
+  $("#item-modal").addEventListener("click", (e)=>{
+    if (e.target === $("#item-modal")) closeItemModal();
+  });
+});
+
 async function loadInventory(){
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}`, { headers: authHeaders() });
   const j = await r.json();
-  if (j.status !== "success") throw new Error(j.message || "Load failed");
+  if (j.status !== "success") { alert(j.message || "Load failed"); return; }
   INV = j.inventory;
   renderInventory();
 }
@@ -79,20 +121,62 @@ function renderInventory(){
   // enc totals
   $("#enc-total").textContent = Number(INV.enc_total || 0).toFixed(1);
 
+  // group items by container
+  const grouped = {};
+  for (const it of (INV.items || [])){
+    const cid = it.container_id || "";
+    (grouped[cid] ||= []).push(it);
+  }
+
   // containers
   const box = $("#containers");
   box.innerHTML = "";
   for (const c of (INV.containers || [])){
-    const row = document.createElement("div");
-    row.className = "row";
-    row.innerHTML = `
-      <input value="${c.name}" data-id="${c.id}" class="cname">
-      <label class="row"><input type="checkbox" class="cinc" data-id="${c.id}" ${c.include ? "checked" : ""}> include in total</label>
-      <span class="muted">enc: <b>${Number(c.enc_total||0).toFixed(1)}</b></span>
+    const items = grouped[c.id] || [];
+    const card = document.createElement("div");
+    card.className = "container-card";
+
+    const head = document.createElement("div");
+    head.className = "container-head";
+    head.innerHTML = `
+      <input value="${escapeHtml(c.name)}" data-id="${c.id}" class="cname" type="text">
+      <label class="row" style="gap:6px;">
+        <input type="checkbox" class="cinc" data-id="${c.id}" ${c.include ? "checked" : ""}>
+        include in total
+      </label>
+      <span class="pill">enc: <b>${Number(c.enc_total||0).toFixed(1)}</b></span>
+      <span class="pill">items: <b>${items.length}</b></span>
       <button class="btn btn-secondary small rename" data-id="${c.id}">Save</button>
     `;
-    box.appendChild(row);
+    card.appendChild(head);
+
+    // items list for this container
+    const list = document.createElement("div");
+    list.className = "items";
+    if (!items.length){
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = "No items in this container.";
+      list.appendChild(empty);
+    }else{
+      for (const it of items){
+        const row = document.createElement("div");
+        row.className = "item-row";
+        const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
+        row.innerHTML = `
+          <div class="grow">
+            <div><b>${escapeHtml(it.name || "Item")}</b></div>
+            <div class="muted">x${it.quantity||1} • enc: ${totalEnc.toFixed(1)}</div>
+          </div>
+          <button class="btn small view" data-id="${it.item_id}">Details</button>
+        `;
+        list.appendChild(row);
+      }
+    }
+    card.appendChild(list);
+    box.appendChild(card);
   }
+
   // save name
   box.querySelectorAll(".rename").forEach(btn=>{
     btn.addEventListener("click", async ()=>{
@@ -101,6 +185,7 @@ function renderInventory(){
       await patchContainer(id, { name });
     });
   });
+
   // toggle include
   box.querySelectorAll(".cinc").forEach(ch=>{
     ch.addEventListener("change", async ()=>{
@@ -108,12 +193,21 @@ function renderInventory(){
     });
   });
 
-  // tx
+  // item details openers
+  box.querySelectorAll(".view").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const it = (INV.items || []).find(x => x.item_id === btn.dataset.id);
+      if (!it) return;
+      openItemModal(it);
+    });
+  });
+
+  // transactions
   const tx = $("#tx"); tx.innerHTML = "";
   for (const t of (INV.transactions || []).slice(-25).reverse()){
     const div = document.createElement("div");
     div.className = "row";
-    div.innerHTML = `<span class="muted">${new Date(t.ts).toLocaleString()}</span> — <b>${t.amount}</b> ${t.currency} — ${t.note || ""}`;
+    div.innerHTML = `<span class="muted">${new Date(t.ts).toLocaleString()}</span> — <b>${t.amount}</b> ${t.currency} — ${escapeHtml(t.note || "")}`;
     tx.appendChild(div);
   }
 }
@@ -130,7 +224,7 @@ async function patchContainer(cid, body){
   renderInventory();
 }
 
-$("#add-cont").addEventListener("click", async ()=>{
+async function addContainer(){
   const name = ($("#new-cont-name").value || "Container").trim();
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/containers`, {
     method: "POST",
@@ -142,12 +236,9 @@ $("#add-cont").addEventListener("click", async ()=>{
   INV = j.inventory;
   $("#new-cont-name").value = "";
   renderInventory();
-});
+}
 
 // search objects
-$("#search").addEventListener("click", search);
-$("#q").addEventListener("keydown", e=>{ if (e.key==="Enter") search(); });
-
 async function search(){
   const q = ($("#q").value || "").trim();
   const r = await fetch(`/catalog/objects?q=${encodeURIComponent(q)}`, { headers: authHeaders() });
@@ -163,8 +254,8 @@ async function search(){
     line.style.borderBottom = "1px solid #222";
     line.style.padding = "6px 0";
     line.innerHTML = `
-      <div style="flex:1;min-width:200px;">
-        <div><b>${o.name}</b></div>
+      <div style="flex:1;min-width:240px;">
+        <div><b>${escapeHtml(o.name)}</b></div>
         <div class="muted">Price: ${o.price ?? 0} — Enc: ${Number(o.enc||0).toFixed(1)}</div>
       </div>
       <input type="number" min="1" value="1" style="width:80px" class="qty">
@@ -180,7 +271,9 @@ async function search(){
       selC.appendChild(opt);
     });
     const selCur = line.querySelector(".cur");
-    Object.keys(INV.currencies || {Jelly:0}).forEach(k=>{
+    const currencies = Object.keys(INV.currencies || {Jelly:0});
+    if (!currencies.length){ currencies.push("Jelly"); }
+    currencies.forEach(k=>{
       const opt = document.createElement("option");
       opt.value = k; opt.textContent = k;
       selCur.appendChild(opt);
@@ -209,7 +302,44 @@ async function buyObject(ref_id, quantity, container_id, currency){
   renderInventory();
 }
 
-document.addEventListener("DOMContentLoaded", loadInventory);
+/* ------- Item Details Modal ------- */
+function openItemModal(it){
+  $("#item-title").textContent = it.name || "Item";
+  const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
+  const totalPaid = (Number(it.paid_unit||0) * Number(it.quantity||1)) || 0;
+
+  $("#item-body").innerHTML = `
+    <div class="row"><span class="pill">Kind: <b>${escapeHtml(it.kind || "object")}</b></span>
+      ${it.subcategory ? `<span class="pill">Sub: <b>${escapeHtml(it.subcategory)}</b></span>` : "" }
+      ${it.quality ? `<span class="pill">Quality: <b>${escapeHtml(it.quality)}</b></span>` : "" }
+    </div>
+    <div class="row"><span class="pill">Quantity: <b>${it.quantity||1}</b></span>
+      <span class="pill">Enc (unit): <b>${Number(it.enc||0).toFixed(1)}</b></span>
+      <span class="pill">Enc (total): <b>${totalEnc.toFixed(1)}</b></span>
+    </div>
+    <div class="row"><span class="pill">Base price (unit): <b>${Number(it.base_price||0)}</b></span>
+      <span class="pill">Paid (unit): <b>${Number(it.paid_unit||0)}</b></span>
+      <span class="pill">Paid (total): <b>${totalPaid}</b></span>
+    </div>
+    ${Array.isArray(it.upgrades) && it.upgrades.length
+      ? `<div class="row">Upgrades: ${it.upgrades.map(u=>`<span class="pill">${escapeHtml(u.name||u)}</span>`).join(" ")}</div>`
+      : ""
+    }
+    <div class="muted" style="margin-top:8px;">Ref ID: ${escapeHtml(it.ref_id || "")}</div>
+    <div class="muted">Item ID: ${escapeHtml(it.item_id || "")}</div>
+  `;
+  $("#item-modal").classList.remove("hidden");
+}
+function closeItemModal(){
+  $("#item-modal").classList.add("hidden");
+}
+
+/* ------- utils ------- */
+function escapeHtml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
 </script>
 </body>
 </html>
