@@ -47,3 +47,19 @@ def _upgrade_fee_for_range(start_count: int, add: int) -> tuple[int, list[dict]]
         if not st: continue
         total += st["fee"]; steps.append(st)
     return total, steps
+
+QUALITY_ORDER = ["Adequate","Good","Very Good","Excellent","Legendary","Mythical","Epic","Divine","Unreal"]
+
+def _compose_variant(quality: str | None, upgrades: list | None) -> str:
+    q = (quality or "Adequate")
+    n = len(upgrades or [])
+    return f"{q} +{n}upg"
+
+def _pick_currency(inv: dict, preferred: str | None = None) -> str:
+    if preferred: 
+        return preferred
+    cur = inv.get("currencies") or {}
+    if cur:
+        # return the first key deterministically
+        return sorted(cur.keys())[0]
+    return "Jelly"
