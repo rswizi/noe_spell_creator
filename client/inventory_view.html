@@ -6,591 +6,210 @@
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+    .grid{display:grid;gap:16px;grid-template-columns:1fr 1fr}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+    .pill{display:inline-block;border:1px solid #444;border-radius:999px;padding:2px 8px;margin-right:6px}
+    .list{max-height:58vh;overflow:auto;border:1px solid #222;border-radius:10px;padding:8px}
     .muted{opacity:.8}
-    .small{font-size:.9rem}
-    .pill{display:inline-block;border:1px solid #444;border-radius:999px;padding:2px 8px;font-size:.85rem}
-    .box{border:1px solid #222;border-radius:10px;padding:10px}
-    .table{width:100%;border-collapse:collapse}
-    .table td,.table th{padding:8px;border-bottom:1px solid #222}
-
-    /* Modal */
-    .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
-    .modal.hidden{display:none!important}
-    .modal-card{background:#111;border:1px solid #333;border-radius:12px;max-width:900px;max-height:85vh;overflow:auto;padding:16px;position:relative}
-    .modal-close{position:absolute;right:12px;top:8px;background:transparent;border:0;font-size:1.6rem;line-height:1;cursor:pointer}
-    .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center}
-    .col{display:flex;flex-direction:column;gap:8px}
-    .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #444;border-radius:999px;padding:2px 8px}
-    .sep{border:0;border-top:1px solid #222;margin:12px 0}
   </style>
 </head>
 <body>
 <div class="container">
-  <h1 id="title">Inventory</h1>
+  <h1 id="inv-title">Inventory</h1>
 
-  <!-- money -->
-  <div class="home-card">
-    <h3>Money</h3>
-    <div id="balances" class="row"></div>
-    <div class="row" style="margin-top:8px;">
-      <input id="tx-cur" placeholder="Currency (e.g. Jelly)" style="width:160px"/>
-      <input id="tx-amt" type="number" placeholder="Amount (+/-)" style="width:160px"/>
-      <input id="tx-note" placeholder="Note (optional)" style="min-width:260px"/>
-      <button id="tx-add" class="btn">Add Transaction</button>
-      <span id="tx-msg" class="muted"></span>
+  <div class="grid">
+    <!-- LEFT: Inventory info -->
+    <div class="home-card">
+      <h3>Overview</h3>
+      <div id="money"></div>
+      <div class="row muted">Total Encumbrance: <strong id="enc-total">0</strong></div>
+
+      <h3 style="margin-top:10px;">Containers</h3>
+      <div id="containers"></div>
+      <div class="row" style="margin-top:8px;">
+        <input id="new-cont-name" placeholder="New container name">
+        <button id="add-cont" class="btn small">+ Add Container</button>
+      </div>
+
+      <h3 style="margin-top:10px;">Recent Transactions</h3>
+      <div id="tx" class="list"></div>
     </div>
-  </div>
 
-  <!-- containers -->
-  <div class="home-card">
-    <h3>Containers</h3>
-    <div id="containers" class="row"></div>
-    <div class="row" style="margin-top:8px;">
-      <input id="ct-name" placeholder="New container name"/>
-      <button id="ct-add" class="btn small">+ Add</button>
-      <span id="ct-msg" class="muted"></span>
-    </div>
-  </div>
-
-  <!-- buy -->
-  <div class="home-card">
-    <h3>Buy from Database</h3>
-    <div class="row">
-      <select id="buy-kind">
-        <option value="weapon">Weapon</option>
-        <option value="equipment">Equipment</option>
-        <option value="tool">Tool</option>
-        <option value="object">Object</option>
-      </select>
-      <input id="buy-q" placeholder="Filter by name…" />
-      <button id="buy-refresh" class="btn small">Search</button>
-      <span id="buy-info" class="muted"></span>
-    </div>
-    <div class="grid" id="buy-list" style="margin-top:10px;"></div>
-
-    <div id="buy-form" class="box" style="margin-top:10px;display:none;">
+    <!-- RIGHT: Catalog -->
+    <div class="home-card">
+      <h3>Add from Objects DB</h3>
       <div class="row">
-        <div class="pill" id="sel-name">—</div>
-        <div class="pill">Base <span id="sel-price">0</span> J</div>
-        <div class="pill">Enc. <span id="sel-enc">0</span></div>
+        <input id="q" placeholder="Search objects…" style="flex:1">
+        <button id="search" class="btn small">Search</button>
       </div>
-      <div class="row" style="margin-top:8px;">
-        <label>Qty <input id="bf-qty" type="number" min="1" value="1" style="width:100px"></label>
-        <label>Quality
-          <select id="bf-quality">
-            <option>Mediocre</option><option selected>Adequate</option><option>Good</option><option>Very Good</option>
-            <option>Excellent</option><option>Legendary</option><option>Mythical</option><option>Epic</option>
-            <option>Divine</option><option>Unreal</option>
-          </select>
-        </label>
-        <label>Container
-          <select id="bf-container"></select>
-        </label>
-      </div>
-
-      <div id="bf-upgrades" style="display:none;margin-top:6px;">
-        <div class="small muted">Upgrades (Weapons & Armor only). Slots = quality level (Adequate=1 … Unreal=9). “Unique” can be taken once.</div>
-        <div class="row" id="upg-wrap"></div>
-      </div>
-
-      <div class="row" style="margin-top:8px;">
-        <div class="pill">Total <span id="bf-total">0</span> J</div>
-        <span id="bf-msg" class="muted"></span>
-        <button id="bf-buy" class="btn" style="margin-left:auto;">Buy</button>
-      </div>
+      <div id="results" class="list" style="margin-top:8px;"></div>
     </div>
   </div>
 
-  <!-- items -->
-  <div class="home-card">
-    <h3>Items</h3>
-    <div class="row">
-      <label>Show container
-        <select id="it-filter"></select>
-      </label>
-      <input id="it-q" placeholder="Filter by name…" />
-    </div>
-    <div class="box" style="margin-top:8px;">
-      <table class="table">
-        <thead><tr>
-          <th>Name</th><th>Kind</th><th>Qty</th><th>Quality</th><th>Upgrades</th><th>Container</th><th></th>
-        </tr></thead>
-        <tbody id="it-body"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div style="margin-top:12px;">
-    <a class="btn btn-secondary" href="inventory_manage.html">← Back</a>
-  </div>
-</div>
-
-<!-- Modify modal -->
-<div id="mod-modal" class="modal hidden" aria-hidden="true">
-  <div class="modal-card">
-    <button class="modal-close" id="mod-close" aria-label="Close">&times;</button>
-    <h3 id="mod-title">Modify Item</h3>
-    <div class="row small muted" id="mod-subtitle"></div>
-    <hr class="sep">
-
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
-      <div class="col">
-        <label><b>Quality</b>
-          <select id="mod-quality">
-            <option>Mediocre</option><option>Adequate</option><option>Good</option><option>Very Good</option>
-            <option>Excellent</option><option>Legendary</option><option>Mythical</option><option>Epic</option>
-            <option>Divine</option><option>Unreal</option>
-          </select>
-        </label>
-        <div class="small muted">Slots from quality: <span id="mod-slots">0</span></div>
-      </div>
-
-      <div class="col">
-        <b>Upgrades</b>
-        <div id="mod-upg" class="row"></div>
-        <div class="small muted">Used: <span id="mod-used">0</span> / <span id="mod-allowed">0</span></div>
-      </div>
-    </div>
-
-    <hr class="sep">
-    <div class="row">
-      <div class="pill">Estimated cost <span id="mod-cost">0</span> J</div>
-      <span class="muted small" id="mod-msg"></span>
-      <button class="btn" id="mod-save" style="margin-left:auto;">Apply</button>
-    </div>
+  <div style="margin-top:16px;">
+    <a class="btn btn-secondary" href="inventory_create.html">← Back</a>
   </div>
 </div>
 
 <script>
-/* ===========================
-   Inventory View — Full Script
-   =========================== */
-
-const $  = (s) => document.querySelector(s);
-const $$ = (s) => Array.from(document.querySelectorAll(s));
-
-/* ---- auth & fetch ---- */
+const $ = s => document.querySelector(s);
 const token = localStorage.getItem("auth_token") || "";
-const authHeaders = () => (token ? { Authorization: "Bearer " + token } : {});
-async function fetchJSON(url, opts = {}) {
-  const r = await fetch(url, { headers: { ...authHeaders(), ...(opts.headers || {}) }, ...opts });
-  try { return await r.json(); } catch { return {}; }
-}
+const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+const invId = new URLSearchParams(location.search).get("inv");
 
-/* ---- constants ---- */
-const QDIFF = {
-  Mediocre: -100, Adequate: 0, Good: 167, "Very Good": 1390,
-  Excellent: 5280, Legendary: 15300, Mythical: 38760,
-  Epic: 128000, Divine: 614400, Unreal: 921600,
-};
-const SLOTS = { Adequate:1, Good:2, "Very Good":3, Excellent:4, Legendary:5, Mythical:6, Epic:7, Divine:8, Unreal:9 };
-
-const W_UPGRADES = [
-  { key:"lethality", name:"Lethality", unique:false },
-  { key:"increase",  name:"Increase",  unique:false },
-  { key:"acuity",    name:"[Unique] Acuity", unique:true },
-  { key:"rune",      name:"[Unique] Rune",   unique:true },
-  { key:"magazine",  name:"Magazine", unique:false },
-  { key:"silver",    name:"[Unique] Silver Plating", unique:true },
-  { key:"range",     name:"Range", unique:false },
-  { key:"blessing",  name:"Blessing", unique:false },
-  { key:"defense",   name:"[Unique] Defense", unique:true },
-];
-const A_UPGRADES = [
-  { key:"defense", name:"Defense (+12 HP)", unique:false },
-  { key:"enchant", name:"Enchantement (+1 EN +1 FO)", unique:false },
-];
-
-// fees table (client-side estimate; server is source of truth)
-const UPGRADE_STEPS = [
-  {n:1, fee:7}, {n:2, fee:14}, {n:3, fee:28}, {n:4, fee:200}, {n:5, fee:400},
-  {n:6, fee:1440}, {n:7, fee:3968}, {n:8, fee:10240}, {n:9, fee:30000},
-];
-
-let INV_ID = new URLSearchParams(location.search).get("inv");
 let INV = null;
-let DB_CACHE = { weapons:[], equipment:[], tools:[], objects:[] };
-let SEL = null; // current selection for buying
 
-/* ---- utils ---- */
-const cap = (s="") => s.charAt(0).toUpperCase()+s.slice(1);
-const priceAtQuality = (base, q) => Math.max(0, Number(base||0) + (QDIFF[q]||0));
-const slotsFor = (q) => SLOTS[q] || 0;
-function ensureContainerOptions() {
-  const sel = $("#bf-container");
-  if (!sel) return;
-  if (!sel.options.length && INV?.containers?.length) {
-    sel.innerHTML = INV.containers.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
-  }
-}
-function usedUpgrades(list){ return (list||[]).length; }
-function summarizeUpgrades(list){
-  if(!list || !list.length) return "";
-  const m = new Map();
-  list.forEach(u => m.set(u.name, (m.get(u.name)||0)+1));
-  return [...m].map(([k,v]) => v>1?`${k}×${v}`:k).join(", ");
-}
-function estimateUpgradeFee(currentCount, addCount){
-  let total = 0;
-  for(let i=currentCount+1;i<=currentCount+addCount;i++){
-    const step = UPGRADE_STEPS.find(s=>s.n===i);
-    if (step) total += step.fee;
-  }
-  return total;
-}
-
-/* ===========================
-   RENDER
-   =========================== */
-function renderBalances(){
-  const cur = INV?.currencies || {};
-  $("#balances").innerHTML = Object.entries(cur)
-    .map(([k,v]) => `<span class="pill">${k}: ${v}</span>`).join(" ") || `<span class="muted">No money yet.</span>`;
-}
-function renderContainers(){
-  const cs = INV?.containers || [];
-  $("#containers").innerHTML = cs.map(c=>`<span class="pill">${c.name} [${c.id}]</span>`).join(" ");
-  const opts = cs.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
-  $("#bf-container").innerHTML = opts;
-  $("#it-filter").innerHTML = `<option value="">All</option>${opts}`;
-}
-function renderItems(){
-  const q = ($("#it-q").value||"").trim().toLowerCase();
-  const cid = $("#it-filter").value;
-  let list = (INV?.items||[]).slice();
-  if (cid) list = list.filter(x=>x.container_id===cid);
-  if (q) list = list.filter(x => (x.name||"").toLowerCase().includes(q));
-  $("#it-body").innerHTML = list.map(it => `
-    <tr>
-      <td>${it.name}</td>
-      <td>${it.kind}</td>
-      <td>${it.quantity}</td>
-      <td>${it.quality || "-"}</td>
-      <td>${summarizeUpgrades(it.upgrades)}</td>
-      <td>${(INV.containers.find(c=>c.id===it.container_id)||{}).name||"-"}</td>
-      <td>
-        ${(it.kind==="weapon" || (it.kind==="equipment" && it.subcategory==="armor"))
-          ? `<button class="btn small" data-mod="${it.item_id}">Modify</button>` : ""}
-      </td>
-    </tr>`).join("");
-  // bind modify buttons
-  $$("#it-body [data-mod]").forEach(btn => btn.addEventListener("click", () => openModify(btn.dataset.mod)));
-}
-
-/* ===========================
-   LOAD INVENTORY
-   =========================== */
 async function loadInventory(){
-  if (!token){ alert("Please log in first."); return; }
-  if (!INV_ID){ alert("Missing inventory id (?inv=...)"); return; }
-  const j = await fetchJSON(`/inventories/${INV_ID}`);
-  if (j.status!=="success"){ alert(j.message||"Failed to load"); return; }
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}`, { headers: authHeaders() });
+  const j = await r.json();
+  if (j.status !== "success") throw new Error(j.message || "Load failed");
   INV = j.inventory;
-  $("#title").textContent = `Inventory — ${INV.name} [${INV.id}]`;
-  renderBalances(); renderContainers(); renderItems();
+  renderInventory();
 }
 
-/* ===========================
-   MONEY
-   =========================== */
-$("#tx-add").addEventListener("click", async ()=>{
-  const currency = ($("#tx-cur").value||"Jelly").trim();
-  const amount = Number($("#tx-amt").value||0);
-  const note = $("#tx-note").value.trim();
-  $("#tx-msg").textContent = "Saving…";
-  const j = await fetchJSON(`/inventories/${INV_ID}/money/transaction`,{
-    method:"POST", headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ currency, amount, note, source:"manual" })
-  });
-  $("#tx-msg").textContent = j.status==="success" ? "Saved." : (j.message||"Failed");
-  if (j.status==="success"){ INV.currencies=j.currencies; renderBalances(); }
-});
+function renderInventory(){
+  $("#inv-title").textContent = INV.name;
 
-/* ===========================
-   CONTAINERS
-   =========================== */
-$("#ct-add").addEventListener("click", async ()=>{
-  const name = ($("#ct-name").value||"Container").trim();
-  $("#ct-msg").textContent = "Adding…";
-  const j = await fetchJSON(`/inventories/${INV_ID}/containers`,{
-    method:"POST", headers:{ "Content-Type":"application/json" },
+  // money
+  const cur = INV.currencies || {};
+  $("#money").innerHTML = Object.keys(cur).length
+    ? Object.entries(cur).map(([k,v])=>`<span class="pill">${k}: <b>${v}</b></span>`).join(" ")
+    : `<span class="muted">No currency set.</span>`;
+
+  // enc totals
+  $("#enc-total").textContent = Number(INV.enc_total || 0).toFixed(1);
+
+  // containers
+  const box = $("#containers");
+  box.innerHTML = "";
+  for (const c of (INV.containers || [])){
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `
+      <input value="${c.name}" data-id="${c.id}" class="cname">
+      <label class="row"><input type="checkbox" class="cinc" data-id="${c.id}" ${c.include ? "checked" : ""}> include in total</label>
+      <span class="muted">enc: <b>${Number(c.enc_total||0).toFixed(1)}</b></span>
+      <button class="btn btn-secondary small rename" data-id="${c.id}">Save</button>
+    `;
+    box.appendChild(row);
+  }
+  // save name
+  box.querySelectorAll(".rename").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const id = btn.dataset.id;
+      const name = box.querySelector(`.cname[data-id="${id}"]`).value.trim() || "Container";
+      await patchContainer(id, { name });
+    });
+  });
+  // toggle include
+  box.querySelectorAll(".cinc").forEach(ch=>{
+    ch.addEventListener("change", async ()=>{
+      await patchContainer(ch.dataset.id, { include: ch.checked });
+    });
+  });
+
+  // tx
+  const tx = $("#tx"); tx.innerHTML = "";
+  for (const t of (INV.transactions || []).slice(-25).reverse()){
+    const div = document.createElement("div");
+    div.className = "row";
+    div.innerHTML = `<span class="muted">${new Date(t.ts).toLocaleString()}</span> — <b>${t.amount}</b> ${t.currency} — ${t.note || ""}`;
+    tx.appendChild(div);
+  }
+}
+
+async function patchContainer(cid, body){
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/containers/${encodeURIComponent(cid)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body)
+  });
+  const j = await r.json();
+  if (j.status !== "success") { alert(j.message || "Update failed"); return; }
+  INV = j.inventory;
+  renderInventory();
+}
+
+$("#add-cont").addEventListener("click", async ()=>{
+  const name = ($("#new-cont-name").value || "Container").trim();
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/containers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ name })
   });
-  $("#ct-msg").textContent = j.status==="success" ? "Added." : (j.message||"Failed");
-  if (j.status==="success"){ INV.containers.push(j.container); renderContainers(); ensureContainerOptions(); }
+  const j = await r.json();
+  if (j.status !== "success") { alert(j.message || "Create failed"); return; }
+  INV = j.inventory;
+  $("#new-cont-name").value = "";
+  renderInventory();
 });
 
-/* ===========================
-   BUY — catalog
-   =========================== */
-function itemCard(src, kind){
-  const title = src.name || (src.category==="armor" ? `Armor — ${src.type}` : src.style || src.type || "Item");
-  const desc  = (src.description || src.effect || "").slice(0,160);
-  const price = src.price ?? 0;
-  const enc   = src.enc ?? 0;
-  return `
-    <div class="box">
-      <div><strong>${title}</strong></div>
-      <div class="small muted">${desc}</div>
-      <div class="row">
-        <span class="pill">Price ${price}</span>
-        <span class="pill">Enc. ${enc}</span>
-        <button class="btn small" data-select='${kind}:${src.id}'>Select</button>
+// search objects
+$("#search").addEventListener("click", search);
+$("#q").addEventListener("keydown", e=>{ if (e.key==="Enter") search(); });
+
+async function search(){
+  const q = ($("#q").value || "").trim();
+  const r = await fetch(`/catalog/objects?q=${encodeURIComponent(q)}`, { headers: authHeaders() });
+  const j = await r.json();
+  const list = $("#results");
+  list.innerHTML = "";
+  const rows = (j && j.objects) || [];
+  if (!rows.length){ list.textContent = "No results."; return; }
+
+  for (const o of rows){
+    const line = document.createElement("div");
+    line.className = "row";
+    line.style.borderBottom = "1px solid #222";
+    line.style.padding = "6px 0";
+    line.innerHTML = `
+      <div style="flex:1;min-width:200px;">
+        <div><b>${o.name}</b></div>
+        <div class="muted">Price: ${o.price ?? 0} — Enc: ${Number(o.enc||0).toFixed(1)}</div>
       </div>
-    </div>`;
-}
-async function refreshCatalog(){
-  $("#buy-info").textContent="Loading…";
-  const kind = $("#buy-kind").value;
-  const q = ($("#buy-q").value||"").trim().toLowerCase();
-
-  if (!DB_CACHE.weapons.length && !DB_CACHE.equipment.length && !DB_CACHE.tools.length && !DB_CACHE.objects.length){
-    const [jw, je, jt, jo] = await Promise.all([
-      fetchJSON(`/weapons`), fetchJSON(`/equipment`), fetchJSON(`/tools`), fetchJSON(`/objects`)
-    ]);
-    DB_CACHE.weapons   = jw.weapons || [];
-    DB_CACHE.equipment = je.equipment || [];
-    DB_CACHE.tools     = jt.tools || [];
-    DB_CACHE.objects   = jo.objects || [];
-  }
-
-  let list = DB_CACHE[kind+"s"] || [];
-  if (q) list = list.filter(x => (x.name||x.type||x.style||"").toLowerCase().includes(q));
-  $("#buy-list").innerHTML = list.map(x => itemCard(x, kind)).join("");
-  $("#buy-info").textContent = `${list.length} item(s)`;
-
-  // bind selects
-  $$("#buy-list [data-select]").forEach(b=>{
-    b.addEventListener("click", ()=>{
-      const [k,id] = b.dataset.select.split(":");
-      selectBuy(k,id);
+      <input type="number" min="1" value="1" style="width:80px" class="qty">
+      <select class="cont"></select>
+      <select class="cur"></select>
+      <button class="btn small buy">Add</button>
+    `;
+    // populate containers + currencies for each row
+    const selC = line.querySelector(".cont");
+    (INV.containers || []).forEach(c=>{
+      const opt = document.createElement("option");
+      opt.value = c.id; opt.textContent = c.name;
+      selC.appendChild(opt);
     });
-  });
-}
-$("#buy-refresh").addEventListener("click", refreshCatalog);
-$("#buy-kind").addEventListener("change", refreshCatalog);
-
-/* BUY — selection & totals */
-function buildUpgradeInputs(container, list){
-  container.innerHTML = "";
-  list.forEach(u=>{
-    const id = `up-${u.key}`;
-    container.insertAdjacentHTML("beforeend",
-      `<label class="chip small">
-        <input type="number" id="${id}" value="0" min="0" ${u.unique?'max="1"':''} style="width:70px">
-        ${u.name}
-      </label>`);
-  });
-}
-function countSelectedUpgrades(){
-  const ups = [];
-  $$("#upg-wrap input[type=number]").forEach(inp=>{
-    const n = Math.max(0, Number(inp.value||0));
-    if (!n) return;
-    const key = inp.id.slice(3);
-    const meta = W_UPGRADES.find(x=>x.key===key) || A_UPGRADES.find(x=>x.key===key);
-    for (let i=0;i<n;i++) ups.push({ key, name: meta.name, unique: !!meta.unique });
-  });
-  return ups;
-}
-function recalcBuyTotal(){
-  if (!SEL) return;
-  const qty  = Math.max(1, Number($("#bf-qty").value||1));
-  const qual = $("#bf-quality").value;
-  const kind = SEL.kind;
-  const base = (kind==="weapon" || kind==="equipment") ? priceAtQuality(SEL.base, qual) : SEL.base;
-
-  const upgrades = countSelectedUpgrades();
-  const slots = slotsFor(qual);
-  $("#bf-msg").textContent = ((kind==="weapon") || (kind==="equipment" && SEL.src.category==="armor")) && upgrades.length>slots
-    ? `Too many upgrades for ${qual} (slots ${slots}).` : "";
-
-  $("#bf-total").textContent = base * qty; // server adds upgrade fees
-}
-function selectBuy(kind, id){
-  const src = (DB_CACHE[kind+"s"]||[]).find(x=>x.id===id);
-  if (!src) return;
-
-  SEL = { kind, id, base: src.price ?? 0, enc: src.enc ?? 0, src };
-
-  $("#sel-name").textContent = src.name || (src.category==="armor" ? `Armor — ${src.type}` : src.style);
-  $("#sel-price").textContent = SEL.base;
-  $("#sel-enc").textContent = SEL.enc;
-
-  // quality control
-  const qSel = $("#bf-quality");
-  if (kind==="weapon" || kind==="equipment"){
-    qSel.disabled = false;
-  } else {
-    qSel.value = "Adequate"; qSel.disabled = true;
-  }
-
-  // upgrades
-  const upgBox = $("#bf-upgrades");
-  const wrap = $("#upg-wrap");
-  if (kind==="weapon" || (kind==="equipment" && src.category==="armor")){
-    buildUpgradeInputs(wrap, kind==="weapon" ? W_UPGRADES : A_UPGRADES);
-    upgBox.style.display = "block";
-  } else {
-    wrap.innerHTML = ""; upgBox.style.display = "none";
-  }
-
-  ensureContainerOptions();
-  $("#buy-form").style.display = "block";
-  recalcBuyTotal();
-}
-
-["bf-qty","bf-quality"].forEach(id=>document.getElementById(id).addEventListener("input", recalcBuyTotal));
-document.getElementById("upg-wrap").addEventListener("input", recalcBuyTotal);
-
-/* BUY — submit */
-$("#bf-buy").addEventListener("click", async ()=>{
-  if (!SEL) return;
-  const body = {
-    kind: SEL.kind,
-    ref_id: SEL.id,
-    quantity: Math.max(1, Number($("#bf-qty").value||1)),
-    quality: $("#bf-quality").value,
-    container_id: $("#bf-container").value,
-    upgrades: countSelectedUpgrades(),
-    currency: "Jelly"
-  };
-  $("#bf-msg").textContent = "Purchasing…";
-  const j = await fetchJSON(`/inventories/${INV_ID}/purchase`, {
-    method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
-  });
-  if (j.status!=="success"){ $("#bf-msg").textContent = j.message || "Purchase failed"; return; }
-  $("#bf-msg").textContent = `Purchased for ${j.transaction.amount * -1} Jelly.`;
-  INV = j.inventory; renderBalances(); renderItems();
-});
-
-/* ===========================
-   MODIFY (quality / upgrades after purchase)
-   =========================== */
-let MOD_ITEM = null;
-
-function openModify(item_id){
-  const it = (INV.items||[]).find(x=>x.item_id===item_id);
-  if (!it) return;
-  MOD_ITEM = it;
-
-  $("#mod-title").textContent = `Modify — ${it.name}`;
-  $("#mod-subtitle").textContent = `Current quality: ${it.quality || "-"} | Upgrades: ${summarizeUpgrades(it.upgrades) || "none"} | Qty: ${it.quantity}`;
-
-  // quality
-  const qSel = $("#mod-quality");
-  qSel.value = it.quality || "Adequate";
-  $("#mod-allowed").textContent = slotsFor(qSel.value);
-  $("#mod-slots").textContent   = slotsFor(qSel.value);
-
-  // upgrades list
-  const wrap = $("#mod-upg");
-  const isWeapon = it.kind==="weapon";
-  const isArmor  = it.kind==="equipment" && it.subcategory==="armor";
-  wrap.innerHTML = "";
-  if (isWeapon || isArmor){
-    const defs = isWeapon ? W_UPGRADES : A_UPGRADES;
-
-    // current counts by key
-    const cnt = {};
-    (it.upgrades||[]).forEach(u=>cnt[u.key]=(cnt[u.key]||0)+1);
-
-    defs.forEach(u=>{
-      const id = `mu-${u.key}`;
-      const cur = cnt[u.key] || 0;
-      wrap.insertAdjacentHTML("beforeend",
-        `<label class="chip small">
-           <span style="min-width:140px;display:inline-block">${u.name}</span>
-           <input type="number" id="${id}" value="${cur}" min="${cur}" ${u.unique?'max="1"':''} style="width:80px">
-         </label>`);
+    const selCur = line.querySelector(".cur");
+    Object.keys(INV.currencies || {Jelly:0}).forEach(k=>{
+      const opt = document.createElement("option");
+      opt.value = k; opt.textContent = k;
+      selCur.appendChild(opt);
     });
-  } else {
-    wrap.innerHTML = `<span class="muted small">Upgrades only apply to Weapons and Armor.</span>`;
+
+    line.querySelector(".buy").addEventListener("click", async ()=>{
+      const qty = Math.max(1, parseInt(line.querySelector(".qty").value||"1", 10));
+      const container_id = selC.value;
+      const currency = selCur.value || "Jelly";
+      await buyObject(o.id, qty, container_id, currency);
+    });
+
+    $("#results").appendChild(line);
   }
-
-  updateModifyHUD();
-  showModal(true);
 }
-function showModal(open){
-  const m = $("#mod-modal");
-  if (open){ m.classList.remove("hidden"); m.setAttribute("aria-hidden","false"); $("#mod-close").focus(); }
-  else { m.classList.add("hidden"); m.setAttribute("aria-hidden","true"); MOD_ITEM=null; }
+
+async function buyObject(ref_id, quantity, container_id, currency){
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/purchase`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ kind: "object", ref_id, quantity, container_id, currency })
+  });
+  const j = await r.json();
+  if (j.status !== "success") { alert(j.message || "Purchase failed"); return; }
+  INV = j.inventory;
+  renderInventory();
 }
-$("#mod-close").addEventListener("click", ()=>showModal(false));
-$("#mod-modal").addEventListener("click", (e)=>{ if(e.target===e.currentTarget) showModal(false); });
-document.addEventListener("keydown", (e)=>{ if (e.key==="Escape" && !$("#mod-modal").classList.contains("hidden")) showModal(false); });
 
-function updateModifyHUD(){
-  if (!MOD_ITEM) return;
-  const newQ = $("#mod-quality").value;
-  const allowed = slotsFor(newQ);
-  $("#mod-allowed").textContent = allowed;
-  $("#mod-slots").textContent   = allowed;
-
-  // count desired upgrades (cannot go below current; inputs min=cur enforce)
-  let desired = 0;
-  $$("#mod-upg input[type=number]").forEach(inp=>{
-    desired += Number(inp.value||0);
-  });
-  $("#mod-used").textContent = desired;
-
-  // cost estimate
-  const base = MOD_ITEM.base_price || 0;
-  const oldQ = MOD_ITEM.quality || "Adequate";
-  const deltaPerUnit = Math.max(0, priceAtQuality(base, newQ) - priceAtQuality(base, oldQ));
-  const qCost = deltaPerUnit * Number(MOD_ITEM.quantity||1);
-
-  // additional upgrades to buy
-  const currentCount = usedUpgrades(MOD_ITEM.upgrades||[]);
-  const addCount = Math.max(0, desired - currentCount);
-  const upgCost = estimateUpgradeFee(currentCount, addCount);
-
-  $("#mod-cost").textContent = qCost + upgCost;
-  $("#mod-msg").textContent  = desired>allowed ? `Too many upgrades for ${newQ} (max ${allowed}).` : "";
-}
-$("#mod-quality").addEventListener("change", updateModifyHUD);
-$("#mod-upg").addEventListener("input", updateModifyHUD);
-
-$("#mod-save").addEventListener("click", async ()=>{
-  if (!MOD_ITEM) return;
-  const newQ = $("#mod-quality").value;
-
-  // figure out which upgrades to add (server only accepts *added* keys)
-  const current = {};
-  (MOD_ITEM.upgrades||[]).forEach(u => current[u.key]=(current[u.key]||0)+1);
-
-  const toAdd = [];
-  $$("#mod-upg input[type=number]").forEach(inp=>{
-    const key = inp.id.slice(3);
-    const want = Number(inp.value||0);
-    const have = current[key] || 0;
-    for(let i=0;i<Math.max(0, want - have);i++) toAdd.push(key);
-  });
-
-  const body = {
-    new_quality: newQ && newQ !== (MOD_ITEM.quality||"Adequate") ? newQ : null,
-    add_upgrades: toAdd
-  };
-
-  $("#mod-msg").textContent = "Applying…";
-  const j = await fetchJSON(`/inventories/${INV_ID}/items/${MOD_ITEM.item_id}/improve`,{
-    method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
-  });
-  if (j.status!=="success"){ $("#mod-msg").textContent = j.message || "Operation failed"; return; }
-  INV = j.inventory; renderBalances(); renderItems(); showModal(false);
-});
-
-/* ===========================
-   BOOT
-   =========================== */
-document.addEventListener("DOMContentLoaded", ()=>{
-  loadInventory();
-  refreshCatalog();
-  $("#it-q").addEventListener("input", renderItems);
-  $("#it-filter").addEventListener("change", renderItems);
-});
+document.addEventListener("DOMContentLoaded", loadInventory);
 </script>
 </body>
 </html>

@@ -1950,7 +1950,12 @@ def bulk_create_equipment(request: Request, payload: dict = Body(...)):
 from fastapi import Body
 
 def _new_container(name: str) -> dict:
-    return {"id": next_id_str("container", padding=3), "name": (name or "Container").strip()}
+    return {
+        "id": next_id_str("container", padding=3),
+        "name": (name or "Container").strip(),
+        "include": True,        # counts into inventory.enc_total?
+        "enc_total": 0.0        # running encumbrance stored in this container
+    }
 
 @app.post("/inventories")
 def create_inventory(request: Request, payload: dict = Body(...)):
@@ -1959,19 +1964,20 @@ def create_inventory(request: Request, payload: dict = Body(...)):
     name = (payload.get("name") or "Inventory").strip()
     currencies = payload.get("currencies") or {}
     containers = payload.get("containers") or []
-    containers = [ _new_container(c.get("name")) for c in containers ] or [ _new_container("Backpack") ]
+    containers = [_new_container(c.get("name")) for c in containers] or [_new_container("Backpack")]
     inv = {
         "id": next_id_str("inventory", padding=4),
         "name": name,
         "owner": user,
-        "currencies": { k: int(v) for k,v in currencies.items() },
+        "currencies": {k: int(v) for k, v in currencies.items()},
         "containers": containers,
         "items": [],
         "transactions": [],
-        "created_at": datetime.datetime.utcnow().isoformat()+"Z",
+        "enc_total": 0.0,   # NEW
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
     }
     db.inventories.insert_one(dict(inv))
-    return {"status":"success","inventory": inv}
+    return {"status": "success", "inventory": inv}
 
 @app.get("/inventories")
 def list_inventories(request: Request):
@@ -2059,7 +2065,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     kind = (payload.get("kind") or "").strip().lower()
     ref_id = (payload.get("ref_id") or "").strip()
     qty = max(1, int(payload.get("quantity") or 1))
-    quality = (payload.get("quality") or "Adequate").strip()
+    quality = (payload.get("quality") or "Adequate").strip()  # kept for future-proof; ignored for objects
     container_id = (payload.get("container_id") or (inv["containers"][0]["id"] if inv.get("containers") else None))
     upgrades_req = payload.get("upgrades") or []
     currency = (payload.get("currency") or "Jelly").strip()
@@ -2068,48 +2074,74 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     if not src: raise HTTPException(404, "Catalog item not found")
 
     base_price = int(src.get("price") or 0)
-    enc = float(src.get("enc") or 0)
-    subcat = src.get("category") if kind=="equipment" else None
-    name = src.get("name") or (subcat=="armor" and f"Armor — {src.get('type')}") or src.get("style") or "Item"
+    enc = float(src.get("enc") or 0.0)
+    subcat = src.get("category") if kind == "equipment" else None
+    name = src.get("name") or (subcat == "armor" and f"Armor — {src.get('type')}") or src.get("style") or "Item"
 
-    # compute quality price (weapons & equipment only)
     unit_price = base_price
-    if kind in ("weapon","equipment"):
+    if kind in ("weapon", "equipment"):
+        # quality/upgrades supported if you need them later
         unit_price = _qprice(base_price, quality)
-
-    # apply upgrades (only weapon/armor)
-    upgrades, fee, steps = _validate_upgrades(kind, subcat, quality, existing=[], add=upgrades_req)
-    unit_price += fee
+        upgrades, fee, steps = _validate_upgrades(kind, subcat, quality, existing=[], add=upgrades_req)
+        unit_price += fee
+    else:
+        upgrades = []
 
     total = unit_price * qty
 
-    # update money (negative transaction)
+    # money (negative transaction)
     cur = inv.get("currencies", {})
-    cur[currency] = int(cur.get(currency,0)) - total
+    cur[currency] = int(cur.get(currency, 0)) - total
 
-    # store item
+    # NEW: encumbrance roll-up into container (and maybe inventory)
+    delta_enc = enc * qty
+    containers = inv.get("containers", [])[:]
+    includes = True
+    if containers:
+        found = False
+        for c in containers:
+            if c.get("id") == container_id:
+                c["enc_total"] = float(c.get("enc_total", 0.0)) + float(delta_enc)
+                c["include"] = bool(c.get("include", True))
+                includes = c["include"]
+                found = True
+                break
+        if not found:
+            # fallback to first container
+            containers[0]["enc_total"] = float(containers[0].get("enc_total", 0.0)) + float(delta_enc)
+            containers[0]["include"] = bool(containers[0].get("include", True))
+            includes = containers[0]["include"]
+            container_id = containers[0]["id"]
+
+    inv_enc_total = float(inv.get("enc_total", 0.0))
+    if includes:
+        inv_enc_total += float(delta_enc)
+
+    # store item + transaction
     item = {
         "item_id": next_id_str("invitem", padding=5),
         "kind": kind,
-        "subcategory": subcat,   # for equipment
+        "subcategory": subcat,
         "ref_id": ref_id,
         "name": name,
         "quantity": qty,
-        "quality": quality if kind in ("weapon","equipment") else None,
+        "quality": (quality if kind in ("weapon", "equipment") else None),
         "enc": enc,
         "base_price": base_price,
         "paid_unit": unit_price,
         "upgrades": upgrades,
         "container_id": container_id,
     }
-    tx = {"ts": datetime.datetime.utcnow().isoformat()+"Z", "currency":currency, "amount": -total, "note": f"Purchase {name} x{qty}", "source":"purchase"}
+    tx = {"ts": datetime.datetime.utcnow().isoformat() + "Z",
+          "currency": currency, "amount": -total,
+          "note": f"Purchase {name} x{qty}", "source": "purchase"}
 
     db.inventories.update_one({"id": inv_id}, {
-        "$set": {"currencies": cur},
+        "$set": {"currencies": cur, "containers": containers, "enc_total": inv_enc_total},
         "$push": {"transactions": tx, "items": item}
     })
-    inv2 = db.inventories.find_one({"id": inv_id}, {"_id":0})
-    return {"status":"success","inventory": inv2, "transaction": tx}
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2, "transaction": tx}
 
 @app.post("/inventories/{inv_id}/items/{item_id}/improve")
 def improve_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
@@ -2162,3 +2194,13 @@ def improve_item(request: Request, inv_id: str, item_id: str, payload: dict = Bo
 
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id":0})
     return {"status":"success","inventory": inv2}
+
+@app.get("/catalog/objects")
+def catalog_objects(request: Request, q: str = "", limit: int = 25):
+    require_auth(request)
+    col = get_col("objects")
+    filt = {}
+    if q.strip():
+        filt = {"name": {"$regex": re.escape(q.strip()), "$options": "i"}}
+    rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1}).limit(int(limit)))
+    return {"status": "success", "objects": rows}

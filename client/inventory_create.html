@@ -13,37 +13,31 @@
 </head>
 <body>
 <div class="container">
-  <h1>Create Inventory</h1>
+  <h1>Create or Open Inventory</h1>
 
-  <div class="home-card">
-    <div class="grid">
-      <div>
-        <label>Name</label>
-        <input id="inv-name" placeholder="e.g. Aria’s Pack" />
+  <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:16px;align-items:start;">
+    <!-- LEFT: Create -->
+    <div>
+      <div class="home-card">
+        <!-- (existing create form stays exactly as-is) -->
+        ... your current form ...
       </div>
-      <div>
-        <label>Initial Currency (Jelly)</label>
-        <input id="cur-jelly" type="number" value="0" />
+
+      <div class="row" style="margin-top:10px;">
+        <button id="create" class="btn">Create</button>
+        <a class="btn btn-secondary" href="inventory_manage.html">← Back</a>
+        <span id="msg" class="muted" style="margin-left:auto;"></span>
       </div>
     </div>
 
-    <h4 style="margin-top:10px;">Extra currencies (optional)</h4>
-    <div id="extra-wrap"></div>
-    <div class="row">
-      <button id="add-cur" class="btn small">+ Currency</button>
+    <!-- RIGHT: My Inventories -->
+    <div>
+      <div class="home-card">
+        <h3 style="margin-top:0;">My Inventories</h3>
+        <input id="inv-search" placeholder="Search by name…" style="width:100%;margin-bottom:8px;">
+        <div id="inv-list" class="scroll-pad"></div>
+      </div>
     </div>
-
-    <h4 style="margin-top:14px;">First containers</h4>
-    <div id="cont-wrap"></div>
-    <div class="row">
-      <button id="add-cont" class="btn small">+ Container</button>
-    </div>
-  </div>
-
-  <div class="row" style="margin-top:10px;">
-    <button id="create" class="btn">Create</button>
-    <a class="btn btn-secondary" href="inventory_manage.html">← Back</a>
-    <span id="msg" class="muted" style="margin-left:auto;"></span>
   </div>
 </div>
 
@@ -106,6 +100,41 @@ document.getElementById("create").onclick = async ()=>{
     location.href = `inventory_view.html?inv=${encodeURIComponent(j.inventory.id)}`;
   }catch(err){ $("#msg").textContent = err.message || "Create failed"; }
 };
+
+  async function loadInventories() {
+    const box = document.querySelector("#inv-list");
+    box.textContent = "Loading…";
+    try {
+      const r = await fetch("/inventories", { headers: authHeaders() });
+      const j = await r.json();
+      const invs = (j && j.inventories) || [];
+      if (!invs.length) { box.textContent = "No inventories yet."; return; }
+
+      box.innerHTML = "";
+      for (const inv of invs) {
+        const a = document.createElement("a");
+        a.className = "btn btn-ghost";
+        a.textContent = `${inv.name}  —  enc ${Number(inv.enc_total||0).toFixed(1)}`;
+        a.style.display = "block";
+        a.style.margin = "6px 0";
+        a.href = `inventory_view.html?inv=${encodeURIComponent(inv.id)}`;
+        box.appendChild(a);
+      }
+    } catch (e) {
+      box.textContent = "Failed to load.";
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", ()=>{
+    loadInventories();
+    const s = document.querySelector("#inv-search");
+    s?.addEventListener("input", ()=>{
+      const q = (s.value || "").trim().toLowerCase();
+      document.querySelectorAll("#inv-list a").forEach(a=>{
+        a.style.display = a.textContent.toLowerCase().includes(q) ? "block" : "none";
+      });
+    });
+  });
 </script>
 </body>
 </html>
