@@ -134,6 +134,11 @@ def get_effects(name: str | None = Query(default=None), school: str | None = Que
 @app.post("/effects/bulk_create")
 @app.post("/admin/effects/bulk_create")
 async def bulk_create_effects(request: Request):
+    
+    replace_duplicates = bool(body.get("replace_duplicates", False))
+    updated = []
+    patch_lines = []
+
     try:
         require_auth(request, ["admin", "moderator"])
     except Exception as e:
@@ -195,12 +200,43 @@ async def bulk_create_effects(request: Request):
             except Exception:
                 return JSONResponse({"status":"error","message":f"Non-numeric MP/EN in effect '{name}'"}, status_code=400)
 
-            dup = eff_col.find_one(
-                {"school": school["id"], "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}, "mp_cost": mp, "en_cost": en},
-                {"_id": 1}
+            name_match = eff_col.find_one(
+                {"school": school["id"], "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}},
+                {"_id": 1, "id": 1, "name": 1, "mp_cost": 1, "en_cost": 1, "description": 1}
             )
-            if dup:
-                continue
+
+            if name_match:
+                if replace_duplicates:
+                    before = {k: name_match.get(k) for k in ("name","mp_cost","en_cost","description")}
+                    eff_col.update_one(
+                        {"_id": name_match["_id"]},
+                        {"$set": {
+                            "name": name,
+                            "description": desc,
+                            "mp_cost": mp,
+                            "en_cost": en,
+                            "school": school["id"]
+                        }}
+                    )
+                    updated.append(name_match["id"])
+                    # Recompute all spells that use this effect
+                    try:
+                        note, changed = _recompute_spells_for_effect(name_match["id"])
+                        patch_lines.append(note)
+                    except Exception as _e:
+                        patch_lines.append(f"[WARN] Recompute failed for effect {name_match['id']}: {_e}")
+                    continue
+                else:
+                    # keep old behavior: if exact same values, treat as duplicate no-op; otherwise create new id
+                    if int(name_match.get("mp_cost", 0)) == mp and int(name_match.get("en_cost", 0)) == en:
+                        continue
+                    # else fall through to create as a new effect
+
+            # (unchanged) create branch:
+            eff_id = next_id_str("effects", padding=4)
+            rec = {"id": eff_id, "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school["id"]}
+            eff_col.insert_one(rec)
+            created.append(eff_id)
 
             eff_id = next_id_str("effects", padding=4)
             rec = {"id": eff_id, "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school["id"]}
@@ -208,7 +244,13 @@ async def bulk_create_effects(request: Request):
             created.append(eff_id)
 
         write_audit("bulk_create_effects", "admin-ui", "—", None, {"school": school, "created": created})
-        return {"status": "success", "school": school, "created": created}
+        return {
+            "status": "success",
+            "school": school,
+            "created": created,
+            "updated": updated,
+            "patch_text": "\n".join(patch_lines).strip() + ("\n" if patch_lines else "")
+        }
 
     except Exception as e:
         logger.exception("bulk_create_effects failed")
