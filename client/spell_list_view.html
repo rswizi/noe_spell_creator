@@ -133,6 +133,11 @@
         <select id="filter-min-cat">
           <option value="">Min. Category: Any</option>
         </select>
+        <select id="filter-type">
+          <option value="">Type: Any</option>
+          <option value="simple">Simple</option>
+          <option value="complex">Complex</option>
+        </select>
         <select id="sort-by">
           <option value="cat_desc">Sort: Category (high → low)</option>
           <option value="name_asc">Sort: Name (A → Z)</option>
@@ -485,6 +490,15 @@ function qs(name){ const p=new URLSearchParams(location.search); return p.get(na
 function openModal(m,b){ m.classList.add("open"); b.classList.add("open"); document.documentElement.classList.add("modal-open"); document.body.classList.add("modal-open"); }
 function closeModal(m,b){ m.classList.remove("open"); b.classList.remove("open"); if(!document.querySelector('.modal.open')){ document.documentElement.classList.remove("modal-open"); document.body.classList.remove("modal-open"); } }
 function execRTOn(el, cmd){ document.getSelection().removeAllRanges(); document.execCommand(cmd, false, null); el.focus(); }
+function escapeHtml(s){
+  return String(s ?? "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;");
+}
+
 
 /* =========================
    Auth bits (minimal)
@@ -746,24 +760,44 @@ function renderIVChips(iv){
   document.getElementById("iv-mag").textContent = +((iv.mag ?? 0) || 0);
 }
 function computeAll(){
+  function msBonusForSchoolId(schoolId){
+    const list = loadBonuses() || [];
+    let sum = 0;
+    for (const b of list){
+      if (b.type !== "ms") continue;
+      if (b.on === "all") { sum += +b.value || 0; continue; }
+      if (b.on === "schools" && Array.isArray(b.targets) && b.targets.includes(String(schoolId))) {
+        sum += +b.value || 0;
+      }
+    }
+    return sum;
+  }
+
   if (!spellList || !schools.length) return [];
   const iv = normalizeIV(spellList.initial_values || {});
   const out = [];
-  // base rows (ignore upgrades)
+
+  // base (non-upgrade) schools
   for (const sch of schools){
     if (sch.upgrade) continue;
     const b = bestMSForSchool(iv, sch, {forceTwo: isComplexNeedsTwo(sch)});
-    const cat = mapCategory(b.ms);
-    out.push({ school: sch, ms: b.ms, cat, breakdown: b, bonus: 0 });
+    const extra = msBonusForSchoolId(sch.id);
+    const ms = b.ms + extra;
+    const cat = mapCategory(ms);
+    out.push({ school: sch, ms, cat, breakdown: b, bonus: extra });
   }
-  // variants (kept as before, bonuses UI left intact; bonus math removed for brevity)
+
+  // variants
   for (const v of loadVariants()){
     const sch = schools.find(s => lc(s.id||"") === lc(v.schoolId||""));
     if (!sch || sch.upgrade) continue;
     const b = msWithChosenNatures(iv, sch, v.natures||[]);
-    const cat = mapCategory(b.ms);
-    out.push({ school: sch, ms: b.ms, cat, breakdown: b, variant: {name:v.name, natures:v.natures}, bonus:0 });
+    const extra = msBonusForSchoolId(sch.id);
+    const ms = b.ms + extra;
+    const cat = mapCategory(ms);
+    out.push({ school: sch, ms, cat, breakdown: b, variant: {name:v.name, natures:v.natures}, bonus: extra });
   }
+
   return out;
 }
 function renderSchools(){
@@ -773,10 +807,21 @@ function renderSchools(){
   const nameFilter = lc(document.getElementById("filter-name").value);
   const minCat = document.getElementById("filter-min-cat").value;
   const sortBy = document.getElementById("sort-by").value;
+  const typeFilter = (document.getElementById("filter-type")?.value || "").toLowerCase(); // NEW
 
   let rows = [...computed];
+
   if (nameFilter) rows = rows.filter(r => lc(displayName(r)).includes(nameFilter));
   if (minCat) rows = rows.filter(r => CAT_ORDER[r.cat.name] >= CAT_ORDER[minCat]);
+
+  if (typeFilter) {
+    rows = rows.filter(r => {
+      const t = lc(r.school?.school_type || "");
+      return typeFilter === "simple" ? t === "simple"
+           : typeFilter === "complex" ? t === "complex"
+           : true;
+    });
+  }
 
   if (sortBy === "name_asc") {
     rows.sort((a,b)=> displayName(a).localeCompare(displayName(b)));
@@ -980,13 +1025,145 @@ function saveVariant(){
   computed = computeAll(); renderSchools(); closeVariant();
 }
 
-/* =========================
-   Bonuses UI (table/editor stubbed as before)
-========================= */
+// ===== Bonuses UI =====
 const bonModal = document.getElementById("bon-modal");
 const bonBackdrop = document.getElementById("bon-backdrop");
-function openBonuses(){ openModal(bonModal, bonBackdrop); }
+const bonBody = document.getElementById("bon-body");
+const bonEditor = document.getElementById("bonus-editor");
+
+function openBonuses(){
+  renderBonuses();
+  bonEditor.style.display = "none";
+  openModal(bonModal, bonBackdrop);
+}
 function closeBonuses(){ closeModal(bonModal, bonBackdrop); }
+
+// RENDER TABLE
+function renderBonuses(){
+  const list = loadBonuses();
+  bonBody.innerHTML = "";
+  if (!Array.isArray(list) || !list.length){
+    bonBody.innerHTML = `<tr><td colspan="6" class="empty">No bonuses yet.</td></tr>`;
+    return;
+  }
+  const schoolById = Object.fromEntries((schools||[]).map(s=>[String(s.id||s.name), s]));
+
+  list.forEach((b, idx)=>{
+    const onScope   = b.on === "all" ? "All" : "Schools";
+    const targetsTxt = (b.on === "all")
+      ? "—"
+      : (Array.isArray(b.targets) && b.targets.length
+          ? b.targets.map(t => (schoolById[t]?.name || t)).join(", ")
+          : "—");
+    const typeTxt   = b.type === "ms" ? "MS" : (b.type || "—");
+    const valueTxt  = (b.value >= 0 ? "+" : "") + String(b.value ?? 0);
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${onScope}</td>
+      <td>${escapeHtml(b.name || "—")}</td>
+      <td>${typeTxt}</td>
+      <td>${targetsTxt}</td>
+      <td>${valueTxt}</td>
+      <td style="text-align:right;">
+        <button class="btn btn-flag small" data-bon-del="${idx}">Delete</button>
+      </td>
+    `;
+    bonBody.appendChild(tr);
+  });
+
+  bonBody.querySelectorAll("[data-bon-del]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const idx = +btn.getAttribute("data-bon-del");
+      const list = loadBonuses();
+      list.splice(idx, 1);
+      saveBonuses(list);
+      renderBonuses();
+    });
+  });
+}
+
+// OPEN EDITOR
+function openBonusEditor(){
+  // Build editor UI
+  const schoolOptions = (schools||[])
+    .filter(s => !s.upgrade)
+    .map(s => `<label class="pill" style="cursor:pointer;"><input type="checkbox" value="${s.id}" style="margin-right:6px;"> ${escapeHtml(s.name||s.id)}</label>`)
+    .join(" ");
+
+  bonEditor.innerHTML = `
+    <div class="section">
+      <div class="row" style="margin-bottom:8px;">
+        <div style="flex:1;">
+          <label class="k">Name</label>
+          <input id="be-name" type="text" placeholder="e.g. Fire Focus">
+        </div>
+        <div>
+          <label class="k">Type</label>
+          <select id="be-type">
+            <option value="ms" selected>MS (additive)</option>
+            <!-- add more types later -->
+          </select>
+        </div>
+        <div>
+          <label class="k">Value</label>
+          <input id="be-value" type="number" step="1" value="1">
+        </div>
+      </div>
+
+      <div class="row" style="margin-bottom:8px;">
+        <div>
+          <label class="k">Applies To</label>
+          <select id="be-on">
+            <option value="all">All Schools</option>
+            <option value="schools">Specific Schools</option>
+          </select>
+        </div>
+        <div id="be-schools-wrap" style="flex:1; display:none;">
+          <div class="k" style="margin-bottom:6px;">Pick Schools</div>
+          <div id="bonus-schools">${schoolOptions || '<span class="muted">No schools loaded.</span>'}</div>
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:flex-end; gap:8px;">
+        <button class="btn btn-secondary" id="be-cancel">Cancel</button>
+        <button class="btn" id="be-save">Save Bonus</button>
+      </div>
+    </div>
+  `;
+  bonEditor.style.display = "block";
+
+  // scope toggle
+  const beOn = document.getElementById("be-on");
+  const beSchoolsWrap = document.getElementById("be-schools-wrap");
+  beOn.addEventListener("change", ()=>{
+    beSchoolsWrap.style.display = beOn.value === "schools" ? "block" : "none";
+  });
+
+  // actions
+  document.getElementById("be-cancel").addEventListener("click", ()=> bonEditor.style.display="none");
+  document.getElementById("be-save").addEventListener("click", ()=>{
+    const name  = (document.getElementById("be-name").value || "").trim();
+    const type  = document.getElementById("be-type").value || "ms";
+    const value = parseInt(document.getElementById("be-value").value || "0", 10);
+    const on    = beOn.value;
+
+    if (!name){ alert("Enter a name."); return; }
+    if (Number.isNaN(value)){ alert("Enter a numeric value."); return; }
+
+    let targets = [];
+    if (on === "schools"){
+      targets = Array.from(document.querySelectorAll("#bonus-schools input[type=checkbox]:checked")).map(c=>c.value);
+      if (!targets.length){ alert("Pick at least one school."); return; }
+    }
+
+    const list = loadBonuses() || [];
+    list.push({ id: `bon_${Date.now()}`, name, type, value, on, targets });
+    saveBonuses(list);
+    bonEditor.style.display = "none";
+    renderBonuses();
+  });
+}
 
 /* =========================
    Meta Editor (alt name + flavor)
@@ -1198,6 +1375,9 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
   await fetchListMeta();
 
+  computed = computeAll();
+  renderSchools();
+
   await loadMySpells();
 
   // Add modal — fill school select
@@ -1217,6 +1397,8 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   document.getElementById("filter-name").addEventListener("input", run);
   document.getElementById("filter-min-cat").addEventListener("change", run);
   document.getElementById("sort-by").addEventListener("change", run);
+  document.getElementById("filter-type").addEventListener("change", run);
+
 
   // Add Spells modal open/close
   const asModal = document.getElementById("addspells-modal");
@@ -1304,6 +1486,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   document.getElementById("open-bonuses").addEventListener("click", openBonuses);
   document.getElementById("bon-close").addEventListener("click", closeBonuses);
   bonBackdrop.addEventListener("click", (e)=>{ if(e.target===bonBackdrop) closeBonuses(); });
+  document.getElementById("bon-add").addEventListener("click", openBonusEditor);
 
   // Meta modal
   document.getElementById("meta-close").addEventListener("click", ()=>closeModal(metaModal, metaBackdrop));
