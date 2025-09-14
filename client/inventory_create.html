@@ -18,10 +18,38 @@
   <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:16px;align-items:start;">
     <!-- LEFT: Create -->
     <div>
-      <div class="home-card">
-        <!-- (existing create form stays exactly as-is) -->
-        ... your current form ...
+    <div class="home-card">
+      <div class="grid">
+        <div>
+          <label>Name</label>
+          <input id="inv-name" placeholder="e.g. Aria’s Pack" />
+        </div>
+        <div>
+          <label>Initial Currency (Jelly)</label>
+          <input id="cur-jelly" type="number" value="0" />
+        </div>
       </div>
+
+      <h4 style="margin-top:10px;">Extra currencies (optional)</h4>
+      <div id="extra-wrap"></div>
+      <div class="row">
+        <button id="add-cur" class="btn small">+ Currency</button>
+      </div>
+
+      <h4 style="margin-top:14px;">First containers</h4>
+      <div id="cont-wrap"></div>
+      <div class="row">
+        <button id="add-cont" class="btn small">+ Container</button>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <button id="create" class="btn">Create</button>
+      <a class="btn btn-secondary" href="inventory_manage.html">← Back</a>
+      <span id="msg" class="muted" style="margin-left:auto;"></span>
+    </div>
+  </div>
+
 
       <div class="row" style="margin-top:10px;">
         <button id="create" class="btn">Create</button>
