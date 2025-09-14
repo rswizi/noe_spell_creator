@@ -615,27 +615,36 @@ function bestMSForSchool(iv, school, opts={}){
   const skillKey = lc(school.linked_skill || "");
   const skillVal = +((iv.skills?.[skillKey]) ?? 0);
   const ints = (school.linked_intensities || []).map(lc);
-  const pool = ints.map(k => +((iv.natures?.[k]) ?? 0)).sort((a,b)=>b-a);
-  const top1 = pool[0] ?? 0, top2 = pool[1] ?? 0;
+
+  const arr = ints.map(k => ({ key:k, val:+((iv.natures?.[k]) ?? 0) }))
+                  .sort((a,b)=> (b.val - a.val) || a.key.localeCompare(b.key));
+
+  const top1 = arr[0] || {key:null, val:0};
+  const top2 = arr[1] || {key:null, val:0};
+
   if (opts.forceTwo){
-    const ms = mag + skillVal + top1 + (top2 || 0);
-    return { ms, useOne:false, pick:[top1, top2||0], mag, skillVal, top1, top2 };
+    const ms = mag + skillVal + top1.val + (top2.val || 0);
+    return {
+      ms, useOne:false, pick:[top1.val, top2.val||0],
+      mag, skillVal, top1: top1.val, top2: top2.val,
+      pickNames: [top1.key, top2.key].filter(Boolean)
+    };
   }
-  const msTwo = mag + skillVal + top1 + top2;
-  const msOne = mag + skillVal + top1 + 2;
+
+  const msTwo = mag + skillVal + top1.val + top2.val;
+  const msOne = mag + skillVal + top1.val + 2;
   const useOne = msOne > msTwo;
   const ms = useOne ? msOne : msTwo;
-  return { ms, useOne, pick: useOne? [top1, "+2 bonus"]:[top1, top2], mag, skillVal, top1, top2 };
+  const pickNames = useOne ? [top1.key].filter(Boolean) : [top1.key, top2.key].filter(Boolean);
+
+  return {
+    ms, useOne,
+    pick: useOne? [top1.val, "+2 bonus"]:[top1.val, top2.val],
+    mag, skillVal, top1: top1.val, top2: top2.val,
+    pickNames
+  };
 }
-function msWithChosenNatures(iv, school, chosen){
-  const mag = +((iv.mag ?? 0) || 0);
-  const skillKey = lc(school.linked_skill || "");
-  const skillVal = +((iv.skills?.[skillKey]) ?? 0);
-  const ints = chosen.map(lc);
-  const sum = ints.reduce((acc,k)=>acc + (+((iv.natures?.[k]) ?? 0)), 0);
-  const ms = mag + skillVal + sum;
-  return { ms, useOne: ints.length===1, pick: ints.map(k=>+((iv.natures?.[k]) ?? 0)), mag, skillVal, chosen:ints };
-}
+
 
 /* =========================
    Eligibility
@@ -773,6 +782,23 @@ function computeAll(){
     return sum;
   }
 
+  function msBonusForUsedNatures(usedNatures){
+    const list = loadBonuses() || [];
+    const usedSet = new Set((usedNatures||[]).map(lc));
+    let sum = 0;
+    for (const b of list){
+      if (b.type !== "ms") continue;
+      if (b.on === "natures"){
+        const targets = (b.targets||[]).map(lc);
+        // Apply once if ALL selected targets are present in the used natures
+        if (targets.length && targets.every(t => usedSet.has(t))) {
+          sum += +b.value || 0;
+        }
+      }
+    }
+    return sum;
+  }
+
   if (!spellList || !schools.length) return [];
   const iv = normalizeIV(spellList.initial_values || {});
   const out = [];
@@ -781,7 +807,7 @@ function computeAll(){
   for (const sch of schools){
     if (sch.upgrade) continue;
     const b = bestMSForSchool(iv, sch, {forceTwo: isComplexNeedsTwo(sch)});
-    const extra = msBonusForSchoolId(sch.id);
+    const extra = msBonusForSchoolId(sch.id) + msBonusForUsedNatures(b.pickNames);
     const ms = b.ms + extra;
     const cat = mapCategory(ms);
     out.push({ school: sch, ms, cat, breakdown: b, bonus: extra });
@@ -792,7 +818,7 @@ function computeAll(){
     const sch = schools.find(s => lc(s.id||"") === lc(v.schoolId||""));
     if (!sch || sch.upgrade) continue;
     const b = msWithChosenNatures(iv, sch, v.natures||[]);
-    const extra = msBonusForSchoolId(sch.id);
+    const extra = msBonusForSchoolId(sch.id) + msBonusForUsedNatures(b.chosen);
     const ms = b.ms + extra;
     const cat = mapCategory(ms);
     out.push({ school: sch, ms, cat, breakdown: b, variant: {name:v.name, natures:v.natures}, bonus: extra });
@@ -1050,11 +1076,15 @@ function renderBonuses(){
 
   list.forEach((b, idx)=>{
     const onScope   = b.on === "all" ? "All" : "Schools";
-    const targetsTxt = (b.on === "all")
-      ? "—"
-      : (Array.isArray(b.targets) && b.targets.length
-          ? b.targets.map(t => (schoolById[t]?.name || t)).join(", ")
-          : "—");
+    const targetsTxt =
+      (b.on === "all") ? "—"
+      : (b.on === "natures")
+          ? (Array.isArray(b.targets) && b.targets.length
+              ? b.targets.map(t => title(t)).join(", ")
+              : "—")
+          : (Array.isArray(b.targets) && b.targets.length
+              ? b.targets.map(t => (schoolById[t]?.name || t)).join(", ")
+              : "—");
     const typeTxt   = b.type === "ms" ? "MS" : (b.type || "—");
     const valueTxt  = (b.value >= 0 ? "+" : "") + String(b.value ?? 0);
 
@@ -1079,6 +1109,8 @@ function renderBonuses(){
       list.splice(idx, 1);
       saveBonuses(list);
       renderBonuses();
+      computed = computeAll();
+      renderSchools();
     });
   });
 }
@@ -1086,83 +1118,102 @@ function renderBonuses(){
 // OPEN EDITOR
 function openBonusEditor(){
   // Build editor UI
-  const schoolOptions = (schools||[])
-    .filter(s => !s.upgrade)
-    .map(s => `<label class="pill" style="cursor:pointer;"><input type="checkbox" value="${s.id}" style="margin-right:6px;"> ${escapeHtml(s.name||s.id)}</label>`)
-    .join(" ");
+const schoolOptions = (schools||[])
+  .filter(s => !s.upgrade)
+  .map(s => `<label class="pill" style="cursor:pointer;"><input type="checkbox" value="${s.id}" style="margin-right:6px;"> ${escapeHtml(s.name||s.id)}</label>`)
+  .join(" ");
 
-  bonEditor.innerHTML = `
-    <div class="section">
-      <div class="row" style="margin-bottom:8px;">
-        <div style="flex:1;">
-          <label class="k">Name</label>
-          <input id="be-name" type="text" placeholder="e.g. Fire Focus">
-        </div>
-        <div>
-          <label class="k">Type</label>
-          <select id="be-type">
-            <option value="ms" selected>MS (additive)</option>
-            <!-- add more types later -->
-          </select>
-        </div>
-        <div>
-          <label class="k">Value</label>
-          <input id="be-value" type="number" step="1" value="1">
-        </div>
+const natureOptions = ['fire','water','wind','earth','sun','moon','lightning','ki']
+  .map(n => `<label class="pill" style="cursor:pointer;"><input type="checkbox" value="${n}" style="margin-right:6px;"> ${title(n)}</label>`)
+  .join(" ");
+
+bonEditor.innerHTML = `
+  <div class="section">
+    <div class="row" style="margin-bottom:8px;">
+      <div style="flex:1;">
+        <label class="k">Name</label>
+        <input id="be-name" type="text" placeholder="e.g. Fire Focus">
       </div>
-
-      <div class="row" style="margin-bottom:8px;">
-        <div>
-          <label class="k">Applies To</label>
-          <select id="be-on">
-            <option value="all">All Schools</option>
-            <option value="schools">Specific Schools</option>
-          </select>
-        </div>
-        <div id="be-schools-wrap" style="flex:1; display:none;">
-          <div class="k" style="margin-bottom:6px;">Pick Schools</div>
-          <div id="bonus-schools">${schoolOptions || '<span class="muted">No schools loaded.</span>'}</div>
-        </div>
+      <div>
+        <label class="k">Type</label>
+        <select id="be-type">
+          <option value="ms" selected>MS (additive)</option>
+        </select>
       </div>
-
-      <div class="row" style="justify-content:flex-end; gap:8px;">
-        <button class="btn btn-secondary" id="be-cancel">Cancel</button>
-        <button class="btn" id="be-save">Save Bonus</button>
+      <div>
+        <label class="k">Value</label>
+        <input id="be-value" type="number" step="1" value="1">
       </div>
     </div>
-  `;
-  bonEditor.style.display = "block";
 
-  // scope toggle
-  const beOn = document.getElementById("be-on");
-  const beSchoolsWrap = document.getElementById("be-schools-wrap");
-  beOn.addEventListener("change", ()=>{
-    beSchoolsWrap.style.display = beOn.value === "schools" ? "block" : "none";
-  });
+    <div class="row" style="margin-bottom:8px;">
+      <div>
+        <label class="k">Applies To</label>
+        <select id="be-on">
+          <option value="all">All Schools</option>
+          <option value="schools">Specific Schools</option>
+          <option value="natures">Specific Natures (used)</option>
+        </select>
+      </div>
 
-  // actions
-  document.getElementById("be-cancel").addEventListener("click", ()=> bonEditor.style.display="none");
-  document.getElementById("be-save").addEventListener("click", ()=>{
-    const name  = (document.getElementById("be-name").value || "").trim();
-    const type  = document.getElementById("be-type").value || "ms";
-    const value = parseInt(document.getElementById("be-value").value || "0", 10);
-    const on    = beOn.value;
+      <div id="be-schools-wrap" style="flex:1; display:none;">
+        <div class="k" style="margin-bottom:6px;">Pick Schools</div>
+        <div id="bonus-schools">${schoolOptions || '<span class="muted">No schools loaded.</span>'}</div>
+      </div>
 
-    if (!name){ alert("Enter a name."); return; }
-    if (Number.isNaN(value)){ alert("Enter a numeric value."); return; }
+      <div id="be-natures-wrap" style="flex:1; display:none;">
+        <div class="k" style="margin-bottom:6px;">Pick Natures (ALL must be used)</div>
+        <div id="bonus-natures">${natureOptions}</div>
+      </div>
+    </div>
 
-    let targets = [];
-    if (on === "schools"){
-      targets = Array.from(document.querySelectorAll("#bonus-schools input[type=checkbox]:checked")).map(c=>c.value);
-      if (!targets.length){ alert("Pick at least one school."); return; }
-    }
+    <div class="row" style="justify-content:flex-end; gap:8px;">
+      <button class="btn btn-secondary" id="be-cancel">Cancel</button>
+      <button class="btn" id="be-save">Save Bonus</button>
+    </div>
+  </div>
+`;
 
-    const list = loadBonuses() || [];
-    list.push({ id: `bon_${Date.now()}`, name, type, value, on, targets });
-    saveBonuses(list);
-    bonEditor.style.display = "none";
-    renderBonuses();
-  });
+bonEditor.style.display = "block";
+
+// scope toggle
+const beOn = document.getElementById("be-on");
+const beSchoolsWrap = document.getElementById("be-schools-wrap");
+const beNaturesWrap = document.getElementById("be-natures-wrap");
+beOn.addEventListener("change", ()=>{
+  beSchoolsWrap.style.display = beOn.value === "schools" ? "block" : "none";
+  beNaturesWrap.style.display = beOn.value === "natures" ? "block" : "none";
+});
+
+// actions
+document.getElementById("be-cancel").addEventListener("click", ()=> bonEditor.style.display="none");
+document.getElementById("be-save").addEventListener("click", ()=>{
+  const name  = (document.getElementById("be-name").value || "").trim();
+  const type  = document.getElementById("be-type").value || "ms";
+  const value = parseInt(document.getElementById("be-value").value || "0", 10);
+  const on    = beOn.value;
+
+  if (!name){ alert("Enter a name."); return; }
+  if (Number.isNaN(value)){ alert("Enter a numeric value."); return; }
+
+  let targets = [];
+  if (on === "schools"){
+    targets = Array.from(document.querySelectorAll("#bonus-schools input[type=checkbox]:checked")).map(c=>c.value);
+    if (!targets.length){ alert("Pick at least one school."); return; }
+  } else if (on === "natures"){
+    targets = Array.from(document.querySelectorAll("#bonus-natures input[type=checkbox]:checked")).map(c=>c.value);
+    if (!targets.length){ alert("Pick at least one nature."); return; }
+  }
+
+  const list = loadBonuses() || [];
+  list.push({ id: `bon_${Date.now()}`, name, type, value, on, targets });
+  saveBonuses(list);
+  bonEditor.style.display = "none";
+  renderBonuses();
+  // reflect immediately in table
+  computed = computeAll();
+  renderSchools();
+});
 }
 
 /* =========================
