@@ -138,7 +138,7 @@
           <option value="simple">Simple</option>
           <option value="complex">Complex</option>
         </select>
-        <select id="sort-by">
+        <label class="mini" style="display:flex; align-items:center; gap:6px; margin-right:8px;"><input type="checkbox" id="hide-unpinned"> Hide unpinned</label><select id="sort-by">
           <option value="cat_desc">Sort: Category (high → low)</option>
           <option value="name_asc">Sort: Name (A → Z)</option>
         </select>
@@ -671,7 +671,20 @@ function eligibleForSpell(spell){
 // --- Server-backed list meta (variants, bonuses, per-spell meta) ---
 let variantsCache = [];
 let bonusesCache = [];
-let spellMetaCache = {};  // { [spellId]: { status: "known"|"learnt", alt_name: "", flavor: "" } }
+let spellMetaCache = {};
+  // Server-side pinned schools
+  const pinsServer = Array.isArray(m.pinned_schools) ? m.pinned_schools.map(String) : [];
+  if (pinsServer.length){
+    PINNED = new Set(pinsServer);
+    savePins(PINNED); // keep local in sync
+  } else {
+    // No server pins yet; keep local pins if any
+    if (PINNED && PINNED.size){
+      // Optionally seed server (silent): do not block UI
+      saveListMeta({ pinned_schools: Array.from(PINNED) }).catch(()=>{});
+    }
+  }
+  // { [spellId]: { status: "known"|"learnt", alt_name: "", flavor: "" } }
 
 async function fetchListMeta(){
   const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/meta`,
@@ -741,6 +754,28 @@ function saveBonuses(list){
   saveListMeta({bonuses: bonusesCache}).catch(()=>{});
 }
 
+
+/* =========================
+   Pin / Unpin schools (client-side, persisted per list in localStorage)
+========================= */
+function pinsKey(){ return `pins_${listId}`; }
+function loadPins(){
+  try{ return new Set(JSON.parse(localStorage.getItem(pinsKey())||"[]").map(String)); }catch{ return new Set(); }
+}
+function savePins(set){
+  try{ localStorage.setItem(pinsKey(), JSON.stringify(Array.from(set||[]))); }catch{}
+}
+let PINNED = loadPins();
+function isPinned(sid){ return PINNED.has(String(sid)); }
+function togglePin(sid){
+  const k = String(sid);
+  if (PINNED.has(k)) PINNED.delete(k); else PINNED.add(k);
+  savePins(PINNED);
+  // sync to server (best effort)
+  try{ saveListMeta({ pinned_schools: Array.from(PINNED) }); }catch(e){}
+  renderSchools();
+}
+
 /* =========================
    Load / Compute / Render Schools
 ========================= */
@@ -782,6 +817,19 @@ function computeAll(){
     return sum;
   }
 
+  
+  function msBonusForLinkedSkill(skillKey){
+    const list = loadBonuses() || [];
+    let sum = 0;
+    for (const b of list){
+      if (b.type !== "ms") continue;
+      if (b.on === "skills" && Array.isArray(b.targets) && b.targets.map(lc).includes(lc(skillKey||""))) {
+        sum += +b.value || 0;
+      }
+    }
+    return sum;
+  }
+
   function msBonusForUsedNatures(usedNatures){
     const list = loadBonuses() || [];
     const usedSet = new Set((usedNatures||[]).map(lc));
@@ -807,7 +855,7 @@ function computeAll(){
   for (const sch of schools){
     if (sch.upgrade) continue;
     const b = bestMSForSchool(iv, sch, {forceTwo: isComplexNeedsTwo(sch)});
-    const extra = msBonusForSchoolId(sch.id) + msBonusForUsedNatures(b.pickNames);
+    const extra = msBonusForSchoolId(sch.id) + msBonusForLinkedSkill(sch.linked_skill) + msBonusForUsedNatures(b.pickNames);
     const ms = b.ms + extra;
     const cat = mapCategory(ms);
     out.push({ school: sch, ms, cat, breakdown: b, bonus: extra });
@@ -818,7 +866,7 @@ function computeAll(){
     const sch = schools.find(s => lc(s.id||"") === lc(v.schoolId||""));
     if (!sch || sch.upgrade) continue;
     const b = msWithChosenNatures(iv, sch, v.natures||[]);
-    const extra = msBonusForSchoolId(sch.id) + msBonusForUsedNatures(b.chosen);
+    const extra = msBonusForSchoolId(sch.id) + msBonusForLinkedSkill(sch.linked_skill) + msBonusForUsedNatures(b.chosen);
     const ms = b.ms + extra;
     const cat = mapCategory(ms);
     out.push({ school: sch, ms, cat, breakdown: b, variant: {name:v.name, natures:v.natures}, bonus: extra });
@@ -849,7 +897,9 @@ function renderSchools(){
     });
   }
 
-  if (sortBy === "name_asc") {
+  if (hideUnpinned) rows = rows.filter(r => isPinned(r.school.id));
+
+    if (sortBy === "name_asc") {
     rows.sort((a,b)=> displayName(a).localeCompare(displayName(b)));
   } else {
     rows.sort((a,b)=>{
@@ -870,7 +920,7 @@ function renderSchools(){
     const tr = document.createElement("tr");
 
     const tdName = document.createElement("td");
-    tdName.innerHTML = `<div class="k">${displayName(r)}</div>`;
+    tdName.innerHTML = `<div class="row" style="align-items:center; gap:8px;"><button class="btn small" data-pin="${r.school.id}" title="${isPinned(r.school.id)?'Unpin':'Pin'}">${isPinned(r.school.id)? "★" : "☆"}</button><div class="k">${displayName(r)}</div></div>`;
     tr.appendChild(tdName);
 
     const tdLinked = document.createElement("td");
@@ -1025,10 +1075,22 @@ function openVariant(schoolId){
     wrap.innerHTML = `<input type="checkbox" id="${id}" value="${k}" style="margin-right:6px;"> ${title(k)}`;
     varChoices.appendChild(wrap);
   });
-  if (ints.length===0) { varChoices.innerHTML = `<span class="muted">No intensities defined.</span>`; }
-  varRule.textContent = complexTwo ? "Complex school: select exactly 2 natures."
-                   : (ints.length<=1 ? "Only one linked nature available for this school."
-                                     : "Simple school: select 1 or 2 natures.");
+  // Also allow non-linked natures
+  const ALL_NATURES = ["fire","water","wind","earth","sun","moon","lightning","ki"];
+  const other = ALL_NATURES.filter(n => !ints.includes(n));
+  if (other.length){
+    const sep = document.createElement("div"); sep.className="muted"; sep.style.marginTop="8px"; sep.textContent = "Other natures:"; varChoices.appendChild(sep);
+    other.forEach((k,i)=>{
+      const id = `var-other-${i}`;
+      const wrap = document.createElement("label");
+      wrap.className = "pill"; wrap.style.cursor = "pointer";
+      wrap.innerHTML = `<input type="checkbox" id="${id}" value="${k}" style="margin-right:6px;"> ${title(k)}`;
+      varChoices.appendChild(wrap);
+    });
+  }
+  if (ints.length===0) { varChoices.innerHTML = `<span class="muted">No intensities defined for this school. You may still pick any nature(s).` + varChoices.innerHTML + `</span>`; }
+  varRule.textContent = complexTwo ? "Complex school: select exactly 2 natures (from linked or other)."
+                   : "Simple school: select 1 or 2 natures (from linked or other).";
   document.getElementById("var-name").value = "";
   document.getElementById("var-status").textContent = "";
   openModal(varModal, varBackdrop);
@@ -1044,8 +1106,7 @@ function saveVariant(){
   const statusEl = document.getElementById("var-status");
   if (!name){ statusEl.textContent = "Enter a variant name."; return; }
   if (complexTwo && chosen.length !== 2){ statusEl.textContent = "Select exactly 2 natures for complex schools."; return; }
-  if (!complexTwo && ints.length > 1 && (chosen.length<1 || chosen.length>2)){ statusEl.textContent = "Select 1 or 2 natures."; return; }
-  if (ints.length===1 && chosen.length!==1){ statusEl.textContent = "This school only has one nature; select that one."; return; }
+  if (!complexTwo && (chosen.length<1 || chosen.length>2)){ statusEl.textContent = "Select 1 or 2 natures."; return; }
 
   addVariant(varCurrentSchool.id, name, chosen);
   computed = computeAll(); renderSchools(); closeVariant();
@@ -1075,16 +1136,20 @@ function renderBonuses(){
   const schoolById = Object.fromEntries((schools||[]).map(s=>[String(s.id||s.name), s]));
 
   list.forEach((b, idx)=>{
-    const onScope   = b.on === "all" ? "All" : "Schools";
+    const onScope   = b.on === "all" ? "All" : (b.on==="natures" ? "Natures" : (b.on==="skills" ? "Skills" : "Schools"));
     const targetsTxt =
       (b.on === "all") ? "—"
       : (b.on === "natures")
           ? (Array.isArray(b.targets) && b.targets.length
               ? b.targets.map(t => title(t)).join(", ")
               : "—")
-          : (Array.isArray(b.targets) && b.targets.length
-              ? b.targets.map(t => (schoolById[t]?.name || t)).join(", ")
-              : "—");
+          : (b.on === "skills"
+              ? (Array.isArray(b.targets) && b.targets.length
+                  ? b.targets.map(t => title(t)).join(", ")
+                  : "—")
+              : (Array.isArray(b.targets) && b.targets.length
+                  ? b.targets.map(t => (schoolById[t]?.name || t)).join(", ")
+                  : "—"));
     const typeTxt   = b.type === "ms" ? "MS" : (b.type || "—");
     const valueTxt  = (b.value >= 0 ? "+" : "") + String(b.value ?? 0);
 
@@ -1116,105 +1181,92 @@ function renderBonuses(){
 }
 
 // OPEN EDITOR
+
 function openBonusEditor(){
   // Build editor UI
-const schoolOptions = (schools||[])
-  .filter(s => !s.upgrade)
-  .map(s => `<label class="pill" style="cursor:pointer;"><input type="checkbox" value="${s.id}" style="margin-right:6px;"> ${escapeHtml(s.name||s.id)}</label>`)
-  .join(" ");
+  const schoolOptions = (schools||[])
+    .filter(s => !s.upgrade)
+    .map(s => `<label class="pill" style="cursor:pointer;"><input type="checkbox" value="${s.id}" style="margin-right:6px;"> ${escapeHtml(s.name||s.id)}</label>`)
+    .join("");
 
-const natureOptions = ['fire','water','wind','earth','sun','moon','lightning','ki']
-  .map(n => `<label class="pill" style="cursor:pointer;"><input type="checkbox" value="${n}" style="margin-right:6px;"> ${title(n)}</label>`)
-  .join(" ");
+  const NATURES = ["fire","water","wind","earth","sun","moon","lightning","ki"];
+  const natureOptions = NATURES.map(n => `<label class="pill" style="cursor:pointer;"><input type="checkbox" value="${n}" style="margin-right:6px;"> ${title(n)}</label>`).join("");
 
-bonEditor.innerHTML = `
-  <div class="section">
-    <div class="row" style="margin-bottom:8px;">
-      <div style="flex:1;">
+  const SKILLS = ["aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation","absorption","spirit"];
+  const skillOptions = SKILLS.map(n => `<label class="pill" style="cursor:pointer;"><input type="checkbox" value="${n}" style="margin-right:6px;"> ${title(n)}</label>`).join("");
+
+  bonEditor.innerHTML = `
+    <div class="section" style="border:1px dashed #444; padding:10px; border-radius:8px;">
+      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
         <label class="k">Name</label>
-        <input id="be-name" type="text" placeholder="e.g. Fire Focus">
-      </div>
-      <div>
+        <input id="be-name" type="text" placeholder="e.g. Wand Focus" style="min-width:180px;">
         <label class="k">Type</label>
-        <select id="be-type">
-          <option value="ms" selected>MS (additive)</option>
-        </select>
-      </div>
-      <div>
-        <label class="k">Value</label>
-        <input id="be-value" type="number" step="1" value="1">
-      </div>
-    </div>
-
-    <div class="row" style="margin-bottom:8px;">
-      <div>
-        <label class="k">Applies To</label>
+        <select id="be-type"><option value="ms">MS</option></select>
+        <label class="k">On</label>
         <select id="be-on">
-          <option value="all">All Schools</option>
-          <option value="schools">Specific Schools</option>
-          <option value="natures">Specific Natures (used)</option>
+          <option value="all">All</option>
+          <option value="schools">Schools</option>
+          <option value="natures">Natures</option>
+          <option value="skills">Skills</option>
         </select>
+        <label class="k">Value</label>
+        <input id="be-value" type="number" value="1" style="width:100px;">
+        <span class="spacer"></span>
+        <button class="btn btn-secondary small" id="be-cancel">Cancel</button>
+        <button class="btn small" id="be-save">Save</button>
       </div>
 
-      <div id="be-schools-wrap" style="flex:1; display:none;">
-        <div class="k" style="margin-bottom:6px;">Pick Schools</div>
-        <div id="bonus-schools">${schoolOptions || '<span class="muted">No schools loaded.</span>'}</div>
-      </div>
-
-      <div id="be-natures-wrap" style="flex:1; display:none;">
-        <div class="k" style="margin-bottom:6px;">Pick Natures (ALL must be used)</div>
-        <div id="bonus-natures">${natureOptions}</div>
-      </div>
+      <div id="bonus-schools" class="chips" style="margin-top:10px; display:none;">${schoolOptions}</div>
+      <div id="bonus-natures" class="chips" style="margin-top:10px; display:none;">${natureOptions}</div>
+      <div id="bonus-skills" class="chips" style="margin-top:10px; display:none;">${skillOptions}</div>
     </div>
+  `;
+  bonEditor.style.display = "block";
 
-    <div class="row" style="justify-content:flex-end; gap:8px;">
-      <button class="btn btn-secondary" id="be-cancel">Cancel</button>
-      <button class="btn" id="be-save">Save Bonus</button>
-    </div>
-  </div>
-`;
-
-bonEditor.style.display = "block";
-
-// scope toggle
-const beOn = document.getElementById("be-on");
-const beSchoolsWrap = document.getElementById("be-schools-wrap");
-const beNaturesWrap = document.getElementById("be-natures-wrap");
-beOn.addEventListener("change", ()=>{
-  beSchoolsWrap.style.display = beOn.value === "schools" ? "block" : "none";
-  beNaturesWrap.style.display = beOn.value === "natures" ? "block" : "none";
-});
-
-// actions
-document.getElementById("be-cancel").addEventListener("click", ()=> bonEditor.style.display="none");
-document.getElementById("be-save").addEventListener("click", ()=>{
-  const name  = (document.getElementById("be-name").value || "").trim();
-  const type  = document.getElementById("be-type").value || "ms";
-  const value = parseInt(document.getElementById("be-value").value || "0", 10);
-  const on    = beOn.value;
-
-  if (!name){ alert("Enter a name."); return; }
-  if (Number.isNaN(value)){ alert("Enter a numeric value."); return; }
-
-  let targets = [];
-  if (on === "schools"){
-    targets = Array.from(document.querySelectorAll("#bonus-schools input[type=checkbox]:checked")).map(c=>c.value);
-    if (!targets.length){ alert("Pick at least one school."); return; }
-  } else if (on === "natures"){
-    targets = Array.from(document.querySelectorAll("#bonus-natures input[type=checkbox]:checked")).map(c=>c.value);
-    if (!targets.length){ alert("Pick at least one nature."); return; }
+  const beOn = document.getElementById("be-on");
+  function showTargets(){
+    document.getElementById("bonus-schools").style.display = (beOn.value==="schools") ? "flex" : "none";
+    document.getElementById("bonus-natures").style.display = (beOn.value==="natures") ? "flex" : "none";
+    document.getElementById("bonus-skills").style.display  = (beOn.value==="skills")  ? "flex" : "none";
   }
+  beOn.addEventListener("change", showTargets); showTargets();
 
-  const list = loadBonuses() || [];
-  list.push({ id: `bon_${Date.now()}`, name, type, value, on, targets });
-  saveBonuses(list);
-  bonEditor.style.display = "none";
-  renderBonuses();
-  // reflect immediately in table
-  computed = computeAll();
-  renderSchools();
-});
+  // actions
+  document.getElementById("be-cancel").addEventListener("click", ()=> bonEditor.style.display="none");
+  document.getElementById("be-save").addEventListener("click", ()=>{
+    const name  = (document.getElementById("be-name").value || "").trim();
+    const type  = document.getElementById("be-type").value || "ms";
+    const value = parseInt(document.getElementById("be-value").value || "0", 10);
+    const on    = beOn.value;
+
+    if (!name){ alert("Enter a name."); return; }
+    if (Number.isNaN(value)){ alert("Enter a numeric value."); return; }
+
+    let targets = [];
+    if (on === "schools"){
+      targets = Array.from(document.querySelectorAll("#bonus-schools input[type=checkbox]:checked")).map(c=>c.value);
+      if (!targets.length){ alert("Pick at least one school."); return; }
+    } else if (on === "natures"){
+      targets = Array.from(document.querySelectorAll("#bonus-natures input[type=checkbox]:checked")).map(c=>c.value);
+      if (!targets.length){ alert("Pick at least one nature."); return; }
+    } else if (on === "skills"){
+      targets = Array.from(document.querySelectorAll("#bonus-skills input[type=checkbox]:checked")).map(c=>c.value);
+      if (!targets.length){ alert("Pick at least one skill."); return; }
+    }
+
+    const list = loadBonuses() || [];
+    list.push({ id: `bon_${Date.now()}`, name, type, value, on, targets });
+    saveBonuses(list);
+    bonEditor.style.display = "none";
+    renderBonuses();
+    // reflect immediately in table
+    computed = computeAll();
+    renderSchools();
+  });
 }
+/* =========================
+   Meta Editor (alt name + flavor)
+========================= */
 
 /* =========================
    Meta Editor (alt name + flavor)
@@ -1444,6 +1496,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
   // Controls
   document.getElementById("recalc").addEventListener("click", ()=>{ computed = computeAll(); renderSchools(); });
+  const hideCB = document.getElementById("hide-unpinned"); if(hideCB){ hideCB.addEventListener("change", ()=>renderSchools()); }
   const run = debounce(()=>renderSchools(), 250);
   document.getElementById("filter-name").addEventListener("input", run);
   document.getElementById("filter-min-cat").addEventListener("change", run);

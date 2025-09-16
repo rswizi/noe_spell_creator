@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin — Browse Users' Spell Lists</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .pill{display:inline-block;border:1px solid #444;border-radius:999px;padding:2px 8px;font-size:.85rem}
+    .scrollbox{max-height:65vh;overflow:auto}
+    .card{border:1px solid #222;border-radius:10px;padding:10px;margin:10px 0}
+    .muted{opacity:.8}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Admin — Browse Users' Spell Lists</h1>
+
+  <div class="home-card">
+    <div class="row">
+      <input id="q-owner" placeholder="Owner (user id or email)" />
+      <input id="q-name"  placeholder="List name contains…" />
+      <input id="q-page"  type="number" value="1" min="1" style="width:90px" />
+      <input id="q-limit" type="number" value="50" min="1" max="200" style="width:100px" />
+      <button id="btn-search" class="btn">Search</button>
+      <button id="btn-clear" class="btn btn-secondary">Reset</button>
+      <span id="msg" class="muted" style="margin-left:auto;"></span>
+    </div>
+  </div>
+
+  <div class="home-card">
+    <div id="results" class="scrollbox"></div>
+  </div>
+
+  <div style="margin-top:12px;">
+    <a class="btn btn-secondary" href="portal.html">← Back</a>
+  </div>
+</div>
+
+<script>
+(() => {
+  const API_BASE = "";
+  const $ = s => document.querySelector(s);
+  const token = localStorage.getItem("auth_token") || "";
+  const role  = localStorage.getItem("auth_role") || "";
+
+  const ownerEl = $("#q-owner");
+  const nameEl  = $("#q-name");
+  const pageEl  = $("#q-page");
+  const limitEl = $("#q-limit");
+  const msgEl   = $("#msg");
+  const outEl   = $("#results");
+
+  document.addEventListener("DOMContentLoaded", () => {
+    if (role !== "admin" && role !== "moderator") {
+      alert("Forbidden: admin/moderator only.");
+      location.href = "home.html";
+      return;
+    }
+    $("#btn-search").addEventListener("click", runSearch);
+    $("#btn-clear").addEventListener("click", () => {
+      ownerEl.value = ""; nameEl.value = ""; pageEl.value = 1; limitEl.value = 50;
+      runSearch();
+    });
+    runSearch();
+  });
+
+  async function runSearch() {
+    if (!token) { alert("Please log in."); return; }
+    const qs = new URLSearchParams();
+    if (ownerEl.value.trim()) qs.set("owner", ownerEl.value.trim());
+    if (nameEl.value.trim())  qs.set("name",  nameEl.value.trim());
+    qs.set("page",  pageEl.value || "1");
+    qs.set("limit", limitEl.value || "50");
+
+    msgEl.textContent = "Loading…";
+    try {
+      const r = await fetch(`/admin/spelllists?${qs}`, { headers: { "Authorization": "Bearer " + token }});
+      const j = await r.json();
+      if (j.status !== "success") throw new Error(j.message || "Query failed");
+      render(j.spelllists || [], j.total || 0, j.page || 1, j.limit || 50);
+      msgEl.textContent = `Total ${j.total} • Page ${j.page}`;
+    } catch (e) {
+      msgEl.textContent = e.message || "Load error";
+      outEl.innerHTML = `<p style="color:#e66">Load error.</p>`;
+    }
+  }
+
+  function render(list, total, page, limit) {
+    if (!list.length) { outEl.innerHTML = `<p>No results.</p>`; return; }
+    outEl.innerHTML = list.map(rowHTML).join("");
+  }
+
+  function rowHTML(sl) {
+    const owner = sl.owner || sl.owner_email || "(unknown)";
+    const count = Array.isArray(sl.spells) ? sl.spells.length : (sl.count || 0);
+    const when  = sl.updated_at || sl.created_at || "";
+    return `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+          <div style="min-width:0">
+            <div style="font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              ${esc(sl.name || "Untitled")} <span class="muted">[${esc(sl.id)}]</span>
+            </div>
+            <div class="muted">${esc(owner)} · spells: ${count} · ${esc(when)}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            <a class="btn small" href="spell_list_view.html?list=${encodeURIComponent(sl.id)}&admin=1">Open</a>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+})();
+</script>
+</body>
+</html>
