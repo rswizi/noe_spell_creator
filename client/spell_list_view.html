@@ -672,18 +672,6 @@ function eligibleForSpell(spell){
 let variantsCache = [];
 let bonusesCache = [];
 let spellMetaCache = {};
-  // Server-side pinned schools
-  const pinsServer = Array.isArray(m.pinned_schools) ? m.pinned_schools.map(String) : [];
-  if (pinsServer.length){
-    PINNED = new Set(pinsServer);
-    savePins(PINNED); // keep local in sync
-  } else {
-    // No server pins yet; keep local pins if any
-    if (PINNED && PINNED.size){
-      // Optionally seed server (silent): do not block UI
-      saveListMeta({ pinned_schools: Array.from(PINNED) }).catch(()=>{});
-    }
-  }
   // { [spellId]: { status: "known"|"learnt", alt_name: "", flavor: "" } }
 
 async function fetchListMeta(){
@@ -704,6 +692,17 @@ async function fetchListMeta(){
       flavor : meta.flavor ?? ""
     };
   }
+  // Sync pinned schools with server now that we have `m`
+  try {
+    const pinsServer = Array.isArray(m.pinned_schools) ? m.pinned_schools.map(String) : [];
+    if (pinsServer.length){
+      PINNED = new Set(pinsServer);
+      savePins(PINNED);
+    } else if (PINNED && PINNED.size){
+      // seed server if none present
+      saveListMeta({ pinned_schools: Array.from(PINNED) }).catch(()=>{});
+    }
+  } catch(e) { /* ignore */ }
 }
 
 // Spell meta read: always return UI shape (camelCase)
@@ -884,6 +883,8 @@ function renderSchools(){
   const typeFilter = (document.getElementById("filter-type")?.value || "").toLowerCase(); // NEW
 
   let rows = [...computed];
+
+  const hideUnpinned = !!document.getElementById("hide-unpinned")?.checked;
 
   if (nameFilter) rows = rows.filter(r => lc(displayName(r)).includes(nameFilter));
   if (minCat) rows = rows.filter(r => CAT_ORDER[r.cat.name] >= CAT_ORDER[minCat]);
