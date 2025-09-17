@@ -18,7 +18,6 @@ from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect, recompute_all_spells
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER
-from server.src.modules.allowed_pages import ALLOWED_PAGES
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -42,6 +41,7 @@ CLIENT_DIR = BASE_DIR / "client"
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit", "tools_home", "tools_parse", "tools_edit", "weapons_home", "weapons_parse", "weapons_edit","equipment_home","equipment_parse","equipement_edit","inventory_browse","inventory_create","inventory_view",}
 
 @app.get("/", include_in_schema=False)
 def root():
@@ -250,6 +250,30 @@ async def bulk_create_effects(request: Request):
         logger.exception("bulk_create_effects failed")
         return JSONResponse({"status":"error","message":str(e)}, status_code=500)
 
+
+@app.get("/admin/spelllists")
+def admin_list_spell_lists(request: Request, owner: str | None = Query(default=None), name: str | None = Query(default=None),
+                           page: int = Query(default=1, ge=1), limit: int = Query(default=50, ge=1, le=200)):
+    """
+    Admin/moderator: list all users' spell lists with optional filters.
+    """
+    require_auth(request, ["admin", "moderator"])
+    col = get_col("spell_lists")
+
+    q = {}
+    if owner:
+        q["$or"] = [{"owner": {"$regex": owner, "$options": "i"}}, {"owner_email": {"$regex": owner, "$options": "i"}}]
+    if name:
+        q["name"] = {"$regex": name, "$options": "i"}
+
+    total = col.count_documents(q)
+    cursor = col.find(q, {"_id": 0}).skip((page-1)*limit).limit(limit)
+    items = list(cursor)
+    for it in items:
+        it["count"] = len(it.get("spells") or [])
+    items.sort(key=lambda x: (x.get("owner","").lower(), x.get("name","").lower()))
+
+    return {"status": "success", "spelllists": items, "page": page, "limit": limit, "total": total}
 
 # ---------- Spells ----------
 @app.get("/spells")
@@ -1641,7 +1665,6 @@ def get_spell_list_meta(list_id: str, request: Request):
         "meta": {
             "variants": doc.get("variants", []),
             "bonuses": doc.get("bonuses", []),
-            "pinned_schools": doc.get("pinned_schools", []),
             "spell_meta": doc.get("spell_meta", {})  # {spellId:{status,alt_name,flavor}}
         }
     }
@@ -1659,7 +1682,6 @@ async def put_spell_list_meta(list_id: str, request: Request):
     if "variants" in body:   updates["variants"]   = body.get("variants") or []
     if "bonuses" in body:    updates["bonuses"]    = body.get("bonuses") or []
     if "spell_meta" in body: updates["spell_meta"] = body.get("spell_meta") or {}
-    if "pinned_schools" in body: updates["pinned_schools"] = body.get("pinned_schools") or []
 
     if updates:
         col.update_one({"id": list_id}, {"$set": updates})
@@ -1670,7 +1692,6 @@ async def put_spell_list_meta(list_id: str, request: Request):
         "meta": {
             "variants": doc.get("variants", []),
             "bonuses": doc.get("bonuses", []),
-            "pinned_schools": doc.get("pinned_schools", []),
             "spell_meta": doc.get("spell_meta", {})
         }
     }

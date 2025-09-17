@@ -68,10 +68,24 @@
 
   async function runSearch() {
     if (!token) { alert("Please log in."); return; }
-  }
-    
+    const qs = new URLSearchParams();
+    if (ownerEl.value.trim()) qs.set("owner", ownerEl.value.trim());
+    if (nameEl.value.trim())  qs.set("name",  nameEl.value.trim());
+    qs.set("page",  pageEl.value || "1");
+    qs.set("limit", limitEl.value || "50");
 
-  
+    msgEl.textContent = "Loading…";
+    try {
+      const r = await fetch(`/admin/spelllists?${qs}`, { headers: { "Authorization": "Bearer " + token }});
+      const j = await r.json();
+      if (j.status !== "success") throw new Error(j.message || "Query failed");
+      render(j.spelllists || [], j.total || 0, j.page || 1, j.limit || 50);
+      msgEl.textContent = `Total ${j.total} • Page ${j.page}`;
+    } catch (e) {
+      msgEl.textContent = e.message || "Load error";
+      outEl.innerHTML = `<p style="color:#e66">Load error.</p>`;
+    }
+  }
 
   function render(list, total, page, limit) {
     if (!list.length) { outEl.innerHTML = `<p>No results.</p>`; return; }
@@ -87,12 +101,12 @@
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
           <div style="min-width:0">
             <div style="font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              ${esc(sl.name || "Untitled")} <span class="muted">[${esc(sl.id || sl._id || "")}]</span>
+              ${esc(sl.name || "Untitled")} <span class="muted">[${esc(sl.id)}]</span>
             </div>
             <div class="muted">${esc(owner)} · spells: ${count} · ${esc(when)}</div>
           </div>
           <div style="display:flex;gap:8px;flex-shrink:0">
-            <a class="btn small" href="spell_list_view.html?id=${encodeURIComponent(sl.id || sl._id || "")}&admin=1">Open</a>
+            <a class="btn small" href="spell_list_view.html?list=${encodeURIComponent(sl.id)}&admin=1">Open</a>
           </div>
         </div>
       </div>`;
