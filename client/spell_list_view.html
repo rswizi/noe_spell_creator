@@ -133,7 +133,7 @@
         <select id="filter-min-cat">
           <option value="">Min. Category: Any</option>
         </select>
-        <select id="filter-type">
+        <label class="mini" style="display:flex; align-items:center; gap:6px; margin-right:8px;"><input type="checkbox" id="hide-unpinned"> Hide unpinned</label><select id="filter-type">
           <option value="">Type: Any</option>
           <option value="simple">Simple</option>
           <option value="complex">Complex</option>
@@ -871,6 +871,8 @@ function renderSchools(){
            : true;
     });
   }
+
+  if (hideUnpinned) rows = rows.filter(r => isPinned(r.school.id));
 
   if (sortBy === "name_asc") {
     rows.sort((a,b)=> displayName(a).localeCompare(displayName(b)));
