@@ -58,7 +58,7 @@
         <div class="row">
           <input id="sl-name" type="text" placeholder="Spell list name..." style="flex:1;min-width:240px;">
           <button class="btn" id="open-create">Configure Initial Values</button>
-          <a class="btn btn-full" href="spell_list_admin.html">🌟 Admin View</a>
+          <a id="admin-view-btn" class="btn btn-full" href="spell_list_admin.html" style="display:none">🌟 Admin View</a>
         </div>
       </div>
 
@@ -186,10 +186,12 @@
       document.getElementById("chip-name").textContent = `${username} (${role})`;
       document.getElementById("user-chip").style.display = "flex";
       document.getElementById("open-login").style.display = "none";
+      const av = document.getElementById("admin-view-btn"); if (av) { av.style.display = (role==="admin"||role==="moderator")? "inline-block":"none"; }
     }
     function setLoggedOutUI() {
       document.getElementById("user-chip").style.display = "none";
       document.getElementById("open-login").style.display = "inline-block";
+      const av = document.getElementById("admin-view-btn"); if (av) av.style.display = "none";
     }
 
     const createModal = document.getElementById("create-modal");

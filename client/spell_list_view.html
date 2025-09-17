@@ -1438,6 +1438,28 @@ async function continueExport(){
 function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
 document.addEventListener("DOMContentLoaded", async ()=>{
+  // Delete list (with confirm + redirect)
+  const delBtn = document.getElementById("delete-list");
+  if (delBtn){
+    delBtn.addEventListener("click", async ()=>{
+      if (!confirm("Delete this spell list? This cannot be undone.")) return;
+      try{
+        const res = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok){
+          const msg = await res.text();
+          alert("Delete failed: " + (msg || res.status));
+          return;
+        }
+        location.href = "spell_list_home.html";
+      }catch(err){
+        alert("Delete failed: " + err.message);
+      }
+    });
+  }
+
   // token & list
   token = localStorage.getItem("auth_token") || "";
   listId = qs("id");
@@ -1621,6 +1643,17 @@ document.addEventListener("DOMContentLoaded", async ()=>{
    Tiny helpers used by export fields
 ========================= */
 window.copyTextById = copyTextById;
+
+// Delegated clicks for dynamic elements
+document.addEventListener("click", (e)=>{
+  const pinBtn = e.target && (e.target.closest ? e.target.closest("[data-pin]") : null);
+  if (pinBtn){
+    e.preventDefault();
+    const sid = pinBtn.getAttribute("data-pin");
+    if (sid) togglePin(sid);
+  }
+});
+
 
 </script>
 </body>
