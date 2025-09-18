@@ -87,20 +87,19 @@
   const token = localStorage.getItem("auth_token") || "";
   const role  = localStorage.getItem("auth_role") || "";
 
+  // UI elements
 
-// Caches for details & type computation
+// ---- Caches for details & type computation ----
 const SCHOOL_BY_ID = {};
 const EFFECTS_BY_ID = {};
-const DETAIL_CACHE = {}; // id -> { spell, costs }
+const DETAILS_CACHE = {}; // id -> { spell, costs }
 
 async function loadEffects() {
   try {
     const res = await fetch(`${API_BASE}/effects`);
     const data = await res.json();
     const list = data.effects || [];
-    for (const e of list) {
-      EFFECTS_BY_ID[String(e.id)] = e;
-    }
+    for (const e of list) EFFECTS_BY_ID[String(e.id)] = e;
   } catch (e) {
     console.error("loadEffects error:", e);
   }
@@ -110,9 +109,9 @@ function computeKnobTypesFromEffects(effectIds) {
   const TYPE_ORDER = { A:1, B:2, C:3 };
   let rBest = "A", aBest = "A";
   for (const eid of (effectIds || [])) {
-    const e = EFFECTS_BY_ID[String(eid)] || null;
+    const e = EFFECTS_BY_ID[String(eid)];
     const sid = e ? (e.school || e.school_id || "") : "";
-    const sch = SCHOOL_BY_ID[String(sid)] || null;
+    const sch = SCHOOL_BY_ID[String(sid)];
     const r = String(sch?.range_type || "A").toUpperCase();
     const a = String(sch?.aoe_type   || "A").toUpperCase();
     if (TYPE_ORDER[r] > TYPE_ORDER[rBest]) rBest = r;
@@ -122,22 +121,20 @@ function computeKnobTypesFromEffects(effectIds) {
 }
 
 async function fetchCostsForSpell(sp) {
-  // Build payload for /costs using the spell values and derived knob types
   const effIds = (sp.effects || []).map(String);
   const { range_type, aoe_type } = computeKnobTypesFromEffects(effIds);
-  const payload = {
-    activation: sp.activation,
-    range: sp.range,
-    aoe: sp.aoe,
-    duration: sp.duration,
-    effects: effIds,
-    range_type, aoe_type,
-  };
   try {
     const r = await fetch(`${API_BASE}/costs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        activation: sp.activation,
+        range: sp.range,
+        aoe: sp.aoe,
+        duration: sp.duration,
+        effects: effIds,
+        range_type, aoe_type
+      })
     });
     return await r.json();
   } catch (e) {
@@ -146,31 +143,16 @@ async function fetchCostsForSpell(sp) {
   }
 }
 
-async function ensureSpellDetails(id) {
-  if (DETAIL_CACHE[id]) return DETAIL_CACHE[id];
-  try {
-    const r = await fetch(`${API_BASE}/spells/${encodeURIComponent(id)}`);
-    const j = await r.json();
-    const sp = j.spell || j;
-    const costs = await fetchCostsForSpell(sp);
-    const pack = { spell: sp, costs };
-    DETAIL_CACHE[id] = pack;
-    return pack;
-  } catch (e) {
-    console.error("ensureSpellDetails error:", e);
-    return null;
-  }
-}
-
-function renderSpellDetailsHTML(id, sp, costs) {
-  // Effects as list with counts
+function renderSpellDetailsHTML(sp, costs) {
   const counts = {};
   (sp.effects || []).forEach(eid => { const k = String(eid); counts[k] = (counts[k]||0) + 1; });
   const effectLines = Object.entries(counts).map(([eid, n])=>{
     const e = EFFECTS_BY_ID[String(eid)] || { name: `[${eid}]` };
     const mult = n > 1 ? ` [x${n}]` : "";
-    return `<div><b>${escapeHtml(e.name || String(eid))}${mult}</b>${e.description ? `: ${escapeHtml(e.description)}` : ""}</div>`;
+    const desc = e.description ? `: ${escapeHtml(e.description)}` : "";
+    return `<div><b>${escapeHtml(e.name || String(eid))}${mult}</b>${desc}</div>`;
   }).join("");
+
   const mp = costs?.mp_cost ?? sp.mp_cost ?? "—";
   const en = costs?.en_cost ?? sp.en_cost ?? "—";
   const cat = costs?.category || sp.category || "—";
@@ -195,8 +177,39 @@ function renderSpellDetailsHTML(id, sp, costs) {
   `;
 }
 
+window.toggleDetails = async function(id) {
+  const holder = document.getElementById(`details-${id}`);
+  if (!holder) return;
 
-  // UI elements
+  // Load details only once
+  if (!holder.getAttribute("data-loaded")) {
+    try {
+      const r = await fetch(`${API_BASE}/spells/${encodeURIComponent(id)}`);
+      const j = await r.json();
+      const sp = j.spell || j;
+      const costs = await fetchCostsForSpell(sp);
+      DETAILS_CACHE[id] = { spell: sp, costs };
+      holder.innerHTML = renderSpellDetailsHTML(sp, costs);
+      holder.setAttribute("data-loaded", "1");
+
+      // Set ❓ flag if mp_to_next_category >= 4
+      const mpNext = (costs && typeof costs.mp_to_next_category !== "undefined")
+        ? Number(costs.mp_to_next_category) : NaN;
+      if (!isNaN(mpNext) && mpNext >= 4) {
+        const flag = document.getElementById(`mpflag-${id}`);
+        if (flag) flag.style.display = "inline";
+      }
+    } catch (e) {
+      console.error("toggleDetails load error:", e);
+      holder.innerHTML = `<div class="tiny" style="color:#ff8080;margin-top:6px;">Failed to load details.</div>`;
+      holder.setAttribute("data-loaded", "1");
+    }
+  }
+
+  // Toggle
+  holder.style.display = (holder.style.display === "none" || !holder.style.display) ? "block" : "none";
+};
+
   const resultsEl  = $("#results");
   const nameEl     = $("#filter-name");
   const categoryEl = $("#filter-category");
@@ -245,40 +258,6 @@ function renderSpellDetailsHTML(id, sp, costs) {
     });
 
     delFlagBtn.addEventListener("click", deleteFlagged);
-
-
-// Delegated click for details
-resultsEl.addEventListener("click", async (e) => {
-  const t = e.target.closest("[data-toggle-details]");
-  if (!t) return;
-  const id = t.getAttribute("data-toggle-details");
-  const holder = document.getElementById(`details-${id}`);
-  if (!holder) return;
-
-  // Load once
-  if (!holder.getAttribute("data-loaded")) {
-    const pack = await ensureSpellDetails(id);
-    if (pack) {
-      holder.innerHTML = renderSpellDetailsHTML(id, pack.spell, pack.costs);
-      holder.setAttribute("data-loaded", "1");
-
-      // Set the ❓ flag if mp_to_next_category >= 4
-      const mpNext = (pack.costs && typeof pack.costs.mp_to_next_category !== "undefined")
-        ? Number(pack.costs.mp_to_next_category) : NaN;
-      if (!isNaN(mpNext) && mpNext >= 4) {
-        const flag = document.getElementById(`mpflag-${id}`);
-        if (flag) flag.style.display = "inline";
-      }
-    } else {
-      holder.innerHTML = `<div class="tiny" style="color:#ff8080;margin-top:6px;">Failed to load details.</div>`;
-      holder.setAttribute("data-loaded", "1");
-    }
-  }
-
-  // Toggle visibility
-  holder.style.display = (holder.style.display === "none" || !holder.style.display) ? "block" : "none";
-});
-
 
     // NEW: recompute-all handler
     recomputeBtn.addEventListener("click", async () => {
@@ -356,13 +335,7 @@ resultsEl.addEventListener("click", async (e) => {
       const res = await fetch(`${API_BASE}/schools`);
       const data = await res.json();
       if (!data || !Array.isArray(data.schools)) return;
-      for (const s of data.schools) {
-        SCHOOL_BY_ID[String(s.id)] = s;
-        const opt = document.createElement("option");
-        opt.value = s.id;
-        opt.textContent = `${s.name} [${s.id}]`;
-        schoolEl.appendChild(opt);
-      }
+      for (const s of data.schools) { SCHOOL_BY_ID[String(s.id)] = s; const opt = document.createElement("option"); opt.value = s.id; opt.textContent = `${s.name} [${s.id}]`; schoolEl.appendChild(opt); }
     } catch (e) {
       console.error("loadSchools error:", e);
     }
@@ -430,9 +403,11 @@ resultsEl.addEventListener("click", async (e) => {
     return `
       <div class="effect-entry" style="justify-content:space-between; align-items:flex-start;">
         <div style="flex:1; min-width:0;">
-          <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          <div class="spell-title" onclick="toggleDetails('${s.id}')" style="font-weight:bold; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            <span class="mpnext-flag" id="mpflag-${s.id}" style="margin-right:6px; display:none;">❓</span>
             ${escapeHtml(s.name || "Untitled")} <span style="opacity:.7">[${s.id}]</span>
           </div>
+          <div id="details-${s.id}" class="spell-details" style="display:none;"></div>
           <div style="opacity:.8;font-size:.95rem">${escapeHtml(meta)}</div>
           <div style="opacity:.7;font-size:.9rem">Schools: ${escapeHtml(schoolNames)}</div>
           <div style="margin-top:6px;"><span class="${pillClass}">${status.toUpperCase()}</span></div>
