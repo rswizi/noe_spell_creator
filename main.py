@@ -11,6 +11,19 @@ from fastapi.staticfiles import StaticFiles
 from pymongo.errors import DuplicateKeyError
 
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
+# --- helper: extended signature that preserves backward compatibility ---
+def spell_sig_with_multiplicity(activation, range_val, aoe_val, duration, effect_ids):
+    # Build a signature identical to spell_sig for the common case (no duplicates),
+    # but append a stable multiplicity suffix when any effect appears more than once.
+    base = spell_sig(activation, range_val, aoe_val, duration, effect_ids)
+    from collections import Counter
+    c = Counter(effect_ids or [])
+    mult_items = sorted([(eid, cnt) for eid, cnt in c.items() if cnt > 1], key=lambda x: str(x[0]))
+    if not mult_items:
+        return base
+    mul = "mul=" + ",".join([f"{eid}x{cnt}" for eid, cnt in mult_items])
+    return f"{base}|{mul}"
+
 
 from server.src.modules.apotheosis_helpers import compute_apotheosis_stats, _can_edit_apotheosis
 from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS, find_user, require_auth, make_token, verify_password, get_auth_token, normalize_email,_sha256
@@ -251,30 +264,6 @@ async def bulk_create_effects(request: Request):
         return JSONResponse({"status":"error","message":str(e)}, status_code=500)
 
 
-@app.get("/admin/spelllists")
-def admin_list_spell_lists(request: Request, owner: str | None = Query(default=None), name: str | None = Query(default=None),
-                           page: int = Query(default=1, ge=1), limit: int = Query(default=50, ge=1, le=200)):
-    """
-    Admin/moderator: list all users' spell lists with optional filters.
-    """
-    require_auth(request, ["admin", "moderator"])
-    col = get_col("spell_lists")
-
-    q = {}
-    if owner:
-        q["$or"] = [{"owner": {"$regex": owner, "$options": "i"}}, {"owner_email": {"$regex": owner, "$options": "i"}}]
-    if name:
-        q["name"] = {"$regex": name, "$options": "i"}
-
-    total = col.count_documents(q)
-    cursor = col.find(q, {"_id": 0}).skip((page-1)*limit).limit(limit)
-    items = list(cursor)
-    for it in items:
-        it["count"] = len(it.get("spells") or [])
-    items.sort(key=lambda x: (x.get("owner","").lower(), x.get("name","").lower()))
-
-    return {"status": "success", "spelllists": items, "page": page, "limit": limit, "total": total}
-
 # ---------- Spells ----------
 @app.get("/spells")
 def list_spells(request: Request):
@@ -368,13 +357,7 @@ async def update_spell(spell_id: str, request: Request):
             return JSONResponse({"status":"error","message":"duration must be an integer"}, status_code=400)
 
         raw_effects = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
-
-        effect_ids = []
-        seen = set()
-        for eid in raw_effects:
-            if eid not in seen:
-                seen.add(eid)
-                effect_ids.append(eid)
+        effect_ids = list(raw_effects)  # allow duplicates to support stacking
                 
         missing = [eid for eid in effect_ids if not get_col("effects").find_one({"id": eid}, {"_id": 1})]
         if missing:
@@ -469,13 +452,7 @@ async def submit_spell(request: Request):
             return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
 
         raw_effects = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
-
-        effect_ids = []
-        seen = set()
-        for eid in raw_effects:
-            if eid not in seen:
-                seen.add(eid)
-                effect_ids.append(eid)
+        effect_ids = list(raw_effects)  # allow duplicates to support stacking
     
         if not effect_ids:
             return JSONResponse({"status": "error", "message": "At least one effect is required."}, status_code=400)
@@ -486,7 +463,7 @@ async def submit_spell(request: Request):
 
         cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
 
-        sig = spell_sig(activation, range_val, aoe_val, duration, effect_ids)
+        sig = spell_sig_with_multiplicity(activation, range_val, aoe_val, duration, effect_ids)
 
         conflict = get_col("spells").find_one({"sig_v1": sig}, {"_id": 0, "id": 1, "name": 1})
         if conflict:
@@ -661,7 +638,7 @@ def backfill_spell_sigs(request: Request):
     for sp in db.spells.find({}, {"_id":1,"activation":1,"range":1,"aoe":1,"duration":1,"effects":1,"sig_v1":1}):
         if sp.get("sig_v1"):
             continue
-        sig = spell_sig(sp.get("activation",""), sp.get("range",0), sp.get("aoe",""), sp.get("duration",0),
+        sig = spell_sig_with_multiplicity(sp.get("activation",""), sp.get("range",0), sp.get("aoe",""), sp.get("duration",0),
                         [str(e) for e in (sp.get("effects") or [])])
         db.spells.update_one({"_id": sp["_id"]}, {"$set": {"sig_v1": sig}})
         updated += 1

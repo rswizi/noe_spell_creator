@@ -17,7 +17,7 @@
 </head>
 <body>
   <div style="max-width:700px;margin:16px auto 0;">
-    <a class="btn btn-secondary" href="#" id="back-home">← Back Home</a>
+    <a class="btn btn-secondary" href="#" id="back-home">←</a>
   </div>
 
   <h1>Create a Spell</h1>
@@ -488,11 +488,26 @@ function clearSpellForm() {
 document.addEventListener("DOMContentLoaded", async () => {
   // nav
   $("#back-home").addEventListener("click", (e) => {
-    e.preventDefault();
-    if (confirm("Are you sure? All unsaved modifications will be lost.")) {
-      location.href = "home.html";
+  e.preventDefault();
+  if (!confirm("Are you sure? All unsaved modifications will be lost.")) return;
+
+  const qs = new URLSearchParams(location.search);
+  const editId   = qs.get("edit_id");
+  // Optional override: pass ?from=database.html (or any page) when linking here
+  const returnTo = qs.get("from") || qs.get("return") || "database.html";
+
+  if (editId) {
+    // If we navigated here from your DB page, just go back; otherwise go to the DB page directly.
+    if (document.referrer && new URL(document.referrer).origin === location.origin) {
+      history.back();
+    } else {
+      location.href = returnTo;
     }
-  });
+  } else {
+    location.href = "home.html";
+  }
+});
+
 
   // load data
   await loadSchools();
