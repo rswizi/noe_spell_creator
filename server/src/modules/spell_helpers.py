@@ -109,12 +109,8 @@ def compute_spell_costs(
     range_type: str | None = None,
     aoe_type: str | None = None,
 ) -> dict:
-    """
-    Compute total MP/EN and category for a spell.
-    Defensive normalization: effect_ids are order-deduped here so all callers are safe.
-    """
-    # Defensive sanitize: order-preserving dedupe of effect ids
-    effect_ids = _unique_preserve([str(e).strip() for e in (effect_ids or []) if str(e).strip()])
+    effect_ids = [str(e).strip() for e in (effect_ids or []) if str(e).strip()]
+
 
     # 1) Decide cost table types
     if not range_type or range_type.upper() not in ("A", "B", "C"):
@@ -224,7 +220,7 @@ def _recompute_spells_for_school(school_id: str) -> tuple[str, int]:
             int(sp.get("range",0)),
             sp.get("aoe","A Square"),
             int(sp.get("duration",1)),
-            _unique_preserve([str(x) for x in (sp.get("effects") or [])])
+            [str(x) for x in (sp.get("effects") or [])]
         )
 
         new_mp, new_en, new_cat = cc["mp_cost"], cc["en_cost"], cc["category"]
@@ -289,12 +285,6 @@ def _recompute_spells_for_effect(effect_id: str) -> tuple[str, int]:
     return ("\n".join(lines), changed)
 
 def recompute_all_spells() -> Tuple[str, int, int]:
-    """
-    Recalculate costs/category for ALL spells.
-    - Persistently dedupes each spell's `effects` list before recomputing
-    - Marks log lines with '(deduped effects)' when a list was repaired
-    Returns (note_text, changed_count, total_count).
-    """
     sp_col = get_col("spells")
     spells = list(sp_col.find({}, {"_id": 0}))
     total = len(spells)
@@ -306,15 +296,9 @@ def recompute_all_spells() -> Tuple[str, int, int]:
         old_en = int(sp.get("en_cost", 0))
         old_cat = sp.get("category", "")
 
-        # Normalize the effects list and persist if it changed
         old_list = [str(x) for x in (sp.get("effects") or [])]
-        eff_list = _unique_preserve(old_list)
-        dedup_note = ""
-        if eff_list != old_list:
-            sp_col.update_one({"id": sp["id"]}, {"$set": {"effects": eff_list}})
-            dedup_note = " (deduped effects)"
+        eff_list = [str(x) for x in (sp.get("effects") or [])]
 
-        # Recompute using the cleaned list
         cc = compute_spell_costs(
             sp.get("activation", "Action"),
             int(sp.get("range", 0)),
