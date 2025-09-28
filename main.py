@@ -2631,7 +2631,15 @@ async def moderator_assign_spell(spell_id: str, request: Request):
     return {"status":"success","id": spell_id, "creator": target_user}
 
 @app.get("/admin/logs")
-def admin_logs(request: Request, user: str = "", action: str = "", from_: str = "", to: str = "", limit: int = 200):
+
+def admin_logs(
+    request: Request,
+    user: str = "",
+    action: str = "",
+    from_: str = Query("", alias="from"),
+    to: str = "",
+    limit: int = 200
+):
     admin_user, _ = require_auth(request, roles=["admin"])
     q = {}
     if user:
