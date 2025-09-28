@@ -34,4 +34,7 @@ ALLOWED_PAGES = {"home",
 "inventory_browse",
 "inventory_create",
 "inventory_view",
-"spell_list_admin",}
+"spell_list_admin",
+"moderator_assign",
+"my_spells",
+"admin_logs",}

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Spell Creator — My Spells</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .entry{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border:1px solid #222;border-radius:10px;padding:10px;margin:10px 0}
+    .pill{display:inline-block;border:1px solid #444;border-radius:999px;padding:2px 8px;font-size:.85rem}
+    .pill-green{background:#123d12;border-color:#1f7a1f}
+    .pill-yellow{background:#3d3a12;border-color:#a88f1e}
+    .pill-red{background:#3d1212;border-color:#7a1f1f}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>My Spells</h1>
+    <div class="home-card" style="margin-bottom:18px;">
+      <div class="filter-bar">
+        <input id="filter-name" type="text" placeholder="Filter by name..." />
+        <select id="filter-category">
+          <option value="">All Categories</option>
+          <option>Novice</option><option>Apprentice</option><option>Disciple</option>
+          <option>Adept</option><option>Mage</option><option>Magister</option>
+          <option>High Mage</option><option>Master</option><option>Grand Master</option>
+          <option>Archmage</option><option>Supreme Archmage</option><option>Avant-garde</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;margin-left:10px;">
+          <input type="checkbox" id="show-approved" /> <span>Show approved (green)</span>
+        </label>
+        <span style="flex:1"></span>
+        <button id="clear-filters">Reset</button>
+      </div>
+    </div>
+
+    <div class="home-card">
+      <div id="results" class="scrollbox"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const API_BASE = "";
+  const $  = (s) => document.querySelector(s);
+  const resultsEl  = $("#results");
+  const nameEl     = $("#filter-name");
+  const categoryEl = $("#filter-category");
+  const showApprovedEl = $("#show-approved");
+  const clearBtn   = $("#clear-filters");
+
+  const token = localStorage.getItem("auth_token") || "";
+  const username = localStorage.getItem("auth_username") || "";
+
+  document.addEventListener("DOMContentLoaded", () => {
+    if (!token) { alert("Log in required."); window.location.href="home.html"; return; }
+    init();
+  });
+
+  async function init() {
+    await fetchSpells();
+    const run = debounce(fetchSpells, 300);
+    nameEl.addEventListener("input", run);
+    categoryEl.addEventListener("change", run);
+    showApprovedEl.addEventListener("change", fetchSpells);
+    clearBtn.addEventListener("click", () => {
+      nameEl.value = "";
+      categoryEl.value = "";
+      showApprovedEl.checked = false;
+      fetchSpells();
+    });
+  }
+
+  function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+  function buildQuery() {
+    const params = new URLSearchParams();
+    const name = nameEl.value.trim();
+    const cat  = categoryEl.value;
+    if (name) params.set("name", name);
+    if (cat)  params.set("category", cat);
+    params.set("creator", "self");
+    if (!showApprovedEl.checked) params.set("status", "yellow,red"); // only not green by default
+    return params.toString();
+  }
+
+  async function fetchSpells() {
+    const q = buildQuery();
+    const url = `${API_BASE}/spells?${q}`;
+    try {
+      const res = await fetch(url, { headers: authHeaders() });
+      const data = await res.json();
+      renderList(data.spells || []);
+    } catch {
+      resultsEl.innerHTML = "<p>Failed to load.</p>";
+    }
+  }
+
+  function authHeaders(){ return token ? {"Authorization": "Bearer " + token} : {}; }
+
+  function spellRow(s) {
+    const status = (s.status || "yellow");
+    const pillClass =
+      status === "green" ? "pill pill-green" :
+      status === "red"   ? "pill pill-red"   :
+                           "pill pill-yellow";
+    const canEdit = status !== "green";
+    const schoolNames = (s.schools || []).map(sc => sc.name).join(", ") || "—";
+    const meta = [s.category||"—", s.activation??"—", s.range??"—", s.aoe??"—", "dur " + (s.duration??"—")].join(" · ");
+
+    const right = canEdit
+      ? `<button class="btn" onclick="editSpell('${s.id}')">Edit</button>`
+      : `<button class="btn" onclick="cloneFromTemplate('${s.id}')">Load as Template</button>`;
+
+    return `
+      <div class="entry">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${escapeHtml(s.name || "Untitled")} <span style="opacity:.7">[${s.id}]</span>
+          </div>
+          <div style="opacity:.8;font-size:.95rem">${escapeHtml(meta)}</div>
+          <div style="opacity:.7;font-size:.9rem">Schools: ${escapeHtml(schoolNames)}</div>
+          <div style="margin-top:6px;"><span class="${pillClass}">${status.toUpperCase()}</span></div>
+        </div>
+        <div>${right}</div>
+      </div>
+    `;
+  }
+
+  function renderList(list) {
+    if (!list.length){ resultsEl.innerHTML = "<p>No spells yet.</p>"; return; }
+    resultsEl.innerHTML = list.map(spellRow).join("");
+  }
+
+  function escapeHtml(str){ return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
+
+  window.editSpell = function(id){
+    window.location.href = "index.html?edit_id=" + encodeURIComponent(id);
+  };
+  window.cloneFromTemplate = function(id){
+    window.location.href = "index.html?spell_id=" + encodeURIComponent(id) + "&clone=1";
+  };
+})();
+</script>
+</body>
+</html>

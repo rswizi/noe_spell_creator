@@ -128,7 +128,15 @@
       <div class="row" style="margin-bottom:8px;">
         <h2 style="margin:0;">School Categories</h2>
         <span class="spacer"></span>
-        <input id="filter-name" type="text" placeholder="Filter by school name…" style="min-width:220px;">
+        <input id="filter-name"
+       name="sl_filter_name"
+       type="text"
+       placeholder="Filter by school name…"
+       autocomplete="off"
+       autocapitalize="none"
+       autocorrect="off"
+       inputmode="search"
+       style="min-width:220px;">
         <select id="filter-min-cat">
           <option value="">Min. Category: Any</option>
         </select>
@@ -1563,6 +1571,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   document.getElementById("filter-min-cat").addEventListener("change", run);
   document.getElementById("sort-by").addEventListener("change", run);
   document.getElementById("filter-type").addEventListener("change", run);
+  document.getElementById("hide-unpinned").addEventListener("change", ()=>renderSchools());
 
 
   // Add Spells modal open/close

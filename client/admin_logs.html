@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Spell Creator — Logs</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #333;padding:6px;vertical-align:top}
+    th{background:#111;position:sticky;top:0}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:.9rem}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Admin — Logs</h1>
+
+    <div class="home-card">
+      <div class="controls">
+        <input id="filter-user" type="text" placeholder="User…" />
+        <input id="filter-action" type="text" placeholder="Action (e.g. spell.create)…" />
+        <input id="filter-from" type="datetime-local" />
+        <input id="filter-to" type="datetime-local" />
+        <button id="btn-search" class="btn">Search</button>
+        <button id="btn-clear" class="btn btn-secondary">Reset</button>
+      </div>
+      <div class="scrollbox" style="max-height:70vh">
+        <table id="log-table">
+          <thead>
+            <tr><th>Time (UTC)</th><th>User</th><th>Action</th><th>Spell/Effect</th><th>Details</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const API_BASE = "";
+  const $  = (s) => document.querySelector(s);
+  const token = localStorage.getItem("auth_token") || "";
+  const role  = localStorage.getItem("auth_role") || "";
+  if (!token || role !== "admin") { alert("Admin only."); window.location.href="home.html"; }
+
+  const userEl = $("#filter-user");
+  const actionEl = $("#filter-action");
+  const fromEl = $("#filter-from");
+  const toEl = $("#filter-to");
+  const tbody = document.querySelector("#log-table tbody");
+
+  function authHeaders(){ return token ? {"Authorization": "Bearer " + token} : {}; }
+
+  async function loadLogs(){
+    const p = new URLSearchParams();
+    const user = userEl.value.trim();
+    const action = actionEl.value.trim();
+    const from = fromEl.value;
+    const to = toEl.value;
+    if (user) p.set("user", user);
+    if (action) p.set("action", action);
+    if (from) p.set("from", new Date(from).toISOString());
+    if (to) p.set("to", new Date(to).toISOString());
+
+    const res = await fetch(`${API_BASE}/admin/logs?${p}`, { headers: authHeaders() });
+    const j = await res.json();
+    if (j.status !== "success") { alert(j.message || "Failed to load logs"); return; }
+    render(j.items || []);
+  }
+
+  function render(items){
+    tbody.innerHTML = items.map(row => {
+      const ts = row.ts || row.time || row.timestamp;
+      const when = ts ? new Date(ts).toISOString() : "";
+      const obj = row.details || {};
+      const spellRef = row.spell_id || row.effect_id || "";
+      return `<tr>
+        <td class="mono">${when}</td>
+        <td class="mono">${escapeHtml(row.user || "")}</td>
+        <td class="mono">${escapeHtml(row.action || "")}</td>
+        <td class="mono">${escapeHtml(spellRef)}</td>
+        <td class="mono" style="max-width:520px;white-space:pre-wrap;">${escapeHtml(JSON.stringify(obj, null, 2))}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function escapeHtml(str){ return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    $("#btn-search").addEventListener("click", loadLogs);
+    $("#btn-clear").addEventListener("click", () => {
+      userEl.value = ""; actionEl.value = ""; fromEl.value = ""; toEl.value = "";
+      loadLogs();
+    });
+    loadLogs();
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Spell Creator — Moderator Assign</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .entry{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid #222;border-radius:10px;padding:10px;margin:10px 0}
+    .creator{opacity:.8}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Moderator — Assign Spells</h1>
+    <div class="home-card" style="margin-bottom:18px;">
+      <div class="row">
+        <input id="filter-name" type="text" placeholder="Filter by name..." />
+        <select id="filter-status">
+          <option value="">All Tags</option>
+          <option value="yellow" selected>Review</option>
+          <option value="red">Flagged</option>
+          <option value="green">Approved</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="only-unassigned" checked /> <span>Only unassigned</span>
+        </label>
+        <span style="flex:1"></span>
+        <button id="refresh">Refresh</button>
+      </div>
+    </div>
+
+    <div class="home-card">
+      <div id="results" class="scrollbox"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="home.html">← Back Home</a>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const API_BASE = "";
+  const $  = (s) => document.querySelector(s);
+
+  const token = localStorage.getItem("auth_token") || "";
+  const role  = localStorage.getItem("auth_role") || "";
+  if (!token || (role !== "moderator" && role !== "admin")) {
+    alert("Moderator or Admin required.");
+    window.location.href = "home.html";
+  }
+
+  const nameEl = $("#filter-name");
+  const statusEl = $("#filter-status");
+  const unassignedEl = $("#only-unassigned");
+  const resultsEl = $("#results");
+
+  async function fetchUsers(){
+    const res = await fetch(`${API_BASE}/users`, { headers: authHeaders() });
+    const j = await res.json();
+    return j.users || [];
+  }
+
+  function authHeaders(){ return token ? {"Authorization":"Bearer " + token} : {}; }
+
+  function buildQuery(){
+    const p = new URLSearchParams();
+    const name = nameEl.value.trim();
+    const st = statusEl.value;
+    if (name) p.set("name", name);
+    if (st) p.set("status", st);
+    if (unassignedEl.checked) p.set("unassigned", "1");
+    return p.toString();
+  }
+
+  async function fetchSpells(){
+    const q = buildQuery();
+    const res = await fetch(`${API_BASE}/moderator/spells?${q}`, { headers: authHeaders() });
+    const j = await res.json();
+    render(j.spells || [], await fetchUsers());
+  }
+
+  function render(spells, users){
+    if (!spells.length){ resultsEl.innerHTML = "<p>No spells.</p>"; return; }
+    const userOpts = users.map(u => `<option value="${u.username}">${u.username} (${u.role})</option>`).join("");
+    resultsEl.innerHTML = spells.map(s => {
+      const creator = s.creator ? `<span class="creator">by ${s.creator}</span>` : `<span class="creator" style="color:#ffdf7a">unassigned</span>`;
+      return `
+        <div class="entry">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(s.name || "Untitled")} <span style="opacity:.7">[${s.id}]</span></div>
+            ${creator}
+          </div>
+          <div>
+            <select id="sel-${s.id}" style="min-width:200px">
+              <option value="">-- choose creator --</option>
+              ${userOpts}
+            </select>
+            <button class="btn" onclick="assign('${s.id}')">Assign</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function escapeHtml(str){ return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
+
+  window.assign = async function(id){
+    const select = document.getElementById("sel-" + id);
+    const username = select.value.trim();
+    if (!username){ alert("Choose a user."); return; }
+    const res = await fetch(`${API_BASE}/moderator/spells/${encodeURIComponent(id)}/assign`, {
+      method: "PUT",
+      headers: { "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify({ username })
+    });
+    const j = await res.json();
+    if (j.status !== "success") { alert(j.message || "Assign failed"); return; }
+    await fetchSpells();
+  };
+
+  document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("refresh").addEventListener("click", fetchSpells);
+    nameEl.addEventListener("input", debounce(fetchSpells, 250));
+    statusEl.addEventListener("change", fetchSpells);
+    unassignedEl.addEventListener("change", fetchSpells);
+    fetchSpells();
+  });
+
+  function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+})();
+</script>
+</body>
+</html>

@@ -11,19 +11,6 @@ from fastapi.staticfiles import StaticFiles
 from pymongo.errors import DuplicateKeyError
 
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
-# --- helper: extended signature that preserves backward compatibility ---
-def spell_sig_with_multiplicity(activation, range_val, aoe_val, duration, effect_ids):
-    # Build a signature identical to spell_sig for the common case (no duplicates),
-    # but append a stable multiplicity suffix when any effect appears more than once.
-    base = spell_sig(activation, range_val, aoe_val, duration, effect_ids)
-    from collections import Counter
-    c = Counter(effect_ids or [])
-    mult_items = sorted([(eid, cnt) for eid, cnt in c.items() if cnt > 1], key=lambda x: str(x[0]))
-    if not mult_items:
-        return base
-    mul = "mul=" + ",".join([f"{eid}x{cnt}" for eid, cnt in mult_items])
-    return f"{base}|{mul}"
-
 
 from server.src.modules.apotheosis_helpers import compute_apotheosis_stats, _can_edit_apotheosis
 from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS, find_user, require_auth, make_token, verify_password, get_auth_token, normalize_email,_sha256
@@ -31,7 +18,6 @@ from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect, recompute_all_spells
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER
-from server.src.modules.allowed_pages import ALLOWED_PAGES
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -54,6 +40,8 @@ CLIENT_DIR = BASE_DIR / "client"
 
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
+
+ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit", "tools_home", "tools_parse", "tools_edit", "weapons_home", "weapons_parse", "weapons_edit","equipment_home","equipment_parse","equipement_edit","inventory_browse","inventory_create","inventory_view",}
 
 @app.get("/", include_in_schema=False)
 def root():
@@ -249,6 +237,20 @@ async def bulk_create_effects(request: Request):
             eff_col.insert_one(rec)
             created.append(eff_id)
 
+        
+        # Per-effect audit entries
+        try:
+            username, _ = require_auth(request, ["admin","moderator"])
+        except Exception:
+            username = "anonymous"
+        try:
+            for _eid in created:
+                write_audit("effect.create", username, _eid, None, {"school": school.get("id"), "created_via_bulk": True})
+            for _eid in updated:
+                write_audit("effect.update", username, _eid, None, {"updated_via_bulk": True})
+        except Exception:
+            pass
+
         write_audit("bulk_create_effects", "admin-ui", "—", None, {"school": school, "created": created})
         return {
             "status": "success",
@@ -263,40 +265,60 @@ async def bulk_create_effects(request: Request):
         return JSONResponse({"status":"error","message":str(e)}, status_code=500)
 
 
+@app.get("/admin/spelllists")
+def admin_list_spell_lists(request: Request, owner: str | None = Query(default=None), name: str | None = Query(default=None),
+                           page: int = Query(default=1, ge=1), limit: int = Query(default=50, ge=1, le=200)):
+    """
+    Admin/moderator: list all users' spell lists with optional filters.
+    """
+    require_auth(request, ["admin", "moderator"])
+    col = get_col("spell_lists")
+
+    q = {}
+    if owner:
+        q["$or"] = [{"owner": {"$regex": owner, "$options": "i"}}, {"owner_email": {"$regex": owner, "$options": "i"}}]
+    if name:
+        q["name"] = {"$regex": name, "$options": "i"}
+
+    total = col.count_documents(q)
+    cursor = col.find(q, {"_id": 0}).skip((page-1)*limit).limit(limit)
+    items = list(cursor)
+    for it in items:
+        it["count"] = len(it.get("spells") or [])
+    items.sort(key=lambda x: (x.get("owner","").lower(), x.get("name","").lower()))
+
+    return {"status": "success", "spelllists": items, "page": page, "limit": limit, "total": total}
+
 # ---------- Spells ----------
 @app.get("/spells")
 def list_spells(request: Request):
     qp = request.query_params
-    name = qp.get("name") or None
+    name     = qp.get("name") or None
     category = qp.get("category") or None
-    school = qp.get("school") or None
-    status = qp.get("status") or None
-    fav_only = (qp.get("favorite") or qp.get("fav") or "").lower() in ("1", "true", "yes")
+    school   = qp.get("school") or None
+    status   = qp.get("status") or None
+    favorite = (qp.get("favorite") or qp.get("fav") or "").lower() in ("1","true","yes")
+    creator  = qp.get("creator") or None   # "self" or a username
 
-
-    try:
-        page = max(1, int(qp.get("page") or 1))
-    except Exception:
-        page = 1
-    try:
-        limit = max(1, min(500, int(qp.get("limit") or 100)))
-    except Exception:
-        limit = 100
+    try:    page  = max(1, int(qp.get("page") or 1))
+    except: page  = 1
+    try:    limit = max(1, min(500, int(qp.get("limit") or 100)))
+    except: limit = 100
 
     sp_col  = get_col("spells")
     eff_col = get_col("effects")
     sch_col = get_col("schools")
 
     q = {}
-    if name:
-        q["name"] = {"$regex": name, "$options": "i"}
-    if category:
-        q["category"] = category
+    if name:     q["name"] = {"$regex": name, "$options": "i"}
+    if category: q["category"] = category
     if status:
-        q["status"] = status.lower()
-   
+        vals = [s.strip().lower() for s in status.split(",") if s.strip()]
+        q["status"] = vals[0] if len(vals) == 1 else {"$in": vals}
+
+    # favorites
     fav_ids = None
-    if fav_only:
+    if favorite:
         try:
             user, _ = require_user_doc(request)
         except HTTPException as he:
@@ -306,12 +328,22 @@ def list_spells(request: Request):
             return {"spells": [], "page": page, "limit": limit, "total": 0}
         q["id"] = {"$in": fav_ids}
 
-    total = sp_col.count_documents(q)
+    # creator filter
+    if creator:
+        if creator == "self":
+            u, _ = require_auth(request, roles=["user","moderator","admin"])
+            q["creator"] = u
+        else:
+            # only staff can view arbitrary creators
+            _, role = require_auth(request, roles=["moderator","admin"])
+            q["creator"] = creator
+
+    total  = sp_col.count_documents(q)
     cursor = sp_col.find(q, {"_id": 0}).skip((page - 1) * limit).limit(limit)
     spells = list(cursor)
 
+    # enrich with schools derived from effects
     school_map = {s["id"]: s.get("name", s["id"]) for s in sch_col.find({}, {"_id": 0, "id": 1, "name": 1})}
-
     all_eff_ids = {str(eid) for sp in spells for eid in (sp.get("effects") or [])}
     eff_docs = list(eff_col.find({"id": {"$in": list(all_eff_ids)}}, {"_id": 0, "id": 1, "school": 1}))
     eff_school = {d["id"]: str(d.get("school") or "") for d in eff_docs}
@@ -337,34 +369,56 @@ def get_spell(spell_id: str):
 
 @app.put("/spells/{spell_id}")
 async def update_spell(spell_id: str, request: Request):
+    # Auth & authorization checks
+    try:
+        username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=401)
+
+    before = get_col("spells").find_one({"id": spell_id})
+    if not before:
+        return JSONResponse({"status": "error", "message": f"Spell {spell_id} not found"}, status_code=404)
+
+    # Owner can edit only if not approved (not green)
+    if role == "user":
+        if before.get("creator") != username:
+            return JSONResponse({"status": "error", "message": "Not your spell"}, status_code=403)
+        if (before.get("status") or "").lower() == "green":
+            return JSONResponse({"status": "error", "message": "Approved spells are read-only; use clone from template"}, status_code=403)
+
+    # Parse payload and recompute costs (status is NOT changed here)
     try:
         body = await request.json()
     except Exception:
         return JSONResponse({"status": "error", "message": "Invalid JSON body"}, status_code=400)
 
     try:
-        name        = (body.get("name") or "Unnamed Spell").strip()
-        activation  = body.get("activation") or "Action"
+        name        = (body.get("name") or before.get("name","Unnamed Spell")).strip()
+        activation  = body.get("activation") or before.get("activation","Action")
         try:
-            range_val = int(body.get("range", 0))
+            range_val = int(body.get("range", before.get("range", 0)))
         except Exception:
             return JSONResponse({"status":"error","message":"range must be an integer"}, status_code=400)
-        aoe_val     = body.get("aoe") or "A Square"
+        aoe_val     = body.get("aoe") or before.get("aoe","A Square")
         try:
-            duration  = int(body.get("duration", 1))
+            duration  = int(body.get("duration", before.get("duration", 1)))
         except Exception:
             return JSONResponse({"status":"error","message":"duration must be an integer"}, status_code=400)
 
-        raw_effects = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
-        effect_ids = list(raw_effects)  # allow duplicates to support stacking
-                
+        raw_effects = [str(e).strip() for e in (body.get("effects") or before.get("effects") or []) if str(e).strip()]
+        effect_ids, seen = [], set()
+        for eid in raw_effects:
+            if eid not in seen:
+                seen.add(eid)
+                effect_ids.append(eid)
+
         missing = [eid for eid in effect_ids if not get_col("effects").find_one({"id": eid}, {"_id": 1})]
         if missing:
             return JSONResponse({"status":"error","message":f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
 
         cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
 
-        doc = {
+        updates = {
             "name": name,
             "activation": activation,
             "range": range_val,
@@ -374,15 +428,23 @@ async def update_spell(spell_id: str, request: Request):
             "mp_cost": cc["mp_cost"],
             "en_cost": cc["en_cost"],
             "category": cc["category"],
-            "spell_type": body.get("spell_type") or "Simple",
-            "moderation": "yellow",
+            "spell_type": body.get("spell_type") or before.get("spell_type") or "Simple",
+            # DO NOT touch status here (moderation workflow)
         }
 
-        r = get_col("spells").update_one({"id": spell_id}, {"$set": doc}, upsert=False)
+        r = get_col("spells").update_one({"id": spell_id}, {"$set": updates}, upsert=False)
         if r.matched_count == 0:
             return JSONResponse({"status": "error", "message": f"Spell {spell_id} not found"}, status_code=404)
 
-        return {"status": "success", "id": spell_id, "spell": doc}
+        after = get_col("spells").find_one({"id": spell_id}, {"_id": 0})
+
+        try:
+            action = "spell.update.admin" if role in ("admin","moderator") else "spell.update.user"
+            write_audit(action, username, spell_id, {k: before.get(k) for k in ("name","activation","range","aoe","duration","effects","mp_cost","en_cost","category","spell_type","status","creator")}, after)
+        except Exception:
+            pass
+
+        return {"status": "success", "id": spell_id, "spell": after}
 
     except Exception as e:
         logger.exception("PUT /spells/%s failed", spell_id)
@@ -396,6 +458,50 @@ def delete_spell(spell_id: str, request: Request):
         return {"status": "success", "deleted": spell_id}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.post("/spells/{spell_id}/clone")
+def clone_from_template(spell_id: str, request: Request):
+    try:
+        username, _ = require_auth(request, roles=["user", "moderator", "admin"])
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=401)
+
+    col = get_col("spells")
+    base = col.find_one({"id": spell_id}, {"_id": 0})
+    if not base:
+        return JSONResponse({"status": "error", "message": "Not found"}, status_code=404)
+
+    # (optionally require base to be green)
+    # if (base.get("status") or "").lower() != "green":
+    #     return JSONResponse({"status": "error", "message": "Only approved (green) spells can be used as template"}, status_code=403)
+
+    new_id = next_id_str("spells", padding=4)
+    new_doc = {
+        "id": new_id,
+        "name": f"{base.get('name','Spell')} (copy)",
+        "name_key": norm_key(f"{base.get('name','Spell')} (copy)"),
+        "activation": base.get("activation","Action"),
+        "range": int(base.get("range",0)),
+        "aoe": base.get("aoe","A Square"),
+        "duration": int(base.get("duration",1)),
+        "effects": [str(x) for x in (base.get("effects") or [])],
+        "mp_cost": int(base.get("mp_cost",0)),
+        "en_cost": int(base.get("en_cost",0)),
+        "category": base.get("category",""),
+        "spell_type": base.get("spell_type") or "Simple",
+        "status": "yellow",              # new draft
+        "creator": username,
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+    get_col("spells").insert_one(dict(new_doc))
+
+    try:
+        write_audit("spell.clone.user", username, new_id, {"from": spell_id}, {"status": "yellow"})
+    except Exception:
+        pass
+
+    return {"status": "success", "id": new_id, "spell": new_doc}
+
 
 @app.post("/costs")
 async def get_costs(request: Request):
@@ -431,6 +537,12 @@ async def get_costs(request: Request):
 
 @app.post("/submit_spell")
 async def submit_spell(request: Request):
+    # 🔐 must be logged in (user/mod/admin)
+    try:
+        username, _role = require_auth(request, roles=["user", "moderator", "admin"])
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=401)
+
     try:
         body = await request.json()
     except Exception:
@@ -451,8 +563,12 @@ async def submit_spell(request: Request):
             return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
 
         raw_effects = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
-        effect_ids = list(raw_effects)  # allow duplicates to support stacking
-    
+        effect_ids, seen = [], set()
+        for eid in raw_effects:
+            if eid not in seen:
+                seen.add(eid)
+                effect_ids.append(eid)
+
         if not effect_ids:
             return JSONResponse({"status": "error", "message": "At least one effect is required."}, status_code=400)
 
@@ -460,22 +576,18 @@ async def submit_spell(request: Request):
         if missing:
             return JSONResponse({"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
 
-        cc = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
-
-        sig = spell_sig_with_multiplicity(activation, range_val, aoe_val, duration, effect_ids)
+        cc  = compute_spell_costs(activation, range_val, aoe_val, duration, effect_ids)
+        sig = spell_sig(activation, range_val, aoe_val, duration, effect_ids)
 
         conflict = get_col("spells").find_one({"sig_v1": sig}, {"_id": 0, "id": 1, "name": 1})
         if conflict:
             return JSONResponse(
-                {
-                    "status": "error",
-                    "message": f"Another spell with identical parameters already exists (id {conflict.get('id')}, name '{conflict.get('name','')}')."
-                },
+                {"status": "error",
+                 "message": f"Another spell with identical parameters already exists (id {conflict.get('id')}, name '{conflict.get('name','')}')."},
                 status_code=409
             )
 
         sid = next_id_str("spells", padding=4)
-
         doc = {
             "id": sid,
             "name": name,
@@ -490,10 +602,18 @@ async def submit_spell(request: Request):
             "en_cost": cc["en_cost"],
             "category": cc["category"],
             "spell_type": body.get("spell_type") or "Simple",
-            "status": "yellow",
+            "status": "yellow",          # pending review
+            "creator": username,         # ← track owner
+            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         }
 
         get_col("spells").insert_one(dict(doc))
+
+        try:
+            write_audit("spell.create", username, sid, None, {"status": "yellow"})
+        except Exception:
+            pass
+
         return {"status": "success", "id": sid, "spell": doc}
 
     except Exception as e:
@@ -637,7 +757,7 @@ def backfill_spell_sigs(request: Request):
     for sp in db.spells.find({}, {"_id":1,"activation":1,"range":1,"aoe":1,"duration":1,"effects":1,"sig_v1":1}):
         if sp.get("sig_v1"):
             continue
-        sig = spell_sig_with_multiplicity(sp.get("activation",""), sp.get("range",0), sp.get("aoe",""), sp.get("duration",0),
+        sig = spell_sig(sp.get("activation",""), sp.get("range",0), sp.get("aoe",""), sp.get("duration",0),
                         [str(e) for e in (sp.get("effects") or [])])
         db.spells.update_one({"_id": sp["_id"]}, {"$set": {"sig_v1": sig}})
         updated += 1
@@ -773,6 +893,15 @@ async def admin_update_effect(effect_id: str, request: Request):
     col.update_one({"id": effect_id}, {"$set": {
         "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school
     }})
+    try:
+        username, _ = require_auth(request, ["admin","moderator"])
+    except Exception:
+        username = "anonymous"
+    try:
+        write_audit("effect.update", username, effect_id, {k: old.get(k) for k in ("name","description","mp_cost","en_cost","school")}, {"name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school})
+    except Exception:
+        pass
+
 
     effect_changes = []
     def _chg(label, a, b):
@@ -836,6 +965,17 @@ def admin_delete_effect(effect_id: str, request: Request):
     if len(lines) == 2:
         lines.append("No spells referenced this effect.")
 
+    
+    try:
+        username, _ = require_auth(request, ["admin","moderator"])
+    except Exception:
+        username = "anonymous"
+    try:
+        affected_ids = [sp.get("id") for sp in affected]
+        write_audit("effect.delete", username, effect_id, old, {"deleted": True, "affected_spells": affected_ids})
+    except Exception:
+        pass
+
     return {"status":"success","deleted":effect_id,"patch_text":"\n".join(lines) + "\n"}
 
 @app.get("/admin/effects/duplicates")
@@ -891,6 +1031,16 @@ async def admin_effect_duplicates_apply(request: Request):
         if remove_ids:
             r = eff_col.delete_many({"id": {"$in": remove_ids}})
             total_deleted += int(r.deleted_count or 0)
+
+    
+    try:
+        username, _ = require_auth(request, ["admin","moderator"])
+    except Exception:
+        username = "anonymous"
+    try:
+        write_audit("effects.dedupe", username, "—", None, {"total_deleted": total_deleted, "total_spells_touched": total_spells_touched, "groups": plan})
+    except Exception:
+        pass
 
     return {
         "status":"success",
@@ -1024,6 +1174,26 @@ def admin_delete_school(school_id: str, request: Request, force: bool = Query(de
               f"[{sp['id']}] {sp.get('name','(unnamed)')}: "
               f"MP {old_mp} → {cc['mp_cost']}, EN {old_en} → {cc['en_cost']}, Category {old_cat} → {cc['category']} (effects removed with school)"
             )
+
+    
+    try:
+        username, _ = require_auth(request, ["admin","moderator"])
+    except Exception:
+        username = "anonymous"
+    try:
+        _deleted_effects = []
+        try:
+            _deleted_effects = eff_ids
+        except Exception:
+            _deleted_effects = []
+        _touched_spells = []
+        try:
+            _touched_spells = [sp.get("id") for sp in affected]
+        except Exception:
+            _touched_spells = []
+        write_audit("school.delete", username, school_id, school, {"deleted": True, "deleted_effects": _deleted_effects, "touched_spells": _touched_spells, "force": bool(force)})
+    except Exception:
+        pass
 
     sch.delete_one({"id": school_id})
     return {"status":"success","deleted":school_id,"patch_text":"\n".join(lines) + "\n"}
@@ -2427,3 +2597,64 @@ def catalog_tools(request: Request, q: str = "", limit: int = 50):
     filt = {"name": {"$regex": re.escape(q.strip()), "$options": "i"}} if q.strip() else {}
     rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1}).limit(int(limit)))
     return {"status": "success", "tools": rows}
+
+@app.get("/moderator/spells")
+def moderator_list_spells(request: Request, name: str = "", status: str = "", unassigned: str = ""):
+    require_auth(request, roles=["moderator","admin"])
+    q = {}
+    if name:   q["name"] = {"$regex": name, "$options":"i"}
+    if status: q["status"] = status.lower()
+    if unassigned:
+        q["$or"] = [{"creator": {"$exists": False}}, {"creator": None}, {"creator": ""}]
+    rows = list(get_col("spells").find(q, {"_id":0, "id":1, "name":1, "creator":1}))
+    rows.sort(key=lambda r: (r.get("creator") or "~", r.get("name","").lower()))
+    return {"status":"success","spells": rows}
+
+@app.put("/moderator/spells/{spell_id}/assign")
+async def moderator_assign_spell(spell_id: str, request: Request):
+    username, _ = require_auth(request, roles=["moderator","admin"])
+    body = await request.json()
+    target_user = (body.get("username") or "").strip()
+    if not target_user:
+        return JSONResponse({"status":"error","message":"username required"}, status_code=400)
+
+    col = get_col("spells")
+    before = col.find_one({"id": spell_id})
+    if not before:
+        return JSONResponse({"status":"error","message":"Not found"}, status_code=404)
+
+    col.update_one({"id": spell_id}, {"$set": {"creator": target_user}})
+    after = col.find_one({"id": spell_id}, {"_id":0})
+    try:
+        write_audit("spell.assign", username, spell_id, {"creator": before.get("creator")}, {"creator": target_user})
+    except Exception:
+        pass
+    return {"status":"success","id": spell_id, "creator": target_user}
+
+@app.get("/admin/logs")
+def admin_logs(request: Request, user: str = "", action: str = "", from_: str = "", to: str = "", limit: int = 200):
+    admin_user, _ = require_auth(request, roles=["admin"])
+    q = {}
+    if user:
+        q["user"] = user
+    if action:
+        q["action"] = action
+    if from_:
+        try:
+            q.setdefault("ts", {})["$gte"] = datetime.datetime.fromisoformat(from_.replace("Z",""))
+        except Exception:
+            pass
+    if to:
+        try:
+            q.setdefault("ts", {})["$lte"] = datetime.datetime.fromisoformat(to.replace("Z",""))
+        except Exception:
+            pass
+
+    items = list(get_col("logs").find(q, {"_id":0}).sort("ts",-1).limit(min(1000, max(1, limit))))
+
+    try:
+        write_audit("logs.view", admin_user, None, {"filter": q}, {"count": len(items)})
+    except Exception:
+        pass
+
+    return {"status": "success", "items": items}
