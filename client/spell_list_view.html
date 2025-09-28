@@ -76,13 +76,12 @@
   <div class="topbar">
     <h1>NoE Manager</h1>
     <div class="auth-inline">
-      <div id="user-chip" class="user-chip" style="display:none;">
+      <div id="user-chip" class="user-chip">
         <span class="chip-name" id="chip-name"></span>
         <button id="chip-logout" class="btn linklike">Log Out</button>
       </div>
       <button id="open-login" class="btn btn-secondary small">Log In</button>
-      <a class="btn btn-secondary small" href="spell_list_home.html">Back to Lists</a>
-      <a class="btn btn-secondary small" href="portal.html">Portal</a>
+      <a id="open-signup" class="btn btn-secondary small" href="signup.html">Sign Up</a>
     </div>
   </div>
 
@@ -198,18 +197,22 @@
 
   <!-- Login Modal -->
   <div id="login-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-  <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true">
     <div class="modal-card">
       <header>
         <div class="modal-title" id="login-title">Log In</div>
         <button class="modal-close" id="close-login" aria-label="Close">✕</button>
       </header>
+
       <label for="login-username">Username</label>
       <input type="text" id="login-username" placeholder="Enter username" />
+
       <label for="login-password" style="margin-top:10px;">Password</label>
       <input type="password" id="login-password" placeholder="Enter password" />
-      <div id="login-status" class="sub" style="margin-top:8px;"></div>
-      <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+
+      <div id="login-status" style="opacity:.85; margin-top:8px;"></div>
+
+      <div class="modal-actions">
         <button class="btn btn-secondary" id="cancel-login">Cancel</button>
         <button class="btn" id="login-btn">Log In</button>
       </div>
@@ -456,6 +459,88 @@
 const API_BASE = ""; // set if your backend is mounted at a prefix
 let token = "";
 let listId = "";
+
+const modal    = document.getElementById("login-modal");
+const backdrop = document.getElementById("login-backdrop");
+const statusEl = document.getElementById("login-status");
+
+function openLogin() {
+  modal.classList.add("open");
+  backdrop.classList.add("open");
+  const u = document.getElementById("login-username");
+  if (u) u.focus();
+}
+function closeLogin() {
+  modal.classList.remove("open");
+  backdrop.classList.remove("open");
+  if (statusEl) statusEl.textContent = "";
+}
+
+async function login() {
+  const username = document.getElementById("login-username").value.trim();
+  const password = document.getElementById("login-password").value;
+  statusEl.textContent = "";
+
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+  if (data.status === "success") {
+    localStorage.setItem("auth_token", data.token);
+    localStorage.setItem("auth_username", data.username);
+    localStorage.setItem("auth_role", data.role);
+    setLoggedInUI(data.username, data.role);
+    closeLogin();
+  } else {
+    statusEl.textContent = data.message || "Login failed";
+  }
+}
+
+async function logout() {
+  const token = localStorage.getItem("auth_token");
+  if (token) {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+  }
+  localStorage.clear();
+  setLoggedOutUI();
+
+  closeLogin();
+}
+
+async function checkMe() {
+  const token = localStorage.getItem("auth_token");
+  if (!token) { setLoggedOutUI(); return; }
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    headers: { "Authorization": `Bearer ${token}` }
+  });
+  const data = await res.json();
+  if (data.status === "success") setLoggedInUI(data.username, data.role);
+  else setLoggedOutUI();
+}
+
+// --- header UI state ---
+document.addEventListener("DOMContentLoaded", () => {
+
+  modal.classList.remove("open");
+  backdrop.classList.remove("open");
+
+  document.getElementById("open-login").addEventListener("click", (e) => { e.preventDefault(); openLogin(); });
+  document.getElementById("close-login").addEventListener("click", (e) => { e.preventDefault(); closeLogin(); });
+  document.getElementById("cancel-login").addEventListener("click", (e) => { e.preventDefault(); closeLogin(); });
+  document.getElementById("login-backdrop").addEventListener("click", closeLogin);
+  document.getElementById("login-btn").addEventListener("click", (e) => { e.preventDefault(); login(); });
+
+  document.getElementById("chip-logout").addEventListener("click", (e) => { e.preventDefault(); logout(); });
+
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLogin(); });
+
+  checkMe();
+});
 
 const CATS = [
   {name:"Avant-Garde", ms:92, days:50},
