@@ -2657,3 +2657,11 @@ def admin_logs(request: Request, user: str = "", action: str = "", from_: str = 
         pass
 
     return {"status": "success", "items": items}
+
+@app.get("/users")
+def list_users_for_assignment(request: Request):
+    # moderators and admins may fetch the slim user list
+    require_auth(request, roles=["moderator", "admin"])
+    users = list(get_col("users").find({}, {"_id": 0, "username": 1, "role": 1}))
+    users.sort(key=lambda u: u["username"].lower())
+    return {"status": "success", "users": users}
