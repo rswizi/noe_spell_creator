@@ -18,6 +18,7 @@ from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect, recompute_all_spells
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER
+from server.src.modules.allowed_pages import ALLOWED_PAGES
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -40,8 +41,6 @@ CLIENT_DIR = BASE_DIR / "client"
 
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
-
-ALLOWED_PAGES = {"home", "index", "scraper", "templates", "admin", "export", "user_management","signup","browse","browse_effects","browse_schools","portal","apotheosis_home","apotheosis_create","apotheosis_browse","apotheosis_parse_constraints","apotheosis_constraints","spell_list_home","spell_list_view", "inventory_home", "inventory_manage", "objects_home", "objects_parse", "objects_edit", "tools_home", "tools_parse", "tools_edit", "weapons_home", "weapons_parse", "weapons_edit","equipment_home","equipment_parse","equipement_edit","inventory_browse","inventory_create","inventory_view",}
 
 @app.get("/", include_in_schema=False)
 def root():
