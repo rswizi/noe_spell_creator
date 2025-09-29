@@ -302,6 +302,7 @@
   document.addEventListener("DOMContentLoaded", async ()=>{
     await loadMe();
     await load();
+    await loadConstraints();
   
     const run = debounce(()=>render(CACHE), 200);
     $("#f-name").addEventListener("input", run);
@@ -318,6 +319,21 @@
     $("#modal").addEventListener("click", e=>{ if(e.target.id==="modal") closeModal(); });
     document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
   });
-</script>  
+
+const token = () => localStorage.getItem("auth_token") || "";
+const authHeaders = () => (token() ? { "Authorization": "Bearer " + token() } : {});
+
+// Load constraints (call this during boot)
+async function loadConstraints() {
+  const res = await fetch(`/apotheosis/constraints`, { headers: authHeaders() });
+  const txt = await res.text();
+  const j = (() => { try { return JSON.parse(txt); } catch { return {status:"error", message: txt}; } })();
+  if (j.status !== "success") throw new Error(j.message || "Failed to load constraints");
+
+  const list = j.constraints || [];
+  const avail = document.querySelector("#c-available");
+  avail.innerHTML = list.map(c => `<option value="${c.id}" data-json='${JSON.stringify(c)}'>[${c.id}] ${c.name}</option>`).join("");
+}
+</script> 
 </body>
 </html>

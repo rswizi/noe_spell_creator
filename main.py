@@ -1341,13 +1341,23 @@ async def create_apotheosis(request: Request):
     return {"status":"success","apotheosis":doc}
 
 @app.get("/apotheoses")
-def list_apotheoses(request: Request, name: str | None = Query(default=None), typ: str | None = Query(default=None), stage: str | None = Query(default=None), favorite: str | None = Query(default=None)):
-    qp = request.query_params
-    q = {}
+@app.get("/apotheoses")
+def list_apotheoses(
+    request: Request,
+    name: str | None = Query(default=None),
+    typ: str | None = Query(default=None),
+    stage: str | None = Query(default=None),
+    favorite: str | None = Query(default=None),
+):
+    # require auth; get identity and role
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+
+    q: dict = {}
     if name:  q["name"]  = {"$regex": name, "$options": "i"}
     if typ:   q["type"]  = {"$regex": typ, "$options": "i"}
     if stage: q["stage"] = {"$regex": stage, "$options": "i"}
 
+    # favorites filter (unchanged)
     fav_only = str(favorite or "").lower() in ("1","true","yes")
     if fav_only:
         user, _ = require_user_doc(request)
@@ -1356,8 +1366,12 @@ def list_apotheoses(request: Request, name: str | None = Query(default=None), ty
             return {"status":"success","apotheoses":[]}
         q["id"] = {"$in": fav}
 
+    # visibility: only admins see all; everyone else sees only their own
+    if role != "admin":
+        q["creator"] = username
+
     docs = list(get_col("apotheoses").find(q, {"_id":0}))
-    docs.sort(key=lambda d: d["name"].lower())
+    docs.sort(key=lambda d: d.get("name","").lower())
     return {"status":"success","apotheoses":docs}
 
 @app.get("/apotheoses/{aid}")
