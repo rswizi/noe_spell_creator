@@ -158,7 +158,7 @@
     }
 
     async function load(){
-      const r = await fetch(`/apotheoses`);
+      const r = await fetch(`/apotheoses`, { headers: authHeaders() });
       const j = await readJson(r);
       CACHE = j.apotheoses || [];
       render(CACHE);
