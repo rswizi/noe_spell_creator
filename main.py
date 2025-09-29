@@ -2630,16 +2630,10 @@ async def moderator_assign_spell(spell_id: str, request: Request):
         pass
     return {"status":"success","id": spell_id, "creator": target_user}
 
+LOGS_COL = "audit_logs"
 @app.get("/admin/logs")
-
-def admin_logs(
-    request: Request,
-    user: str = "",
-    action: str = "",
-    from_: str = Query("", alias="from"),
-    to: str = "",
-    limit: int = 200
-):
+@app.get("/admin/logs")
+def admin_logs(request: Request, user: str = "", action: str = "", from_: str = "", to: str = "", limit: int = 200):
     admin_user, _ = require_auth(request, roles=["admin"])
     q = {}
     if user:
@@ -2657,7 +2651,7 @@ def admin_logs(
         except Exception:
             pass
 
-    items = list(get_col("logs").find(q, {"_id":0}).sort("ts",-1).limit(min(1000, max(1, limit))))
+    items = list(get_col(LOGS_COL).find(q, {"_id":0}).sort("ts",-1).limit(min(1000, max(1, limit))))
 
     try:
         write_audit("logs.view", admin_user, None, {"filter": q}, {"count": len(items)})
