@@ -66,7 +66,7 @@
     if (user) p.set("user", user);
     if (action) p.set("action", action);
     if (from) p.set("from_", new Date(from).toISOString());
-    if (to) p.set("to", new Date(to).toISOString());
+    if (to)   p.set("to",    new Date(to).toISOString());
 
     const res = await fetch(`${API_BASE}/admin/logs?${p}`, { headers: authHeaders() });
     const j = await res.json();
@@ -76,13 +76,13 @@
 
   function render(items){
     tbody.innerHTML = items.map(row => {
-      const ts = row.ts || row.time || row.timestamp;
-      let when = "";
-      if (ts) {
-        const cleaned = String(ts).replace(/,\s*$/, ""); // strip trailing comma
-        const d = new Date(cleaned);
-        when = isNaN(d.getTime()) ? cleaned : d.toISOString();
-      }
+    const ts = row.ts || row.time || row.timestamp;
+    let when = "";
+    if (ts) {
+      const cleaned = String(ts).replace(/,\s*$/, ""); // strip trailing comma
+      const d = new Date(cleaned);
+      when = isNaN(d.getTime()) ? cleaned : d.toISOString();
+    }
       const obj = row.details || {};
       const spellRef = row.spell_id || row.effect_id || "";
       return `<tr>

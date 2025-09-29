@@ -2631,33 +2631,23 @@ async def moderator_assign_spell(spell_id: str, request: Request):
     return {"status":"success","id": spell_id, "creator": target_user}
 
 LOGS_COL = "audit_logs"
-@app.get("/admin/logs")
+
 @app.get("/admin/logs")
 def admin_logs(request: Request, user: str = "", action: str = "", from_: str = "", to: str = "", limit: int = 200):
     admin_user, _ = require_auth(request, roles=["admin"])
     q = {}
-    if user:
-        q["user"] = user
-    if action:
-        q["action"] = action
+    if user:   q["user"] = user
+    if action: q["action"] = action
     if from_:
-        try:
-            q.setdefault("ts", {})["$gte"] = datetime.datetime.fromisoformat(from_.replace("Z",""))
-        except Exception:
-            pass
+        try: q.setdefault("ts", {})["$gte"] = datetime.datetime.fromisoformat(from_.replace("Z",""))
+        except Exception: pass
     if to:
-        try:
-            q.setdefault("ts", {})["$lte"] = datetime.datetime.fromisoformat(to.replace("Z",""))
-        except Exception:
-            pass
+        try: q.setdefault("ts", {})["$lte"] = datetime.datetime.fromisoformat(to.replace("Z",""))
+        except Exception: pass
 
     items = list(get_col(LOGS_COL).find(q, {"_id":0}).sort("ts",-1).limit(min(1000, max(1, limit))))
-
-    try:
-        write_audit("logs.view", admin_user, None, {"filter": q}, {"count": len(items)})
-    except Exception:
-        pass
-
+    try: write_audit("logs.view", admin_user, None, {"filter": q}, {"count": len(items)})
+    except Exception: pass
     return {"status": "success", "items": items}
 
 @app.get("/users")
