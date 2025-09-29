@@ -144,34 +144,32 @@
 <script>
   const API_BASE = "";
   const $ = s => document.querySelector(s);
-  
+
+  // ---- Auth helpers (single source of truth)
+  const getToken = () =>
+    localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
+  const authHeaders = () =>
+    getToken() ? { Authorization: "Bearer " + getToken() } : {};
+
   let CACHE = [];
   let STARS = new Set(JSON.parse(localStorage.getItem("apoth_stars") || "[]"));
   let ME = null; // { username, role } or null
-  
-  function token() {
-    return localStorage.getItem("token") || "";
-  }
-  function authHeaders() {
-    const t = token();
-    return t ? { "Authorization": "Bearer " + t } : {};
-  }
-  
+
   async function loadMe() {
-    if (!token()) { ME = null; return; }
+    if (!getToken()) { ME = null; return; }
     try {
       const r = await fetch(`/auth/me`, { headers: authHeaders() });
       const j = await r.json();
       ME = j.status === "success" ? { username: j.username, role: j.role } : null;
     } catch { ME = null; }
   }
-  
+
   function starToggle(id){
     if (STARS.has(id)) STARS.delete(id); else STARS.add(id);
     localStorage.setItem("apoth_stars", JSON.stringify(Array.from(STARS)));
     render(CACHE);
   }
-  
+
   function canEdit(a){
     if (!ME) return false;
     return (ME.username === a.creator) || ["moderator","admin"].includes(ME.role);
@@ -180,11 +178,11 @@
     if (!ME) return false;
     return ["moderator","admin"].includes(ME.role);
   }
-  
+
   function row(a){
     const s = a.stats || {};
     const starred = STARS.has(a.id);
-  
+
     const editBtn = canEdit(a)
       ? `<button class="btn" onclick="editApotheosis('${a.id}')">Edit</button>`
       : "";
@@ -192,7 +190,7 @@
       ? `<button class="btn btn-danger" onclick="deleteApotheosis('${a.id}')">Delete</button>`
       : "";
     const dupBtn = `<button class="btn" onclick="duplicateApotheosis('${a.id}')">Duplicate</button>`;
-  
+
     return `
       <div class="effect-entry">
         <div style="flex:1;">
@@ -216,30 +214,42 @@
       </div>
     `;
   }
-  
+
   function render(list){
-    const fName = $("#f-name").value.trim().toLowerCase();
-  
-    // Normalize stage filter to match API values ("Stage I"…)
-    const fStage = $("#f-stage").value;
+    const fName = $("#f-name")?.value.trim().toLowerCase() || "";
+    const fStage = $("#f-stage")?.value || "";
     const stageText = fStage ? `Stage ${["I","II","III","IV","V"][parseInt(fStage,10)-1]}` : "";
-  
-    const onlyStar = $("#f-star").checked;
-  
+    const onlyStar = $("#f-star")?.checked || false;
+
     let out = list.slice();
     if (fName) out = out.filter(a => (a.name||"").toLowerCase().includes(fName));
     if (stageText) out = out.filter(a => String(a.stage) === stageText);
     if (onlyStar) out = out.filter(a => STARS.has(a.id));
-    $("#results").innerHTML = out.length ? out.map(row).join("") : `<p>No results.</p>`;
+    ($("#results")||{}).innerHTML = out.length ? out.map(row).join("") : `<p>No results.</p>`;
   }
-  
+
+  // Require auth for this list; admins will see all, others only theirs (backend enforces)
   async function load(){
-    const res = await fetch(`/apotheoses`);
-    const j = await res.json().catch(()=>({}));
+    const r = await fetch(`/apotheoses`, { headers: authHeaders() });
+    const j = await r.json().catch(()=>({}));
     CACHE = j.apotheoses || [];
     render(CACHE);
   }
-  
+
+  // ----- Constraints (Create page)
+  async function loadConstraints() {
+    const res = await fetch(`/apotheosis/constraints`, { headers: authHeaders() });
+    const txt = await res.text();
+    const j = (() => { try { return JSON.parse(txt); } catch { return {status:"error", message: txt}; } })();
+    if (j.status !== "success") throw new Error(j.message || "Failed to load constraints");
+
+    const list = j.constraints || [];
+    const avail = document.querySelector("#c-available");
+    if (avail) {
+      avail.innerHTML = list.map(c => `<option value="${c.id}" data-json='${JSON.stringify(c)}'>[${c.id}] ${c.name}</option>`).join("");
+    }
+  }
+
   // ----- Details modal -----
   function openDetails(id){
     const a = CACHE.find(x => String(x.id) === String(id));
@@ -252,11 +262,8 @@
     $("#m-power").textContent = String(s.power ?? "—");
     $("#m-stab").textContent  = String(s.stability ?? "—");
     $("#m-amp").textContent   = String(s.amplitude ?? "—");
-  
-    // constraints are stored as ids; show as pills
     const cs = (a.constraints || []).map(cid => `<span class="pill">${cid}</span>`).join("");
     $("#m-constraints").innerHTML = cs || "—";
-  
     $("#modal").classList.remove("hidden");
     $("#modal").setAttribute("aria-hidden", "false");
   }
@@ -264,76 +271,58 @@
     $("#modal").classList.add("hidden");
     $("#modal").setAttribute("aria-hidden", "true");
   }
-  
-  // ----- Actions -----
+
   function editApotheosis(id){
-    // Reuse creator page as an editor if you want; pass ?edit=<id>
     window.location.href = `apotheosis_create.html?edit=${encodeURIComponent(id)}`;
   }
-  
+
   async function duplicateApotheosis(id){
     try{
       const r = await fetch(`/apotheoses/${id}/duplicate`, { method: "POST", headers: { ...authHeaders() }});
       const j = await r.json();
       if (j.status !== "success") throw new Error(j.message || "Duplicate failed");
-      await load(); // refresh list
+      await load();
       alert(`Duplicated as ${j.apotheosis.id}`);
     }catch(e){
       alert(e.message || "Duplicate failed.");
     }
   }
-  
+
   async function deleteApotheosis(id){
     if (!confirm(`Delete ${id}? This cannot be undone.`)) return;
     try{
       const r = await fetch(`/apotheoses/${id}`, { method: "DELETE", headers: { ...authHeaders() }});
       const j = await r.json();
       if (j.status !== "success") throw new Error(j.message || "Delete failed");
-      // update local cache quickly
       CACHE = CACHE.filter(a => a.id !== id);
       render(CACHE);
     }catch(e){
       alert(e.message || "Delete failed.");
     }
   }
-  
+
   function debounce(fn, ms=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); } }
-  
+
   document.addEventListener("DOMContentLoaded", async ()=>{
     await loadMe();
-    await load();
-    await loadConstraints();
-  
+    await Promise.allSettled([
+      load(),           // browse list
+      loadConstraints() // create page (no-op if list box not present)
+    ]);
+
     const run = debounce(()=>render(CACHE), 200);
-    $("#f-name").addEventListener("input", run);
-    $("#f-stage").addEventListener("change", run);
-    $("#f-star").addEventListener("change", run);
-    $("#f-reset").addEventListener("click", ()=>{
-      $("#f-name").value="";
-      $("#f-stage").value="";
-      $("#f-star").checked=false;
+    $("#f-name")?.addEventListener("input", run);
+    $("#f-stage")?.addEventListener("change", run);
+    $("#f-star")?.addEventListener("change", run);
+    $("#f-reset")?.addEventListener("click", ()=>{
+      if ($("#f-name")) $("#f-name").value="";
+      if ($("#f-stage")) $("#f-stage").value="";
+      if ($("#f-star")) $("#f-star").checked=false;
       render(CACHE);
     });
-  
-    $("#modal-close").addEventListener("click", closeModal);
-    $("#modal").addEventListener("click", e=>{ if(e.target.id==="modal") closeModal(); });
+
+    $("#modal-close")?.addEventListener("click", closeModal);
+    $("#modal")?.addEventListener("click", e=>{ if(e.target.id==="modal") closeModal(); });
     document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
   });
-
-const token = () => localStorage.getItem("auth_token") || "";
-const authHeaders = () => (token() ? { "Authorization": "Bearer " + token() } : {});
-
-// Load constraints (call this during boot)
-async function loadConstraints() {
-  const res = await fetch(`/apotheosis/constraints`, { headers: authHeaders() });
-  const txt = await res.text();
-  const j = (() => { try { return JSON.parse(txt); } catch { return {status:"error", message: txt}; } })();
-  if (j.status !== "success") throw new Error(j.message || "Failed to load constraints");
-
-  const list = j.constraints || [];
-  const avail = document.querySelector("#c-available");
-  avail.innerHTML = list.map(c => `<option value="${c.id}" data-json='${JSON.stringify(c)}'>[${c.id}] ${c.name}</option>`).join("");
-}
-</script> 
-</body>
-</html>
+</script>
