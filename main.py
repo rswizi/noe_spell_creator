@@ -291,15 +291,18 @@ def admin_list_spell_lists(request: Request, owner: str | None = Query(default=N
 # ---------- Spells ----------
 @app.get("/spells")
 def list_spells(request: Request):
-    qp = request.query_params
-    name        = qp.get("name") or None
-    category    = qp.get("category") or None
-    status      = qp.get("status") or None
-    favorite    = (qp.get("favorite") or qp.get("fav") or "").lower() in ("1","true","yes")
-    creator     = qp.get("creator") or None           # "self" or a username
-    school_id   = qp.get("school_id") or None         # preferred
-    school_param= qp.get("school") or None            # legacy: id OR name
+    import re
 
+    qp = request.query_params
+    name         = qp.get("name") or None
+    category     = qp.get("category") or None
+    status       = qp.get("status") or None
+    favorite     = (qp.get("favorite") or qp.get("fav") or "").lower() in ("1", "true", "yes")
+    creator      = qp.get("creator") or None            # "self" or a username
+    school_id    = qp.get("school_id") or None          # <— preferred
+    school_legacy= qp.get("school") or None             # id OR name (fallback)
+
+    # pagination
     try:    page  = max(1, int(qp.get("page") or 1))
     except: page  = 1
     try:    limit = max(1, min(500, int(qp.get("limit") or 100)))
@@ -309,15 +312,16 @@ def list_spells(request: Request):
     eff_col = get_col("effects")
     sch_col = get_col("schools")
 
-    # ---- base query
-    q = {}
-    if name:     q["name"] = {"$regex": name, "$options": "i"}
-    if category: q["category"] = category
+    # ---------------- Base query (name/category/status/favorites/creator)
+    q: dict = {}
+    if name:
+        q["name"] = {"$regex": name, "$options": "i"}
+    if category:
+        q["category"] = category
     if status:
         vals = [s.strip().lower() for s in status.split(",") if s.strip()]
         q["status"] = vals[0] if len(vals) == 1 else {"$in": vals}
 
-    # favorites
     if favorite:
         try:
             user, _ = require_user_doc(request)
@@ -328,59 +332,57 @@ def list_spells(request: Request):
             return {"spells": [], "page": page, "limit": limit, "total": 0}
         q["id"] = {"$in": fav_ids}
 
-    # creator filter
     if creator:
         if creator == "self":
-            u, _ = require_auth(request, roles=["user","moderator","admin"])
+            u, _ = require_auth(request, roles=["user", "moderator", "admin"])
             q["creator"] = u
         else:
-            _, _ = require_auth(request, roles=["moderator","admin"])
+            _, _ = require_auth(request, roles=["moderator", "admin"])
             q["creator"] = creator
 
-    total  = sp_col.count_documents(q)
-    spells = list(sp_col.find(q, {"_id": 0}).skip((page - 1) * limit).limit(limit))
+    # ---------------- School filter (resolve to effect IDs, then push into Mongo query)
+    target_school_ids: set[str] = set()
+    if school_id:
+        target_school_ids.add(str(school_id).strip())
+    elif school_legacy:
+        probe = str(school_legacy).strip()
+        # If it matches an ID exactly, use it; else resolve by name (exact -> contains)
+        if sch_col.find_one({"id": probe}, {"_id": 0, "id": 1}):
+            target_school_ids.add(probe)
+        else:
+            exact = list(sch_col.find({"name": {"$regex": f"^{re.escape(probe)}$", "$options": "i"}}, {"_id": 0, "id": 1}))
+            rows  = exact or list(sch_col.find({"name": {"$regex": probe, "$options": "i"}}, {"_id": 0, "id": 1}))
+            for r in rows:
+                target_school_ids.add(str(r["id"]))
 
-    # ---- derive schools per spell from effects
-    school_map = {s["id"]: s.get("name", s["id"])
-                  for s in sch_col.find({}, {"_id": 0, "id": 1, "name": 1})}
-    all_eff_ids = {str(eid) for sp in spells for eid in (sp.get("effects") or [])}
-    eff_docs = list(eff_col.find({"id": {"$in": list(all_eff_ids)}},
-                                 {"_id": 0, "id": 1, "school": 1}))
+    if target_school_ids:
+        eff_ids = [e["id"] for e in eff_col.find({"school": {"$in": list(target_school_ids)}},
+                                                 {"_id": 0, "id": 1})]
+        if not eff_ids:
+            return {"spells": [], "page": 1, "limit": limit, "total": 0}
+        q["effects"] = {"$in": eff_ids}
+
+    # ---------------- Count + page WITH school filter applied
+    total  = sp_col.count_documents(q)
+    cursor = sp_col.find(q, {"_id": 0}).skip((page - 1) * limit).limit(limit)
+    spells = list(cursor)
+
+    # ---------------- Enrich: add schools list to each spell for display
+    # Build: effect_id -> school_id, and school_id -> name
+    eff_ids_on_page = {str(eid) for sp in spells for eid in (sp.get("effects") or [])}
+    eff_docs = list(eff_col.find({"id": {"$in": list(eff_ids_on_page)}}, {"_id": 0, "id": 1, "school": 1}))
     eff_to_school = {d["id"]: str(d.get("school") or "") for d in eff_docs}
 
-    enriched = []
+    school_docs = list(sch_col.find({}, {"_id": 0, "id": 1, "name": 1}))
+    school_map  = {s["id"]: s.get("name", s["id"]) for s in school_docs}
+
     for sp in spells:
         sch_ids = sorted({eff_to_school.get(str(eid), "")
                           for eid in (sp.get("effects") or [])
                           if eff_to_school.get(str(eid), "")})
         sp["schools"] = [{"id": sid, "name": school_map.get(sid, sid)} for sid in sch_ids]
-        enriched.append(sp)
 
-    # ---- school filter (ID first; also accept legacy ?school=ID or name)
-    target_ids = set()
-    if school_id:
-        target_ids.add(str(school_id).strip().lower())
-
-    if (not target_ids) and school_param:
-        probe = str(school_param).strip()
-        # if it's an exact id, use it
-        if sch_col.find_one({"id": probe}, {"_id": 0, "id": 1}):
-            target_ids.add(probe.lower())
-        else:
-            # resolve by name (exact -> contains)
-            rows = list(sch_col.find({"name": {"$regex": f"^{re.escape(probe)}$", "$options": "i"}},
-                                     {"_id": 0, "id": 1}))
-            if not rows:
-                rows = list(sch_col.find({"name": {"$regex": probe, "$options": "i"}},
-                                         {"_id": 0, "id": 1}))
-            for r in rows:
-                target_ids.add(str(r["id"]).lower())
-
-    if target_ids:
-        enriched = [sp for sp in enriched
-                    if any(str(s["id"]).lower() in target_ids for s in (sp.get("schools") or []))]
-
-    return {"spells": enriched, "page": page, "limit": limit, "total": total}
+    return {"spells": spells, "page": page, "limit": limit, "total": total}
 
 @app.get("/spells/{spell_id}")
 def get_spell(spell_id: str):
