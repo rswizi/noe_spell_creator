@@ -22,7 +22,12 @@ body{
 .btn{appearance:none;border:0;border-radius:12px;padding:10px 14px;background:var(--accent);color:white;font-weight:600;cursor:pointer}
 .btn.subtle{background:#1f2937}
 .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.12)}
-.badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;background:#111827;border:1px solid rgba(255,255,255,.08);font-size:12px}
+.badge{ 
+  display:inline-flex; align-items:center; gap:6px;
+  border-radius:999px; padding:6px 10px; background:#111827;
+  border:1px solid rgba(255,255,255,.08); font-size:12px;
+  white-space: nowrap;           /* <-- prevents ET / Condition DC from breaking */
+}
 .kpi{display:flex;flex-direction:column;gap:6px}
 .kpi .num{font-size:18px;font-weight:700}
 .bar{height:10px;border-radius:999px;background:#111827;border:1px solid rgba(255,255,255,.08);position:relative;overflow:hidden}
@@ -49,3 +54,26 @@ body{
 .pill{border:1px solid rgba(255,255,255,.08);background:#0f172a;border-radius:999px;padding:6px 10px;display:inline-flex;gap:6px;align-items:center}
 .danger{color:#fecaca}
 .good{color:#bbf7d0}
+#charSkillContainer{
+  display:grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));  /* <-- 4 columns */
+  gap:12px;
+}
+
+.char-card{
+  background:rgba(255,255,255,.02);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;
+  padding:8px;
+}
+
+.char-card .rowline{
+  grid-template-columns: 1fr 85px 70px 120px;  /* name | invested | mod | [total|mod] */
+  border-bottom: none;
+  padding:6px 4px;
+}
+.char-card .rowline .mini{font-size:11px}
+.char-card .rowline.head .h{font-weight:700;color:#e5e7eb}
+.char-card .rowline.head{padding-top:2px;padding-bottom:6px;border-bottom:1px dashed rgba(255,255,255,.08)}
+.char-card .rowline.skill{padding:6px 4px;border-bottom:1px dashed rgba(255,255,255,.06)}
+.char-card .rowline.skill:last-child{border-bottom:0}

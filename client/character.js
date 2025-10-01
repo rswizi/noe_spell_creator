@@ -114,40 +114,51 @@
   // Build Characteristics + Skills editor
   // ------------------------------
   const charSkillContainer = $('#charSkillContainer');
+  charSkillContainer.innerHTML = ''; // clear in case of hot reload
+
   CHAR_MAP.forEach(group => {
-    const header = document.createElement('div');
-    header.className = 'rowline';
-    header.innerHTML = `
+    const card = document.createElement('div');
+    card.className = 'char-card';
+
+    // header row (labels)
+    const head = document.createElement('div');
+    head.className = 'rowline head';
+    head.innerHTML = `
       <div class="h">${group.label}</div>
       <div class="mini">Invested</div>
       <div class="mini">Modifier</div>
       <div class="mini">[ Total | Mod ]`;
-    charSkillContainer.appendChild(header);
+    card.appendChild(head);
 
-    const row = document.createElement('div');
-    row.className = 'rowline';
-    row.innerHTML = `
+    // characteristic line (investable)
+    const crow = document.createElement('div');
+    crow.className = 'rowline skill';
+    crow.innerHTML = `
       <div><span class="muted">Characteristic</span></div>
       <div><input class="input" type="number" min="0" max="16" value="0" data-c-invest="${group.investKey}"></div>
       <div><span class="mono" data-c-mod="${group.key}">0</span></div>
       <div><span class="mono" data-c-total="${group.key}">4</span> | <span class="mono" data-c-totalmod="${group.key}">-3</span></div>`;
-    charSkillContainer.appendChild(row);
+    card.appendChild(crow);
 
+    // linked skills (each one line)
     group.skills.forEach(s => {
       const srow = document.createElement('div');
-      srow.className = 'rowline';
+      srow.className = 'rowline skill';
       srow.innerHTML = `
         <div>— ${s.label}</div>
         <div><input class="input" type="number" min="0" max="8" value="0" data-s-invest="${s.key}"></div>
         <div><span class="mono" data-s-mod="${s.key}">0</span></div>
         <div><span class="mono" data-s-base="${s.key}">0</span></div>`;
-      charSkillContainer.appendChild(srow);
+      card.appendChild(srow);
     });
+
+    charSkillContainer.appendChild(card);
   });
 
-  // ------------------------------
-  // Intensities table
-  // ------------------------------
+  $$('#charSkillContainer input').forEach(inp =>
+    inp.addEventListener('input', () => { recompute(); scheduleSave(); })
+  );
+
   const tbodyInt = $('#intensityTable tbody');
   INTENSITIES.forEach(nm => {
     const tr = document.createElement('tr');
@@ -587,7 +598,7 @@
   // ------------------------------
   // Seed + first compute + load
   // ------------------------------
-  addSubRow(); // safe now (helpers exist)
+  addSubRow();
   recompute();
   loadOrCreateCharacter();
 })();
