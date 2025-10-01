@@ -22,11 +22,11 @@ body{
 .btn{appearance:none;border:0;border-radius:12px;padding:10px 14px;background:var(--accent);color:white;font-weight:600;cursor:pointer}
 .btn.subtle{background:#1f2937}
 .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.12)}
-.badge{ 
+.badge{
   display:inline-flex; align-items:center; gap:6px;
   border-radius:999px; padding:6px 10px; background:#111827;
   border:1px solid rgba(255,255,255,.08); font-size:12px;
-  white-space: nowrap;           /* <-- prevents ET / Condition DC from breaking */
+  white-space:nowrap;
 }
 .kpi{display:flex;flex-direction:column;gap:6px}
 .kpi .num{font-size:18px;font-weight:700}
@@ -56,24 +56,48 @@ body{
 .good{color:#bbf7d0}
 #charSkillContainer{
   display:grid;
-  grid-template-columns: repeat(4, minmax(0,1fr));  /* <-- 4 columns */
-  gap:12px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap:14px;
 }
 
 .char-card{
   background:rgba(255,255,255,.02);
   border:1px solid rgba(255,255,255,.06);
   border-radius:12px;
-  padding:8px;
+  padding:10px;
 }
 
-.char-card .rowline{
-  grid-template-columns: 1fr 85px 70px 120px;  /* name | invested | mod | [total|mod] */
-  border-bottom: none;
-  padding:6px 4px;
+.char-card .rowline.head{
+  display:grid;
+  grid-template-columns: 1fr 110px 86px 132px;
+  gap:8px;
+  padding:6px 4px 8px;
+  border-bottom:1px dashed rgba(255,255,255,.08);
 }
-.char-card .rowline .mini{font-size:11px}
 .char-card .rowline.head .h{font-weight:700;color:#e5e7eb}
-.char-card .rowline.head{padding-top:2px;padding-bottom:6px;border-bottom:1px dashed rgba(255,255,255,.08)}
-.char-card .rowline.skill{padding:6px 4px;border-bottom:1px dashed rgba(255,255,255,.06)}
+.char-card .rowline.head .mini{font-size:11px;color:#94a3b8}
+
+.char-card .rowline.skill{
+  display:grid;
+  grid-template-columns:
+    1fr
+    clamp(84px, 12vw, 120px)
+    clamp(64px, 8vw, 92px)
+    clamp(118px, 14vw, 160px);
+  gap:8px;
+  align-items:center;
+  padding:6px 4px;
+  border-bottom:1px dashed rgba(255,255,255,.06);
+}
 .char-card .rowline.skill:last-child{border-bottom:0}
+
+.char-card .rowline .mini{font-size:11px}
+.char-card .rowline .muted{color:#9aa4b2}
+
+.char-card .input{padding:8px 10px}
+
+.char-card .rowline div:first-child{
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
+.char-card .rowline .mono{font-variant-numeric:tabular-nums}
