@@ -1,18 +1,20 @@
 (() => {
   // ====== CONFIG ======
-  const API_BASE = "";
+  const API_BASE = ""; // same-origin FastAPI
   const token = localStorage.getItem("auth_token") || "";
 
-  const authHeaders = () => ({
-    ...(AUTH_TOKEN ? { Authorization: `Bearer ${AUTH_TOKEN}` } : {}),
-    'Content-Type': 'application/json'
-  });
+  function authHeaders() {
+    const h = { "Content-Type": "application/json" };
+    if (token) h["Authorization"] = `Bearer ${token}`;
+    return h;
+  }
 
-  const $ = (sel, el = document) => el.querySelector(sel);
+  const $  = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
 
+  // Status pill
   const saveStatus = $('#saveStatus');
-  const setStatus = (txt, cls='') => {
+  const setStatus = (txt, cls="") => {
     if (!saveStatus) return;
     saveStatus.textContent = txt;
     saveStatus.className = `pill ${cls}`;
@@ -205,7 +207,8 @@
     typeSel.addEventListener('change', ()=>{ toggleSkill(); recompute(); triggerSave(); });
     skillSel.addEventListener('change', ()=>{ recompute(); triggerSave(); });
     tierInp.addEventListener('input', ()=>{ recompute(); triggerSave(); });
-
+    delBtn.addEventListener('click', ()=>{ tr.remove(); recompute(); triggerSave(); });
+    
     const td1 = document.createElement('td'); td1.appendChild(typeSel);
     const td2 = document.createElement('td'); td2.appendChild(skillSel);
     const td3 = document.createElement('td'); td3.appendChild(tierInp);
@@ -433,15 +436,17 @@
       headers: authHeaders(),
       body: JSON.stringify(payload)
     });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json();
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.message || j.error || res.statusText);
+    return j;
   }
   async function apiGet(id){
     const res = await fetch(`${API_BASE}/characters/${encodeURIComponent(id)}`, {
       headers: authHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json();
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.message || j.error || res.statusText);
+    return j;
   }
   async function apiUpdate(id, payload){
     const res = await fetch(`${API_BASE}/characters/${encodeURIComponent(id)}`, {
@@ -449,8 +454,9 @@
       headers: authHeaders(),
       body: JSON.stringify(payload)
     });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json();
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.message || j.error || res.statusText);
+    return j;
   }
 
   function collectPayload(){
@@ -533,95 +539,63 @@
 
   // ====== Autosave wiring ======
   let saveTimer = null;
-  function triggerSave(){
-    setStatus('Saving…','');
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveNow, 500);
-  }
+  function debounce(fn, ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+  const triggerSave = debounce(saveNow, 500);
 
   async function saveNow(){
     try {
-      const id = cidInput.value;
+      setStatus("Saving…");
       const payload = collectPayload();
-      const res = id ? await apiUpdate(id, payload) : await apiCreate(payload);
-      const cid = id || res?.character?.id;
-      if (cid && !cidInput.value){
-        cidInput.value = cid;
-        // Reflect in URL (?id=...)
-        const url = new URL(location.href);
-        url.searchParams.set('id', cid);
-        history.replaceState(null, '', url.toString());
-      }
-      applyServerComputed(res);
-      setStatus('Saved','good');
+      const existingId = (cidInput.value || "").trim();
+      const resp = existingId ? await apiUpdate(existingId, payload)
+                              : await apiCreate(payload);
+      // keep id & apply computed values from server if any
+      if (resp?.character?.id) cidInput.value = String(resp.character.id);
+      if (resp?.computed) applyServerComputed(resp);
+      setStatus("Saved", "good");
     } catch (e) {
-        console.error(e);
-        setStatus(`Error: ${e.message?.slice(0,60) || 'save failed'}`,'danger');
-      }
+      console.error(e);
+      setStatus(`Save failed`, "danger");
+    }
   }
 
-  // ====== Event bindings (also fire autosave) ======
-  ['#c_level','#c_xp','#c_name','#p_height','#p_weight','#p_bday','#p_backstory','#p_notes','#avatarUrl']
-    .forEach(sel => $(sel).addEventListener('input', ()=>{ recompute(); triggerSave(); }));
+  // Save on any user change
+  const changeSelectors = [
+    '#c_name','#c_level','#c_xp','#avatarUrl',
+    '#p_height','#p_weight','#p_bday','#p_backstory','#p_notes'
+  ];
+  changeSelectors.forEach(sel => {
+    const el = $(sel); if (el) el.addEventListener('input', ()=>{ recompute(); triggerSave(); });
+  });
 
-  $$('#charSkillContainer input').forEach(inp => inp.addEventListener('input', ()=>{ recompute(); triggerSave(); }));
-  $$('#intensityTable [data-i-invest]').forEach(inp => inp.addEventListener('input', ()=>{ recompute(); triggerSave(); }));
+  // Characteristics & skills & intensities
+  $$('#charSkillContainer input').forEach(inp =>
+    inp.addEventListener('input', ()=>{ recompute(); triggerSave(); })
+  );
+  $$('#intensityTable [data-i-invest]').forEach(inp =>
+    inp.addEventListener('input', ()=>{ recompute(); triggerSave(); })
+  );
 
-  // ====== Boot: load existing or create new, then compute ======
-  (async function init(){
-    setStatus('Loading…','');
-    try{
-      const fromUrl = getQuery('id');
-      if (fromUrl){
-        const data = await apiGet(fromUrl);
-        // hydrate UI from stored doc
-        const doc = data.character;
-        cidInput.value = doc.id || '';
-        $('#c_name').value = doc.name || '';
-        $('#avatarUrl').value = doc.img || '';
-        charAvatar.src = doc.img || 'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg';
-        $('#c_xp').value = Number(doc.xp_total||0);
-        $('#c_level').value = doc.level_manual || ''; // blank uses XP
+  // Sublimations: we already call recompute() inside row add/remove/change;
+  // just ensure triggerSave() is also called in the same places.
+  // (In addSubRow, after recompute(), also call triggerSave())
 
-        // characteristics
-        CHAR_MAP.forEach(g => {
-          const inv = (doc.characteristics||{})[g.investKey] || 0;
-          $(`[data-c-invest="${g.investKey}"]`).value = inv;
-        });
-        // skills & intensities
-        const allSkills = doc.skills || {};
-        CHAR_MAP.forEach(g => g.skills.forEach(s => {
-          $(`[data-s-invest="${s.key}"]`).value = allSkills[s.key] || 0;
-        }));
-        INTENSITIES.forEach(nm => {
-          $(`[data-i-invest="${nm}"]`).value = allSkills[nm] || 0;
-        });
-        // sublimations
-        subTableBody.innerHTML = '';
-        (doc.sublimations||[]).forEach(s => {
-          const rev = { 'Excellence':'1','Lethality':'2','Blessing':'3','Defense':'4','Speed':'5','Endurance':'6','Devastation':'7','Clarity':'8' };
-          addSubRow({ type: rev[s.type] || '2', skill: s.skill || '', tier: s.tier||1 });
-        });
-        // bio
-        $('#p_height').value = doc.bio?.height || '';
-        $('#p_weight').value = doc.bio?.weight || '';
-        $('#p_bday').value   = doc.bio?.birthday || '';
-        $('#p_backstory').value = doc.bio?.backstory || '';
-        $('#p_notes').value  = doc.bio?.notes || '';
-
-        recompute();
-        applyServerComputed(data);
-        setStatus('Loaded','');
-      } else {
-        // brand new; create on first save
-        recompute();
-        setStatus('New sheet','');
+  // Load if id is in query (?id=123)
+  document.addEventListener('DOMContentLoaded', async () => {
+    const qid = new URLSearchParams(location.search).get('id');
+    if (qid) {
+      try {
+        setStatus("Loading…");
+        const resp = await apiGet(qid);
+        cidInput.value = String(resp.character.id);
+        // TODO: write a small hydrator to push server values into the inputs if needed
+        // For now we rely on local inputs and deriveds.
+        if (resp.computed) applyServerComputed(resp);
+        setStatus("Loaded");
+      } catch {
+        setStatus("Load failed", "danger");
       }
-    } catch(e){
-      console.error(e);
-      recompute();
-      setStatus('Offline mode','warn');
     }
-  })();
-
+    recompute();
+  });
 })();

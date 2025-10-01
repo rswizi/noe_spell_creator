@@ -4,14 +4,10 @@
   <meta charset="utf-8" />
   <title>Character Manager</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/static/character.css">
+  <link rel="stylesheet" href="/static/character.css" />
+  <script defer src="/static/character.js"></script>
 </head>
 <body>
-    <div class="row" style="align-items:center; gap:8px">
-        <div class="title">Character</div>
-      <span id="saveStatus" class="pill muted" style="font-size:12px">Idle</span>
-      <input id="c_id" type="hidden" />
-    </div>
   <div class="wrap">
     <!-- Header -->
     <div class="panel">
@@ -27,7 +23,12 @@
             </div>
           </div>
           <div>
-            <div class="title">Character</div>
+            <div class="row" style="align-items:center; gap:8px">
+              <div class="title">Character</div>
+              <span id="saveStatus" class="pill muted" style="font-size:12px">Idle</span>
+              <input id="c_id" type="hidden" />
+            </div>
+
             <div class="row grid-3">
               <label class="kpi">
                 <span class="label">Name</span>
@@ -42,6 +43,7 @@
                 <input id="c_xp" type="number" min="0" class="input" value="0">
               </label>
             </div>
+
             <div class="divider"></div>
             <div class="row grid-4">
               <span class="badge">MO: <b id="k_mo" class="mono">4</b></span>
@@ -212,4 +214,4 @@
   </div>
 </body>
 </html>
-<script defer src="/static/js/characters.js"></script>
+<script defer src="/static/js/character.js"></script>
