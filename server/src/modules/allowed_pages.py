@@ -37,4 +37,5 @@ ALLOWED_PAGES = {"home",
 "spell_list_admin",
 "moderator_assign",
 "my_spells",
-"admin_logs",}
+"admin_logs",
+"character"}
