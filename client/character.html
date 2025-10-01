@@ -4,8 +4,7 @@
   <meta charset="utf-8" />
   <title>Character Manager</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/static/character.css" />
-  <script defer src="/static/character.js"></script>
+  <link href="/static/css/character.css" rel="stylesheet" />
 </head>
 <body>
   <div class="wrap">
@@ -23,12 +22,7 @@
             </div>
           </div>
           <div>
-            <div class="row" style="align-items:center; gap:8px">
-              <div class="title">Character</div>
-              <span id="saveStatus" class="pill muted" style="font-size:12px">Idle</span>
-              <input id="c_id" type="hidden" />
-            </div>
-
+            <div class="title">Character</div>
             <div class="row grid-3">
               <label class="kpi">
                 <span class="label">Name</span>
@@ -43,7 +37,6 @@
                 <input id="c_xp" type="number" min="0" class="input" value="0">
               </label>
             </div>
-
             <div class="divider"></div>
             <div class="row grid-4">
               <span class="badge">MO: <b id="k_mo" class="mono">4</b></span>
@@ -58,7 +51,6 @@
         <div class="panel soft">
           <div class="title">Resources</div>
           <div class="row">
-            <!-- HP -->
             <div class="row grid-3">
               <div class="kpi">
                 <span class="label">HP</span>
@@ -93,7 +85,7 @@
                 <div class="bar"><i id="enc_bar"></i></div>
               </div>
             </div>
-            <div class="hint">Max values are derived. Current values are editable in the combat/inventory flows later.</div>
+            <div class="hint">Max values are derived. Current values will be editable in combat/inventory later.</div>
           </div>
         </div>
       </div>
@@ -111,7 +103,6 @@
 
       <!-- Tab: Statistics -->
       <div class="tabpan active" id="tab-stats">
-        <!-- Counters -->
         <div class="row grid-3">
           <div class="panel soft">
             <div class="label">Skill Points</div>
@@ -128,7 +119,7 @@
           </div>
         </div>
 
-        <!-- Sublimation table -->
+        <!-- Sublimations -->
         <div class="panel" style="margin-top:16px">
           <div class="row" style="grid-template-columns:1fr auto; align-items:center">
             <div class="title">Sublimations</div>
@@ -160,15 +151,15 @@
           <div class="title">Intensities</div>
           <table class="tbl" id="intensityTable">
             <thead>
-              <tr>
-                <th>Name</th>
-                <th>Invested</th>
-                <th>Modifier</th>
-                <th>Base Value</th>
-                <th>ID</th>
-                <th>IV</th>
-                <th class="right">Res/Wk</th>
-              </tr>
+            <tr>
+              <th>Name</th>
+              <th>Invested</th>
+              <th>Modifier</th>
+              <th>Base Value</th>
+              <th>ID</th>
+              <th>IV</th>
+              <th class="right">Res/Wk</th>
+            </tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -179,19 +170,19 @@
       <!-- Tab: Inventory -->
       <div class="tabpan" id="tab-inventory">
         <div class="title">Inventory</div>
-        <p class="muted">We’ll wire this to your existing inventory system later.</p>
+        <p class="muted">To be wired later.</p>
       </div>
 
       <!-- Tab: Abilities -->
       <div class="tabpan" id="tab-abilities">
         <div class="title">Abilities</div>
-        <p class="muted">Coming soon—talents, archetypes, passives, actives.</p>
+        <p class="muted">Coming soon.</p>
       </div>
 
       <!-- Tab: Combat -->
       <div class="tabpan" id="tab-combat">
         <div class="title">Combat</div>
-        <p class="muted">This will host current HP/SP/EN/FO, conditions, active spells, etc.</p>
+        <p class="muted">Coming soon.</p>
       </div>
 
       <!-- Tab: Personal -->
@@ -212,6 +203,7 @@
       </div>
     </div>
   </div>
+
+  <script defer src="/static/js/character.js"></script>
 </body>
 </html>
-<script defer src="/static/js/character.js"></script>
