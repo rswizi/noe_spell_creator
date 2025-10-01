@@ -1,7 +1,7 @@
 (() => {
   // ====== CONFIG ======
-  const API_BASE = ''; // same-origin FastAPI. If different: 'https://api.example.com'
-  const AUTH_TOKEN = localStorage.getItem('authToken') || null;
+  const API_BASE = "";
+  const token = localStorage.getItem("auth_token") || "";
 
   const authHeaders = () => ({
     ...(AUTH_TOKEN ? { Authorization: `Bearer ${AUTH_TOKEN}` } : {}),
@@ -555,9 +555,9 @@
       applyServerComputed(res);
       setStatus('Saved','good');
     } catch (e) {
-      console.error(e);
-      setStatus('Error','danger');
-    }
+        console.error(e);
+        setStatus(`Error: ${e.message?.slice(0,60) || 'save failed'}`,'danger');
+      }
   }
 
   // ====== Event bindings (also fire autosave) ======
