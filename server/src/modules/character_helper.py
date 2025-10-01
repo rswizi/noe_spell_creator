@@ -271,3 +271,132 @@ def compute_character(ci: CharacterInput) -> CharacterComputed:
         caps=caps,
         derived=dr,
     )
+
+
+CHAR_COLLECTION = "characters"
+
+SUB_TIER_SLOTS = {1: 1, 2: 3, 3: 5, 4: 7}
+
+SUB_TIER_MIN_LEVEL = {1: 1, 2: 25, 3: 50, 4: 75}
+
+SKILL_LINKS = {
+    # REF
+    "Technicity": "REF", "Dodge": "REF", "Tempo": "REF", "Reactivity": "REF",
+    # DEX
+    "Accuracy": "DEX", "Evasion": "DEX", "Stealth": "DEX", "Acrobatics": "DEX",
+    # BOD
+    "Brutality": "BOD", "Blocking": "BOD", "Resistance": "BOD", "Athletics": "BOD",
+    # WIL
+    "Intimidation": "WIL", "Spirit": "WIL", "Instinct": "WIL", "Absorption": "WIL",
+    # MAG
+    "Aura": "MAG", "Incantation": "MAG", "Enchantment": "MAG", "Restoration": "MAG", "Potential": "MAG",
+    # PRE
+    "Taming": "PRE", "Charm": "PRE", "Charisma": "PRE", "Deception": "PRE", "Persuasion": "PRE",
+    # WIS
+    "Survival": "WIS", "Education": "WIS", "Perception": "WIS", "Psychology": "WIS", "Investigation": "WIS",
+    # TEC
+    "Crafting": "TEC", "Sleight of hand": "TEC", "Alchemy": "TEC", "Medicine": "TEC", "Engineering": "TEC",
+    # Intensities (count as skills, linked to MAG)
+    "Fire": "MAG", "Water": "MAG", "Earth": "MAG", "Wind": "MAG",
+    "Lightning": "MAG", "Moon": "MAG", "Sun": "MAG", "Ki": "MAG",
+}
+
+CHAR_KEYS = ("REF","DEX","BOD","WIS","PRE","MAG","WIL","TEC")
+
+DEFAULT_CHARACTER = {
+    "name": "Unnamed",
+    "img": "",
+    "xp_total": 0,
+    "level_manual": None,
+    "bio": {"height": "", "weight": "", "birthday": "", "backstory": "", "notes": ""},
+
+    "characteristics": {k: 0 for k in CHAR_KEYS},
+    "skills": {k: 0 for k in SKILL_LINKS.keys()},
+
+    "sublimations": [],
+
+    "mods": {"characteristics": {}, "skills": {}},
+    "created_at": None,
+    "updated_at": None,
+}
+
+def _effective_level(doc: dict) -> int:
+    """Manual level if set, otherwise derive from XP."""
+    lvl = int(doc.get("level_manual")) if doc.get("level_manual") not in (None, "") else level_from_total_xp(int(doc.get("xp_total") or 0))
+    return max(1, min(lvl, 100))
+
+def _sum_sublimation_slots(subs: list[dict]) -> int:
+    tot = 0
+    for s in subs or []:
+        tier = int(s.get("tier") or 1)
+        tot += SUB_TIER_SLOTS.get(tier, 0)
+    return tot
+
+def _sublimation_bonuses(subs: list[dict]) -> dict:
+    """
+    Translate sublimations into numeric bonuses we can feed into compute_character:
+      - Excellence: +tier to the chosen skill's *modifier* (capped to invested by helper)
+      - Defense: +12 HP per tier
+      - Endurance: +2 EN per tier
+      - Speed: +1 MO per tier
+      - Clarity: +1 FO per tier
+      - Devastation: +tier to Condition DC
+      - Lethality / Blessing: stored for UI; do not affect base math here
+    """
+    bonuses = {
+        "bonus_hp_flat": 0,
+        "bonus_en_flat": 0,
+        "bonus_fo_flat": 0,
+        "bonus_mo_flat": 0,
+        "bonus_condition_dc": 0, 
+        "skill_mods": {}, 
+        "counts": {"Lethality": 0, "Blessing": 0}
+    }
+    for s in subs or []:
+        typ = (s.get("type") or "").strip().title()
+        tier = int(s.get("tier") or 1)
+        if typ == "Excellence":
+            sk = s.get("skill") or ""
+            if sk:
+                bonuses["skill_mods"][sk] = int(bonuses["skill_mods"].get(sk, 0)) + tier
+        elif typ == "Defense":
+            bonuses["bonus_hp_flat"] += 12 * tier
+        elif typ == "Endurance":
+            bonuses["bonus_en_flat"] += 2 * tier
+        elif typ == "Speed":
+            bonuses["bonus_mo_flat"] += 1 * tier
+        elif typ == "Clarity":
+            bonuses["bonus_fo_flat"] += 1 * tier
+        elif typ == "Devastation":
+            bonuses["bonus_condition_dc"] += tier
+        elif typ in ("Lethality", "Blessing"):
+            bonuses["counts"][typ] += tier
+    return bonuses
+
+def _validate_caps(level: int, char_inv: dict, skill_inv: dict):
+    from fastapi import HTTPException
+    ccap = max_characteristic_cap(level)
+    scap = max_skill_cap(level)
+    bad_c = {k: v for k, v in char_inv.items() if int(v) > ccap or int(v) < 0}
+    bad_s = {k: v for k, v in skill_inv.items() if int(v) > scap or int(v) < 0}
+    if bad_c:
+        raise HTTPException(status_code=400, detail=f"Characteristic over cap {ccap}: {bad_c}")
+    if bad_s:
+        raise HTTPException(status_code=400, detail=f"Skill over cap {scap}: {bad_s}")
+
+def _validate_sublimations(level: int, subs: list[dict], skills: dict, slot_max: int):
+    from fastapi import HTTPException
+
+    for s in subs or []:
+        tier = int(s.get("tier") or 1)
+        min_lvl = SUB_TIER_MIN_LEVEL.get(tier, 999)
+        if level < min_lvl:
+            raise HTTPException(status_code=400, detail=f"Sublimation tier {tier} requires level {min_lvl}+")
+        if (s.get("type") or "").strip().title() == "Excellence":
+            sk = s.get("skill") or ""
+            if sk not in skills:
+                raise HTTPException(status_code=400, detail=f"Excellence must target a valid skill (got '{sk}')")
+
+    used = _sum_sublimation_slots(subs)
+    if used > slot_max:
+        raise HTTPException(status_code=400, detail=f"Sublimation slots exceeded: {used}/{slot_max}")

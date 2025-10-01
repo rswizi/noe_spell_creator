@@ -19,6 +19,7 @@ from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplic
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER
 from server.src.modules.allowed_pages import ALLOWED_PAGES
+from server.src.modules.character_helper import CHAR_COLLECTION, DEFAULT_CHARACTER, _effective_level, CharacterInput, SKILL_LINKS, compute_character, _validate_caps, _validate_sublimations, _sublimation_bonuses, _sum_sublimation_slots
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -2696,3 +2697,251 @@ def list_users_for_assignment(request: Request):
     users = list(get_col("users").find({}, {"_id": 0, "username": 1, "role": 1}))
     users.sort(key=lambda u: u["username"].lower())
     return {"status": "success", "users": users}
+
+# ================================= Character
+@app.post("/characters")
+def create_character(request: Request, payload: dict = Body(...)):
+    username, _ = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col(CHAR_COLLECTION)
+
+    doc = dict(DEFAULT_CHARACTER)
+    doc["id"] = next_id_str(CHAR_COLLECTION, padding=4)
+    doc["owner"] = username
+    doc["created_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+
+    doc["name"] = (payload.get("name") or doc["name"]).strip()
+    doc["img"] = (payload.get("img") or doc["img"]).strip()
+
+    doc["xp_total"] = int(payload.get("xp_total") or 0)
+    lm = payload.get("level_manual", None)
+    doc["level_manual"] = int(lm) if lm not in (None, "",) else None
+
+    in_chars = payload.get("characteristics") or {}
+    in_skills = payload.get("skills") or {}
+    doc["characteristics"].update({k: int(in_chars.get(k, 0)) for k in doc["characteristics"].keys()})
+    doc["skills"].update({k: int(in_skills.get(k, 0)) for k in doc["skills"].keys()})
+
+    doc["sublimations"] = [
+        {
+            "type": (s.get("type") or "").strip().title(),
+            "tier": int(s.get("tier") or 1),
+            "skill": s.get("skill") or None,
+        }
+        for s in (payload.get("sublimations") or [])
+    ]
+
+    bio_in = payload.get("bio") or {}
+    doc["bio"] = {
+        "height": (bio_in.get("height") or "").strip(),
+        "weight": (bio_in.get("weight") or "").strip(),
+        "birthday": (bio_in.get("birthday") or "").strip(),
+        "backstory": (bio_in.get("backstory") or "").strip(),
+        "notes": (bio_in.get("notes") or "").strip(),
+    }
+
+    level = _effective_level(doc)
+
+    ci = CharacterInput(
+        level=level,
+        invested_characteristics=doc["characteristics"],
+        characteristic_mods=doc["mods"]["characteristics"],
+        invested_skills=doc["skills"],
+        skill_mods=doc["mods"]["skills"],
+        skill_links=SKILL_LINKS,
+    )
+    pre = compute_character(ci)
+    _validate_caps(level, doc["characteristics"], doc["skills"])
+    _validate_sublimations(level, doc["sublimations"], doc["skills"], pre.derived.sublimation_slots_max)
+
+    # persist
+    get_col(CHAR_COLLECTION).insert_one(dict(doc))
+
+    try:
+        write_audit("character.create", username, doc["id"], None, {"name": doc["name"]})
+    except Exception:
+        pass
+
+    # return with computed view
+    return get_character(doc["id"], request)
+
+@app.get("/characters/mine")
+def my_characters(request: Request):
+    username, _ = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col(CHAR_COLLECTION)
+    rows = list(col.find({"owner": username}, {"_id": 0}))
+    # Optional: light summary (without heavy computed)
+    rows.sort(key=lambda r: r.get("created_at",""))
+    return {"status": "success", "characters": rows}
+
+def _computed_view(doc: dict) -> dict:
+    """Build the computed payload using helpers + sublimation bonuses."""
+    level = _effective_level(doc)
+
+    # Sublimation bonuses
+    sub = _sublimation_bonuses(doc.get("sublimations") or [])
+    skill_mods = dict(doc.get("mods", {}).get("skills") or {})
+    # Inject excellence per-skill mods
+    for k, v in sub["skill_mods"].items():
+        skill_mods[k] = int(skill_mods.get(k, 0)) + int(v)
+
+    ci = CharacterInput(
+        level=level,
+        invested_characteristics=doc.get("characteristics") or {},
+        characteristic_mods=doc.get("mods", {}).get("characteristics") or {},
+        invested_skills=doc.get("skills") or {},
+        skill_mods=skill_mods,
+        skill_links=SKILL_LINKS,
+    )
+    comp = compute_character(ci)
+
+    # Apply condition DC bonus from Devastation post-compute
+    derived = comp.derived.__dict__.copy()
+    derived["condition_dc"] = int(derived["condition_dc"]) + int(sub["bonus_condition_dc"])
+
+    # slot usage
+    sub_slots_used = _sum_sublimation_slots(doc.get("sublimations") or [])
+
+    return {
+        "level": level,
+        "caps": comp.caps,
+        "totals": comp.characteristic_totals,
+        "mods": comp.characteristic_mods,
+        "milestones": comp.milestones,
+        "base_values": comp.skill_base_values,
+        "derived": derived,
+        "sublimations": {
+            "items": doc.get("sublimations") or [],
+            "slots_used": sub_slots_used,
+            "slots_max": derived["sublimation_slots_max"],
+            "counts": sub["counts"],  # Lethality/Blessing counts for UI
+        },
+    }
+
+@app.get("/characters/{cid}")
+def get_character(cid: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col(CHAR_COLLECTION)
+    doc = col.find_one({"id": cid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found")
+    if not (doc.get("owner") == username or role in ("admin","moderator")):
+        raise HTTPException(401, "Unauthorized")
+
+    return {
+        "status": "success",
+        "character": doc,
+        "computed": _computed_view(doc),
+    }
+
+@app.put("/characters/{cid}")
+def update_character(cid: str, request: Request, payload: dict = Body(...)):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col(CHAR_COLLECTION)
+    doc = col.find_one({"id": cid})
+    if not doc: raise HTTPException(404, "Not found")
+    if not (doc.get("owner") == username or role in ("admin","moderator")):
+        raise HTTPException(401, "Unauthorized")
+
+    before = {k: doc.get(k) for k in ("name","img","xp_total","level_manual","characteristics","skills","sublimations","bio")}
+
+    # patch values
+    if "name" in payload: doc["name"] = (payload.get("name") or "").strip()
+    if "img" in payload: doc["img"] = (payload.get("img") or "").strip()
+
+    if "xp_total" in payload: doc["xp_total"] = int(payload.get("xp_total") or 0)
+    if "level_manual" in payload:
+        lm = payload.get("level_manual")
+        doc["level_manual"] = int(lm) if lm not in (None, "") else None
+
+    if "characteristics" in payload:
+        inc = payload.get("characteristics") or {}
+        for k in doc["characteristics"].keys():
+            if k in inc:
+                doc["characteristics"][k] = int(inc[k])
+
+    if "skills" in payload:
+        ins = payload.get("skills") or {}
+        for k in doc["skills"].keys():
+            if k in ins:
+                doc["skills"][k] = int(ins[k])
+
+    if "sublimations" in payload:
+        doc["sublimations"] = [
+            {
+                "type": (s.get("type") or "").strip().title(),
+                "tier": int(s.get("tier") or 1),
+                "skill": s.get("skill") or None,
+            }
+            for s in (payload.get("sublimations") or [])
+        ]
+
+    if "bio" in payload:
+        b = payload.get("bio") or {}
+        for key in ("height","weight","birthday","backstory","notes"):
+            if key in b:
+                doc["bio"][key] = (b.get(key) or "").strip()
+
+    doc["updated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+
+    # validations (caps + sublimations)
+    level = _effective_level(doc)
+    # provisional compute for slot cap
+    ci_tmp = CharacterInput(
+        level=level,
+        invested_characteristics=doc["characteristics"],
+        characteristic_mods=doc.get("mods", {}).get("characteristics") or {},
+        invested_skills=doc["skills"],
+        skill_mods=doc.get("mods", {}).get("skills") or {},
+        skill_links=SKILL_LINKS,
+    )
+    pre = compute_character(ci_tmp)
+    _validate_caps(level, doc["characteristics"], doc["skills"])
+    _validate_sublimations(level, doc["sublimations"], doc["skills"], pre.derived.sublimation_slots_max)
+
+    col.update_one({"id": cid}, {"$set": doc})
+    try:
+        write_audit("character.update", username, cid, before, {"updated": True})
+    except Exception:
+        pass
+
+    return get_character(cid, request)
+
+@app.delete("/characters/{cid}")
+def delete_character(cid: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col(CHAR_COLLECTION)
+    doc = col.find_one({"id": cid}, {"_id": 0})
+    if not doc: raise HTTPException(404, "Not found")
+    if not (doc.get("owner") == username or role in ("admin","moderator")):
+        raise HTTPException(401, "Unauthorized")
+
+    col.delete_one({"id": cid})
+    try:
+        write_audit("character.delete", username, cid, doc, {"deleted": True})
+    except Exception:
+        pass
+    return {"status": "success", "deleted": cid}
+
+@app.get("/characters/{cid}/compute")
+def compute_character_view(cid: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col(CHAR_COLLECTION)
+    doc = col.find_one({"id": cid}, {"_id": 0})
+    if not doc: raise HTTPException(404, "Not found")
+    if not (doc.get("owner") == username or role in ("admin","moderator")):
+        raise HTTPException(401, "Unauthorized")
+    return {"status": "success", "computed": _computed_view(doc)}
+
+@app.get("/admin/characters")
+def admin_list_characters(request: Request, owner: str | None = Query(default=None), name: str | None = Query(default=None), page: int = 1, limit: int = 50):
+    require_auth(request, roles=["admin","moderator"])
+    col = get_col(CHAR_COLLECTION)
+    q = {}
+    if owner:
+        q["owner"] = {"$regex": owner, "$options": "i"}
+    if name:
+        q["name"] = {"$regex": name, "$options": "i"}
+    total = col.count_documents(q)
+    items = list(col.find(q, {"_id": 0}).skip((page-1)*limit).limit(limit))
+    items.sort(key=lambda d: (d.get("owner","").lower(), d.get("name","").lower()))
+    return {"status":"success","characters": items, "page": page, "limit": limit, "total": total}
