@@ -3,7 +3,7 @@
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
 
-  // ---------------- Tabs ----------------
+  // ----- Tabs -----
   $$('.tab').forEach(btn => {
     btn.addEventListener('click', () => {
       $$('.tab').forEach(b => b.classList.remove('active'));
@@ -14,7 +14,7 @@
     });
   });
 
-  // ---------------- Avatar ----------------
+  // ----- Avatar -----
   const avatarUrl = $('#avatarUrl');
   const charAvatar = $('#charAvatar');
   if (avatarUrl) {
@@ -24,10 +24,11 @@
     });
   }
 
-  // ---------------- Helpers / rules ----------------
-  const modFromTotal = total => Math.floor((Number(total) - 10) / 2);
+  // ===== Rules / helpers =====
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const milestoneFromTotal = total => Math.floor((Number(total) - 10) / 2);
+  const levelFromXP = xp => Math.min(Math.floor((-1 + Math.sqrt(1 + 8 * (xp / 100))) / 2) + 1, 100);
   const tens = lvl => Math.floor(lvl / 10);
-  const f = n => Number.isFinite(n) ? n : 0;
 
   const CHAR_GROUPS = [
     { key:'ref', label:'Reflex (REF)',    investKey:'reflexp',    skills:[
@@ -85,9 +86,10 @@
   ];
 
   const INTENSITIES = ['Fire','Water','Earth','Wind','Lightning','Moon','Sun','Ki'];
+
   const SUB_TYPES = [
     { id:'2', label:'Lethality' },
-    { id:'1', label:'Excellence' }, // adds skill bonus
+    { id:'1', label:'Excellence' }, // +1 per tier to chosen skill; capped by Invested
     { id:'3', label:'Blessing' },
     { id:'4', label:'Defense' },
     { id:'5', label:'Speed' },
@@ -98,13 +100,13 @@
 
   const ALL_SKILLS = CHAR_GROUPS.flatMap(g => g.skills.map(s => ({...s, group:g.key})));
 
-  // ---------------- Build Characteristics & Skills ----------------
+  // ===== Build UI: Characteristics & Skills =====
   const charSkillContainer = $('#charSkillContainer');
-  charSkillContainer.innerHTML = ""; // ensure clean mount
+  charSkillContainer.innerHTML = "";
 
   CHAR_GROUPS.forEach(group => {
-    const wrap = document.createElement('div');
-    wrap.className = 'char-card';
+    const card = document.createElement('div');
+    card.className = 'char-card';
 
     // header
     const head = document.createElement('div');
@@ -112,49 +114,53 @@
     head.innerHTML = `
       <div class="h">${group.label}</div>
       <div class="mini">Invested</div>
-      <div class="mini">Char Bonus</div>
-      <div class="mini">[ Total | Char Mod ]</div>
+      <div class="mini">Modifier</div>
+      <div class="mini">[ Total | Milestone ]</div>
     `;
-    wrap.appendChild(head);
+    card.appendChild(head);
 
-    // characteristic row
+    // characteristic row (invest + modifier input)
     const crow = document.createElement('div');
     crow.className = 'rowline';
     crow.innerHTML = `
       <div><span class="muted">Characteristic</span></div>
       <div><input class="input" type="number" min="0" max="16" value="0" data-c-invest="${group.investKey}"></div>
-      <div><span class="mono" data-c-bonus="${group.key}">0</span></div>
-      <div><span class="mono" data-c-total="${group.key}">4</span> | <span class="mono" data-c-mod="${group.key}">-3</span></div>
+      <div><input class="input" type="number" min="-10" max="10" value="0" data-c-modifier="${group.key}"></div>
+      <div><span class="mono" data-c-total="${group.key}">4</span> | <span class="mono" data-c-mile="${group.key}">-3</span></div>
     `;
-    wrap.appendChild(crow);
+    card.appendChild(crow);
 
-    // skills
+    // skills header
     const shead = document.createElement('div');
     shead.className = 'rowline subhead';
     shead.innerHTML = `
       <div class="mini">—</div>
       <div class="mini">Invested</div>
-      <div class="mini">Skill Bonus</div>
+      <div class="mini">Modifier</div>
       <div class="mini">Base Value</div>
     `;
-    wrap.appendChild(shead);
+    card.appendChild(shead);
 
+    // skills rows
     group.skills.forEach(s => {
       const srow = document.createElement('div');
       srow.className = 'rowline';
       srow.innerHTML = `
         <div>— ${s.label}</div>
         <div><input class="input" type="number" min="0" max="8" value="0" data-s-invest="${s.key}" data-s-group="${group.key}"></div>
-        <div><span class="mono" data-s-bonus="${s.key}">0</span></div>
-        <div><span class="mono" data-s-base="${s.key}">0</span></div>
+        <div><input class="input" type="number" min="0" max="0" value="0" data-s-mod="${s.key}"></div>
+        <div>
+          <span class="mono" data-s-base="${s.key}">0</span>
+          <span class="mini" data-s-bonus-note="${s.key}" style="margin-left:6px;opacity:.7">(bonus 0)</span>
+        </div>
       `;
-      wrap.appendChild(srow);
+      card.appendChild(srow);
     });
 
-    charSkillContainer.appendChild(wrap);
+    charSkillContainer.appendChild(card);
   });
 
-  // ---------------- Intensities ----------------
+  // ===== Intensities table =====
   const tbodyInt = $('#intensityTable tbody');
   tbodyInt.innerHTML = "";
   INTENSITIES.forEach(nm => {
@@ -162,7 +168,7 @@
     tr.innerHTML = `
       <td>${nm}</td>
       <td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="${nm}"></td>
-      <td class="mono" data-i-mod="${nm}">0</td>
+      <td><input class="input" type="number" min="0" max="0" value="0" data-i-mod="${nm}"></td>
       <td class="mono" data-i-base="${nm}">0</td>
       <td class="mono" data-i-id="${nm}">—</td>
       <td class="mono" data-i-iv="${nm}">—</td>
@@ -171,7 +177,7 @@
     tbodyInt.appendChild(tr);
   });
 
-  // ---------------- Sublimations ----------------
+  // ===== Sublimations =====
   const subTableBody = $('#subTable tbody');
   const btnAddSub = $('#btnAddSub');
 
@@ -209,15 +215,13 @@
     delBtn.addEventListener('click', () => { tr.remove(); recompute(); queueSave(); });
 
     function toggleSkill(){
-      const needsSkill = typeSel.value === '1'; // Excellence
+      const needsSkill = typeSel.value === '1'; // Excellence only
       skillSel.disabled = !needsSkill;
       skillSel.style.opacity = needsSkill ? 1 : .5;
     }
-
     typeSel.addEventListener('change', ()=>{ toggleSkill(); recompute(); queueSave(); });
     skillSel.addEventListener('change', ()=>{ recompute(); queueSave(); });
     tierInp.addEventListener('input', ()=>{ recompute(); queueSave(); });
-
     toggleSkill();
 
     const td1 = document.createElement('td'); td1.appendChild(typeSel);
@@ -230,55 +234,40 @@
     tr.appendChild(td3);
     tr.appendChild(slotsCell);
     tr.appendChild(td5);
-
     tr._refs = { typeSel, skillSel, tierInp, slotsCell };
     subTableBody.appendChild(tr);
   }
 
   btnAddSub.addEventListener('click', () => { addSubRow(); recompute(); queueSave(); });
+  // seed example
+  addSubRow({ type:'1', skill:'accuracy', tier:2 });
 
-  // seed
-  addSubRow({ type:'1', skill:'accuracy', tier:3 });
-  addSubRow({ type:'2', skill:'', tier:1 });
-
-  // ---------------- Reads & Sets ----------------
+  // ===== Reads / Sets =====
   const setTxt = (sel, v) => { const el=$(sel); if (el) el.textContent=String(v); };
-  const lvlInp = $('#c_level');
-  const xpInp  = $('#c_xp');
+  const lvlInp = $('#c_level'), xpInp = $('#c_xp');
 
-  function readLevel(){
-    let lvl = Number(lvlInp.value || 1);
-    if (!lvl || lvl < 1){
-      const xp = Number(xpInp.value||0);
-      const n  = Math.floor((-1 + Math.sqrt(1 + 8*(xp/100)))/2);
-      lvl = Math.min(n+1, 100);
-    }
-    return Math.min(Math.max(lvl,1),100);
-  }
-
-  function idIvFromBV(bv){
+  const idIvFromBV = (bv) => {
     if (bv <= 0) return ['—','—'];
     if (bv <= 7)  return ['1d4', 2];
     if (bv <= 11) return ['1d6', 3];
     if (bv <= 15) return ['1d8', 4];
     if (bv <= 17) return ['1d10',5];
     return ['1d12', 6];
+  };
+
+  function readLevel(){
+    let lvl = Number(lvlInp.value || 1);
+    if (!lvl || lvl < 1) lvl = levelFromXP(Number(xpInp.value||0));
+    return clamp(lvl, 1, 100);
   }
 
-  function sumSubType(code){
-    return Array.from(subTableBody.children).reduce((acc, tr) => {
-      const { typeSel, tierInp } = tr._refs || {};
-      return acc + ((typeSel && typeSel.value === code) ? Math.max(0, Number(tierInp.value||0)) : 0);
-    }, 0);
-  }
-
-  // ---------------- Recompute ----------------
+  // ===== Recompute =====
   function recompute(){
     const lvl = readLevel();
     lvlInp.value = String(lvl);
 
-    // Excellence bonuses per-skill
-    const excellence = {};
+    // --- Excellence map
+    const ex = {}; // skill -> tiers
     let subUsed = 0;
     Array.from(subTableBody.children).forEach(tr=>{
       const { typeSel, skillSel, tierInp, slotsCell } = tr._refs || {};
@@ -286,90 +275,93 @@
       slotsCell.textContent = String(tier);
       subUsed += tier;
       if (typeSel.value === '1' && skillSel.value){
-        excellence[skillSel.value] = (excellence[skillSel.value]||0) + tier;
+        ex[skillSel.value] = (ex[skillSel.value]||0) + tier;
       }
     });
 
-    // Characteristic totals & mods
+    // --- Characteristics: totals, milestones
     const charInvest = {};
-    const charTotal  = {};
-    const charMod    = {};  // d20-style mod used by skills
+    const charModExternal = {};
+    const charMilestone   = {};
     CHAR_GROUPS.forEach(g => {
-      const invested = Number($(`[data-c-invest="${g.investKey}"]`).value || 0);
-      charInvest[g.key] = invested;
+      const inv = Number($(`[data-c-invest="${g.investKey}"]`).value || 0);
+      charInvest[g.key] = inv;
 
-      const charBonus = 0; // external item/trait; for now 0
-      const total     = invested + charBonus + 4; // base 4 on creation
-      const cmod      = modFromTotal(total);
+      const modInputEl = $(`[data-c-modifier="${g.key}"]`);
+      const modVal = clamp(Number(modInputEl.value||0), -10, 10);
+      modInputEl.value = String(modVal);
+      charModExternal[g.key] = modVal;
 
-      $(`[data-c-bonus="${g.key}"]`).textContent = String(charBonus);
+      const total = 4 + inv + modVal;               // base 4 + invested + external modifier
+      const mile  = milestoneFromTotal(total);      // Milestone added to skills
       $(`[data-c-total="${g.key}"]`).textContent = String(total);
-      $(`[data-c-mod="${g.key}"]`).textContent   = String(cmod);
+      $(`[data-c-mile="${g.key}"]`).textContent  = String(mile);
 
-      charTotal[g.key] = total;
-      charMod[g.key]   = cmod;
+      charMilestone[g.key] = mile;
     });
 
-    // Skill bases
+    // --- Skills: base values with caps
     const skillInvest = {};
+    const skillModExternal = {};
     CHAR_GROUPS.forEach(g => {
       g.skills.forEach(s => {
         const inv = Number($(`[data-s-invest="${s.key}"]`).value || 0);
         skillInvest[s.key] = inv;
 
-        // Excellence bonus capped by invested points
-        const exBonus = Math.min(excellence[s.key]||0, inv);
-        const base = inv + exBonus + (charMod[g.key]||0);
+        const modEl = $(`[data-s-mod="${s.key}"]`);
+        const exTiers = ex[s.key] || 0;
+        modEl.max = Math.max(0, inv - exTiers);      // external mod cap so (mod + ex) ≤ invested
+        const rawMod = clamp(Number(modEl.value||0), 0, Number(modEl.max));
+        modEl.value = String(rawMod);
+        skillModExternal[s.key] = rawMod;
 
-        $(`[data-s-bonus="${s.key}"]`).textContent = String(exBonus);
-        $(`[data-s-base="${s.key}"]`).textContent  = String(base);
+        const appliedBonus = Math.min(inv, rawMod + exTiers);
+        const base = inv + appliedBonus + (charMilestone[g.key] || 0);
+
+        $(`[data-s-base="${s.key}"]`).textContent = String(base);
+        $(`[data-s-bonus-note="${s.key}"]`).textContent = `(bonus ${appliedBonus})`;
       });
     });
 
-    // Counters & caps
+    // --- Counters & caps
     const cp_used = Object.values(charInvest).reduce((a,b)=>a+b,0);
     const cp_max  = 22 + Math.floor((lvl-1)/9)*3;
     const sp_used = Object.values(skillInvest).reduce((a,b)=>a+b,0);
     const sp_max  = 40 + (lvl-1)*2;
     const skill_cap = (lvl>=50?8:lvl>=40?7:lvl>=30?6:lvl>=20?5:lvl>=10?4:3);
+    const char_cap  = (lvl>=55?10:lvl>=46?9:lvl>=37?8:lvl>=28?7:lvl>=19?6:lvl>=10?5:4);
 
-    setTxt('#cp_used', cp_used);
-    setTxt('#cp_max',  cp_max);
-    setTxt('#sp_used', sp_used);
-    setTxt('#sp_max',  sp_max);
-    setTxt('#skill_cap', skill_cap);
-    setTxt('#char_cap', (lvl>=55?10:lvl>=46?9:lvl>=37?8:lvl>=28?7:lvl>=19?6:lvl>=10?5:4));
+    setTxt('#cp_used', cp_used); setTxt('#cp_max', cp_max);
+    setTxt('#sp_used', sp_used); setTxt('#sp_max', sp_max);
+    setTxt('#skill_cap', skill_cap); setTxt('#char_cap', char_cap);
 
-    // Sublimation slots / tier cap
-    const mile_pre = Math.max(charMod.pre||0, 0);
-    const sub_max  = (mile_pre*2) + Math.floor(lvl/10);
+    // --- Sublimation slots / tier cap
+    const mile_pre_pos = Math.max(charMilestone.pre || 0, 0); // Positive Milestones only
+    const sub_max  = (mile_pre_pos*2) + Math.floor(lvl/10);
     const tier_cap = Math.ceil(lvl/25);
-    setTxt('#sub_used', subUsed);
-    setTxt('#sub_max', sub_max);
-    setTxt('#sub_tier', tier_cap);
+    setTxt('#sub_used', subUsed); setTxt('#sub_max', sub_max); setTxt('#sub_tier', tier_cap);
 
-    // Derived resources
-    const mile_bod = Math.max(charMod.bod||0,0);
-    const mile_wil = Math.max(charMod.wil||0,0);
-    const mile_mag = Math.max(charMod.mag||0,0);
-    const mile_dex = Math.max(charMod.dex||0,0);
-    const mile_ref = Math.max(charMod.ref||0,0);
-    const mile_wis = Math.max(charMod.wis||0,0);
+    // --- Derived resources (use Positive Milestones)
+    const mile_bod_pos = Math.max(charMilestone.bod||0,0);
+    const mile_wil_pos = Math.max(charMilestone.wil||0,0);
+    const mile_mag_pos = Math.max(charMilestone.mag||0,0);
+    const mile_dex_pos = Math.max(charMilestone.dex||0,0);
+    const mile_ref_pos = Math.max(charMilestone.ref||0,0);
+    const mile_wis_pos = Math.max(charMilestone.wis||0,0);
 
-    const sub_def   = sumSubType('4'); // Defense +12 HP each
-    const sub_end   = sumSubType('6'); // Endurance +2 EN each
-    const sub_clr   = sumSubType('8'); // Clarity +1 FO each
-    const sub_spd   = sumSubType('5'); // Speed +1 MO each
-    const lvl5      = Math.floor((lvl-1)/5);
+    const sub_def   = sumSubType('4'); // Defense +12 HP
+    const sub_end   = sumSubType('6'); // Endurance +2 EN
+    const sub_clr   = sumSubType('8'); // Clarity +1 FO
+    const sub_spd   = sumSubType('5'); // Speed +1 MO
 
-    const hp_max = 100 + (lvl-1) + 12*mile_bod + 6*mile_wil + 12*sub_def;
-    const en_max = 5 + lvl5 + mile_wil + 2*mile_mag + 2*sub_end;
-    const fo_max = 2 + lvl5 + mile_wil + mile_wis + 2*Math.max(charMod.pre||0,0) + sub_clr; // PRE milestone counts twice in your text; here we use +PRE_mile + Clarity
-    const mo     = 4 + mile_dex + mile_ref + sub_spd;
-    const et     = 1 + Math.floor((lvl-1)/9) + mile_mag;
+    const hp_max = 100 + (lvl-1) + 12*mile_bod_pos + 6*mile_wil_pos + 12*sub_def;
+    const en_max = 5 + Math.floor((lvl-1)/5) + mile_wil_pos + 2*mile_mag_pos + 2*sub_end;
+    const fo_max = 2 + Math.floor((lvl-1)/5) + mile_wil_pos + mile_wis_pos + (Math.max(charMilestone.pre||0,0)) + sub_clr;
+    const mo     = 4 + mile_dex_pos + mile_ref_pos + sub_spd;
+    const et     = 1 + Math.floor((lvl-1)/9) + mile_mag_pos;
     const cdc    = 6 + tens(lvl) + sumSubType('7');
 
-    // TX & Enc
+    // --- Skills used by TX / Enc
     const resistanceBV = Number($('[data-s-base="resistance"]').textContent||0);
     const alchemyBV    = Number($('[data-s-base="alchemy"]').textContent||0);
     const tx_max = resistanceBV + alchemyBV;
@@ -378,7 +370,7 @@
     const spiritBV     = Number($('[data-s-base="spirit"]').textContent||0);
     const enc_max = 10 + athleticsBV + spiritBV;
 
-    // set resources & badges
+    // Set resources & badges
     setResource('#hp_cur','#hp_max','#hp_bar',hp_max,hp_max);
     setResource('#sp_cur','#sp_max','#sp_bar',0,Math.floor(hp_max/10));
     setResource('#en_cur','#en_max','#en_bar',Math.min(5,en_max),en_max);
@@ -387,35 +379,47 @@
     setResource('#enc_cur','#enc_max','#enc_bar',0,enc_max);
 
     setTxt('#k_mo', mo);
-    setTxt('#k_init', mo + Math.max(charMod.ref||0,0));
+    setTxt('#k_init', mo + mile_ref_pos);
     setTxt('#k_et', et);
     setTxt('#k_cdc', cdc);
 
-    // Intensities (base = invested + MAG mod; if invested==0, base=0)
-    const magMod = charMod.mag || 0;
-    const ivMap = {};
+    // --- Intensities as skills (linked to MAG milestone)
+    const mag_mile = charMilestone.mag || 0;
     INTENSITIES.forEach(nm => {
       const inv = Number($(`[data-i-invest="${nm}"]`).value || 0);
-      const base = inv>0 ? inv + magMod : 0;
+      const modEl = $(`[data-i-mod="${nm}"]`);
+      modEl.max = Math.max(0, inv); // cap: ≤ Invested
+      const rawMod = clamp(Number(modEl.value||0), 0, Number(modEl.max));
+      modEl.value = String(rawMod);
+
+      // if invested == 0 => base = 0 (specialist rule not modeled here)
+      const applied = Math.min(inv, rawMod); // no Excellence on intensities (by design)
+      const base = inv > 0 ? inv + applied + mag_mile : 0;
       const [ID, IV] = idIvFromBV(base);
-      ivMap[nm] = Number(IV||0);
-      $(`[data-i-mod="${nm}"]`).textContent  = String(magMod);
+
       $(`[data-i-base="${nm}"]`).textContent = String(base);
-      $(`[data-i-id="${nm}"]`).textContent   = String(ID);
-      $(`[data-i-iv="${nm}"]`).textContent   = String(IV||'—');
-      $(`[data-i-rw="${nm}"]`).textContent   = "0"; // placeholder grid
+      $(`[data-i-id="${nm}"]`).textContent = String(ID);
+      $(`[data-i-iv="${nm}"]`).textContent = String(IV||'—');
+      $(`[data-i-rw="${nm}"]`).textContent = "0";
     });
 
-    // cap highlighting
+    // Highlights
     decorateCaps(skill_cap, sp_max, cp_max, sub_max, tier_cap);
   }
 
   function setResource(curSel, maxSel, barSel, cur, max){
     setTxt(maxSel, max);
-    cur = Math.min(Math.max(cur, 0), Math.max(0,max));
+    cur = clamp(cur, 0, Math.max(0,max));
     setTxt(curSel, cur);
     const pct = max>0 ? Math.round((cur/max)*100) : 0;
     $(barSel).style.width = `${pct}%`;
+  }
+
+  function sumSubType(code){
+    return Array.from(subTableBody.children).reduce((acc, tr) => {
+      const { typeSel, tierInp } = tr._refs || {};
+      return acc + ((typeSel && typeSel.value === code) ? Math.max(0, Number(tierInp.value||0)) : 0);
+    }, 0);
   }
 
   function decorateCaps(skillCap, spMax, cpMax, subMax, tierCap){
@@ -436,11 +440,52 @@
     });
   }
 
-  // ---------------- Save-on-change ----------------
-  let saveTimer = null;
-  function queueSave(){
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveDraft, 300);
+  // ===== Save on change =====
+  let saveTimer=null;
+  function queueSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveDraft, 300); }
+
+  function collectPayload(){
+    const lvl = readLevel();
+    const name = ($('#c_name').value || '').trim();
+    const xp   = Number($('#c_xp').value || 0);
+    const avatar = $('#avatarUrl')?.value || '';
+
+    const invested_characteristics = {};
+    const characteristic_modifiers = {};
+    CHAR_GROUPS.forEach(g=>{
+      invested_characteristics[g.key] = Number($(`[data-c-invest="${g.investKey}"]`).value||0);
+      characteristic_modifiers[g.key] = Number($(`[data-c-modifier="${g.key}"]`).value||0);
+    });
+
+    const invested_skills = {};
+    const skill_modifiers = {};
+    CHAR_GROUPS.forEach(g=>g.skills.forEach(s=>{
+      invested_skills[s.key] = Number($(`[data-s-invest="${s.key}"]`).value||0);
+      skill_modifiers[s.key] = Number($(`[data-s-mod="${s.key}"]`).value||0);
+    }));
+
+    const intensities_invested = {};
+    const intensities_modifiers = {};
+    INTENSITIES.forEach(nm=>{
+      intensities_invested[nm] = Number($(`[data-i-invest="${nm}"]`).value||0);
+      intensities_modifiers[nm] = Number($(`[data-i-mod="${nm}"]`).value||0);
+    });
+
+    const sublimations = Array.from(subTableBody.children).map(tr=>{
+      const { typeSel, skillSel, tierInp } = tr._refs || {};
+      return { type: typeSel.value, skill: (skillSel.value||null), tier: Number(tierInp.value||0) };
+    });
+
+    return {
+      name, level:lvl, xp, avatar,
+      invested_characteristics,
+      characteristic_modifiers,
+      invested_skills,
+      skill_modifiers,
+      intensities_invested,
+      intensities_modifiers,
+      sublimations
+    };
   }
 
   async function saveDraft(){
@@ -452,45 +497,15 @@
         body: JSON.stringify(payload),
       });
     }catch(e){
-      // swallow for now; you can surface a toast if you want
       console.warn('save failed', e);
     }
   }
 
-  function collectPayload(){
-    const lvl = readLevel();
-    const name = ($('#c_name').value || '').trim();
-    const xp   = Number($('#c_xp').value || 0);
-    const avatar = $('#avatarUrl').value || '';
-
-    const invested_chars = {};
-    CHAR_GROUPS.forEach(g=>{
-      invested_chars[g.key] = Number($(`[data-c-invest="${g.investKey}"]`).value||0);
-    });
-
-    const invested_skills = {};
-    CHAR_GROUPS.forEach(g=>g.skills.forEach(s=>{
-      invested_skills[s.key] = Number($(`[data-s-invest="${s.key}"]`).value||0);
-    }));
-
-    const sublimations = Array.from(subTableBody.children).map(tr=>{
-      const { typeSel, skillSel, tierInp } = tr._refs || {};
-      return { type: typeSel.value, skill: (skillSel.value||null), tier: Number(tierInp.value||0) };
-    });
-
-    return {
-      name, level:lvl, xp, avatar,
-      invested_characteristics: invested_chars,
-      invested_skills,
-      sublimations
-    };
-  }
-
-  // ---------------- Events ----------------
+  // ===== Events =====
   ['#c_level','#c_xp','#c_name'].forEach(sel => $(sel).addEventListener('input', ()=>{ recompute(); queueSave(); }));
   $$('#charSkillContainer input').forEach(inp => inp.addEventListener('input', ()=>{ recompute(); queueSave(); }));
-  $$('#intensityTable [data-i-invest]').forEach(inp => inp.addEventListener('input', ()=>{ recompute(); queueSave(); }));
+  $$('#intensityTable input').forEach(inp => inp.addEventListener('input', ()=>{ recompute(); queueSave(); }));
 
-  // first compute
+  // Initial compute
   recompute();
 })();
