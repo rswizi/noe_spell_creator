@@ -1,247 +1,123 @@
+/* /static/js/character.js
+ * Character Manager – complete, safe, debounced, and clickable “Sources” drawers.
+ */
+
 (() => {
-  const $ = (sel, el = document) => el.querySelector(sel);
-  const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
+  // ---------- utilities ----------
+  const $  = (sel, el=document) => el.querySelector(sel);
+  const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
 
-  // ---------- Tabs ----------
-  $$('.tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      $$('.tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const key = btn.dataset.tab;
-      $$('.tabpan').forEach(p => p.classList.remove('active'));
-      $(`#tab-${key}`).classList.add('active');
-    });
-  });
+  // numeric helpers
+  const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+  const toInt = (v, def=0) => {
+    if (v == null) return def;
+    const s = String(v).replace(/[^\d-]/g,''); // keep minus for robustness
+    const n = parseInt(s,10);
+    return Number.isFinite(n) ? n : def;
+  };
 
-  // ---------- Avatar ----------
-  $('#avatarUrl').addEventListener('input', () => {
-    $('#charAvatar').src = $('#avatarUrl').value || 'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg';
-    queueSave();
-  });
+  // Enforce 0–2 digits, replace (not append)
+  function sanitizeNumericInput(inp, {min=0, max=99}={}){
+    let val = inp.value || '';
+    // keep only digits
+    val = val.replace(/[^\d]/g,'');
+    if (val.length > 2) val = val.slice(0,2);
+    const n = clamp(toInt(val,0), min, max);
+    inp.value = String(n);
+    return n;
+  }
 
-  // ---------- Data model ----------
-  // Characteristics + skills map
+  // Debounce for autosave
+  const debounce = (fn, ms=500) => {
+    let t=null;
+    return (...args)=>{ clearTimeout(t); t = setTimeout(()=>fn(...args), ms); };
+  };
+
+  // ---------- constants ----------
   const CHAR_MAP = [
     { key:'ref', label:'Reflex (REF)', investKey:'reflexp', skills:[
       { key:'technicity', label:'Technicity' },
-      { key:'dodge', label:'Dodge' },
-      { key:'tempo', label:'Tempo' },
-      { key:'reactivity', label:'Reactivity' },
+      { key:'dodge',       label:'Dodge' },
+      { key:'tempo',       label:'Tempo' },
+      { key:'reactivity',  label:'Reactivity' },
     ]},
     { key:'dex', label:'Dexterity (DEX)', investKey:'dexterityp', skills:[
-      { key:'accuracy', label:'Accuracy' },
-      { key:'evasion', label:'Evasion' },
-      { key:'stealth', label:'Stealth' },
-      { key:'acrobatics', label:'Acrobatics' },
+      { key:'accuracy',    label:'Accuracy' },
+      { key:'evasion',     label:'Evasion' },
+      { key:'stealth',     label:'Stealth' },
+      { key:'acrobatics',  label:'Acrobatics' },
     ]},
     { key:'bod', label:'Body (BOD)', investKey:'bodyp', skills:[
-      { key:'brutality', label:'Brutality' },
-      { key:'blocking', label:'Blocking' },
-      { key:'resistance', label:'Resistance' },
-      { key:'athletics', label:'Athletics' },
+      { key:'brutality',   label:'Brutality' },
+      { key:'blocking',    label:'Blocking' },
+      { key:'resistance',  label:'Resistance' },
+      { key:'athletics',   label:'Athletics' },
     ]},
     { key:'wil', label:'Willpower (WIL)', investKey:'willpowerp', skills:[
-      { key:'intimidation', label:'Intimidation' },
-      { key:'spirit', label:'Spirit' },
-      { key:'instinct', label:'Instinct' },
-      { key:'absorption', label:'Absorption' },
+      { key:'intimidation',label:'Intimidation' },
+      { key:'spirit',      label:'Spirit' },
+      { key:'instinct',    label:'Instinct' },
+      { key:'absorption',  label:'Absorption' },
     ]},
     { key:'mag', label:'Magic (MAG)', investKey:'magicp', skills:[
-      { key:'aura', label:'Aura' },
+      { key:'aura',        label:'Aura' },
       { key:'incantation', label:'Incantation' },
       { key:'enchantment', label:'Enchantment' },
       { key:'restoration', label:'Restoration' },
-      { key:'potential', label:'Potential' },
+      { key:'potential',   label:'Potential' },
     ]},
     { key:'pre', label:'Presence (PRE)', investKey:'presencep', skills:[
-      { key:'taming', label:'Taming' },
-      { key:'charm', label:'Charm' },
-      { key:'charisma', label:'Charisma' },
-      { key:'deception', label:'Deception' },
-      { key:'persuasion', label:'Persuasion' },
+      { key:'taming',      label:'Taming' },
+      { key:'charm',       label:'Charm' },
+      { key:'charisma',    label:'Charisma' },
+      { key:'deception',   label:'Deception' },
+      { key:'persuasion',  label:'Persuasion' },
     ]},
     { key:'wis', label:'Wisdom (WIS)', investKey:'wisdomp', skills:[
-      { key:'survival', label:'Survival' },
-      { key:'education', label:'Education' },
-      { key:'perception', label:'Perception' },
-      { key:'psychology', label:'Psychology' },
-      { key:'investigation', label:'Investigation' },
+      { key:'survival',    label:'Survival' },
+      { key:'education',   label:'Education' },
+      { key:'perception',  label:'Perception' },
+      { key:'psychology',  label:'Psychology' },
+      { key:'investigation',label:'Investigation' },
     ]},
     { key:'tec', label:'Tech (TEC)', investKey:'techp', skills:[
-      { key:'crafting', label:'Crafting' },
-      { key:'soh', label:'Sleight of hand' },
-      { key:'alchemy', label:'Alchemy' },
-      { key:'medecine', label:'Medicine' },
+      { key:'crafting',    label:'Crafting' },
+      { key:'soh',         label:'Sleight of hand' },
+      { key:'alchemy',     label:'Alchemy' },
+      { key:'medecine',    label:'Medicine' },
       { key:'engineering', label:'Engineering' },
     ]},
   ];
+
   const INTENSITIES = ['Fire','Water','Earth','Wind','Lightning','Moon','Sun','Ki'];
 
-  // ---------- Build UI ----------
-  const charSkillContainer = $('#charSkillContainer');
+  // Sublimation types (IDs keep your earlier mapping)
+  const SUB_TYPES = {
+    EXCELLENCE:'1',   // +tiers to a specific skill (bonus capped by invested)
+    LETHALITY:'2',    // +2 neutral damage per tier (not in this sheet)
+    BLESSING:'3',     // magic dice adders (not in this sheet)
+    DEFENSE:'4',      // +12 HP per tier
+    SPEED:'5',        // +1 MO per tier
+    ENDURANCE:'6',    // +2 EN per tier
+    DEVASTATION:'7',  // +1 Condition DC per tier
+    CLARITY:'8',      // +1 FO per tier
+  };
 
-  function buildCharCards(){
-    charSkillContainer.innerHTML = '';
-    CHAR_MAP.forEach(group => {
-      const card = document.createElement('div');
-      card.className = 'char-card';
+  // ---------- derived / rules ----------
+  const scoreFromInvest = inv => 4 + inv;              // total characteristic score (mods currently external)
+  const milestoneFromScore = score => Math.max(Math.floor(score/2 - 5), 0); // “Positive Milestone”
+  const charScoreToMilestoneSigned = score => Math.floor(score/2 - 5); // signed value (for showing milestone column)
 
-      // header
-      const h = document.createElement('div');
-      h.className = 'card-h';
-      h.innerHTML = `
-        <div>${group.label}</div>
-        <div class="mini">[ Total | Milestone ]</div>
-      `;
-      card.appendChild(h);
+  const skillCapFromLevel = lvl =>
+    (lvl >= 50 ? 8 : lvl >= 40 ? 7 : lvl >= 30 ? 6 : lvl >= 20 ? 5 : lvl >= 10 ? 4 : 3);
 
-      const rows = document.createElement('div');
-      rows.className = 'rows';
+  const charCapFromLevel = lvl =>
+    (lvl >= 55 ? 10 : lvl >= 46 ? 9 : lvl >= 37 ? 8 : lvl >= 28 ? 7 : lvl >= 19 ? 6 : lvl >= 10 ? 5 : 4);
 
-      // Characteristic row
-      const crow = rowLine('Characteristic', {
-        invested: {attr:`data-c-invest="${group.investKey}"`, min:0, max:16},
-        milestone: {attr:`data-c-mil="${group.key}"`},
-        total:     {attr:`data-c-total="${group.key}"`},
-        openableId:`csrc-${group.key}`
-      });
-      rows.appendChild(crow);
-
-      // Skills
-      group.skills.forEach(s=>{
-        const srow = rowLine('— '+s.label, {
-          invested: {attr:`data-s-invest="${s.key}"`, min:0, max:8},
-          milestone:{attr:`data-s-mil="${s.key}"`}, // excellence bonus (not editable)
-          total:    {attr:`data-s-base="${s.key}"`},
-          openableId:`ssrc-${s.key}`,
-          miniRight:'(bonus <span class="mono" data-s-bonus="'+s.key+'">0</span>)'
-        });
-        rows.appendChild(srow);
-      });
-
-      card.appendChild(rows);
-      charSkillContainer.appendChild(card);
-    });
-  }
-
-  function rowLine(label, opts){
-    const wrap = document.createElement('div');
-    wrap.className='rowline';
-    wrap.innerHTML = `
-      <div>
-        <button class="btn ghost" data-toggle="${opts.openableId}" style="padding:6px 8px;font-size:12px">${label}</button>
-        ${opts.miniRight? `<span class="mini" style="margin-left:8px">${opts.miniRight}</span>`:''}
-      </div>
-      <div><input class="input" type="number" ${opts.invested.attr} min="${opts.invested.min}" max="${opts.invested.max}" value="0"></div>
-      <div class="mono"><span ${opts.milestone.attr}>0</span> | <span ${opts.total.attr}>4</span></div>
-      <div class="src" id="${opts.openableId}">
-        <table><tbody ${opts.openableId.startsWith('csrc')?`data-c-modsrc="${opts.openableId}"`:`data-s-modsrc="${opts.openableId}"`}></tbody></table>
-      </div>
-    `;
-    // toggle
-    wrap.querySelector(`[data-toggle="${opts.openableId}"]`).addEventListener('click', ()=>{
-      wrap.classList.toggle('open');
-    });
-    return wrap;
-  }
-
-  // ---------- Sublimations ----------
-  const SUB_TYPES = [
-    { id:'2', label:'Lethality' },
-    { id:'1', label:'Excellence' }, // needs skill
-    { id:'3', label:'Blessing' },
-    { id:'4', label:'Defense' },
-    { id:'5', label:'Speed' },
-    { id:'7', label:'Devastation' },
-    { id:'8', label:'Clarity' },
-    { id:'6', label:'Endurance' },
-  ];
-  const ALL_SKILLS = CHAR_MAP.flatMap(g=>g.skills).map(s=>({key:s.key, label:s.label}));
-  const subTableBody = $('#subTable tbody');
-
-  $('#btnAddSub').addEventListener('click', ()=> addSubRow());
-
-  function addSubRow(defaults = {type:'2', skill:'', tier:1}){
-    const tr = document.createElement('tr');
-
-    const typeSel = document.createElement('select');
-    SUB_TYPES.forEach(t=>{
-      const o = document.createElement('option');
-      o.value=t.id; o.textContent=t.label;
-      if(defaults.type===t.id) o.selected=true;
-      typeSel.appendChild(o);
-    });
-
-    const skillSel = document.createElement('select');
-    const empty = document.createElement('option');
-    empty.value=''; empty.textContent='—';
-    skillSel.appendChild(empty);
-    ALL_SKILLS.forEach(s=>{
-      const o = document.createElement('option'); o.value=s.key; o.textContent=s.label;
-      if(defaults.skill===s.key) o.selected=true;
-      skillSel.appendChild(o);
-    });
-
-    const tierInp = document.createElement('input');
-    tierInp.type='number'; tierInp.min='0'; tierInp.max='4'; tierInp.value=defaults.tier;
-
-    const slotsCell = document.createElement('td');
-    slotsCell.className='right mono';
-    slotsCell.textContent = String(defaults.tier);
-
-    const delBtn = document.createElement('button');
-    delBtn.className='btn ghost';
-    delBtn.textContent='Remove';
-    delBtn.addEventListener('click', ()=>{ tr.remove(); recompute(); queueSave(); });
-
-    function toggleSkill(){
-      skillSel.disabled = (typeSel.value!=='1');
-      skillSel.style.opacity = skillSel.disabled ? .5 : 1;
-    }
-    toggleSkill();
-
-    typeSel.addEventListener('change', ()=>{ toggleSkill(); recompute(); queueSave(); });
-    skillSel.addEventListener('change', ()=>{ recompute(); queueSave(); });
-    tierInp.addEventListener('input', ()=>{ slotsCell.textContent = tierInp.value; recompute(); queueSave(); });
-
-    const td1 = document.createElement('td'); td1.appendChild(typeSel);
-    const td2 = document.createElement('td'); td2.appendChild(skillSel);
-    const td3 = document.createElement('td'); td3.appendChild(tierInp);
-    const td5 = document.createElement('td'); td5.appendChild(delBtn);
-
-    tr.appendChild(td1);
-    tr.appendChild(td2);
-    tr.appendChild(td3);
-    tr.appendChild(slotsCell);
-    tr.appendChild(td5);
-    tr._refs = { typeSel, skillSel, tierInp, slotsCell };
-    subTableBody.appendChild(tr);
-  }
-  // seed one row
-  addSubRow({type:'1', skill:'accuracy', tier:2});
-
-  // ---------- Intensities ----------
-  const tbodyInt = $('#intensityTable tbody');
-  INTENSITIES.forEach(nm=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${nm}</td>
-      <td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="${nm}"></td>
-      <td class="mono" data-i-mil="${nm}">0</td>
-      <td class="mono" data-i-base="${nm}">0</td>
-      <td class="mono" data-i-id="${nm}">—</td>
-      <td class="mono" data-i-iv="${nm}">—</td>
-      <td class="mono right" data-i-rw="${nm}">0</td>
-    `;
-    tbodyInt.appendChild(tr);
-  });
-
-  // ---------- Helpers ----------
-  const setTxt = (sel, v) => { $(sel).textContent = String(v); };
-  const modFromScore = score => Math.floor(score/2 - 5);
-  const scoreFromInvest = invest => 4 + invest;
-  const milestoneCount = v => Math.max(modFromScore(v), 0); // positive milestones only
-  const levelFromXP = xp => Math.min(Math.floor((-1 + Math.sqrt(1 + 8*(xp/100)))/2)+1, 100);
+  const levelFromXP = xp => {
+    const k = Math.floor((-1 + Math.sqrt(1 + 8*(xp/100)))/2);
+    return clamp(k+1, 1, 100);
+  };
 
   function idIvFromBV(bv){
     if (bv <= 0) return ['—','—'];
@@ -249,323 +125,505 @@
     if (bv <= 11) return ['1d6', 3];
     if (bv <= 15) return ['1d8', 4];
     if (bv <= 17) return ['1d10',5];
-    return ['1d12',6];
+    return ['1d12', 6]; // 18+
   }
 
-  function replaceOnType(inp){
-    inp.addEventListener('focus', ()=>{ inp.select?.(); inp.dataset.touched="0"; });
-    inp.addEventListener('beforeinput', (ev)=>{
-      if (inp.dataset.touched!=="1"){
-        if (ev.inputType?.startsWith('insert')) inp.select?.();
-        inp.dataset.touched="1";
-      }
+  // ---------- DOM: build collapsible “Sources” drawers ----------
+  function attachDrawer(container, title, getSourcesFn){
+    const row = container;
+    if (!row) return;
+    // Clickable header: any element with `.stat-click` inside row
+    const clickTarget = $('.stat-click', row) || row;
+    const drawer = $('.sources', row);
+    if (!drawer) return;
+
+    clickTarget.addEventListener('click', () => {
+      row.classList.toggle('open');
+      renderSources(drawer, getSourcesFn());
     });
   }
 
-  function attachNumeric(){
-    $$('#charSkillContainer input[type="number"], #intensityTable input[type="number"]').forEach(inp=>{
-      replaceOnType(inp);
-      inp.setAttribute('inputmode','numeric');
-      inp.setAttribute('pattern','[0-9]*');
-      inp.addEventListener('input', ()=>{ recompute(); queueSave(); });
-    });
-    $$('#subTable tbody input[type="number"]').forEach(inp=>{
-      replaceOnType(inp);
-      inp.setAttribute('inputmode','numeric');
-      inp.setAttribute('pattern','[0-9]*');
-    });
-  }
-
-  // ---------- Compute ----------
-  function readLevel(){
-    const lvlInp = $('#c_level');
-    const xpInp = $('#c_xp');
-    let lvl = Number(lvlInp.value || 1);
-    if (!lvl || lvl < 1){
-      lvl = levelFromXP(Number(xpInp.value||0));
-      $('#c_level').value = String(lvl);
+  function renderSources(drawer, entries){
+    drawer.innerHTML = '';
+    if (!entries || entries.length === 0){
+      const p = document.createElement('div');
+      p.className='source-empty';
+      p.textContent = 'No modifiers yet.';
+      drawer.appendChild(p);
+      return;
     }
-    return Math.min(Math.max(lvl,1),100);
-  }
-
-  function sumSubType(code){
-    return Array.from($('#subTable tbody').children).reduce((acc, tr) => {
-      const { typeSel, tierInp } = tr._refs;
-      return acc + (typeSel.value === code ? Math.max(0,Number(tierInp.value||0)) : 0);
-    }, 0);
-  }
-
-  function collectExcellenceBonuses(){
-    // skillKey -> tier sum
-    const map = {};
-    Array.from($('#subTable tbody').children).forEach(tr=>{
-      const { typeSel, skillSel, tierInp } = tr._refs;
-      if (typeSel.value==='1' && skillSel.value){
-        map[skillSel.value] = (map[skillSel.value]||0) + Math.max(0,Number(tierInp.value||0));
-      }
-    });
-    return map;
-  }
-
-  function addSourcesTo(tableSel, rows){
-    const tbody = $(`[${tableSel}]`);
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    rows.forEach(r=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${r.name}</td><td class="right mono">${r.val>0?`+${r.val}`:r.val}</td>`;
-      tbody.appendChild(tr);
+    entries.forEach(([name, val])=>{
+      const line = document.createElement('div');
+      line.className='source-line';
+      const a = document.createElement('span'); a.textContent = name;
+      const b = document.createElement('b');   b.textContent = (val>0?'+':'')+val;
+      line.appendChild(a); line.appendChild(b);
+      drawer.appendChild(line);
     });
   }
 
+  // ---------- State read/write ----------
+  // We store “subRows” from the sublimation table; the rest is read from inputs using data- attributes
+  function readLevel(){
+    const l = $('#c_level');
+    const x = $('#c_xp');
+    let lvl = toInt(l?.value ?? 1,1);
+    if (!lvl) lvl = levelFromXP(toInt(x?.value ?? 0,0));
+    return clamp(lvl,1,100);
+  }
+
+  function readSublimations(){
+    const rows = Array.from($('#subTable tbody')?.children ?? []);
+    return rows.map(tr => {
+      const type = tr._refs?.typeSel?.value || SUB_TYPES.LETHALITY;
+      const skill= tr._refs?.skillSel?.value || '';
+      const tier = clamp(toInt(tr._refs?.tierInp?.value||0,0), 0, 4);
+      return {type, skill, tier};
+    });
+  }
+
+  // ---------- Compute + Paint ----------
   function recompute(){
     const lvl = readLevel();
+    if ($('#c_level')) $('#c_level').value = String(lvl);
 
-    // Characteristic investments -> scores -> milestones
-    const charInvest = {};
-    const charScore  = {};
-    const charMil    = {};
-    CHAR_MAP.forEach(g=>{
-      const inv = Number($(`[data-c-invest="${g.investKey}"]`).value||0);
-      const score = scoreFromInvest(inv);
-      const mil = milestoneCount(score);
-      charInvest[g.key]=inv; charScore[g.key]=score; charMil[g.key]=mil;
-      $(`[data-c-total="${g.key}"]`).textContent = String(score);
-      $(`[data-c-mil="${g.key}"]`).textContent   = String(mil);
-      // sources for characteristic (none yet, reserved)
-      addSourcesTo(`data-c-modsrc="csrc-${g.key}"`, []);
+    // caps & totals
+    const skillCap = skillCapFromLevel(lvl);
+    const charCap  = charCapFromLevel(lvl);
+    setTxt('#skill_cap', skillCap);
+    setTxt('#char_cap',  charCap);
+
+    // sublimations
+    const subs = readSublimations();
+    const subSlotsUsed = subs.reduce((a,s)=>a+s.tier,0);
+    const mile_pre_pos = Math.max(charMod('pre'), 0);
+    const subSlotsMax  = (mile_pre_pos*2) + Math.floor(lvl/10);
+    const tierCap      = Math.ceil(lvl/25);
+
+    setTxt('#sub_used', subSlotsUsed);
+    setTxt('#sub_max',  subSlotsMax);
+    setTxt('#sub_tier', tierCap);
+
+    // excellence map (skill -> bonus)
+    const excellence = {};
+    subs.forEach(s=>{
+      if (s.type === SUB_TYPES.EXCELLENCE && s.skill){
+        excellence[s.skill] = (excellence[s.skill]||0) + s.tier;
+      }
     });
 
-    // Sublimation bookkeeping
-    const sub_defense   = sumSubType('4'); // +12 HP per tier
-    const sub_speed     = sumSubType('5'); // +1 MO per
-    const sub_clarity   = sumSubType('8'); // +1 FO per
-    const sub_endurance = sumSubType('6'); // +2 EN per
-    const sub_devast    = sumSubType('7'); // +Condition DC per tier
+    // defense/speed/clarity/endurance/devastation tiers for derived
+    const tDefense    = sumTier(subs, SUB_TYPES.DEFENSE);
+    const tSpeed      = sumTier(subs, SUB_TYPES.SPEED);
+    const tClarity    = sumTier(subs, SUB_TYPES.CLARITY);
+    const tEndurance  = sumTier(subs, SUB_TYPES.ENDURANCE);
+    const tDevast     = sumTier(subs, SUB_TYPES.DEVASTATION);
 
-    const excellence = collectExcellenceBonuses(); // skill -> tiers
+    // Characteristic invested (0..16)
+    const cInvest = {};
+    CHAR_MAP.forEach(g=>{
+      const inp = $(`[data-c-invest="${g.investKey}"]`);
+      if (!inp) return;
+      const n = sanitizeNumericInput(inp,{min:0,max:16});
+      cInvest[g.key] = n;
+    });
 
-    // Skills
-    const skillInvest = {};
+    // Scores, milestones (signed display & positive)
+    const cScore = {};
+    const cMilSigned = {};
+    const cMilPos = {};
+    CHAR_MAP.forEach(g=>{
+      const score = scoreFromInvest(cInvest[g.key]||0);
+      cScore[g.key] = score;
+      cMilSigned[g.key] = charScoreToMilestoneSigned(score);
+      cMilPos[g.key]   = Math.max(cMilSigned[g.key], 0);
+      // paint characteristic row numbers
+      setTxt(`[data-c-total="${g.key}"]`, score);
+      setTxt(`[data-c-mile="${g.key}"]`, cMilSigned[g.key]); // can be negative
+    });
+
+    // Skills invested (0..8) and base values
+    let sp_used = 0;
     CHAR_MAP.forEach(g=>{
       g.skills.forEach(s=>{
-        const inv = Number($(`[data-s-invest="${s.key}"]`).value || 0);
-        const bonus = Math.min(inv, excellence[s.key]||0); // Excellence cannot exceed invested
-        const base = inv + bonus + (charMil[g.key]||0);
-        skillInvest[s.key]=inv;
-        $(`[data-s-bonus="${s.key}"]`).textContent = String(bonus);
-        $(`[data-s-mil="${s.key}"]`).textContent   = String(charMil[g.key]||0);
-        $(`[data-s-base="${s.key}"]`).textContent  = String(base);
-        addSourcesTo(`data-s-modsrc="ssrc-${s.key}"`,
-          bonus>0 ? [{name:`Sublimation • Excellence (Tier ${excellence[s.key]})`, val:+bonus}] : []
-        );
+        const inp = $(`[data-s-invest="${s.key}"]`);
+        if (!inp) return;
+        const n = sanitizeNumericInput(inp,{min:0,max:8});
+        sp_used += n;
+        const bonus = Math.min(n, excellence[s.key]||0); // Excellence cap by invested
+        const base  = n + bonus + cMilSigned[g.key];     // Base = invested + excellenceBonus + Milestone (signed)
+        setTxt(`[data-s-mod="${s.key}"]`, bonus);
+        setTxt(`[data-s-base="${s.key}"]`, base);
+
+        // Attach “Sources” drawer for skills
+        const row = inp.closest('.skill-row');
+        if (row && !row._drawerHooked){
+          attachDrawer(row, s.label, () => {
+            const list = [];
+            if ((excellence[s.key]||0)>0) list.push([`Sublimation: Excellence (${s.label})`, Math.min(n, excellence[s.key]||0)]);
+            return list;
+          });
+          row._drawerHooked = true;
+        }
       });
+
+      // “Sources” drawer for characteristic – currently only shows “No modifiers yet.”
+      const charRow = $(`[data-c-invest="${g.investKey}"]`)?.closest('.char-row');
+      if (charRow && !charRow._drawerHooked){
+        attachDrawer(charRow, g.label, () => []);
+        charRow._drawerHooked = true;
+      }
     });
 
-    // Points & Caps
-    const cp_used = Object.values(charInvest).reduce((a,b)=>a+b,0);
+    // points/caps
+    const cp_used = Object.values(cInvest).reduce((a,b)=>a+b,0);
     const cp_max  = 22 + Math.floor((lvl-1)/9)*3;
-    const sp_used = Object.values(skillInvest).reduce((a,b)=>a+b,0);
     const sp_max  = 40 + (lvl-1)*2;
-    const skill_cap = (lvl >= 50 ? 8 : lvl >= 40 ? 7 : lvl >= 30 ? 6 : lvl >= 20 ? 5 : lvl >= 10 ? 4 : 3);
-    const char_cap  = (lvl >= 55 ? 10 : lvl >= 46 ? 9 : lvl >= 37 ? 8 : lvl >= 28 ? 7 : lvl >= 19 ? 6 : lvl >= 10 ? 5 : 4);
 
     setTxt('#cp_used', cp_used);
-    setTxt('#cp_max', cp_max);
+    setTxt('#cp_max',  cp_max);
     setTxt('#sp_used', sp_used);
-    setTxt('#sp_max', sp_max);
-    setTxt('#skill_cap', skill_cap);
-    setTxt('#char_cap', char_cap);
+    setTxt('#sp_max',  sp_max);
 
-    // Sublimation caps
-    const mile_pre = Math.max(charMil.pre||0,0);
-    const sub_max  = (mile_pre*2) + Math.floor(lvl/10);
-    const tier_cap = Math.ceil(lvl/25);
-    const sub_used = Array.from(subTableBody.children).reduce((acc, tr)=>acc+Number(tr._refs.tierInp.value||0),0);
-    setTxt('#sub_used', sub_used);
-    setTxt('#sub_max', sub_max);
-    setTxt('#sub_tier', tier_cap);
+    // Derived badges & resources
+    const mile_bod = cMilPos['bod']||0;
+    const mile_wil = cMilPos['wil']||0;
+    const mile_mag = cMilPos['mag']||0;
+    const mile_dex = cMilPos['dex']||0;
+    const mile_ref = cMilPos['ref']||0;
+    const mile_wis = cMilPos['wis']||0;
+    const lvl_up_count = Math.max(lvl-1,0);
 
-    // Derived resources
-    const lvl_up = Math.max(lvl-1,0);
-    const hp_max = 100 + lvl_up + 12*(charMil.bod||0) + 6*(charMil.wil||0) + 12*sub_defense;
-    const en_max = 5   + Math.floor(lvl_up/5) + (charMil.wil||0) + 2*(charMil.mag||0) + 2*sub_endurance;
-    const fo_max = 2   + Math.floor(lvl_up/5) + (charMil.wil||0) + (charMil.pre||0) + sub_clarity;
-    const mo     = 4   + (charMil.dex||0) + (charMil.ref||0) + sub_speed;
-    const et     = 1   + Math.floor(lvl/10) + (charMil.mag||0);
-    const cdc    = 6   + Math.floor(lvl/10) + sub_devast;
+    const hp_max = 100 + lvl_up_count + 12*mile_bod + 6*mile_wil + 12*tDefense;
+    const en_max = 5 + Math.floor(lvl_up_count/5) + 2*mile_wil + 4*mile_mag + 2*tEndurance;
+    const fo_max = 2 + Math.floor(lvl_up_count/5) + mile_wil + (cMilPos['pre']||0)*2 + mile_wis + tClarity;
+    const mo     = 4 + mile_dex + mile_ref + tSpeed;
+    const et     = 1 + Math.floor(lvl_up_count/9) + mile_mag;
+    const cdc    = 6 + Math.floor(lvl/10) + tDevast;
 
-    setResource('#hp_cur','#hp_max','#hp_bar',hp_max,hp_max);
-    setResource('#sp_cur','#sp_max','#sp_bar',0,Math.floor(hp_max*0.1));
-    setResource('#en_cur','#en_max','#en_bar',Math.min(5,en_max),en_max);
-    setResource('#fo_cur','#fo_max','#fo_bar',Math.min(2,fo_max),fo_max);
+    setBadge('#k_mo', mo);
+    setBadge('#k_init', mo + mile_ref);
+    setBadge('#k_et', et);
+    setBadge('#k_cdc', cdc);
 
-    const resistanceBV = Number($('[data-s-base="resistance"]')?.textContent||0);
-    const alchemyBV    = Number($('[data-s-base="alchemy"]')?.textContent||0);
-    setResource('#tx_cur','#tx_max','#tx_bar',0,resistanceBV+alchemyBV);
+    setBar('#hp_cur','#hp_max','#hp_bar', hp_max, hp_max);
+    setBar('#sp_cur','#sp_max','#sp_bar', 0, Math.floor(hp_max*0.1));
+    setBar('#en_cur','#en_max','#en_bar', Math.min(5,en_max), en_max);
+    setBar('#fo_cur','#fo_max','#fo_bar', Math.min(2,fo_max), fo_max);
 
-    const athleticsBV  = Number($('[data-s-base="athletics"]')?.textContent||0);
-    const spiritBV     = Number($('[data-s-base="spirit"]')?.textContent||0);
-    setResource('#enc_cur','#enc_max','#enc_bar',0,10 + athleticsBV*5 + spiritBV*2);
+    // TX and Enc
+    const resBV = readTextAsInt('[data-s-base="resistance"]');
+    const alcBV = readTextAsInt('[data-s-base="alchemy"]');
+    const txMax = resBV + alcBV;
+    setBar('#tx_cur','#tx_max','#tx_bar', 0, txMax);
 
-    setTxt('#k_mo', mo);
-    setTxt('#k_init', mo + (charMil.ref||0));
-    setTxt('#k_et', et);
-    setTxt('#k_cdc', cdc);
+    const athBV = readTextAsInt('[data-s-base="athletics"]');
+    const spiBV = readTextAsInt('[data-s-base="spirit"]');
+    const encMax= 10 + (athBV*5) + (spiBV*2);
+    setBar('#enc_cur','#enc_max','#enc_bar', 0, encMax);
 
-    // Intensities (based on MAG milestone)
-    const magMil = charMil.mag||0;
-    const ivMap = {};
+    // Intensities based on MAG milestone (signed)
+    const magMilSigned = cMilSigned['mag']||0;
     INTENSITIES.forEach(nm=>{
-      const inv = Number($(`[data-i-invest="${nm}"]`).value||0);
-      const mil = magMil;
-      const base = (inv>0 ? inv + mil : 0);
+      const inp = $(`[data-i-invest="${nm}"]`);
+      if (!inp) return;
+      const inv = sanitizeNumericInput(inp,{min:0,max:8});
+      const base = (inv>0 ? inv + magMilSigned : 0);
       const [ID, IV] = idIvFromBV(base);
-      ivMap[nm] = Number(IV||0);
+      setTxt(`[data-i-mod="${nm}"]`, magMilSigned);
+      setTxt(`[data-i-base="${nm}"]`, base);
+      setTxt(`[data-i-id="${nm}"]`, ID);
+      setTxt(`[data-i-iv="${nm}"]`, IV==='—' ? '—' : String(IV));
+      setTxt(`[data-i-rw="${nm}"]`, '0'); // placeholder – wire your grid later
 
-      $(`[data-i-mil="${nm}"]`).textContent  = String(mil);
-      $(`[data-i-base="${nm}"]`).textContent = String(base);
-      $(`[data-i-id="${nm}"]`).textContent   = String(ID);
-      $(`[data-i-iv="${nm}"]`).textContent   = String(IV||'—');
-      $(`[data-i-rw="${nm}"]`).textContent   = '0'; // placeholder grid
+      // Drawer for intensities – show if any Excellence (unlikely) or future sources
+      const row = inp.closest('.int-row');
+      if (row && !row._drawerHooked){
+        attachDrawer(row, nm, () => []);
+        row._drawerHooked = true;
+      }
     });
 
-    // Visual warnings
-    $$('#charSkillContainer [data-s-invest]').forEach(inp=>{
-      const val = Number(inp.value||0);
-      inp.style.borderColor = (val>skill_cap) ? '#ef4444' : 'rgba(255,255,255,.1)';
+    // Visual cap guards
+    decorateCaps(skillCap, charCap, sp_max, cp_max, subSlotsMax, tierCap);
+
+    // persist
+    triggerAutosave();
+  }
+
+  // ---------- Painting helpers ----------
+  function setTxt(sel,val){ const n=$(sel); if(n) n.textContent=String(val); }
+  function readTextAsInt(sel){ const n=$(sel); return n?toInt(n.textContent||0,0):0; }
+  function setBadge(sel, val){ const n=$(sel); if(n) n.textContent=String(val); }
+  function setBar(curSel,maxSel,barSel,cur,max){
+    const c=$(curSel), m=$(maxSel), b=$(barSel);
+    if (m) m.textContent=String(max);
+    if (c) c.textContent=String(clamp(cur,0,max));
+    if (b) b.style.width = (max>0 ? Math.round((cur/max)*100) : 0)+'%';
+  }
+  function decorateCaps(skillCap, charCap, spMax, cpMax, subMax, tierCap){
+    // skill invests
+    CHAR_MAP.forEach(g => g.skills.forEach(s=>{
+      const inp = $(`[data-s-invest="${s.key}"]`);
+      if (!inp) return;
+      const val = toInt(inp.value,0);
+      inp.classList.toggle('over', val>skillCap);
+    }));
+    // characteristics scores
+    CHAR_MAP.forEach(g=>{
+      const inp = $(`[data-c-invest="${g.investKey}"]`);
+      if (!inp) return;
+      const sc = scoreFromInvest(toInt(inp.value,0));
+      inp.classList.toggle('over', sc>charCap);
     });
-    $$('#charSkillContainer [data-c-invest]').forEach(inp=>{
-      const sc = scoreFromInvest(Number(inp.value||0));
-      inp.style.borderColor = (sc>4+16 || sc>20) ? '#ef4444' : 'rgba(255,255,255,.1)';
-    });
-    $('#sp_used').classList.toggle('danger', sp_used>sp_max);
-    $('#cp_used').classList.toggle('danger', cp_used>cp_max);
-    $('#sub_used').classList.toggle('danger', sub_used>sub_max);
-    Array.from(subTableBody.children).forEach(tr=>{
-      const t = Number(tr._refs.tierInp.value||0);
-      tr._refs.tierInp.style.borderColor = (t>tier_cap) ? '#ef4444' : 'rgba(255,255,255,.1)';
+    // totals
+    const spUsed = toInt($('#sp_used')?.textContent||0,0);
+    $('#sp_used')?.classList.toggle('danger', spUsed>spMax);
+    const cpUsed = toInt($('#cp_used')?.textContent||0,0);
+    $('#cp_used')?.classList.toggle('danger', cpUsed>cpMax);
+    const subUsed = toInt($('#sub_used')?.textContent||0,0);
+    $('#sub_used')?.classList.toggle('danger', subUsed>subMax);
+
+    // each sub row tier
+    Array.from($('#subTable tbody')?.children||[]).forEach(tr=>{
+      const t = toInt(tr._refs?.tierInp?.value||0,0);
+      if (tr._refs?.tierInp) tr._refs.tierInp.classList.toggle('over', t>tierCap);
     });
   }
 
-  function setResource(curSel, maxSel, barSel, cur, max){
-    setTxt(maxSel, max);
-    cur = Math.min(Math.max(cur,0), Math.max(0,max));
-    setTxt(curSel, cur);
-    const pct = max>0 ? Math.round((cur/max)*100) : 0;
-    $(barSel).style.width = `${pct}%`;
+  // signed milestone from characteristic key
+  function charMod(key){
+    // find group by key mapping we used earlier
+    // keys in cMilSigned map: ref/dex/bod/wil/mag/pre/wis/tec
+    return charMilSignedCache[key] || 0;
   }
 
-  // ---------- Autosave ----------
-  const CHARACTER_ID = 'demo-1'; // swap for real id when integrating
+  // ---------- Sublimations table wiring ----------
+  function sumTier(subs, type){ return subs.filter(s=>s.type===type).reduce((a,b)=>a+b.tier,0); }
 
-  async function saveToServer(payload){
+  function addSubRow(defaults = {type:SUB_TYPES.LETHALITY, skill:'', tier:1}){
+    const tb = $('#subTable tbody'); if (!tb) return;
+    const tr = document.createElement('tr');
+
+    // type select
+    const typeSel = document.createElement('select'); typeSel.className='input s';
+    Object.entries(SUB_TYPES).forEach(([name,id])=>{
+      const o=document.createElement('option');
+      o.value=id; o.textContent = prettySubLabel(id);
+      typeSel.appendChild(o);
+    });
+    typeSel.value = defaults.type;
+
+    // skill select
+    const skillSel = document.createElement('select'); skillSel.className='input m';
+    const empty = document.createElement('option'); empty.value=''; empty.textContent='—';
+    skillSel.appendChild(empty);
+    CHAR_MAP.flatMap(g=>g.skills).forEach(s=>{
+      const o=document.createElement('option');
+      o.value=s.key; o.textContent=s.label; skillSel.appendChild(o);
+    });
+    skillSel.value = defaults.skill || '';
+
+    // tier
+    const tierInp = document.createElement('input');
+    tierInp.type='number'; tierInp.min='0'; tierInp.max='4'; tierInp.value=String(clamp(defaults.tier,0,4));
+    tierInp.className='input xs';
+
+    // slots cell
+    const slotsCell = document.createElement('td'); slotsCell.className='right mono'; slotsCell.textContent=String(clamp(defaults.tier,0,4));
+
+    // delete
+    const delBtn = document.createElement('button'); delBtn.className='btn ghost'; delBtn.textContent='Remove';
+
+    // skill enabled only for Excellence
+    function toggleSkill(){
+      const isEx = typeSel.value === SUB_TYPES.EXCELLENCE;
+      skillSel.disabled = !isEx;
+      skillSel.style.opacity = isEx ? '1' : '.5';
+    }
+    toggleSkill();
+
+    // events
+    typeSel.addEventListener('change', () => { toggleSkill(); recompute(); });
+    skillSel.addEventListener('change', recompute);
+    tierInp.addEventListener('input', () => {
+      const n = sanitizeNumericInput(tierInp,{min:0,max:4});
+      slotsCell.textContent = String(n);
+      recompute();
+    });
+    delBtn.addEventListener('click', () => { tr.remove(); recompute(); });
+
+    // compose
+    const td1=document.createElement('td'); td1.appendChild(typeSel);
+    const td2=document.createElement('td'); td2.appendChild(skillSel);
+    const td3=document.createElement('td'); td3.appendChild(tierInp);
+    const td5=document.createElement('td'); td5.appendChild(delBtn);
+
+    tr.appendChild(td1);
+    tr.appendChild(td2);
+    tr.appendChild(td3);
+    tr.appendChild(slotsCell);
+    tr.appendChild(td5);
+
+    tr._refs={typeSel,skillSel,tierInp,slotsCell};
+    tb.appendChild(tr);
+  }
+
+  function prettySubLabel(id){
+    switch(id){
+      case SUB_TYPES.LETHALITY:   return 'Lethality';
+      case SUB_TYPES.EXCELLENCE:  return 'Excellence';
+      case SUB_TYPES.BLESSING:    return 'Blessing';
+      case SUB_TYPES.DEFENSE:     return 'Defense';
+      case SUB_TYPES.SPEED:       return 'Speed';
+      case SUB_TYPES.DEVASTATION: return 'Devastation';
+      case SUB_TYPES.CLARITY:     return 'Clarity';
+      case SUB_TYPES.ENDURANCE:   return 'Endurance';
+      default: return 'Unknown';
+    }
+  }
+
+  // ---------- Save (debounced) ----------
+  const autosave = debounce(saveNow, 600);
+  function triggerAutosave(){ autosave(collectPayload()); }
+
+  function collectPayload(){
+    const lvl  = readLevel();
+    const name = $('#c_name')?.value || '';
+    const xp   = toInt($('#c_xp')?.value||0,0);
+    const avatarUrl = $('#avatarUrl')?.value || '';
+
+    // invests
+    const characteristics = {};
+    CHAR_MAP.forEach(g=>{
+      const n = toInt($(`[data-c-invest="${g.investKey}"]`)?.value || 0, 0);
+      characteristics[g.key] = n;
+    });
+    const skills = {};
+    CHAR_MAP.forEach(g=>g.skills.forEach(s=>{
+      const n = toInt($(`[data-s-invest="${s.key}"]`)?.value || 0, 0);
+      skills[s.key] = n;
+    }));
+
+    const intensities = {};
+    INTENSITIES.forEach(nm=>{
+      intensities[nm] = toInt($(`[data-i-invest="${nm}"]`)?.value || 0, 0);
+    });
+
+    const sublimations = readSublimations();
+
+    return {
+      id: $('#characterId')?.value || null,
+      name, level:lvl, xp, avatarUrl,
+      characteristics, skills, intensities, sublimations,
+      // send some derived so backend can validate, if you like
+      summary: {
+        sp_used: toInt($('#sp_used')?.textContent||0,0),
+        cp_used: toInt($('#cp_used')?.textContent||0,0)
+      }
+    };
+  }
+
+  async function saveNow(payload){
     try{
-      await fetch(`/api/character/${CHARACTER_ID}`, {
-        method:'PUT',
+      const res = await fetch('/api/characters/save', {
+        method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(payload)
       });
-    }catch(e){
-      // best-effort fallback to localStorage
-      localStorage.setItem('character_autosave', JSON.stringify(payload));
+      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+      // optionally show a tiny “saved” pulse
+      document.body.classList.add('saved');
+      setTimeout(()=>document.body.classList.remove('saved'), 500);
+    }catch(err){
+      // silent to console so the UI never breaks
+      console.warn(err);
     }
   }
 
-  async function loadFromServer(){
-    try{
-      const r = await fetch(`/api/character/${CHARACTER_ID}`);
-      if (r.ok){
-        return await r.json();
-      }
-    }catch(e){}
-    const raw = localStorage.getItem('character_autosave');
-    return raw ? JSON.parse(raw) : null;
-  }
+  // ---------- global cache for signed milestones (used by charMod) ----------
+  let charMilSignedCache = {};
 
-  function readState(){
-    const state = {
-      id: CHARACTER_ID,
-      avatar: $('#avatarUrl').value || '',
-      name: $('#c_name').value || '',
-      level: Number($('#c_level').value||1),
-      xp: Number($('#c_xp').value||0),
-      charInvest: {},
-      skillInvest: {},
-      intensities: {},
-      sublimations: [],
-      personal: {
-        height: $('#p_height').value||'',
-        weight: $('#p_weight').value||'',
-        bday:   $('#p_bday').value||'',
-        backstory: $('#p_backstory').value||'',
-        notes:     $('#p_notes').value||'',
-      }
-    };
-    CHAR_MAP.forEach(g=>{
-      state.charInvest[g.key] = Number($(`[data-c-invest="${g.investKey}"]`).value||0);
-      g.skills.forEach(s=>{
-        state.skillInvest[s.key] = Number($(`[data-s-invest="${s.key}"]`).value||0);
+  // ---------- Wire up events ----------
+  function bindEvents(){
+    // avatar
+    const avatarUrl = $('#avatarUrl');
+    const charAvatar = $('#charAvatar');
+    if (avatarUrl && charAvatar){
+      avatarUrl.addEventListener('input', ()=>{
+        charAvatar.src = avatarUrl.value || 'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg';
+        triggerAutosave();
       });
-    });
-    INTENSITIES.forEach(nm=>{
-      state.intensities[nm] = Number($(`[data-i-invest="${nm}"]`).value||0);
-    });
-    Array.from(subTableBody.children).forEach(tr=>{
-      const {typeSel,skillSel,tierInp} = tr._refs;
-      state.sublimations.push({type:typeSel.value, skill:skillSel.value, tier:Number(tierInp.value||0)});
-    });
-    return state;
-  }
-
-  function writeState(s){
-    if(!s) return;
-    $('#avatarUrl').value = s.avatar||'';
-    $('#charAvatar').src = s.avatar||'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg';
-    $('#c_name').value = s.name||'';
-    $('#c_level').value = s.level||1;
-    $('#c_xp').value = s.xp||0;
-    if (s.personal){
-      $('#p_height').value = s.personal.height||'';
-      $('#p_weight').value = s.personal.weight||'';
-      $('#p_bday').value   = s.personal.bday||'';
-      $('#p_backstory').value = s.personal.backstory||'';
-      $('#p_notes').value     = s.personal.notes||'';
     }
-    // investments
-    CHAR_MAP.forEach(g=>{
-      const v = s.charInvest?.[g.key] ?? 0;
-      $(`[data-c-invest="${g.investKey}"]`).value = v;
-      g.skills.forEach(sk=>{
-        const sv = s.skillInvest?.[sk.key] ?? 0;
-        $(`[data-s-invest="${sk.key}"]`).value = sv;
+
+    // Level & XP
+    ['#c_level','#c_xp','#c_name'].forEach(sel=>{
+      const inp=$(sel); if(!inp) return;
+      inp.addEventListener('input', ()=>{
+        if (sel!=='#c_name') sanitizeNumericInput(inp,{min:(sel==='#c_level'?1:0),max:9999});
+        recompute();
       });
     });
-    INTENSITIES.forEach(nm=>{
-      $(`[data-i-invest="${nm}"]`).value = s.intensities?.[nm] ?? 0;
+
+    // characteristics & skills & intensities
+    $$('#charSkillContainer input').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        sanitizeNumericInput(inp,{min:0,max: inp.dataset.cInvest ? 16 : 8});
+        recompute();
+      });
     });
-    // sublimations
-    subTableBody.innerHTML='';
-    (s.sublimations||[]).forEach(x=> addSubRow(x));
+    $$('#intensityTable [data-i-invest]').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        sanitizeNumericInput(inp,{min:0,max:8});
+        recompute();
+      });
+    });
+
+    // Sublimations
+    $('#btnAddSub')?.addEventListener('click', ()=>{
+      addSubRow({type:SUB_TYPES.LETHALITY, skill:'', tier:1});
+      recompute();
+    });
+
+    // Tabs (if present)
+    $$('.tab').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        $$('.tab').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        const key = btn.dataset.tab;
+        $$('.tabpan').forEach(p=>p.classList.remove('active'));
+        $(`#tab-${key}`)?.classList.add('active');
+      });
+    });
   }
 
-  let saveTimer = null;
-  function queueSave(){
-    const payload = readState();
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(()=> saveToServer(payload), 350);
-  }
-
-  // ---------- Events ----------
-  ['#c_level','#c_xp','#c_name','#p_height','#p_weight','#p_bday','#p_backstory','#p_notes','#avatarUrl']
-    .forEach(sel => $(sel).addEventListener('input', ()=>{ recompute(); queueSave(); }));
-
-  // ---------- Init ----------
-  buildCharCards();
-  attachNumeric();
-  (async ()=>{
-    const s = await loadFromServer();
-    if (s) writeState(s);
+  // ---------- init ----------
+  function init(){
+    // Ensure at least one sublimation row exists for UX
+    if (!$('#subTable tbody')?.children.length){
+      addSubRow({type:SUB_TYPES.EXCELLENCE, skill:'accuracy', tier:2});
+    }
+    bindEvents();
     recompute();
-  })();
+  }
+
+  // Before recompute, keep milestone cache updated
+  const _origRecompute = recompute;
+  recompute = function(){
+    // build signed milestones cache
+    const cache = {};
+    CHAR_MAP.forEach(g=>{
+      const val = toInt($(`[data-c-invest="${g.investKey}"]`)?.value || 0, 0);
+      cache[g.key] = charScoreToMilestoneSigned(scoreFromInvest(val));
+    });
+    charMilSignedCache = cache;
+    _origRecompute();
+  };
+
+  // run
+  if (document.readyState === 'complete' || document.readyState === 'interactive'){
+    init();
+  }else{
+    document.addEventListener('DOMContentLoaded', init);
+  }
 })();

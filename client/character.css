@@ -5,7 +5,7 @@
 html,body{height:100%}
 body{
   margin:0;background:linear-gradient(180deg,#0b0f1a,#0c1222 30%,#0b0f1a 100%);
-  color:var(--txt);font:14px/1.45 Inter, system-ui, -apple-system, Segoe UI, Roboto;
+  color:var(--txt);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto;
 }
 .wrap{max-width:1280px;margin:0 auto;padding:20px}
 .panel{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:16px}
@@ -19,9 +19,10 @@ body{
   border:1px solid rgba(255,255,255,.1);background:#0f172a;color:var(--txt);outline:none
 }
 .input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+.input.num2{width:56px;padding:8px 10px;text-align:center} /* 2-digit fields */
 .inline{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
-.btn{appearance:none;border:0;border-radius:12px;padding:10px 14px;background:var(--accent);color:white;font-weight:600;cursor:pointer}
+.btn{appearance:none;border:0;border-radius:12px;padding:8px 10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
 .btn.subtle{background:#1f2937}
 .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.12)}
 .badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;background:#111827;border:1px solid rgba(255,255,255,.08);font-size:12px}
@@ -52,48 +53,50 @@ body{
 
 .row-split{display:flex;justify-content:space-between;align-items:center}
 
-.hdr-grid{
-  display:grid;gap:16px;
-  grid-template-columns: 380px 1fr;
-}
-.res-grid{
-  display:grid;gap:14px;
-  grid-template-columns: repeat(3,minmax(0,1fr));
-}
-@media (max-width: 980px){
+/* header grid + resources grid */
+.hdr-grid{display:grid;gap:16px;grid-template-columns:380px 1fr;}
+.res-grid{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr));}
+@media (max-width:980px){
   .hdr-grid{grid-template-columns:1fr}
-  .res-grid{grid-template-columns: repeat(2,minmax(0,1fr))}
+  .res-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
 .two-grid{display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr))}
 .three-grid{display:grid;gap:16px;grid-template-columns:repeat(3,minmax(0,1fr))}
-@media (max-width: 980px){
+@media (max-width:980px){
   .two-grid,.three-grid{grid-template-columns:1fr}
 }
 
-/* === Characteristic cards grid (4 columns desktop) === */
-.char-grid{
-  display:grid;gap:16px;
-  grid-template-columns:repeat(1,minmax(0,1fr));
-}
-@media (min-width: 900px){
-  .char-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
-@media (min-width: 1200px){
-  .char-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
-}
+/* characteristic cards grid */
+.char-grid{display:grid;gap:16px;grid-template-columns:repeat(1,minmax(0,1fr));}
+@media (min-width:900px){ .char-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (min-width:1200px){ .char-grid{grid-template-columns:repeat(4,minmax(0,1fr))} }
 
-/* card */
+/* card + rows */
 .char-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:14px}
 .char-card .card-h{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px dashed rgba(255,255,255,.06);font-weight:600;color:#cbd5e1}
 .char-card .rows{padding:8px}
-.rowline{display:grid;grid-template-columns: 1fr 110px 140px;gap:8px;align-items:center;padding:8px 4px;border-bottom:1px dashed rgba(255,255,255,.06)}
+
+/* Row layout: label (flex) | tiny number | [Total | Milestone] */
+.rowline{
+  display:grid;
+  grid-template-columns: 1fr auto auto;
+  gap:10px;align-items:center;padding:8px 4px;
+  border-bottom:1px dashed rgba(255,255,255,.06)
+}
 .rowline:last-child{border-bottom:0}
+.rowline .name{
+  min-width:0;display:flex;align-items:center;gap:8px;
+}
+.rowline .name .toggle{
+  padding:4px 8px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+}
 .rowline .mini{font-size:12px;color:var(--muted)}
-.rowline .src{grid-column:1/-1;margin:6px 0 0 0;display:none}
+.rowline .tot{min-width:98px;text-align:right}
+.rowline .src{grid-column:1/-1;margin:6px 0 0;display:none}
 .rowline.open .src{display:block}
 .src table{width:100%;border-collapse:collapse}
 .src td{padding:2px 0;color:#cbd5e1;font-size:12px}
 
-/* caps / warnings */
+/* warnings */
 .danger{color:#fecaca}
