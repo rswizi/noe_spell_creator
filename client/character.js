@@ -3,20 +3,16 @@
   const $ = (s, el=document) => el.querySelector(s);
   const $$ = (s, el=document) => Array.from(el.querySelectorAll(s));
 
-  // --------- helpers
+  // ---- helpers
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const milestoneFromTotal = total => Math.floor((Number(total) - 10) / 2);
   const tens = lvl => Math.floor(lvl/10);
   const levelFromXP = xp => Math.min(Math.floor((-1 + Math.sqrt(1 + 8*(xp/100)))/2)+1, 100);
   const idIvFromBV = bv => (bv<=0?['—','—']:bv<=7?['1d4',2]:bv<=11?['1d6',3]:bv<=15?['1d8',4]:bv<=17?['1d10',5]:['1d12',6]);
 
-  // --------- select-on-focus so new number replaces old
   function replaceOnType(inp){
-    inp.addEventListener('focus', () => inp.select());
-    // also select all on first keypress if caret at start (mobile nicety)
-    inp.addEventListener('keydown', e => {
-      if (!inp._touched){ inp.select(); inp._touched = true; }
-    });
+    inp.addEventListener('focus', ()=>inp.select());
+    inp.addEventListener('keydown', ()=>{ if(!inp._touched){ inp.select(); inp._touched=true; } });
   }
 
   // Tabs
@@ -37,7 +33,7 @@
     avatarUrl.addEventListener('input', ()=>{ charAvatar.src = avatarUrl.value || charAvatar.src; queueSave(); });
   }
 
-  // --------- data maps
+  // Data maps
   const GROUPS = [
     { key:'ref', label:'Reflex (REF)',    investKey:'reflexp',    skills:[
       { key:'technicity',  label:'Technicity' },
@@ -95,7 +91,7 @@
   const INTENSITIES = ['Fire','Water','Earth','Wind','Lightning','Moon','Sun','Ki'];
   const SUB_TYPES = [
     { id:'2', label:'Lethality' },
-    { id:'1', label:'Excellence' }, // +1 per tier to chosen skill (capped by Invested)
+    { id:'1', label:'Excellence' }, // per-tier skill bonus, capped by invested
     { id:'3', label:'Blessing' },
     { id:'4', label:'Defense' },
     { id:'5', label:'Speed' },
@@ -105,47 +101,96 @@
   ];
   const ALL_SKILLS = GROUPS.flatMap(g => g.skills.map(s => ({...s, group:g.key})));
 
-  // --------- build Characteristics & Skills (no manual modifier inputs)
+  // ---------- Build Characteristics & Skills with hidden mod panels
   const container = $('#charSkillContainer'); container.innerHTML = '';
   GROUPS.forEach(g=>{
     const card = document.createElement('div');
     card.className = 'char-card';
-
-    card.innerHTML = `
-      <div class="rowline head">
-        <div class="h">${g.label}</div>
-        <div class="mini">Invested</div>
-        <div class="mini">[ Total | Milestone ]</div>
-      </div>
-      <div class="rowline">
-        <div><span class="muted">Characteristic</span></div>
-        <div><input class="input" type="number" min="0" max="16" value="0" data-c-invest="${g.investKey}"></div>
-        <div><span class="mono" data-c-total="${g.key}">4</span> | <span class="mono" data-c-mile="${g.key}">-3</span></div>
-      </div>
-      <div class="rowline subhead">
-        <div class="mini">—</div>
-        <div class="mini">Invested</div>
-        <div class="mini">Base Value</div>
-      </div>
+    const head = document.createElement('div');
+    head.className = 'rowline head';
+    head.innerHTML = `
+      <div>${g.label}</div>
+      <div class="mini">Invested</div>
+      <div class="mini">[ Total | Milestone ]</div>
     `;
+    card.appendChild(head);
+
+    // Characteristic row
+    const crow = document.createElement('div');
+    crow.className = 'rowline';
+    crow.innerHTML = `
+      <div class="toggle" data-toggle="c-${g.key}"><i></i><span class="muted">Characteristic</span></div>
+      <div><input class="input" type="number" min="0" max="16" value="0" data-c-invest="${g.investKey}"></div>
+      <div><span class="mono" data-c-total="${g.key}">4</span> | <span class="mono" data-c-mile="${g.key}">-3</span></div>
+    `;
+    card.appendChild(crow);
+
+    // Characteristic mod-source panel
+    const cpanel = document.createElement('div');
+    cpanel.className = 'mod-panel';
+    cpanel.dataset.cMods = g.key;
+    cpanel.innerHTML = `
+      <table>
+        <thead><tr><th>Source</th><th class="right">Modifier</th></tr></thead>
+        <tbody data-c-modsrc="${g.key}"><tr><td class="muted">No modifiers yet</td><td class="right">0</td></tr></tbody>
+      </table>
+    `;
+    card.appendChild(cpanel);
+
+    // Subhead
+    const subhead = document.createElement('div');
+    subhead.className = 'rowline subhead';
+    subhead.innerHTML = `<div>—</div><div>Invested</div><div>Base Value</div>`;
+    card.appendChild(subhead);
+
+    // Skills
     g.skills.forEach(s=>{
-      const row = document.createElement('div');
-      row.className = 'rowline';
-      row.innerHTML = `
-        <div>— ${s.label}</div>
+      const srow = document.createElement('div');
+      srow.className = 'rowline';
+      srow.innerHTML = `
+        <div class="toggle" data-toggle="s-${s.key}"><i></i>— ${s.label}</div>
         <div><input class="input" type="number" min="0" max="8" value="0" data-s-invest="${s.key}" data-s-group="${g.key}"></div>
-        <div>
-          <span class="mono" data-s-base="${s.key}">0</span>
-          <span class="small-hint" data-s-bonus-note="${s.key}" style="margin-left:6px">(bonus 0)</span>
-        </div>
+        <div><span class="mono" data-s-base="${s.key}">0</span><span class="small-hint" data-s-bonus-note="${s.key}">(bonus 0)</span></div>
       `;
-      card.appendChild(row);
+      card.appendChild(srow);
+
+      const spanel = document.createElement('div');
+      spanel.className = 'mod-panel';
+      spanel.dataset.sMods = s.key;
+      spanel.innerHTML = `
+        <table>
+          <thead><tr><th>Source</th><th class="right">Modifier</th></tr></thead>
+          <tbody data-s-modsrc="${s.key}"><tr><td class="muted">No modifiers yet</td><td class="right">0</td></tr></tbody>
+        </table>
+      `;
+      card.appendChild(spanel);
     });
+
     container.appendChild(card);
   });
 
-  // --------- Intensities (no manual modifier input)
-  const tbodyInt = $('#intensityTable tbody'); tbodyInt.innerHTML = '';
+  // Toggle handlers (open/close)
+  container.addEventListener('click', (e)=>{
+    const t = e.target.closest('.toggle'); if(!t) return;
+    const id = t.dataset.toggle;
+    let panel = null;
+    if (id?.startsWith('c-')){
+      const key = id.slice(2);
+      panel = container.querySelector(`.mod-panel[data-c-mods="${key}"]`);
+    } else if (id?.startsWith('s-')){
+      const key = id.slice(2);
+      panel = container.querySelector(`.mod-panel[data-s-mods="${key}"]`);
+    }
+    if (panel){
+      const open = !panel.classList.contains('open');
+      container.querySelectorAll('.toggle').forEach(el=>el.classList.remove('open'));
+      container.querySelectorAll('.mod-panel').forEach(p=>p.classList.remove('open'));
+      if (open){ panel.classList.add('open'); t.classList.add('open'); }
+    }
+  });
+
+  // ---------- Intensities
+  const tbodyInt = $('#intensityTable tbody'); if (tbodyInt){ tbodyInt.innerHTML = ''; }
   INTENSITIES.forEach(nm=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -159,7 +204,7 @@
     tbodyInt.appendChild(tr);
   });
 
-  // --------- Sublimations
+  // ---------- Sublimations
   const subBody = $('#subTable tbody');
   const btnAddSub = $('#btnAddSub');
   function addSubRow(def={type:'1',skill:'accuracy',tier:2}){
@@ -175,10 +220,9 @@
     delBtn.addEventListener('click', ()=>{ tr.remove(); recompute(); queueSave(); });
 
     function toggleSkill(){
-      const needs = typeSel.value==='1';
+      const needs = typeSel.value==='1'; // Excellence
       skillSel.disabled = !needs; skillSel.style.opacity = needs?1:.5;
     }
-
     typeSel.addEventListener('change', ()=>{ toggleSkill(); recompute(); queueSave(); });
     skillSel.addEventListener('change', ()=>{ recompute(); queueSave(); });
     tierInp.addEventListener('input', ()=>{ slotsCell.textContent=tierInp.value; recompute(); queueSave(); });
@@ -193,10 +237,10 @@
     subBody.appendChild(tr);
     toggleSkill();
   }
-  btnAddSub.addEventListener('click', ()=>{ addSubRow({type:'2', skill:'', tier:1}); recompute(); queueSave(); });
-  addSubRow(); // seed one excellence row
+  btnAddSub?.addEventListener('click', ()=>{ addSubRow({type:'2', skill:'', tier:1}); recompute(); queueSave(); });
+  addSubRow(); // seed one Excellence row
 
-  // --------- utils
+  // ---- small utils
   function setTxt(sel, v){ const el=$(sel); if(el) el.textContent=String(v); }
   function setResource(curSel, maxSel, barSel, cur, max){
     setTxt(maxSel, max);
@@ -218,72 +262,87 @@
     },0);
   }
 
-  // --------- recompute
+  // ---------- recompute
   function recompute(){
-    const lvl = readLevel(); $('#c_level').value = String(lvl);
+    const lvl = readLevel(); const lvlUp = Math.max(lvl-1,0);
+    $('#c_level').value = String(lvl);
 
-    // Excellence bonuses
-    const ex = {};
+    // Excellence tiers per skill
+    const exTiers = {};
     let subUsed = 0;
     Array.from(subBody.children).forEach(tr=>{
       const { typeSel, skillSel, tierInp, slotsCell } = tr._refs || {};
       const t = Math.max(0,Number(tierInp.value||0));
       subUsed += t; slotsCell.textContent = String(t);
       if (typeSel.value==='1' && skillSel.value){
-        ex[skillSel.value] = (ex[skillSel.value]||0) + t;
+        exTiers[skillSel.value] = (exTiers[skillSel.value]||0) + t;
       }
     });
 
-    // Characteristics totals & milestones
+    // Characteristics
     const cInv={}, cMile={};
     GROUPS.forEach(g=>{
       const inv = Number($(`[data-c-invest="${g.investKey}"]`).value||0);
       cInv[g.key]=inv;
-      const total = 4 + inv;          // no manual modifiers
+      const total = 4 + inv;      // no manual char modifiers yet
       const mile  = milestoneFromTotal(total);
+      cMile[g.key]=mile;
       $(`[data-c-total="${g.key}"]`).textContent = String(total);
       $(`[data-c-mile="${g.key}"]`).textContent  = String(mile);
-      cMile[g.key]=mile;
+
+      // Char mod sources (empty for now; ready for future)
+      const tbody = $(`[data-c-modsrc="${g.key}"]`);
+      tbody.innerHTML = `<tr><td class="muted">No modifiers yet</td><td class="right">0</td></tr>`;
     });
 
-    // Skills base values (bonus = min(invested, excellenceTiers))
+    // Skills
     const sInv={};
     GROUPS.forEach(g=>{
       g.skills.forEach(s=>{
         const inv = Number($(`[data-s-invest="${s.key}"]`).value||0);
         sInv[s.key]=inv;
-        const bonus = Math.min(inv, ex[s.key]||0);
-        const base  = inv + bonus + (cMile[g.key]||0);
+        const tiers = exTiers[s.key]||0;
+        const exBonus = Math.min(inv, tiers); // excellence capped by invested
+        const base  = inv + exBonus + (cMile[g.key]||0);
         $(`[data-s-base="${s.key}"]`).textContent = String(base);
-        $(`[data-s-bonus-note="${s.key}"]`).textContent = `(bonus ${bonus})`;
+        $(`[data-s-bonus-note="${s.key}"]`).textContent = `(bonus ${exBonus})`;
+
+        // Populate skill mod panel (sources)
+        const tbody = $(`[data-s-modsrc="${s.key}"]`);
+        if (exBonus>0){
+          tbody.innerHTML = `
+            <tr><td>Sublimation • Excellence (Tier ${tiers})</td><td class="right">+${exBonus}</td></tr>
+          `;
+        } else {
+          tbody.innerHTML = `<tr><td class="muted">No modifiers yet</td><td class="right">0</td></tr>`;
+        }
       });
     });
 
-    // caps & counters
+    // Totals & caps
     const cp_used = Object.values(cInv).reduce((a,b)=>a+b,0);
-    const cp_max  = 22 + Math.floor((lvl-1)/9)*3;
+    const cp_max  = 22 + Math.floor(lvlUp/9)*3;
     const sp_used = Object.values(sInv).reduce((a,b)=>a+b,0);
-    const sp_max  = 40 + (lvl-1)*2;
+    const sp_max  = 40 + lvlUp*2;
     const skill_cap = (lvl>=50?8:lvl>=40?7:lvl>=30?6:lvl>=20?5:lvl>=10?4:3);
     const char_cap  = (lvl>=55?10:lvl>=46?9:lvl>=37?8:lvl>=28?7:lvl>=19?6:lvl>=10?5:4);
     setTxt('#cp_used', cp_used); setTxt('#cp_max', cp_max);
     setTxt('#sp_used', sp_used); setTxt('#sp_max', sp_max);
     setTxt('#skill_cap', skill_cap); setTxt('#char_cap', char_cap);
 
-    // Sublimation slots / tier cap
+    // Sublimation slots/tier cap
     const sub_max = (Math.max(cMile.pre||0,0)*2) + Math.floor(lvl/10);
     const tier_cap = Math.ceil(lvl/25);
     setTxt('#sub_used', subUsed); setTxt('#sub_max', sub_max); setTxt('#sub_tier', tier_cap);
 
-    // Resources
+    // Resources (positive milestones only)
     const pos = k => Math.max(cMile[k]||0,0);
-    const defT = sumSubType('4'), endu = sumSubType('6'), clar = sumSubType('8'), spd = sumSubType('5'), dev = sumSubType('7');
-    const hp_max = 100 + (lvl-1) + 12*pos('bod') + 6*pos('wil') + 12*defT;
-    const en_max = 5 + Math.floor((lvl-1)/5) + pos('wil') + 2*pos('mag') + 2*endu;
-    const fo_max = 2 + Math.floor((lvl-1)/5) + pos('wil') + pos('wis') + pos('pre') + clar;
-    const mo     = 4 + pos('dex') + pos('ref') + spd;
-    const et     = 1 + Math.floor((lvl-1)/9) + pos('mag');
-    const cdc    = 6 + tens(lvl) + dev;
+    const hp_max = 100 + lvlUp + 12*pos('bod') + 6*pos('wil') + 12*sumSubType('4');
+    const en_max = 5 + Math.floor(lvlUp/5) + pos('wil') + 2*pos('mag') + 2*sumSubType('6');
+    const fo_max = 2 + Math.floor(lvlUp/5) + pos('wil') + pos('wis') + pos('pre') + sumSubType('8');
+    const mo     = 4 + pos('dex') + pos('ref') + sumSubType('5');
+    const et     = 1 + Math.floor(lvlUp/9) + pos('mag');
+    const cdc    = 6 + tens(lvl) + sumSubType('7');
 
     const resBV  = Number($('[data-s-base="resistance"]').textContent||0);
     const alcBV  = Number($('[data-s-base="alchemy"]').textContent||0);
@@ -330,7 +389,7 @@
     });
   }
 
-  // --------- save on change
+  // ---- save on change
   let saveTimer=null;
   function queueSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,300); }
   function collectPayload(){
@@ -357,18 +416,20 @@
     await fetch(`${API_BASE}/characters/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collectPayload())});
   }catch(e){ console.warn('save failed',e); } }
 
-  // --------- events
+  // ---- events
   ['#c_level','#c_xp','#c_name','#avatarUrl'].forEach(sel=>{
     const el=$(sel); if(!el) return;
     replaceOnType(el);
     el.addEventListener('input', ()=>{ recompute(); queueSave(); });
   });
-
-  // attach events to each numeric input and enable select-on-focus
-  $$('#charSkillContainer input, #intensityTable input').forEach(inp=>{
-    replaceOnType(inp);
-    inp.addEventListener('input', ()=>{ recompute(); queueSave(); });
-  });
+  // numeric inputs
+  const attachNumeric = () => {
+    $$('#charSkillContainer input, #intensityTable input').forEach(inp=>{
+      replaceOnType(inp);
+      inp.addEventListener('input', ()=>{ recompute(); queueSave(); });
+    });
+  };
+  attachNumeric();
 
   // initial compute
   recompute();

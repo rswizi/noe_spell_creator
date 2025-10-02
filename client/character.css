@@ -42,14 +42,63 @@ body{margin:0;background:linear-gradient(180deg,#0b0f1a,#0c1222 30%,#0b0f1a);col
 .right{text-align:right}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 
-.char-grid{display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr))}
-@media (min-width: 1100px){ .char-grid{grid-template-columns:repeat(4,minmax(0,1fr))} }
+.char-grid{
+  display:grid;
+  gap:16px;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+@media (min-width: 1100px){
+  .char-grid{ grid-template-columns:repeat(4,minmax(0,1fr)); }
+}
+.char-card{
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:14px;
+  padding:8px 8px 0;
+}
+.rowline{
+  display:grid;
+  grid-template-columns: 1fr 120px 160px;
+  gap:8px;
+  align-items:center;
+  padding:8px 6px;
+  border-bottom:1px dashed rgba(255,255,255,.06);
+}
+.rowline.head{ font-weight:600; color:#cbd5e1; }
+.rowline.subhead{ color:#9aa0aa; font-size:12px; }
+.rowline:last-child{ border-bottom:0; }
 
-.char-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:8px 8px 2px}
-.rowline{display:grid;grid-template-columns: 1fr 120px 160px;gap:8px;align-items:center;padding:8px 6px;border-bottom:1px dashed rgba(255,255,255,.06)}
-.rowline.head{grid-template-columns: 1fr 120px 160px}
-.rowline.subhead{grid-template-columns: 1fr 120px 160px;color:var(--muted);font-size:12px}
-.rowline:last-child{border-bottom:0}
-
-.small-hint{font-size:12px;color:var(--muted)}
+.small-hint{ font-size:12px; color:#9aa0aa; margin-left:6px; }
 .danger{color:#fecaca}
+
+.toggle{
+  cursor:pointer;
+  display:flex; align-items:center; gap:8px;
+}
+.toggle i{
+  width:10px; height:10px; border:1px solid rgba(255,255,255,.4);
+  border-radius:3px; display:inline-block; transform:rotate(0deg);
+  transition:transform .15s ease;
+}
+.toggle.open i{ transform:rotate(90deg); }
+
+.mod-panel{
+  grid-column: 1 / -1;
+  display:none;
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.05);
+  border-radius:10px;
+  padding:10px;
+  margin:6px 0 2px;
+}
+.mod-panel.open{ display:block; }
+.mod-panel table{ width:100%; border-collapse:collapse; }
+.mod-panel th,.mod-panel td{
+  padding:6px 4px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  text-align:left;
+}
+.mod-panel th{ color:#cbd5e1; font-weight:600; }
+.mod-panel td.right{ text-align:right; }
+
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
