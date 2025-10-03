@@ -102,73 +102,59 @@
   }
 
   // ---------- UI builders ----------
-  function buildCharSkillCards() {
+    function buildCharSkillCards() {
     const host = document.getElementById('charSkillContainer');
     host.innerHTML = '';
 
     CHAR_MAP.forEach(group => {
-      const card = document.createElement('div');
-      card.className = 'stat-card';
+        const card = document.createElement('div');
+        card.className = 'stat-card';
 
-      // helper: one row
-      const makeRow = (displayName, investAttr, investMax, totalAttr, mileAttr, rowClass, sourceKey) => {
+        // helper: one row
+        const makeCharRow = () => {
         const row = document.createElement('div');
-        row.className = `stat-row ${rowClass}`;
+        row.className = 'stat-row char-row';
 
-        // clickable name (opens Sources)
+        // clickable name
         const nameEl = document.createElement('div');
         nameEl.className = 'stat-name clickable stat-click';
-        nameEl.textContent = displayName;
-        nameEl.dataset.sourceKey = sourceKey;
+        nameEl.textContent = group.label;
+        nameEl.dataset.sourceKey = `c:${group.key}`;
         row.appendChild(nameEl);
 
-        // invested input (2-digit)
+        // invested
         const inv = document.createElement('input');
         inv.type = 'number';
         inv.min = '0';
-        inv.max = String(investMax);
+        inv.max = '16';
         inv.value = '0';
         inv.className = 'input numeric';
-        inv.setAttribute(investAttr, ''); // attribute presence matters for selectors
+        inv.setAttribute('data-c-invest', group.investKey);
         row.appendChild(inv);
 
-        // right badges [Total] | [Milestone]
+        // total
         const total = document.createElement('div');
         total.className = 'badge-col';
-        total.setAttribute(totalAttr, '');
+        total.setAttribute('data-c-total', group.key);
         total.textContent = '0';
         row.appendChild(total);
 
+        // milestone
         const mile = document.createElement('div');
         mile.className = 'badge-col';
-        mile.setAttribute(mileAttr, '');
+        mile.setAttribute('data-c-mile', group.key);
         mile.textContent = '0';
         row.appendChild(mile);
 
-        // sources drawer container
         const srcBox = document.createElement('div');
         srcBox.className = 'sources';
         row.appendChild(srcBox);
 
-        // attach drawer (empty initially; recompute fills content)
         attachDrawer(row, () => []);
-
         card.appendChild(row);
-      };
+        };
 
-      // Characteristic row — use REAL name, attribute must be data-c-invest, totals data-c-total / data-c-mile
-      makeRow(
-        group.label,
-        `data-c-invest=${group.investKey}`,   // attr presence only; value used by selector
-        16,
-        `data-c-total=${group.key}`,
-        `data-c-mile=${group.key}`,
-        'char-row',
-        `c:${group.key}`
-      );
-
-      // Skills rows — data-s-invest / data-s-base, milestone column will show linked char milestone
-      group.skills.forEach(s => {
+        const makeSkillRow = (s) => {
         const row = document.createElement('div');
         row.className = 'stat-row skill-row';
 
@@ -184,18 +170,18 @@
         inv.max = '8';
         inv.value = '0';
         inv.className = 'input numeric';
-        inv.setAttribute(`data-s-invest`, s.key);
+        inv.setAttribute('data-s-invest', s.key);
         row.appendChild(inv);
 
         const base = document.createElement('div');
         base.className = 'badge-col';
-        base.setAttribute(`data-s-base`, s.key);
+        base.setAttribute('data-s-base', s.key);
         base.textContent = '0';
         row.appendChild(base);
 
         const mile = document.createElement('div');
         mile.className = 'badge-col';
-        mile.setAttribute(`data-s-mile`, s.key);
+        mile.setAttribute('data-s-mile', s.key);
         mile.textContent = '0';
         row.appendChild(mile);
 
@@ -205,11 +191,15 @@
 
         attachDrawer(row, () => []);
         card.appendChild(row);
-      });
+        };
 
-      host.appendChild(card);
+        // build rows
+        makeCharRow();
+        group.skills.forEach(makeSkillRow);
+
+        host.appendChild(card);
     });
-  }
+    }
 
   function buildIntensities(){
     const tbody = $('#intensityTable tbody');
