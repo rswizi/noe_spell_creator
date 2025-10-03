@@ -102,57 +102,118 @@
   }
 
   // ---------- UI builders ----------
-  function buildCharSkillCards(){
-    const host = $('#charSkillContainer');
+  function buildCharSkillCards() {
+    const host = document.getElementById('charSkillContainer');
     host.innerHTML = '';
-    CHAR_MAP.forEach(g=>{
-      const card = document.createElement('div');
-      card.className = 'char-card';
-      card.innerHTML = `
-        <div class="card-h">
-          <div>${g.label}</div>
-          <div class="mini">[ Total | Milestone ]</div>
-        </div>
-        <div class="rows"></div>`;
-      const rows = $('.rows', card);
 
-      // Characteristic row
-      rows.appendChild(buildCharRow(g));
-      // Skills rows
-      g.skills.forEach(s => rows.appendChild(buildSkillRow(g, s)));
+    CHAR_MAP.forEach(group => {
+      const card = document.createElement('div');
+      card.className = 'stat-card';
+
+      // helper: one row
+      const makeRow = (displayName, investAttr, investMax, totalAttr, mileAttr, rowClass, sourceKey) => {
+        const row = document.createElement('div');
+        row.className = `stat-row ${rowClass}`;
+
+        // clickable name (opens Sources)
+        const nameEl = document.createElement('div');
+        nameEl.className = 'stat-name clickable stat-click';
+        nameEl.textContent = displayName;
+        nameEl.dataset.sourceKey = sourceKey;
+        row.appendChild(nameEl);
+
+        // invested input (2-digit)
+        const inv = document.createElement('input');
+        inv.type = 'number';
+        inv.min = '0';
+        inv.max = String(investMax);
+        inv.value = '0';
+        inv.className = 'input numeric';
+        inv.setAttribute(investAttr, ''); // attribute presence matters for selectors
+        row.appendChild(inv);
+
+        // right badges [Total] | [Milestone]
+        const total = document.createElement('div');
+        total.className = 'badge-col';
+        total.setAttribute(totalAttr, '');
+        total.textContent = '0';
+        row.appendChild(total);
+
+        const mile = document.createElement('div');
+        mile.className = 'badge-col';
+        mile.setAttribute(mileAttr, '');
+        mile.textContent = '0';
+        row.appendChild(mile);
+
+        // sources drawer container
+        const srcBox = document.createElement('div');
+        srcBox.className = 'sources';
+        row.appendChild(srcBox);
+
+        // attach drawer (empty initially; recompute fills content)
+        attachDrawer(row, () => []);
+
+        card.appendChild(row);
+      };
+
+      // Characteristic row — use REAL name, attribute must be data-c-invest, totals data-c-total / data-c-mile
+      makeRow(
+        group.label,
+        `data-c-invest=${group.investKey}`,   // attr presence only; value used by selector
+        16,
+        `data-c-total=${group.key}`,
+        `data-c-mile=${group.key}`,
+        'char-row',
+        `c:${group.key}`
+      );
+
+      // Skills rows — data-s-invest / data-s-base, milestone column will show linked char milestone
+      group.skills.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'stat-row skill-row';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'stat-name clickable stat-click';
+        nameEl.textContent = s.label;
+        nameEl.dataset.sourceKey = `s:${s.key}`;
+        row.appendChild(nameEl);
+
+        const inv = document.createElement('input');
+        inv.type = 'number';
+        inv.min = '0';
+        inv.max = '8';
+        inv.value = '0';
+        inv.className = 'input numeric';
+        inv.setAttribute(`data-s-invest`, s.key);
+        row.appendChild(inv);
+
+        const base = document.createElement('div');
+        base.className = 'badge-col';
+        base.setAttribute(`data-s-base`, s.key);
+        base.textContent = '0';
+        row.appendChild(base);
+
+        const mile = document.createElement('div');
+        mile.className = 'badge-col';
+        mile.setAttribute(`data-s-mile`, s.key);
+        mile.textContent = '0';
+        row.appendChild(mile);
+
+        const srcBox = document.createElement('div');
+        srcBox.className = 'sources';
+        row.appendChild(srcBox);
+
+        attachDrawer(row, () => []);
+        card.appendChild(row);
+      });
+
       host.appendChild(card);
     });
   }
 
-  function buildCharRow(group){
-    const row = document.createElement('div');
-    row.className = 'rowline char-row';
-    row.innerHTML = `
-      <div class="name stat-click"><button class="toggle">Characteristic</button></div>
-      <div>
-        <input class="input num2" type="number" min="0" max="16" value="0" data-c-invest="${group.investKey}">
-      </div>
-      <div class="tot mono">
-        <span data-c-total="${group.key}">4</span> |
-        <span data-c-mile="${group.key}">-3</span>
-      </div>
-      <div class="src sources"></div>`;
-    return row;
-  }
-
-  function buildSkillRow(group, skill){
-    const row = document.createElement('div');
-    row.className = 'rowline skill-row';
-    row.innerHTML = `
-      <div class="name stat-click"><button class="toggle">${skill.label}</button><span class="mini">(bonus <span data-s-mod="${skill.key}">0</span>)</span></div>
-      <div><input class="input num2" type="number" min="0" max="8" value="0" data-s-invest="${skill.key}"></div>
-      <div class="tot mono"><span data-s-base="${skill.key}">0</span></div>
-      <div class="src sources"></div>`;
-    return row;
-  }
-
   function buildIntensities(){
     const tbody = $('#intensityTable tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
     INTENSITIES.forEach(nm=>{
       const tr = document.createElement('tr');
@@ -166,7 +227,6 @@
         <td class="mono" data-i-iv="${nm}">—</td>
         <td class="mono right" data-i-rw="${nm}">0</td>
       `;
-      const src = document.createElement('tr');
       tbody.appendChild(tr);
     });
   }
@@ -181,6 +241,7 @@
     });
   }
   function renderSources(box, entries){
+    if (!box) return;
     box.innerHTML = '';
     if (!entries || !entries.length){
       const d = document.createElement('div');
@@ -257,7 +318,9 @@
     // cache milestones (signed)
     const cache = {};
     CHAR_MAP.forEach(g=>{
-      const inv = toInt($(`[data-c-invest="${g.investKey}"]`)?.value||0,0);
+      const invEl = $(`[data-c-invest="${g.investKey}"]`);
+      if (!invEl) return;
+      const inv = toInt(invEl.value||0,0);
       cache[g.key] = milestoneSigned(scoreFromInvest(inv));
     });
     charMilSignedCache = cache;
@@ -286,12 +349,21 @@
       }
     });
 
-    // Characteristics totals + milestones
+    // Characteristics totals + milestones (update UI)
     CHAR_MAP.forEach(g=>{
-      const inv = normalizeNumeric($(`[data-c-invest="${g.investKey}"]`),{min:0,max:16});
-      const score = scoreFromInvest(inv);
+      const inp = $(`[data-c-invest="${g.investKey}"]`);
+      if (!inp) return;
+      normalizeNumeric(inp,{min:0,max:16});
+      const score = scoreFromInvest(toInt(inp.value,0));
       setTxt(`[data-c-total="${g.key}"]`, score);
       setTxt(`[data-c-mile="${g.key}"]`, milestoneSigned(score));
+
+      // characteristic drawer -> "No modifiers yet." for now
+      const crow = inp.closest('.char-row');
+      if (crow && !crow._charDrawer){
+        attachDrawer(crow, ()=>[]);
+        crow._charDrawer = true;
+      }
     });
 
     // Skills bases
@@ -299,26 +371,28 @@
     CHAR_MAP.forEach(g=>{
       g.skills.forEach(s=>{
         const inp = $(`[data-s-invest="${s.key}"]`);
-        const inv = normalizeNumeric(inp,{min:0,max:8});
+        if (!inp) return;
+        normalizeNumeric(inp,{min:0,max:8});
+        const inv = toInt(inp.value,0);
         sp_used += inv;
         const bonus = Math.min(inv, excel[s.key]||0);
         const base  = inv + bonus + (charMilSignedCache[g.key]||0);
-        setTxt(`[data-s-mod="${s.key}"]`, bonus);
         setTxt(`[data-s-base="${s.key}"]`, base);
+        setTxt(`[data-s-mile="${s.key}"]`, (charMilSignedCache[g.key]||0));
 
-        // sources drawer
+        // sources drawer for skill row
         const row = inp.closest('.skill-row');
-        if (row && !row._drawer){
-          attachDrawer(row, ()=> (bonus>0 ? [[`Sublimation: Excellence (${s.label})`, bonus]] : []));
-          row._drawer = true;
+        if (row && !row._skillDrawer){
+          row._getSources = ()=> (bonus>0 ? [[`Sublimation: Excellence (${s.label})`, bonus]] : []);
+          attachDrawer(row, ()=> row._getSources());
+          row._skillDrawer = true;
+        } else if (row && row._getSources){
+          row._getSources = ()=> (bonus>0 ? [[`Sublimation: Excellence (${s.label})`, bonus]] : []);
+          if (row.classList.contains('open')) {
+            renderSources($('.sources', row), row._getSources());
+          }
         }
       });
-      // characteristic drawer
-      const crow = $(`[data-c-invest="${g.investKey}"]`)?.closest('.char-row');
-      if (crow && !crow._drawer){
-        attachDrawer(crow, ()=>[]); // “No modifiers yet.”
-        crow._drawer = true;
-      }
     });
 
     // Points/caps
@@ -365,7 +439,9 @@
     const magM = charMilSignedCache['mag']||0;
     INTENSITIES.forEach(nm=>{
       const inp = $(`[data-i-invest="${nm}"]`);
-      const inv = normalizeNumeric(inp,{min:0,max:8});
+      if (!inp) return;
+      normalizeNumeric(inp,{min:0,max:8});
+      const inv = toInt(inp.value,0);
       const base = inv>0 ? inv + magM : 0;
       const [ID,IV] = idIvFromBV(base);
       setTxt(`[data-i-mod="${nm}"]`, magM);
@@ -373,7 +449,7 @@
       setTxt(`[data-i-id="${nm}"]`, ID);
       setTxt(`[data-i-iv="${nm}"]`, IV==='—'?'—':String(IV));
       setTxt(`[data-i-rw="${nm}"]`, '0');
-      // drawer (empty for now)
+
       const row = inp.closest('tr');
       if (row && !row._drawer){
         attachDrawer(row, ()=>[]);
@@ -387,7 +463,8 @@
 
   // ---------- Sublimations table ----------
   function addSubRow(defaults = {type:SUB_TYPES.EXCELLENCE, skill:'', tier:1}){
-    const tb = $('#subTable tbody'); const tr=document.createElement('tr');
+    const tb = $('#subTable tbody'); if (!tb) return;
+    const tr=document.createElement('tr');
 
     const typeSel=document.createElement('select'); typeSel.className='input s';
     Object.values(SUB_TYPES).forEach(id=>{
@@ -470,10 +547,13 @@
     const avatarUrl = $('#avatarUrl'), charAvatar = $('#charAvatar');
     avatarUrl?.addEventListener('input', ()=>{ charAvatar.src = avatarUrl.value || 'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg'; triggerAutosave(); });
 
-    // simple inputs
+    // basic inputs
     ['#c_level','#c_xp','#c_name'].forEach(sel=>{
       const n=$(sel); if(!n) return;
-      n.addEventListener('input', ()=>{ if(sel!=='#c_name') normalizeNumeric(n,{min: sel==='#c_level'?1:0, max: 99}); recompute(); });
+      n.addEventListener('input', ()=>{
+        if(sel!=='#c_name') normalizeNumeric(n,{min: sel==='#c_level'?1:0, max: 99});
+        recompute();
+      });
     });
 
     // Delegate inputs inside grids
@@ -506,7 +586,7 @@
   function init(){
     buildCharSkillCards();
     buildIntensities();
-    if (!$('#subTable tbody').children.length){
+    if (!$('#subTable tbody') || !$('#subTable tbody').children.length){
       addSubRow({type:SUB_TYPES.EXCELLENCE, skill:'accuracy', tier:2});
     }
     bindEvents();
