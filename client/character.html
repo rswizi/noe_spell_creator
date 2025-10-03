@@ -4,31 +4,30 @@
   <meta charset="utf-8" />
   <title>Character Manager</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/static/character.css" />
+  <link rel="stylesheet" href="/static/css/character.css">
 </head>
 <body>
   <div class="wrap">
 
-    <!-- HEADER + RESOURCES -->
+    <!-- HEADER -->
     <div class="panel">
       <div class="hdr-grid">
-        <!-- left column -->
         <div>
           <img id="charAvatar" class="avatar" src="https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg" alt="">
-          <div class="inline">
+          <label class="inline">
             <span class="label">Image URL</span>
             <input id="avatarUrl" class="input" placeholder="https://…" />
-          </div>
+          </label>
 
           <div class="title">Character</div>
           <label class="label">Name</label>
-          <input id="c_name" class="input" placeholder="Akari of the East" />
+          <input id="c_name" class="input" placeholder="Akari of the East">
 
           <label class="label" style="margin-top:8px">Level</label>
-          <input id="c_level" type="number" min="1" max="100" class="input num2" value="1" />
+          <input id="c_level" class="input" type="number" min="1" max="100" value="1">
 
           <label class="label" style="margin-top:8px">XP</label>
-          <input id="c_xp" type="number" min="0" class="input" value="0" />
+          <input id="c_xp" class="input" type="number" min="0" value="0">
 
           <div class="badges">
             <span class="badge">MO: <b id="k_mo" class="mono">4</b></span>
@@ -38,43 +37,42 @@
           </div>
         </div>
 
-        <!-- right column -->
+        <!-- RESOURCES -->
         <div class="panel soft">
           <div class="title">Resources</div>
           <div class="res-grid">
             <div class="kpi">
               <span class="label">HP</span>
-              <div class="num"><span id="hp_cur">100</span>/<span id="hp_max">100</span></div>
+              <div class="num mono"><span id="hp_cur">100</span>/<span id="hp_max">100</span></div>
               <div class="bar hp"><i id="hp_bar"></i></div>
             </div>
             <div class="kpi">
               <span class="label">SP</span>
-              <div class="num"><span id="sp_cur">0</span>/<span id="sp_max">10</span></div>
+              <div class="num mono"><span id="sp_cur">0</span>/<span id="sp_max">10</span></div>
               <div class="bar sp"><i id="sp_bar"></i></div>
             </div>
             <div class="kpi">
               <span class="label">EN</span>
-              <div class="num"><span id="en_cur">5</span>/<span id="en_max">5</span></div>
+              <div class="num mono"><span id="en_cur">5</span>/<span id="en_max">5</span></div>
               <div class="bar en"><i id="en_bar"></i></div>
             </div>
-
             <div class="kpi">
               <span class="label">FO</span>
-              <div class="num"><span id="fo_cur">2</span>/<span id="fo_max">2</span></div>
+              <div class="num mono"><span id="fo_cur">2</span>/<span id="fo_max">2</span></div>
               <div class="bar fo"><i id="fo_bar"></i></div>
             </div>
             <div class="kpi">
               <span class="label">TX</span>
-              <div class="num"><span id="tx_cur">0</span>/<span id="tx_max">0</span></div>
+              <div class="num mono"><span id="tx_cur">0</span>/<span id="tx_max">0</span></div>
               <div class="bar tx"><i id="tx_bar"></i></div>
             </div>
             <div class="kpi">
               <span class="label">Enc</span>
-              <div class="num"><span id="enc_cur">0</span>/<span id="enc_max">10</span></div>
+              <div class="num mono"><span id="enc_cur">0</span>/<span id="enc_max">10</span></div>
               <div class="bar"><i id="enc_bar"></i></div>
             </div>
           </div>
-          <div class="hint">Max values are derived. Current values will be editable in the combat/inventory flows later.</div>
+          <div class="hint">Max values are derived. Current values will be editable in combat/inventory later.</div>
         </div>
       </div>
     </div>
@@ -89,16 +87,16 @@
         <button class="tab" data-tab="personal">Personal</button>
       </div>
 
-      <!-- Tab: Statistics -->
+      <!-- TAB: STATS -->
       <div class="tabpan active" id="tab-stats">
         <div class="three-grid">
           <div class="panel soft">
             <div class="label">Skill Points</div>
-            <div class="num mono"><span id="sp_used">0</span> / <span id="sp_max">40</span> <span class="mini">[cap <span id="skill_cap">3</span>]</span></div>
+            <div class="num mono"><span id="sp_used">0</span> / <span id="sp_max">40</span> <span class="label">[cap <span id="skill_cap">3</span>]</span></div>
           </div>
           <div class="panel soft">
             <div class="label">Characteristic Points</div>
-            <div class="num mono"><span id="cp_used">0</span> / <span id="cp_max">22</span> <span class="mini">[cap <span id="char_cap">10</span>]</span></div>
+            <div class="num mono"><span id="cp_used">0</span> / <span id="cp_max">22</span> <span class="label">[cap <span id="char_cap">4</span>]</span></div>
           </div>
           <div class="panel soft">
             <div class="label">Sublimation</div>
@@ -107,7 +105,7 @@
           </div>
         </div>
 
-        <!-- Sublimations -->
+        <!-- SUBLIMATIONS -->
         <div class="panel" style="margin-top:16px">
           <div class="row-split">
             <div class="title">Sublimations</div>
@@ -118,7 +116,7 @@
               <tr>
                 <th style="width:240px">Type</th>
                 <th>Skill (for Excellence)</th>
-                <th style="width:90px">Tier</th>
+                <th style="width:110px">Tier</th>
                 <th class="right" style="width:70px">Slots</th>
                 <th style="width:80px"></th>
               </tr>
@@ -128,41 +126,53 @@
           <div class="hint">Types: Lethality, Excellence (choose a skill), Blessing, Defense, Speed, Devastation, Clarity, Endurance.</div>
         </div>
 
-        <!-- Characteristics & Skills -->
+        <!-- CHARACTERISTICS & SKILLS -->
         <div class="panel" style="margin-top:16px">
-          <div class="title">Characteristics & Skills</div>
-          <div id="charSkillContainer" class="char-grid"><!-- built by JS --></div>
+          <div class="title">Characteristics &amp; Skills</div>
+          <div id="charSkillContainer" class="stats-grid"></div>
         </div>
 
-        <!-- Intensities -->
+        <!-- INTENSITIES -->
         <div class="panel" style="margin-top:16px">
           <div class="title">Intensities</div>
           <table class="tbl" id="intensityTable">
             <thead>
               <tr>
                 <th>Name</th>
-                <th style="width:70px">Invested</th>
-                <th style="width:70px">Milestone</th>
-                <th style="width:90px">Base Value</th>
-                <th style="width:60px">ID</th>
-                <th style="width:60px">IV</th>
-                <th class="right" style="width:90px">Res/Wk</th>
+                <th>Invested</th>
+                <th>Milestone (MAG)</th>
+                <th>Base Value</th>
+                <th>ID</th>
+                <th>IV</th>
+                <th class="right">Res/Wk</th>
               </tr>
             </thead>
-            <tbody><!-- built by JS --></tbody>
+            <tbody></tbody>
           </table>
-          <div class="hint">Click any row to see modifier sources. Specialist rule and resistance grid can be added later.</div>
+          <div class="hint">Click a row to see sources. Specialist rule & resistance grid come later.</div>
         </div>
       </div>
 
-      <!-- Other tabs (placeholders) -->
-      <div class="tabpan" id="tab-inventory"><div class="title">Inventory</div><p class="muted">Wiring later.</p></div>
-      <div class="tabpan" id="tab-abilities"><div class="title">Abilities</div><p class="muted">Wiring later.</p></div>
-      <div class="tabpan" id="tab-combat"><div class="title">Combat</div><p class="muted">Wiring later.</p></div>
-      <div class="tabpan" id="tab-personal"><div class="title">Personal</div><p class="muted">Wiring later.</p></div>
+      <!-- OTHER TABS -->
+      <div class="tabpan" id="tab-inventory"><div class="muted">Inventory wiring later.</div></div>
+      <div class="tabpan" id="tab-abilities"><div class="muted">Abilities coming soon.</div></div>
+      <div class="tabpan" id="tab-combat"><div class="muted">Combat HUD coming soon.</div></div>
+      <div class="tabpan" id="tab-personal">
+        <div class="two-grid">
+          <div class="panel soft">
+            <label><span class="label">Height</span><input id="p_height" class="input" placeholder="175 cm"></label>
+            <label style="margin-top:8px"><span class="label">Weight</span><input id="p_weight" class="input" placeholder="70 kg"></label>
+            <label style="margin-top:8px"><span class="label">Birthday</span><input id="p_bday" class="input" placeholder="TBD"></label>
+          </div>
+          <div class="panel soft">
+            <label><span class="label">Backstory</span><textarea id="p_backstory" class="input" rows="6" placeholder="Who are they?"></textarea></label>
+            <label style="margin-top:8px"><span class="label">Player Notes</span><textarea id="p_notes" class="input" rows="6" placeholder="Anything else…"></textarea></label>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <script defer src="/static/character.js"></script>
+  <script defer src="/static/js/character.js"></script>
 </body>
 </html>
