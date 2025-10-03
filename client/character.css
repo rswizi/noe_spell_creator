@@ -63,15 +63,28 @@ body{
 
 /* rows in card */
 .stat-row{
-  display:grid;grid-template-columns: 1fr 100px 62px 70px; /* name | invested | total | milestone */
-  gap:10px;align-items:center;padding:8px 4px;border-bottom:1px dashed rgba(255,255,255,.06)
+  display:grid;
+  grid-template-columns: minmax(160px, 1fr) 110px 80px 90px;
+  gap:10px; align-items:center;
+  padding:8px 4px;
+  border-bottom:1px dashed rgba(255,255,255,.06);
 }
-.stat-row:last-child{border-bottom:0}
-.stat-name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-row > * { min-width:0; }
+.stat-name{
+  color: var(--txt);
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 .stat-name.clickable{cursor:pointer}
-.badge-col{text-align:right;font-family:ui-monospace,Menlo,Consolas,monospace}
+.badge-col{
+  text-align:right;
+  font-family:ui-monospace,Menlo,Consolas,monospace
+}
 .sources{grid-column:1/-1;margin:6px 0 0;display:none}
 .stat-row.open .sources{display:block}
+.stat-row:last-child{border-bottom:0}
 .source-empty{color:#9ca3af;font-size:12px}
 .source-line{display:flex;justify-content:space-between;padding:2px 0;font-size:12px}
 

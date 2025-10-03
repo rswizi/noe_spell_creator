@@ -134,7 +134,7 @@
 
     const name = document.createElement('div');
     name.className = 'stat-name clickable';
-    name.textContent = 'Characteristic';
+    name.textContent = group.label.replace(/\s*\(.+\)/,'') || 'Characteristic';
     row.appendChild(name);
 
     const inv = document.createElement('input');
@@ -151,7 +151,8 @@
     row.appendChild(mile);
 
     const srcBox = document.createElement('div'); srcBox.className='sources'; row.appendChild(srcBox);
-    attachDrawer(row, ()=>[]);
+    row._getSources = ()=>[];  // characteristic sources will show up here later
+    attachDrawer(row, ()=>row._getSources());
 
     return row;
   }
@@ -161,7 +162,8 @@
     row.className = 'stat-row skill-row';
 
     const name = document.createElement('div');
-    name.className='stat-name clickable'; name.textContent = `— ${s.label}`;
+    name.className='stat-name clickable';
+    name.textContent = `— ${s.label}`;
     row.appendChild(name);
 
     const inv = document.createElement('input');
@@ -178,7 +180,9 @@
     row.appendChild(mile);
 
     const srcBox = document.createElement('div'); srcBox.className='sources'; row.appendChild(srcBox);
-    attachDrawer(row, ()=>[]);
+    // will be set in recompute() with the actual Excellence bonus
+    row._getSources = ()=>[];
+    attachDrawer(row, ()=>row._getSources());
 
     return row;
   }
