@@ -1,62 +1,21 @@
-/* character.js — wired to /characters endpoints with autosave (debounced) */
+/* character.js — clean wiring to /characters with 2-col stats, correct milestones, Excellence, and debounced autosave */
 
 (() => {
-  // ---------- Tiny DOM helpers ----------
-  const $  = (sel, el = document) => el.querySelector(sel);
-  const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
-  const num = v => (v===''||v==null) ? 0 : Number(v);
+  // ---------- Tiny helpers ----------
+  const $  = (sel, el=document) => el.querySelector(sel);
+  const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+  const num = (v) => (v===''||v==null) ? 0 : Number(v);
 
-  // ---------- API ----------
-  const API = {
-    async createCharacter(payload) {
-      const r = await fetch('/characters', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(payload),
-        credentials: 'include',
-      });
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
-    },
-    async getCharacter(id) {
-      const r = await fetch(`/characters/${encodeURIComponent(id)}`, { credentials: 'include' });
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
-    },
-    async patchCharacter(id, delta) {
-      const r = await fetch(`/characters/${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(delta),
-        credentials: 'include',
-      });
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
-    },
+  const cidInput   = $('#c_id');           // hidden input holding character id
+  const saveStatus = $('#saveStatus');     // small pill to show status
+  const setStatus  = (txt, kind='') => {
+    if (!saveStatus) return;
+    saveStatus.textContent = txt;
+    saveStatus.classList.remove('good','danger');
+    if (kind) saveStatus.classList.add(kind);
   };
 
-  // ---------- Global state ----------
-  let CHARACTER_ID = null;       // set after first save or load
-  let SAVE_TIMER   = null;       // debounce timer
-  const SAVE_DELAY = 350;
-
-  // ---------- Game math helpers ----------
-  const modFromScore  = score => Math.floor(score/2 - 5);   // d20-like
-  const scoreFromInv  = invest => 4 + invest;               // base 4 + invested
-  const tens          = lvl => Math.floor(lvl / 10);
-  const miles         = m => Math.max(m, 0);                // positive milestones only
-
-  // Intensity Dice / IV from Base Value
-  function idIvFromBV(bv){
-    if (bv <= 0) return ['—','—'];
-    if (bv <= 7)  return ['1d4', 2];
-    if (bv <= 11) return ['1d6', 3];
-    if (bv <= 15) return ['1d8', 4];
-    if (bv <= 17) return ['1d10', 5];
-    return ['1d12', 6];
-  }
-
-  // ---------- Static maps (must match your HTML data-… keys) ----------
+  // ---------- Static maps (must match your HTML) ----------
   const GROUPS = [
     { key:'ref', label:'Reflex',    investKey:'reflexp',    skills:['technicity','dodge','tempo','reactivity'] },
     { key:'dex', label:'Dexterity', investKey:'dexterityp', skills:['accuracy','evasion','stealth','acrobatics'] },
@@ -67,286 +26,27 @@
     { key:'wis', label:'Wisdom',    investKey:'wisdomp',    skills:['survival','education','perception','psychology','investigation'] },
     { key:'tec', label:'Tech',      investKey:'techp',      skills:['crafting','soh','alchemy','medecine','engineering'] },
   ];
+
   const INTENSITIES = ['Fire','Water','Earth','Wind','Lightning','Moon','Sun','Ki'];
 
-  // ---------- Sublimation helpers ----------
-  function readSublimationsFromUI(){
-    const rows = $('#subTable tbody') ? Array.from($('#subTable tbody').children) : [];
-    return rows.map(tr => {
-      const type  = tr._refs?.typeSel?.value || '';
-      const skill = tr._refs?.skillSel?.value || '';
-      const tier  = num(tr._refs?.tierInp?.value || 0);
-      return { type, skill, tier };
-    });
-  }
-  function sumSublimation(typeCode){
-    return readSublimationsFromUI()
-      .filter(s => s.type === typeCode)
-      .reduce((a,b)=>a + Math.max(0, b.tier), 0);
-  }
+  // ---------- Game math ----------
+  const modFromScore = (score) => Math.floor(score/2 - 5);   // Milestone = characteristic modifier
+  const scoreFromInv = (inv) => 4 + inv;
 
-  // ---------- Serialization ----------
-  function readCharacteristicsFromUI(){
-    const out = {};
-    GROUPS.forEach(g => {
-      const inv = num($(`[data-c-invest="${g.investKey}"]`)?.value || 0);
-      const mod = 0; // external char modifier (from traits/etc) — locked to 0 for now
-      out[g.key] = { invest: inv, modifier: mod };
-    });
-    return out;
-  }
+  // dice table (if you show ID/IV elsewhere)
+  const idIvFromBV = (bv) => {
+    if (bv <= 0) return ['—','—'];
+    if (bv <= 7)  return ['1d4', 2];
+    if (bv <= 11) return ['1d6', 3];
+    if (bv <= 15) return ['1d8', 4];
+    if (bv <= 17) return ['1d10', 5];
+    return ['1d12', 6];
+  };
 
-  function readSkillsFromUI(){
-    const out = {};
-    GROUPS.forEach(g => {
-      g.skills.forEach(s => {
-        const inv = num($(`[data-s-invest="${s}"]`)?.value || 0);
-        // Skill modifier currently comes only from Excellence sublimation (capped to invest)
-        const excel = readSublimationsFromUI().filter(x=>x.type==='1' && x.skill===s)
-                         .reduce((a,b)=>a + Math.max(0,b.tier), 0);
-        const bonus = Math.min(inv, excel);
-        out[s] = { invest: inv, modifier: bonus };
-      });
-    });
-    // Intensities read as skills too (invest, mod = magic milestone)
-    INTENSITIES.forEach(nm => {
-      const inv = num($(`[data-i-invest="${nm}"]`)?.value || 0);
-      out[`intensity_${nm}`] = { invest: inv, modifier: 0 }; // actual mod added via linked char mod (MAG)
-    });
-    return out;
-  }
-
-  function readPersonal(){
-    return {
-      height:   $('#p_height')?.value || '',
-      weight:   $('#p_weight')?.value || '',
-      birthday: $('#p_bday')?.value   || '',
-      backstory:$('#p_backstory')?.value || '',
-      notes:    $('#p_notes')?.value  || '',
-    };
-  }
-
-  function serializeCharacter(){
-    const name   = $('#c_name')?.value || '';
-    const level  = num($('#c_level')?.value || 1);
-    const xp     = num($('#c_xp')?.value || 0);
-    const avatar_url = $('#avatarUrl')?.value || '';
-
-    return {
-      name, level, xp, avatar_url,
-      // current resources (UI currently derived-only; keep at zero unless you track currents)
-      hp: 0, sp: 0, en: 0, fo: 0, tx: 0, enc: 0,
-      characteristics: readCharacteristicsFromUI(),
-      skills:          readSkillsFromUI(),
-      intensities:     INTENSITIES.reduce((acc,nm) => {
-                         acc[nm] = { invest: num($(`[data-i-invest="${nm}"]`)?.value || 0) };
-                         return acc;
-                       }, {}),
-      sublimations:    readSublimationsFromUI(),
-      ...readPersonal(),
-    };
-  }
-
-  // ---------- Debounced save ----------
-  function scheduleSave(deltaProducer){
-    if (SAVE_TIMER) clearTimeout(SAVE_TIMER);
-    SAVE_TIMER = setTimeout(async () => {
-      try {
-        const delta = typeof deltaProducer === 'function' ? deltaProducer() : deltaProducer;
-        if (!CHARACTER_ID) {
-          // first save: create with the whole doc
-          const created = await API.createCharacter(serializeCharacter());
-          CHARACTER_ID = created.character.id;
-        } else {
-          await API.patchCharacter(CHARACTER_ID, delta);
-        }
-      } catch (err) {
-        console.error('Save failed', err);
-      }
-    }, SAVE_DELAY);
-  }
-
-  // ---------- Recompute view (derived) ----------
-  function recompute(){
-    const lvl  = Math.min(Math.max(num($('#c_level')?.value || 1),1), 100);
-    $('#c_level') && ($('#c_level').value = String(lvl));
-
-    // char scores & milestones
-    const cInv = readCharacteristicsFromUI();
-    const cScore = {};
-    const cMod   = {};
-    Object.entries(cInv).forEach(([k, o]) => {
-      const score = scoreFromInv(o.invest + num(o.modifier||0)); // characteristic modifier applies to score
-      cScore[k] = score;
-      cMod[k]   = modFromScore(score); // Milestone (char mod to skills)
-      // write UI totals if present
-      $(`[data-c-total="${k}"]`)    && ($(`[data-c-total="${k}"]`).textContent = String(score));
-      $(`[data-c-milestone="${k}"]`)&& ($(`[data-c-milestone="${k}"]`).textContent = String(cMod[k]));
-    });
-
-    // Sublimation buckets
-    const sub_defense   = sumSublimation('4'); // +12 HP / tier
-    const sub_speed     = sumSublimation('5'); // +1 MO / tier
-    const sub_clarity   = sumSublimation('8'); // +1 FO / tier
-    const sub_endurance = sumSublimation('6'); // +2 EN / tier
-    const sub_devast    = sumSublimation('7'); // + Condition DC per tier
-
-    // skills base values (invest + skill modifier + linked char milestone)
-    GROUPS.forEach(g => {
-      g.skills.forEach(s => {
-        const inv   = num($(`[data-s-invest="${s}"]`)?.value || 0);
-        const excel = readSublimationsFromUI().filter(x=>x.type==='1' && x.skill===s)
-                         .reduce((a,b)=>a + Math.max(0,b.tier), 0);
-        const sMod  = Math.min(inv, excel); // capped to invest
-        const base  = inv + sMod + cMod[g.key];
-        $(`[data-s-mod="${s}"]`)   && ($(`[data-s-mod="${s}"]`).textContent  = String(sMod));
-        $(`[data-s-base="${s}"]`)  && ($(`[data-s-base="${s}"]`).textContent = String(base));
-      });
-    });
-
-    // intensities base values = invest + MAG milestone (only if invest>0)
-    const magMil = cMod.mag ?? cMod['mag'] ?? 0;
-    INTENSITIES.forEach(nm => {
-      const inv = num($(`[data-i-invest="${nm}"]`)?.value || 0);
-      const base = inv > 0 ? inv + magMil : 0;
-      const [ID, IV] = idIvFromBV(base);
-      $(`[data-i-mod="${nm}"]`)  && ($(`[data-i-mod="${nm}"]`).textContent  = String(magMil));
-      $(`[data-i-base="${nm}"]`) && ($(`[data-i-base="${nm}"]`).textContent = String(base));
-      $(`[data-i-id="${nm}"]`)   && ($(`[data-i-id="${nm}"]`).textContent   = String(ID));
-      $(`[data-i-iv="${nm}"]`)   && ($(`[data-i-iv="${nm}"]`).textContent   = String(IV==='—'? '—' : IV));
-    });
-
-    // points & caps
-    const lvl_up_count = Math.max(lvl-1,0);
-    const cp_used = Object.values(cInv).reduce((a,b)=>a + num(b.invest||0), 0);
-    const cp_max  = 22 + Math.floor(lvl_up_count/9)*3;
-    const skillInv = readSkillsFromUI();
-    // only real skills (not intensity_* internal keys) for SP spent
-    const sp_used = Object.entries(skillInv)
-      .filter(([k]) => !k.startsWith('intensity_'))
-      .reduce((a,[,v]) => a + num(v.invest||0), 0);
-    const sp_max  = 40 + lvl_up_count*2;
-    const skill_cap = (lvl >= 50 ? 8 : lvl >= 40 ? 7 : lvl >= 30 ? 6 : lvl >= 20 ? 5 : lvl >= 10 ? 4 : 3);
-
-    $('#cp_used') && ($('#cp_used').textContent = String(cp_used));
-    $('#cp_max')  && ($('#cp_max').textContent  = String(cp_max));
-    $('#sp_used') && ($('#sp_used').textContent = String(sp_used));
-    $('#sp_max')  && ($('#sp_max').textContent  = String(sp_max));
-    $('#skill_cap') && ($('#skill_cap').textContent = String(skill_cap));
-
-    // Sublimation slots cap
-    const mile_pre = miles(cMod.pre ?? cMod['pre'] ?? 0);
-    const sub_max  = (mile_pre*2) + tens(lvl);
-    const tier_cap = Math.ceil(lvl/25);
-    const sub_used = readSublimationsFromUI().reduce((a,b)=>a + Math.max(0, b.tier), 0);
-    $('#sub_max') && ($('#sub_max').textContent = String(sub_max));
-    $('#sub_used')&& ($('#sub_used').textContent= String(sub_used));
-    $('#sub_tier')&& ($('#sub_tier').textContent= String(tier_cap));
-
-    // Resources (max)
-    const mile_bod = miles(cMod.bod ?? cMod['bod'] ?? 0);
-    const mile_wil = miles(cMod.wil ?? cMod['wil'] ?? 0);
-    const mile_mag = miles(magMil);
-    const mile_dex = miles(cMod.dex ?? cMod['dex'] ?? 0);
-    const mile_ref = miles(cMod.ref ?? cMod['ref'] ?? 0);
-    const mile_wis = miles(cMod.wis ?? cMod['wis'] ?? 0);
-
-    const hp_max = 100 + lvl_up_count + (12*mile_bod) + (6*mile_wil) + (12*sub_defense);
-    const en_max = 5 + Math.floor(lvl_up_count/5) + (2*mile_wil) + (4*mile_mag) + (2*sub_endurance);
-    const fo_max = 2 + Math.floor(lvl_up_count/5) + (2*mile_pre) + mile_wis + mile_wil + sub_clarity;
-    const mo     = 4 + mile_dex + mile_ref + sub_speed;
-    const et     = 1 + Math.floor(lvl_up_count/9) + mile_mag;
-    const cdc    = 6 + tens(lvl) + sub_devast;
-
-    setBar('#hp_cur','#hp_max','#hp_bar', hp_max, hp_max);
-    setBar('#sp_cur','#sp_max','#sp_bar', 0, Math.floor(hp_max*0.1));
-    setBar('#en_cur','#en_max','#en_bar', Math.min(5,en_max), en_max);
-    setBar('#fo_cur','#fo_max','#fo_bar', Math.min(2,fo_max), fo_max);
-
-    // TX & Enc caps (need base values of Resistance / Alchemy / Athletics / Spirit)
-    const baseR = textNum($('[data-s-base="resistance"]'));
-    const baseA = textNum($('[data-s-base="alchemy"]'));
-    const tx_max = baseR + baseA;
-    setBar('#tx_cur','#tx_max','#tx_bar', 0, tx_max);
-
-    const baseAth = textNum($('[data-s-base="athletics"]'));
-    const baseSpi = textNum($('[data-s-base="spirit"]'));
-    const enc_max = 10 + (baseAth*5) + (baseSpi*2);
-    setBar('#enc_cur','#enc_max','#enc_bar', 0, enc_max);
-
-    // header badges
-    $('#k_mo')   && ($('#k_mo').textContent   = String(mo));
-    $('#k_init') && ($('#k_init').textContent = String(mo + mile_ref));
-    $('#k_et')   && ($('#k_et').textContent   = String(et));
-    $('#k_cdc')  && ($('#k_cdc').textContent  = String(cdc));
-  }
-
-  function textNum(el){ return el ? num(el.textContent || 0) : 0; }
-
-  function setBar(curSel, maxSel, barSel, cur, max){
-    const curEl = $(curSel), maxEl = $(maxSel), barEl = $(barSel);
-    if (maxEl) maxEl.textContent = String(max);
-    if (curEl) curEl.textContent = String(Math.min(cur, max));
-    if (barEl) barEl.style.width = (max>0 ? Math.round((cur/max)*100) : 0) + '%';
-  }
-
-  // ---------- Hydration ----------
-  function hydrateUI(doc){
-    $('#c_name')   && ($('#c_name').value = doc.name || '');
-    $('#c_level')  && ($('#c_level').value = String(doc.level || 1));
-    $('#c_xp')     && ($('#c_xp').value    = String(doc.xp || 0));
-    $('#avatarUrl')&& ($('#avatarUrl').value = doc.avatar_url || '');
-    $('#charAvatar')&&($('#charAvatar').src = doc.avatar_url || 'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg');
-
-    // characteristics
-    if (doc.characteristics){
-      GROUPS.forEach(g=>{
-        const inv = doc.characteristics[g.key]?.invest ?? 0;
-        const inp = $(`[data-c-invest="${g.investKey}"]`);
-        if (inp) inp.value = String(inv);
-      });
-    }
-    // skills
-    if (doc.skills){
-      GROUPS.forEach(g=>{
-        g.skills.forEach(s=>{
-          const inv = doc.skills[s]?.invest ?? 0;
-          const inp = $(`[data-s-invest="${s}"]`);
-          if (inp) inp.value = String(inv);
-        });
-      });
-    }
-    // intensities
-    if (doc.intensities){
-      INTENSITIES.forEach(nm=>{
-        const inv = doc.intensities[nm]?.invest ?? 0;
-        const inp = $(`[data-i-invest="${nm}"]`);
-        if (inp) inp.value = String(inv);
-      });
-    }
-    // sublimations
-    if (Array.isArray(doc.sublimations) && $('#subTable tbody')){
-      const tbody = $('#subTable tbody');
-      tbody.innerHTML = '';
-      doc.sublimations.forEach(s => addSubRow(s));
-    } else if ($('#subTable tbody') && $('#subTable tbody').children.length === 0) {
-      addSubRow({type:'2', skill:'', tier:1}); // seed
-    }
-
-    // personal
-    $('#p_height')   && ($('#p_height').value   = doc.height   || '');
-    $('#p_weight')   && ($('#p_weight').value   = doc.weight   || '');
-    $('#p_bday')     && ($('#p_bday').value     = doc.birthday || '');
-    $('#p_backstory')&& ($('#p_backstory').value= doc.backstory|| '');
-    $('#p_notes')    && ($('#p_notes').value    = doc.notes    || '');
-
-    recompute();
-  }
-
-  // ---------- Sublimation table UI ----------
+  // ---------- Sublimation wiring ----------
   const SUB_TYPES = [
     { id:'2', label:'Lethality' },
-    { id:'1', label:'Excellence' }, // needs skill
+    { id:'1', label:'Excellence' },  // needs a skill
     { id:'3', label:'Blessing' },
     { id:'4', label:'Defense' },
     { id:'5', label:'Speed' },
@@ -354,71 +54,60 @@
     { id:'8', label:'Clarity' },
     { id:'6', label:'Endurance' },
   ];
-  const ALL_SKILLS = GROUPS.flatMap(g => g.skills).map(k => ({key:k, label:k.charAt(0).toUpperCase()+k.slice(1)}));
+  const SKILL_OPTIONS = GROUPS.flatMap(g => g.skills);
 
-  function addSubRow(defaults = {type:'2', skill:'', tier:1}){
-    const tbody = $('#subTable tbody');
-    if (!tbody) return;
+  const subBody = $('#subTable tbody');
+  const btnAddSub = $('#btnAddSub');
+  if (btnAddSub) btnAddSub.addEventListener('click', () => addSubRow());
 
+  function addSubRow(defaults = { type:'2', skill:'', tier:1 }) {
     const tr = document.createElement('tr');
 
+    // Type
     const typeSel = document.createElement('select');
     typeSel.className = 'input';
     SUB_TYPES.forEach(t => {
       const o = document.createElement('option');
       o.value = t.id; o.textContent = t.label;
-      if (defaults.type === t.id) o.selected = true;
+      if (String(defaults.type) === t.id) o.selected = true;
       typeSel.appendChild(o);
     });
 
+    // Skill (only enabled for Excellence)
     const skillSel = document.createElement('select');
     skillSel.className = 'input';
-    const empty = document.createElement('option');
-    empty.value=''; empty.textContent='—';
-    skillSel.appendChild(empty);
-    ALL_SKILLS.forEach(s=>{
+    const optEmpty = document.createElement('option'); optEmpty.value=''; optEmpty.textContent='—';
+    skillSel.appendChild(optEmpty);
+    SKILL_OPTIONS.forEach(k => {
       const o = document.createElement('option');
-      o.value = s.key; o.textContent = s.label;
-      if (defaults.skill === s.key) o.selected = true;
+      o.value = k; o.textContent = k.charAt(0).toUpperCase()+k.slice(1);
+      if (defaults.skill === k) o.selected = true;
       skillSel.appendChild(o);
     });
 
     const tierInp = document.createElement('input');
-    tierInp.type='number'; tierInp.min='0'; tierInp.max='4'; tierInp.value = String(defaults.tier);
-    tierInp.className='input';
+    tierInp.type = 'number'; tierInp.min = '0'; tierInp.max = '4';
+    tierInp.className = 'input xs';
+    tierInp.value = String(defaults.tier ?? 1);
 
     const slotsCell = document.createElement('td');
-    slotsCell.className='right mono';
-    slotsCell.textContent = String(Math.max(0, num(tierInp.value)));
+    slotsCell.className = 'right mono';
+    slotsCell.textContent = String(defaults.tier ?? 1);
 
     const delBtn = document.createElement('button');
-    delBtn.className='btn ghost';
-    delBtn.textContent='Remove';
-    delBtn.addEventListener('click', ()=>{
-      tr.remove();
-      recompute();
-      scheduleSave(()=>({ sublimations: readSublimationsFromUI() }));
-    });
+    delBtn.className = 'btn ghost'; delBtn.textContent = 'Remove';
+    delBtn.addEventListener('click', () => { tr.remove(); recompute(); triggerSave(); });
 
     function toggleSkill(){
-      const disabled = (typeSel.value !== '1'); // Excellence only
-      skillSel.disabled = disabled;
-      skillSel.style.opacity = disabled ? .5 : 1;
+      const isEx = typeSel.value === '1';
+      skillSel.disabled = !isEx;
+      skillSel.style.opacity = isEx ? 1 : .5;
     }
     toggleSkill();
 
-    typeSel.addEventListener('change', ()=>{
-      toggleSkill(); recompute();
-      scheduleSave(()=>({ sublimations: readSublimationsFromUI() }));
-    });
-    skillSel.addEventListener('change', ()=>{
-      scheduleSave(()=>({ sublimations: readSublimationsFromUI() }));
-    });
-    tierInp.addEventListener('input', ()=>{
-      slotsCell.textContent = String(Math.max(0, num(tierInp.value)));
-      recompute();
-      scheduleSave(()=>({ sublimations: readSublimationsFromUI() }));
-    });
+    typeSel.addEventListener('change', ()=>{ toggleSkill(); recompute(); triggerSave(); });
+    skillSel.addEventListener('change', ()=>{ recompute(); triggerSave(); });
+    tierInp.addEventListener('input',   ()=>{ slotsCell.textContent = String(num(tierInp.value)); recompute(); triggerSave(); });
 
     // compose row
     const td1 = document.createElement('td'); td1.appendChild(typeSel);
@@ -433,79 +122,278 @@
     tr.appendChild(td5);
 
     tr._refs = { typeSel, skillSel, tierInp, slotsCell };
-    tbody.appendChild(tr);
+    subBody.appendChild(tr);
     recompute();
   }
+  // seed a row if table is empty
+  if (subBody && !subBody.children.length) addSubRow();
 
-  $('#btnAddSub') && $('#btnAddSub').addEventListener('click', ()=> addSubRow());
-
-  // ---------- Wire inputs → recompute + save ----------
-  function bindInputs(){
-    // Header + personal
-    ['#c_name','#c_level','#c_xp','#avatarUrl','#p_height','#p_weight','#p_bday','#p_backstory','#p_notes']
-      .forEach(sel => {
-        const el = $(sel);
-        if (!el) return;
-        el.addEventListener('input', ()=>{
-          if (sel==='#avatarUrl' && $('#charAvatar')) {
-            $('#charAvatar').src = el.value || 'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg';
-          }
-          recompute();
-          const keyMap = {
-            '#c_name':'name','#c_level':'level','#c_xp':'xp','#avatarUrl':'avatar_url',
-            '#p_height':'height','#p_weight':'weight','#p_bday':'birthday','#p_backstory':'backstory','#p_notes':'notes'
-          };
-          const k = keyMap[sel];
-          scheduleSave(()=>({ [k]: el.type==='number' ? num(el.value||0) : el.value }));
-        });
-      });
-
-    // Characteristics and skills
-    $$('#charSkillContainer input').forEach(inp => {
-      inp.addEventListener('input', ()=>{
-        // normalize number inputs so replacement doesn't append digits
-        if (inp.type === 'number') {
-          const v = inp.value;
-          inp.value = String(v === '' ? '' : num(v)); // coerce but allow empty
-        }
-        recompute();
-        scheduleSave(serializeCharacter);
-      });
-    });
-
-    // Intensities
-    $$('#intensityTable [data-i-invest]').forEach(inp => {
-      inp.addEventListener('input', ()=>{
-        if (inp.type === 'number') inp.value = String(inp.value==='' ? '' : num(inp.value));
-        recompute();
-        scheduleSave(serializeCharacter);
-      });
-    });
+  // ---------- Reading inputs ----------
+  function readLevel() {
+    const lvl = num($('#c_level')?.value || 1);
+    const xp  = num($('#c_xp')?.value || 0);
+    // Level is manual if present; (XP->level) left to backend for truth
+    return Math.max(1, lvl || 1);
   }
 
-  // ---------- Boot ----------
-  (async function init(){
-    bindInputs();
+  // ---------- Recompute (pure UI compute so the sheet feels alive) ----------
+  function recompute(){
+    const lvl = readLevel();
 
-    // seed one sublimation row if none present
-    if ($('#subTable tbody') && $('#subTable tbody').children.length === 0) {
-      addSubRow({type:'2', skill:'', tier:1});
-    }
+    // Collect characteristic investments + milestones
+    const investC = {};
+    const scoreC  = {};
+    const mileC   = {};
+    GROUPS.forEach(g => {
+      const inv = num($(`[data-c-invest="${g.investKey}"]`)?.value || 0);
+      investC[g.key] = inv;
+      const score = scoreFromInv(inv);
+      const ms    = modFromScore(score);
+      scoreC[g.key] = score;
+      mileC[g.key]  = ms;
 
-    // load if ?id=…
-    const url = new URL(location.href);
-    const id  = url.searchParams.get('id');
-    if (id) {
-      try {
-        const { character } = await API.getCharacter(id);
-        CHARACTER_ID = character.id;
-        hydrateUI(character);
-      } catch (e) {
-        console.error('Failed to load character', e);
+      // Write milestones/total in the UI (characteristic row only)
+      const tot = $(`[data-c-total="${g.key}"]`);
+      const mil = $(`[data-c-milestone="${g.key}"]`);
+      if (tot) tot.textContent = String(score);
+      if (mil) mil.textContent = String(ms);
+    });
+
+    // Sublimations summary (we only need Excellence for UI math)
+    const subRows = Array.from(subBody?.children || []);
+    const excellenceBySkill = {};
+    let subSlotsUsed = 0;
+    subRows.forEach(tr => {
+      const { typeSel, skillSel, tierInp } = tr._refs;
+      const tier = Math.max(0, num(tierInp.value));
+      subSlotsUsed += tier;
+      if (typeSel.value === '1' && skillSel.value) {
+        excellenceBySkill[skillSel.value] = (excellenceBySkill[skillSel.value] || 0) + tier;
       }
-    } else {
-      // new character; will be created on first change
-      recompute();
+    });
+    $('#sub_used') && ($('#sub_used').textContent = String(subSlotsUsed));
+
+    // Skills base values
+    GROUPS.forEach(g => {
+      g.skills.forEach(sk => {
+        const inv = num($(`[data-s-invest="${sk}"]`)?.value || 0);
+        const exBonus = Math.min(inv, excellenceBySkill[sk] || 0); // Excellence cap = invested
+        const base = inv + exBonus + (mileC[g.key] || 0);          // Milestone only from characteristic
+        const baseNode = $(`[data-s-base="${sk}"]`);
+        const modNode = $(`[data-s-mod="${sk}"]`);                  // show bonus from Excellence next to the skill
+        if (baseNode) baseNode.textContent = String(base);
+        if (modNode)  modNode.textContent  = String(exBonus);
+      });
+    });
+
+    // Derived (HP/SP/EN/FO/TX/Enc/ET/Condition DC/etc.) are shown from server compute
+    // after each save; here we just keep bars coherent if values exist:
+    function setBar(curSel, maxSel, barSel){
+      const cur = num($(curSel)?.textContent || 0);
+      const max = num($(maxSel)?.textContent || 0);
+      const pct = max>0 ? Math.round((cur/max)*100) : 0;
+      const i = $(barSel); if (i) i.style.width = `${pct}%`;
     }
+    setBar('#hp_cur', '#hp_max', '#hp_bar');
+    setBar('#sp_cur', '#sp_max', '#sp_bar');
+    setBar('#en_cur', '#en_max', '#en_bar');
+    setBar('#fo_cur', '#fo_max', '#fo_bar');
+    setBar('#tx_cur', '#tx_max', '#tx_bar');
+    setBar('#enc_cur','#enc_max','#enc_bar');
+  }
+
+  // ---------- API (uses /characters as in main.py) ----------
+  const API = {
+    async create(payload){
+      const r = await fetch('/characters', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        credentials:'include', body: JSON.stringify(payload)
+      });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+    async get(id){
+      const r = await fetch(`/characters/${encodeURIComponent(id)}`, { credentials:'include' });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+    async update(id, payload){
+      const r = await fetch(`/characters/${encodeURIComponent(id)}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        credentials:'include', body: JSON.stringify(payload)
+      });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+  };
+
+  // ---------- Collect payload for save ----------
+  function collectPayload(){
+    const payload = {
+      name: ($('#c_name')?.value || '').trim(),
+      img:  ($('#avatarUrl')?.value || '').trim(),
+      xp_total: num($('#c_xp')?.value || 0),
+      level_manual: ($('#c_level')?.value === '' ? null : num($('#c_level')?.value)),
+      characteristics: {},
+      skills: {},
+      sublimations: [],
+      bio: {
+        height: ($('#p_height')?.value || '').trim(),
+        weight: ($('#p_weight')?.value || '').trim(),
+        birthday: ($('#p_bday')?.value || '').trim(),
+        backstory: ($('#p_backstory')?.value || '').trim(),
+        notes: ($('#p_notes')?.value || '').trim(),
+      }
+    };
+
+    GROUPS.forEach(g => {
+      payload.characteristics[g.investKey] = num($(`[data-c-invest="${g.investKey}"]`)?.value || 0);
+      g.skills.forEach(sk => {
+        payload.skills[sk] = num($(`[data-s-invest="${sk}"]`)?.value || 0);
+      });
+    });
+
+    // intensities (treated as skills on backend; if you store them separately, include here too)
+    INTENSITIES.forEach(nm => {
+      const k = nm.toLowerCase();
+      const v = num($(`[data-i-invest="${nm}"]`)?.value || 0);
+      if (!Number.isNaN(v)) payload.skills[k] = v;
+    });
+
+    // sublimations array
+    Array.from(subBody?.children || []).forEach(tr => {
+      const { typeSel, skillSel, tierInp } = tr._refs;
+      const t = typeSel.value;
+      const typeMap = { '1':'Excellence','2':'Lethality','3':'Blessing','4':'Defense','5':'Speed','6':'Endurance','7':'Devastation','8':'Clarity' };
+      payload.sublimations.push({
+        type: typeMap[t] || 'Lethality',
+        tier: num(tierInp.value || 0),
+        skill: (t === '1' && skillSel.value) ? skillSel.value : null
+      });
+    });
+
+    return payload;
+  }
+
+  // ---------- Apply server-computed values back into UI ----------
+  function applyComputed(resp){
+    const c = resp?.computed; if (!c) return;
+    // Derived badges
+    $('#k_mo')     && ($('#k_mo').textContent     = String(c.derived.movement));
+    $('#k_init')   && ($('#k_init').textContent   = String(c.derived.initiative));
+    $('#k_et')     && ($('#k_et').textContent     = String(c.derived.et));
+    $('#k_cdc')    && ($('#k_cdc').textContent    = String(c.derived.condition_dc));
+
+    // Resources
+    const setRes = (curSel,maxSel,barSel,cur,max) => {
+      $(curSel).textContent = String(cur);
+      $(maxSel).textContent = String(max);
+      const i = $(barSel); if (i) i.style.width = max>0 ? `${Math.round((cur/max)*100)}%` : '0%';
+    };
+    setRes('#hp_cur','#hp_max','#hp_bar', c.derived.hp_current ?? c.derived.hp_max, c.derived.hp_max);
+    setRes('#sp_cur','#sp_max','#sp_bar', c.derived.sp_current ?? c.derived.sp_max, c.derived.sp_max);
+    setRes('#en_cur','#en_max','#en_bar', c.derived.en_current ?? c.derived.en_max, c.derived.en_max);
+    setRes('#fo_cur','#fo_max','#fo_bar', c.derived.fo_current ?? c.derived.fo_max, c.derived.fo_max);
+    setRes('#tx_cur','#tx_max','#tx_bar', c.derived.tx_current ?? c.derived.tx_max, c.derived.tx_max);
+    setRes('#enc_cur','#enc_max','#enc_bar', c.derived.enc_current ?? c.derived.enc_max, c.derived.enc_max);
+
+    // Characteristic [Total | Milestone] header numbers
+    GROUPS.forEach(g => {
+      const tot = $(`[data-c-total="${g.key}"]`);
+      const mil = $(`[data-c-milestone="${g.key}"]`);
+      if (tot) tot.textContent = String(c.totals[g.key] ?? scoreFromInv(num($(`[data-c-invest="${g.investKey}"]`)?.value || 0)));
+      if (mil) mil.textContent = String(c.milestones[g.key] ?? modFromScore(scoreFromInv(num($(`[data-c-invest="${g.investKey}"]`)?.value || 0))));
+    });
+
+    // Sublimation slots
+    $('#sub_max') && ($('#sub_max').textContent = String(c.sublimations.slots_max));
+    $('#sub_used')&& ($('#sub_used').textContent = String(c.sublimations.slots_used));
+  }
+
+  // ---------- Autosave (debounced) ----------
+  let saveTimer = null;
+  function triggerSave(){
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, 500);
+  }
+
+  async function saveNow(){
+    try{
+      setStatus('Saving…');
+      const payload = collectPayload();
+      const id = (cidInput?.value || '').trim();
+      const resp = id ? await API.update(id, payload) : await API.create(payload);
+      const newId = id || resp?.character?.id;
+      if (newId && !cidInput.value) {
+        cidInput.value = newId;
+        const u = new URL(location.href); u.searchParams.set('id', newId);
+        history.replaceState(null, '', u.toString());
+      }
+      applyComputed(resp);
+      setStatus('Saved','good');
+    }catch(err){
+      console.error(err);
+      setStatus('Error','danger');
+    }
+  }
+
+  // ---------- Bind inputs (always recompute then autosave) ----------
+  [
+    '#c_name','#c_level','#c_xp','#avatarUrl',
+    '#p_height','#p_weight','#p_bday','#p_backstory','#p_notes'
+  ].forEach(sel => $(sel)?.addEventListener('input', () => { recompute(); triggerSave(); }));
+
+  // characteristic/skill/intensity inputs
+  $$('#charSkillContainer input').forEach(inp =>
+    inp.addEventListener('input', () => { recompute(); triggerSave(); })
+  );
+  $$('#intensityTable [data-i-invest]').forEach(inp =>
+    inp.addEventListener('input', () => { recompute(); triggerSave(); })
+  );
+
+  // Avatar preview
+  $('#avatarUrl')?.addEventListener('change', () => {
+    const url = $('#avatarUrl').value || 'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg';
+    $('#charAvatar').src = url;
+  });
+
+  // ---------- Boot: load if ?id= is present ----------
+  (async function init(){
+    setStatus('Ready');
+    const qid = new URLSearchParams(location.search).get('id');
+    if (qid){
+      try{
+        setStatus('Loading…');
+        const resp = await API.get(qid);
+        const doc  = resp.character;
+        cidInput.value = doc.id || '';
+        // hydrate a few basics (you can extend as needed)
+        $('#c_name').value   = doc.name || '';
+        $('#avatarUrl').value = doc.img || '';
+        $('#charAvatar').src  = doc.img || 'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg';
+        $('#c_xp').value     = Number(doc.xp_total || 0);
+        $('#c_level').value  = doc.level_manual ?? '';
+        // characteristics
+        const ch = doc.characteristics || {};
+        GROUPS.forEach(g => { $(`[data-c-invest="${g.investKey}"]`).value = ch[g.investKey] ?? 0; });
+        // skills
+        const sk = doc.skills || {};
+        GROUPS.forEach(g => g.skills.forEach(k => { const n=$(`[data-s-invest="${k}"]`); if (n) n.value = sk[k] ?? 0; }));
+        INTENSITIES.forEach(nm => { const k = nm.toLowerCase(); const n = $(`[data-i-invest="${nm}"]`); if (n) n.value = sk[k] ?? 0; });
+        // sublimations
+        subBody.innerHTML = '';
+        (doc.sublimations || []).forEach(s => {
+          const map = {Excellence:'1',Lethality:'2',Blessing:'3',Defense:'4',Speed:'5',Endurance:'6',Devastation:'7',Clarity:'8'};
+          addSubRow({ type: map[s.type] || '2', skill: s.skill || '', tier: s.tier || 1 });
+        });
+        applyComputed(resp);
+        setStatus('Loaded','good');
+      }catch(e){
+        console.warn(e);
+        setStatus('Load failed','danger');
+      }
+    }
+    recompute();
   })();
+
 })();
