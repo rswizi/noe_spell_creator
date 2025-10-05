@@ -53,8 +53,14 @@ body{
 }
 
 /* characteristic & skills cards grid (1 / 2 / 4) */
-.stats-grid{display:grid;gap:16px;grid-template-columns:1fr}
-@media (min-width:900px){ .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.stats-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px;
+}
+@media (max-width: 900px){
+  .stats-grid{ grid-template-columns:1fr; }
+}
 @media (min-width:1200px){ .stats-grid{grid-template-columns:repeat(4,minmax(0,1fr))} }
 
 .stat-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:14px}
@@ -64,29 +70,29 @@ body{
 /* rows in card */
 .stat-row{
   display:grid;
-  grid-template-columns: minmax(160px, 1fr) 110px 80px 90px;
-  gap:10px; align-items:center;
+  gap:10px;
+  align-items:center;
   padding:8px 4px;
   border-bottom:1px dashed rgba(255,255,255,.06);
 }
-.stat-row > * { min-width:0; }
+.stat-row > *{ min-width:0; }
 .stat-name{
-  color: var(--txt);
-  min-width:0;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  color:var(--txt);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .stat-name.clickable{cursor:pointer}
 .badge-col{
   text-align:right;
-  font-family:ui-monospace,Menlo,Consolas,monospace
+  font-family:ui-monospace,Menlo,Consolas,monospace;
 }
-.sources{grid-column:1/-1;margin:6px 0 0;display:none}
-.stat-row.open .sources{display:block}
-.stat-row:last-child{border-bottom:0}
-.source-empty{color:#9ca3af;font-size:12px}
-.source-line{display:flex;justify-content:space-between;padding:2px 0;font-size:12px}
+.sources{ grid-column:1/-1; margin-top:6px; display:none; }
+.stat-row.open .sources{ display:block; }
+.stat-row:last-child{ border-bottom:0; }
+.source-empty{ color:#9ca3af; font-size:12px; }
+.source-line{ display:flex; justify-content:space-between; padding:2px 0; font-size:12px; }
+.stat-row.skill-row{
+  grid-template-columns:minmax(200px,1fr) 110px 90px;
+}
 
 /* table */
 .tbl{width:100%;border-collapse:collapse}
@@ -108,3 +114,5 @@ body{
 .over{border-color:#ef4444 !important}
 .danger{color:#fecaca}
 body.saved{outline: 2px solid #10b981; outline-offset: -2px; transition: outline .4s ease}
+
+.char-card .card-head small{ display:none; }

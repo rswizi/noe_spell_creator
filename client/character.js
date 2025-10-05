@@ -112,7 +112,7 @@
 
       const head = document.createElement('div');
       head.className = 'head';
-      head.innerHTML = `<div>${group.label}</div><div class="label">[ Total | Milestone ]</div>`;
+      head.innerHTML = `<div class="card-title">${group.label}</div>`;
       card.appendChild(head);
 
       const rows = document.createElement('div');
@@ -143,15 +143,19 @@
     row.appendChild(inv);
 
     const total = document.createElement('div');
-    total.className='badge-col'; total.setAttribute('data-c-total', group.key); total.textContent='4';
+    total.className='badge-col';
+    total.setAttribute('data-c-total', group.key);
+    total.textContent='4';     // 4 + invested
     row.appendChild(total);
 
     const mile  = document.createElement('div');
-    mile.className='badge-col'; mile.setAttribute('data-c-mile', group.key); mile.textContent='-3';
+    mile.className='badge-col';
+    mile.setAttribute('data-c-mile', group.key);
+    mile.textContent='-3';     // milestone shown only on char rows
     row.appendChild(mile);
 
     const srcBox = document.createElement('div'); srcBox.className='sources'; row.appendChild(srcBox);
-    row._getSources = ()=>[];  // characteristic sources will show up here later
+    row._getSources = ()=>[];  // future: traits/talents/etc
     attachDrawer(row, ()=>row._getSources());
 
     return row;
@@ -171,21 +175,19 @@
     inv.className='input'; inv.setAttribute('data-s-invest', s.key);
     row.appendChild(inv);
 
+    // Base value column (invested + Excellence bonus + linked characteristic milestone)
     const base = document.createElement('div');
     base.className='badge-col'; base.setAttribute('data-s-base', s.key); base.textContent='0';
     row.appendChild(base);
 
-    const mile = document.createElement('div');
-    mile.className='badge-col'; mile.setAttribute('data-s-mile', s.key); mile.textContent='-3';
-    row.appendChild(mile);
-
+    // Sources drawer
     const srcBox = document.createElement('div'); srcBox.className='sources'; row.appendChild(srcBox);
-    // will be set in recompute() with the actual Excellence bonus
-    row._getSources = ()=>[];
+    row._getSources = ()=>[]; // set during recompute for Excellence
     attachDrawer(row, ()=>row._getSources());
 
     return row;
   }
+
 
   function buildIntensities(){
     const tbody = $('#intensityTable tbody');
@@ -331,23 +333,19 @@
 
     // skills base values + source drawers
     let sp_used = 0;
-    CHAR_MAP.forEach(g=>{
-      g.skills.forEach(s=>{
-        const inp = $(`[data-s-invest="${s.key}"]`);
-        if (!inp) return;
-        normalizeNumeric(inp,{min:0,max:8});
-        const inv = toInt(inp.value,0);
-        sp_used += inv;
-        const bonus = Math.min(inv, excel[s.key]||0);
-        const base  = inv + bonus + (charMilSignedCache[g.key]||0);
-        setTxt(`[data-s-base="${s.key}"]`, base);
-        setTxt(`[data-s-mile="${s.key}"]`, (charMilSignedCache[g.key]||0));
+    CHAR_MAP.forEach(g => {
+      g.skills.forEach(s => {
+        const inv = Number($(`[data-s-invest="${s.key}"]`).value || 0);
+        const bonus = Math.min(inv, excellenceMap[s.key] || 0); // Excellence (can’t exceed invested)
+        const base  = inv + bonus + (charMod[g.key] || 0);      // add linked characteristic milestone
 
-        // update/open sources
-        const row = inp.closest('.skill-row');
+        $(`[data-s-base="${s.key}"]`).textContent = String(base);
+
+        // Update source drawer for this skill
+        const row = $(`[data-s-invest="${s.key}"]`)?.closest('.skill-row');
         if (row){
-          row._getSources = ()=> (bonus>0 ? [[`Sublimation: Excellence (${s.label})`, bonus]] : []);
-          if (row.classList.contains('open')) {
+          row._getSources = ()=> (bonus>0 ? [[`Sublimation: Excellence (${s.label})`, `+${bonus}`]] : []);
+          if (row.classList.contains('open')){
             renderSources($('.sources', row), row._getSources());
           }
         }
