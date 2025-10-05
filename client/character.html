@@ -9,7 +9,7 @@
 <body>
   <div class="wrap">
 
-    <!-- ===== Header ===== -->
+    <!-- HEADER -->
     <div class="panel">
       <div class="header">
         <div class="header-left">
@@ -74,7 +74,7 @@
       </div>
     </div>
 
-    <!-- ===== Tabs ===== -->
+    <!-- TABS -->
     <div class="panel">
       <div class="tabs">
         <button class="tab active" data-tab="stats">Statistics</button>
@@ -84,10 +84,10 @@
         <button class="tab" data-tab="personal">Personal</button>
       </div>
 
-      <!-- === Statistics === -->
+      <!-- STATISTICS -->
       <div id="tab-stats" class="tabpan active">
 
-        <!-- Counters -->
+        <!-- counters -->
         <div class="grid-3">
           <div class="counter-box">
             <div class="label">Skill Points</div>
@@ -122,177 +122,103 @@
                 <th style="width:80px"></th>
               </tr>
             </thead>
-            <tbody>
-              <!-- Starts empty on purpose; JS can add rows -->
-            </tbody>
+            <tbody></tbody>
           </table>
           <div class="mini muted">Types: Lethality, Excellence (choose a skill), Blessing, Defense, Speed, Devastation, Clarity, Endurance.</div>
         </div>
 
-        <!-- Characteristics & Skills (2 columns) -->
+        <!-- Characteristics (2 per row) -->
         <div class="title" style="margin-top:12px">Characteristics &amp; Skills</div>
         <div class="char-grid">
 
-          <!-- ===== REF ===== -->
-          <section class="char-card" data-char="ref" data-invest-input="reflexp">
-            <div class="char-head">
-              <div class="char-name">Reflex (REF)</div>
-              <div class="char-metrics mono">
-                <b data-total="ref">4</b> | <span class="muted">Milestone:</span> <b data-milestone="ref">-3</b>
-              </div>
-            </div>
-            <div class="char-invest">
-              <label class="label">Invested</label>
-              <input class="input" type="number" min="0" max="16" value="0" data-invest-input="reflexp"/>
-              <div class="mini muted">[Total is 4 + invested]</div>
-            </div>
-            <div class="skill-row"><div class="skill-name">Technicity</div><input class="input" type="number" min="0" max="8" value="0" data-skill="technicity"/><div class="skill-base mono" data-base="technicity">0</div></div>
-            <div class="skill-row"><div class="skill-name">Dodge</div><input class="input" type="number" min="0" max="8" value="0" data-skill="dodge"/><div class="skill-base mono" data-base="dodge">0</div></div>
-            <div class="skill-row"><div class="skill-name">Tempo</div><input class="input" type="number" min="0" max="8" value="0" data-skill="tempo"/><div class="skill-base mono" data-base="tempo">0</div></div>
-            <div class="skill-row"><div class="skill-name">Reactivity</div><input class="input" type="number" min="0" max="8" value="0" data-skill="reactivity"/><div class="skill-base mono" data-base="reactivity">0</div></div>
+          <!-- REF -->
+          <section class="char-card" data-char="ref" data-invest="reflexp">
+            <div class="char-head"><div class="char-name">Reflex (REF)</div><div class="char-metrics mono"><b data-total="ref">4</b> | <span class="muted">Milestone:</span> <b data-mile="ref">-3</b></div></div>
+            <div class="char-invest"><span class="label">Invested</span><input class="input" type="number" min="0" max="16" value="0" data-invest="reflexp"/><span class="mini muted">[Total is 4 + invested]</span></div>
+            <div class="skill-row"><div>Technicity</div><input class="input" type="number" min="0" max="8" value="0" data-skill="technicity"/><div class="skill-base mono" data-base="technicity">0</div></div>
+            <div class="skill-row"><div>Dodge</div><input class="input" type="number" min="0" max="8" value="0" data-skill="dodge"/><div class="skill-base mono" data-base="dodge">0</div></div>
+            <div class="skill-row"><div>Tempo</div><input class="input" type="number" min="0" max="8" value="0" data-skill="tempo"/><div class="skill-base mono" data-base="tempo">0</div></div>
+            <div class="skill-row"><div>Reactivity</div><input class="input" type="number" min="0" max="8" value="0" data-skill="reactivity"/><div class="skill-base mono" data-base="reactivity">0</div></div>
           </section>
 
-          <!-- ===== DEX ===== -->
-          <section class="char-card" data-char="dex" data-invest-input="dexterityp">
-            <div class="char-head">
-              <div class="char-name">Dexterity (DEX)</div>
-              <div class="char-metrics mono">
-                <b data-total="dex">4</b> | <span class="muted">Milestone:</span> <b data-milestone="dex">-3</b>
-              </div>
-            </div>
-            <div class="char-invest">
-              <label class="label">Invested</label>
-              <input class="input" type="number" min="0" max="16" value="0" data-invest-input="dexterityp"/>
-              <div class="mini muted">[Total is 4 + invested]</div>
-            </div>
-            <div class="skill-row"><div class="skill-name">Accuracy</div><input class="input" type="number" min="0" max="8" value="0" data-skill="accuracy"/><div class="skill-base mono" data-base="accuracy">0</div></div>
-            <div class="skill-row"><div class="skill-name">Evasion</div><input class="input" type="number" min="0" max="8" value="0" data-skill="evasion"/><div class="skill-base mono" data-base="evasion">0</div></div>
-            <div class="skill-row"><div class="skill-name">Stealth</div><input class="input" type="number" min="0" max="8" value="0" data-skill="stealth"/><div class="skill-base mono" data-base="stealth">0</div></div>
-            <div class="skill-row"><div class="skill-name">Acrobatics</div><input class="input" type="number" min="0" max="8" value="0" data-skill="acrobatics"/><div class="skill-base mono" data-base="acrobatics">0</div></div>
+          <!-- DEX -->
+          <section class="char-card" data-char="dex" data-invest="dexterityp">
+            <div class="char-head"><div class="char-name">Dexterity (DEX)</div><div class="char-metrics mono"><b data-total="dex">4</b> | <span class="muted">Milestone:</span> <b data-mile="dex">-3</b></div></div>
+            <div class="char-invest"><span class="label">Invested</span><input class="input" type="number" min="0" max="16" value="0" data-invest="dexterityp"/><span class="mini muted">[Total is 4 + invested]</span></div>
+            <div class="skill-row"><div>Accuracy</div><input class="input" type="number" min="0" max="8" value="0" data-skill="accuracy"/><div class="skill-base mono" data-base="accuracy">0</div></div>
+            <div class="skill-row"><div>Evasion</div><input class="input" type="number" min="0" max="8" value="0" data-skill="evasion"/><div class="skill-base mono" data-base="evasion">0</div></div>
+            <div class="skill-row"><div>Stealth</div><input class="input" type="number" min="0" max="8" value="0" data-skill="stealth"/><div class="skill-base mono" data-base="stealth">0</div></div>
+            <div class="skill-row"><div>Acrobatics</div><input class="input" type="number" min="0" max="8" value="0" data-skill="acrobatics"/><div class="skill-base mono" data-base="acrobatics">0</div></div>
           </section>
 
-          <!-- ===== BOD ===== -->
-          <section class="char-card" data-char="bod" data-invest-input="bodyp">
-            <div class="char-head">
-              <div class="char-name">Body (BOD)</div>
-              <div class="char-metrics mono">
-                <b data-total="bod">4</b> | <span class="muted">Milestone:</span> <b data-milestone="bod">-3</b>
-              </div>
-            </div>
-            <div class="char-invest">
-              <label class="label">Invested</label>
-              <input class="input" type="number" min="0" max="16" value="0" data-invest-input="bodyp"/>
-              <div class="mini muted">[Total is 4 + invested]</div>
-            </div>
-            <div class="skill-row"><div class="skill-name">Brutality</div><input class="input" type="number" min="0" max="8" value="0" data-skill="brutality"/><div class="skill-base mono" data-base="brutality">0</div></div>
-            <div class="skill-row"><div class="skill-name">Blocking</div><input class="input" type="number" min="0" max="8" value="0" data-skill="blocking"/><div class="skill-base mono" data-base="blocking">0</div></div>
-            <div class="skill-row"><div class="skill-name">Resistance</div><input class="input" type="number" min="0" max="8" value="0" data-skill="resistance"/><div class="skill-base mono" data-base="resistance">0</div></div>
-            <div class="skill-row"><div class="skill-name">Athletics</div><input class="input" type="number" min="0" max="8" value="0" data-skill="athletics"/><div class="skill-base mono" data-base="athletics">0</div></div>
+          <!-- BOD -->
+          <section class="char-card" data-char="bod" data-invest="bodyp">
+            <div class="char-head"><div class="char-name">Body (BOD)</div><div class="char-metrics mono"><b data-total="bod">4</b> | <span class="muted">Milestone:</span> <b data-mile="bod">-3</b></div></div>
+            <div class="char-invest"><span class="label">Invested</span><input class="input" type="number" min="0" max="16" value="0" data-invest="bodyp"/><span class="mini muted">[Total is 4 + invested]</span></div>
+            <div class="skill-row"><div>Brutality</div><input class="input" type="number" min="0" max="8" value="0" data-skill="brutality"/><div class="skill-base mono" data-base="brutality">0</div></div>
+            <div class="skill-row"><div>Blocking</div><input class="input" type="number" min="0" max="8" value="0" data-skill="blocking"/><div class="skill-base mono" data-base="blocking">0</div></div>
+            <div class="skill-row"><div>Resistance</div><input class="input" type="number" min="0" max="8" value="0" data-skill="resistance"/><div class="skill-base mono" data-base="resistance">0</div></div>
+            <div class="skill-row"><div>Athletics</div><input class="input" type="number" min="0" max="8" value="0" data-skill="athletics"/><div class="skill-base mono" data-base="athletics">0</div></div>
           </section>
 
-          <!-- ===== WIL ===== -->
-          <section class="char-card" data-char="wil" data-invest-input="willpowerp">
-            <div class="char-head">
-              <div class="char-name">Willpower (WIL)</div>
-              <div class="char-metrics mono">
-                <b data-total="wil">4</b> | <span class="muted">Milestone:</span> <b data-milestone="wil">-3</b>
-              </div>
-            </div>
-            <div class="char-invest">
-              <label class="label">Invested</label>
-              <input class="input" type="number" min="0" max="16" value="0" data-invest-input="willpowerp"/>
-              <div class="mini muted">[Total is 4 + invested]</div>
-            </div>
-            <div class="skill-row"><div class="skill-name">Intimidation</div><input class="input" type="number" min="0" max="8" value="0" data-skill="intimidation"/><div class="skill-base mono" data-base="intimidation">0</div></div>
-            <div class="skill-row"><div class="skill-name">Spirit</div><input class="input" type="number" min="0" max="8" value="0" data-skill="spirit"/><div class="skill-base mono" data-base="spirit">0</div></div>
-            <div class="skill-row"><div class="skill-name">Instinct</div><input class="input" type="number" min="0" max="8" value="0" data-skill="instinct"/><div class="skill-base mono" data-base="instinct">0</div></div>
-            <div class="skill-row"><div class="skill-name">Absorption</div><input class="input" type="number" min="0" max="8" value="0" data-skill="absorption"/><div class="skill-base mono" data-base="absorption">0</div></div>
+          <!-- WIL -->
+          <section class="char-card" data-char="wil" data-invest="willpowerp">
+            <div class="char-head"><div class="char-name">Willpower (WIL)</div><div class="char-metrics mono"><b data-total="wil">4</b> | <span class="muted">Milestone:</span> <b data-mile="wil">-3</b></div></div>
+            <div class="char-invest"><span class="label">Invested</span><input class="input" type="number" min="0" max="16" value="0" data-invest="willpowerp"/><span class="mini muted">[Total is 4 + invested]</span></div>
+            <div class="skill-row"><div>Intimidation</div><input class="input" type="number" min="0" max="8" value="0" data-skill="intimidation"/><div class="skill-base mono" data-base="intimidation">0</div></div>
+            <div class="skill-row"><div>Spirit</div><input class="input" type="number" min="0" max="8" value="0" data-skill="spirit"/><div class="skill-base mono" data-base="spirit">0</div></div>
+            <div class="skill-row"><div>Instinct</div><input class="input" type="number" min="0" max="8" value="0" data-skill="instinct"/><div class="skill-base mono" data-base="instinct">0</div></div>
+            <div class="skill-row"><div>Absorption</div><input class="input" type="number" min="0" max="8" value="0" data-skill="absorption"/><div class="skill-base mono" data-base="absorption">0</div></div>
           </section>
 
-          <!-- ===== MAG ===== -->
-          <section class="char-card" data-char="mag" data-invest-input="magicp">
-            <div class="char-head">
-              <div class="char-name">Magic (MAG)</div>
-              <div class="char-metrics mono">
-                <b data-total="mag">4</b> | <span class="muted">Milestone:</span> <b data-milestone="mag">-3</b>
-              </div>
-            </div>
-            <div class="char-invest">
-              <label class="label">Invested</label>
-              <input class="input" type="number" min="0" max="16" value="0" data-invest-input="magicp"/>
-              <div class="mini muted">[Total is 4 + invested]</div>
-            </div>
-            <div class="skill-row"><div class="skill-name">Aura</div><input class="input" type="number" min="0" max="8" value="0" data-skill="aura"/><div class="skill-base mono" data-base="aura">0</div></div>
-            <div class="skill-row"><div class="skill-name">Incantation</div><input class="input" type="number" min="0" max="8" value="0" data-skill="incantation"/><div class="skill-base mono" data-base="incantation">0</div></div>
-            <div class="skill-row"><div class="skill-name">Enchantment</div><input class="input" type="number" min="0" max="8" value="0" data-skill="enchantment"/><div class="skill-base mono" data-base="enchantment">0</div></div>
-            <div class="skill-row"><div class="skill-name">Restoration</div><input class="input" type="number" min="0" max="8" value="0" data-skill="restoration"/><div class="skill-base mono" data-base="restoration">0</div></div>
-            <div class="skill-row"><div class="skill-name">Potential</div><input class="input" type="number" min="0" max="8" value="0" data-skill="potential"/><div class="skill-base mono" data-base="potential">0</div></div>
+          <!-- MAG -->
+          <section class="char-card" data-char="mag" data-invest="magicp">
+            <div class="char-head"><div class="char-name">Magic (MAG)</div><div class="char-metrics mono"><b data-total="mag">4</b> | <span class="muted">Milestone:</span> <b data-mile="mag">-3</b></div></div>
+            <div class="char-invest"><span class="label">Invested</span><input class="input" type="number" min="0" max="16" value="0" data-invest="magicp"/><span class="mini muted">[Total is 4 + invested]</span></div>
+            <div class="skill-row"><div>Aura</div><input class="input" type="number" min="0" max="8" value="0" data-skill="aura"/><div class="skill-base mono" data-base="aura">0</div></div>
+            <div class="skill-row"><div>Incantation</div><input class="input" type="number" min="0" max="8" value="0" data-skill="incantation"/><div class="skill-base mono" data-base="incantation">0</div></div>
+            <div class="skill-row"><div>Enchantment</div><input class="input" type="number" min="0" max="8" value="0" data-skill="enchantment"/><div class="skill-base mono" data-base="enchantment">0</div></div>
+            <div class="skill-row"><div>Restoration</div><input class="input" type="number" min="0" max="8" value="0" data-skill="restoration"/><div class="skill-base mono" data-base="restoration">0</div></div>
+            <div class="skill-row"><div>Potential</div><input class="input" type="number" min="0" max="8" value="0" data-skill="potential"/><div class="skill-base mono" data-base="potential">0</div></div>
           </section>
 
-          <!-- ===== PRE ===== -->
-          <section class="char-card" data-char="pre" data-invest-input="presencep">
-            <div class="char-head">
-              <div class="char-name">Presence (PRE)</div>
-              <div class="char-metrics mono">
-                <b data-total="pre">4</b> | <span class="muted">Milestone:</span> <b data-milestone="pre">-3</b>
-              </div>
-            </div>
-            <div class="char-invest">
-              <label class="label">Invested</label>
-              <input class="input" type="number" min="0" max="16" value="0" data-invest-input="presencep"/>
-              <div class="mini muted">[Total is 4 + invested]</div>
-            </div>
-            <div class="skill-row"><div class="skill-name">Taming</div><input class="input" type="number" min="0" max="8" value="0" data-skill="taming"/><div class="skill-base mono" data-base="taming">0</div></div>
-            <div class="skill-row"><div class="skill-name">Charm</div><input class="input" type="number" min="0" max="8" value="0" data-skill="charm"/><div class="skill-base mono" data-base="charm">0</div></div>
-            <div class="skill-row"><div class="skill-name">Charisma</div><input class="input" type="number" min="0" max="8" value="0" data-skill="charisma"/><div class="skill-base mono" data-base="charisma">0</div></div>
-            <div class="skill-row"><div class="skill-name">Deception</div><input class="input" type="number" min="0" max="8" value="0" data-skill="deception"/><div class="skill-base mono" data-base="deception">0</div></div>
-            <div class="skill-row"><div class="skill-name">Persuasion</div><input class="input" type="number" min="0" max="8" value="0" data-skill="persuasion"/><div class="skill-base mono" data-base="persuasion">0</div></div>
+          <!-- PRE -->
+          <section class="char-card" data-char="pre" data-invest="presencep">
+            <div class="char-head"><div class="char-name">Presence (PRE)</div><div class="char-metrics mono"><b data-total="pre">4</b> | <span class="muted">Milestone:</span> <b data-mile="pre">-3</b></div></div>
+            <div class="char-invest"><span class="label">Invested</span><input class="input" type="number" min="0" max="16" value="0" data-invest="presencep"/><span class="mini muted">[Total is 4 + invested]</span></div>
+            <div class="skill-row"><div>Taming</div><input class="input" type="number" min="0" max="8" value="0" data-skill="taming"/><div class="skill-base mono" data-base="taming">0</div></div>
+            <div class="skill-row"><div>Charm</div><input class="input" type="number" min="0" max="8" value="0" data-skill="charm"/><div class="skill-base mono" data-base="charm">0</div></div>
+            <div class="skill-row"><div>Charisma</div><input class="input" type="number" min="0" max="8" value="0" data-skill="charisma"/><div class="skill-base mono" data-base="charisma">0</div></div>
+            <div class="skill-row"><div>Deception</div><input class="input" type="number" min="0" max="8" value="0" data-skill="deception"/><div class="skill-base mono" data-base="deception">0</div></div>
+            <div class="skill-row"><div>Persuasion</div><input class="input" type="number" min="0" max="8" value="0" data-skill="persuasion"/><div class="skill-base mono" data-base="persuasion">0</div></div>
           </section>
 
-          <!-- ===== WIS ===== -->
-          <section class="char-card" data-char="wis" data-invest-input="wisdomp">
-            <div class="char-head">
-              <div class="char-name">Wisdom (WIS)</div>
-              <div class="char-metrics mono">
-                <b data-total="wis">4</b> | <span class="muted">Milestone:</span> <b data-milestone="wis">-3</b>
-              </div>
-            </div>
-            <div class="char-invest">
-              <label class="label">Invested</label>
-              <input class="input" type="number" min="0" max="16" value="0" data-invest-input="wisdomp"/>
-              <div class="mini muted">[Total is 4 + invested]</div>
-            </div>
-            <div class="skill-row"><div class="skill-name">Survival</div><input class="input" type="number" min="0" max="8" value="0" data-skill="survival"/><div class="skill-base mono" data-base="survival">0</div></div>
-            <div class="skill-row"><div class="skill-name">Education</div><input class="input" type="number" min="0" max="8" value="0" data-skill="education"/><div class="skill-base mono" data-base="education">0</div></div>
-            <div class="skill-row"><div class="skill-name">Perception</div><input class="input" type="number" min="0" max="8" value="0" data-skill="perception"/><div class="skill-base mono" data-base="perception">0</div></div>
-            <div class="skill-row"><div class="skill-name">Psychology</div><input class="input" type="number" min="0" max="8" value="0" data-skill="psychology"/><div class="skill-base mono" data-base="psychology">0</div></div>
-            <div class="skill-row"><div class="skill-name">Investigation</div><input class="input" type="number" min="0" max="8" value="0" data-skill="investigation"/><div class="skill-base mono" data-base="investigation">0</div></div>
+          <!-- WIS -->
+          <section class="char-card" data-char="wis" data-invest="wisdomp">
+            <div class="char-head"><div class="char-name">Wisdom (WIS)</div><div class="char-metrics mono"><b data-total="wis">4</b> | <span class="muted">Milestone:</span> <b data-mile="wis">-3</b></div></div>
+            <div class="char-invest"><span class="label">Invested</span><input class="input" type="number" min="0" max="16" value="0" data-invest="wisdomp"/><span class="mini muted">[Total is 4 + invested]</span></div>
+            <div class="skill-row"><div>Survival</div><input class="input" type="number" min="0" max="8" value="0" data-skill="survival"/><div class="skill-base mono" data-base="survival">0</div></div>
+            <div class="skill-row"><div>Education</div><input class="input" type="number" min="0" max="8" value="0" data-skill="education"/><div class="skill-base mono" data-base="education">0</div></div>
+            <div class="skill-row"><div>Perception</div><input class="input" type="number" min="0" max="8" value="0" data-skill="perception"/><div class="skill-base mono" data-base="perception">0</div></div>
+            <div class="skill-row"><div>Psychology</div><input class="input" type="number" min="0" max="8" value="0" data-skill="psychology"/><div class="skill-base mono" data-base="psychology">0</div></div>
+            <div class="skill-row"><div>Investigation</div><input class="input" type="number" min="0" max="8" value="0" data-skill="investigation"/><div class="skill-base mono" data-base="investigation">0</div></div>
           </section>
 
-          <!-- ===== TEC ===== -->
-          <section class="char-card" data-char="tec" data-invest-input="techp">
-            <div class="char-head">
-              <div class="char-name">Tech (TEC)</div>
-              <div class="char-metrics mono">
-                <b data-total="tec">4</b> | <span class="muted">Milestone:</span> <b data-milestone="tec">-3</b>
-              </div>
-            </div>
-            <div class="char-invest">
-              <label class="label">Invested</label>
-              <input class="input" type="number" min="0" max="16" value="0" data-invest-input="techp"/>
-              <div class="mini muted">[Total is 4 + invested]</div>
-            </div>
-            <div class="skill-row"><div class="skill-name">Crafting</div><input class="input" type="number" min="0" max="8" value="0" data-skill="crafting"/><div class="skill-base mono" data-base="crafting">0</div></div>
-            <div class="skill-row"><div class="skill-name">Sleight of hand</div><input class="input" type="number" min="0" max="8" value="0" data-skill="soh"/><div class="skill-base mono" data-base="soh">0</div></div>
-            <div class="skill-row"><div class="skill-name">Alchemy</div><input class="input" type="number" min="0" max="8" value="0" data-skill="alchemy"/><div class="skill-base mono" data-base="alchemy">0</div></div>
-            <div class="skill-row"><div class="skill-name">Medicine</div><input class="input" type="number" min="0" max="8" value="0" data-skill="medecine"/><div class="skill-base mono" data-base="medecine">0</div></div>
-            <div class="skill-row"><div class="skill-name">Engineering</div><input class="input" type="number" min="0" max="8" value="0" data-skill="engineering"/><div class="skill-base mono" data-base="engineering">0</div></div>
+          <!-- TEC -->
+          <section class="char-card" data-char="tec" data-invest="techp">
+            <div class="char-head"><div class="char-name">Tech (TEC)</div><div class="char-metrics mono"><b data-total="tec">4</b> | <span class="muted">Milestone:</span> <b data-mile="tec">-3</b></div></div>
+            <div class="char-invest"><span class="label">Invested</span><input class="input" type="number" min="0" max="16" value="0" data-invest="techp"/><span class="mini muted">[Total is 4 + invested]</span></div>
+            <div class="skill-row"><div>Crafting</div><input class="input" type="number" min="0" max="8" value="0" data-skill="crafting"/><div class="skill-base mono" data-base="crafting">0</div></div>
+            <div class="skill-row"><div>Sleight of hand</div><input class="input" type="number" min="0" max="8" value="0" data-skill="soh"/><div class="skill-base mono" data-base="soh">0</div></div>
+            <div class="skill-row"><div>Alchemy</div><input class="input" type="number" min="0" max="8" value="0" data-skill="alchemy"/><div class="skill-base mono" data-base="alchemy">0</div></div>
+            <div class="skill-row"><div>Medicine</div><input class="input" type="number" min="0" max="8" value="0" data-skill="medecine"/><div class="skill-base mono" data-base="medecine">0</div></div>
+            <div class="skill-row"><div>Engineering</div><input class="input" type="number" min="0" max="8" value="0" data-skill="engineering"/><div class="skill-base mono" data-base="engineering">0</div></div>
           </section>
 
         </div>
       </div>
 
-      <!-- other tabs just placeholders -->
+      <!-- other tabs -->
       <div id="tab-inventory" class="tabpan"><p class="muted">Inventory coming soon.</p></div>
       <div id="tab-abilities" class="tabpan"><p class="muted">Abilities coming soon.</p></div>
       <div id="tab-combat" class="tabpan"><p class="muted">Combat coming soon.</p></div>
