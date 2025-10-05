@@ -4,163 +4,161 @@
   <meta charset="utf-8" />
   <title>Character Manager</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/static/character.css" />
+  <link rel="stylesheet" href="/static/character.css">
 </head>
 <body>
   <div class="wrap">
 
+    <!-- Hidden id + small status pill -->
+    <input id="c_id" type="hidden">
+    <div id="saveStatus" class="statuspill">Ready</div>
+
     <!-- Header -->
+    <div class="panel header">
+      <div class="header-left">
+        <img id="charAvatar" class="avatar" src="https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg" alt="">
+        <label class="pill">
+          <span>Image URL</span>
+          <input id="avatarUrl" class="input" placeholder="https://…" />
+        </label>
+      </div>
+
+      <div class="header-mid">
+        <h1 class="title">Character</h1>
+        <label class="rowline"><span>Name</span><input id="c_name" class="input" placeholder="Akari of the East"></label>
+        <label class="rowline"><span>Level</span><input id="c_level" class="input" type="number" min="1" max="100" value="1"></label>
+        <label class="rowline"><span>XP</span><input id="c_xp" class="input" type="number" min="0" value="0"></label>
+
+        <div class="badges">
+          <span class="badge">MO: <b id="k_mo">4</b></span>
+          <span class="badge">Initiative: <b id="k_init">4</b></span>
+          <span class="badge">ET: <b id="k_et">1</b></span>
+          <span class="badge">Condition DC: <b id="k_cdc">6</b></span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="title sm">Resources</div>
+        <div class="res">
+          <div class="kpi">
+            <div class="kpi-head">HP</div>
+            <div class="kpi-num"><span id="hp_cur">100</span>/<span id="hp_max">100</span></div>
+            <div class="bar hp"><i id="hp_bar" style="width:100%"></i></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-head">SP</div>
+            <div class="kpi-num"><span id="sp_cur">0</span>/<span id="sp_max">10</span></div>
+            <div class="bar sp"><i id="sp_bar"></i></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-head">EN</div>
+            <div class="kpi-num"><span id="en_cur">5</span>/<span id="en_max">5</span></div>
+            <div class="bar en"><i id="en_bar" style="width:100%"></i></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-head">FO</div>
+            <div class="kpi-num"><span id="fo_cur">2</span>/<span id="fo_max">2</span></div>
+            <div class="bar fo"><i id="fo_bar" style="width:100%"></i></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-head">TX</div>
+            <div class="kpi-num"><span id="tx_cur">0</span>/<span id="tx_max">0</span></div>
+            <div class="bar tx"><i id="tx_bar"></i></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-head">Enc</div>
+            <div class="kpi-num"><span id="enc_cur">0</span>/<span id="enc_max">10</span></div>
+            <div class="bar"><i id="enc_bar"></i></div>
+          </div>
+        </div>
+        <div class="hint">Max values are derived. Current values are editable in combat/inventory later.</div>
+      </div>
+    </div>
+
+    <!-- Stats meta row -->
+    <div class="panel soft counters">
+      <div class="counter-box">
+        <div class="label">Skill Points</div>
+        <div class="num mono"><span id="sp_used">0</span> / <span id="sp_max">40</span> <span class="mini">[cap <span id="skill_cap">3</span>]</span></div>
+      </div>
+      <div class="counter-box">
+        <div class="label">Characteristic Points</div>
+        <div class="num mono"><span id="cp_used">0</span> / <span id="cp_max">22</span> <span class="mini">[cap <span id="char_cap">10</span>]</span></div>
+      </div>
+      <div class="counter-box">
+        <div class="label">Sublimation</div>
+        <div class="num mono"><span id="sub_used">0</span> / <span id="sub_max">0</span></div>
+        <div class="mini">Tier cap: <span id="sub_tier">1</span> (I–IV)</div>
+      </div>
+    </div>
+
+    <!-- Sublimations -->
     <div class="panel">
-      <div class="hdr-grid">
-        <!-- Left: avatar & identity -->
-        <div>
-          <img id="charAvatar" class="avatar" src="https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg" alt="">
-          <div class="inline">
-            <span class="label">Image URL</span>
-            <input id="avatarUrl" class="input" placeholder="https://…" />
-          </div>
+      <div class="row header-row">
+        <div class="title">Sublimations</div>
+        <button id="btnAddSub" class="btn subtle">Add Sublimation</button>
+      </div>
+      <table class="tbl" id="subTable">
+        <thead>
+          <tr>
+            <th style="width:260px">Type</th>
+            <th>Skill (for Excellence)</th>
+            <th style="width:120px">Tier</th>
+            <th class="right" style="width:70px">Slots</th>
+            <th style="width:80px"></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="hint">Types: Lethality, Excellence (choose a skill), Blessing, Defense, Speed, Devastation, Clarity, Endurance.</div>
+    </div>
 
-          <div class="title">Character</div>
-          <label class="label">Name</label>
-          <input id="c_name" class="input" placeholder="Akari of the East">
+    <!-- Characteristics & Skills -->
+    <div class="panel">
+      <div class="title">Characteristics &amp; Skills</div>
+      <div id="charSkillContainer" class="grid-2"></div>
+    </div>
 
-          <label class="label">Level</label>
-          <input id="c_level" type="number" min="1" max="100" class="input" value="1">
+    <!-- Intensities -->
+    <div class="panel">
+      <div class="title">Intensities</div>
+      <table class="tbl" id="intensityTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Invested</th>
+            <th>Modifier</th>
+            <th>Base Value</th>
+            <th>ID</th>
+            <th>IV</th>
+            <th class="right">Res/Wk</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="hint">Specialist rule & resistance/weakness grid are computed automatically.</div>
+    </div>
 
-          <label class="label">XP</label>
-          <input id="c_xp" type="number" min="0" class="input" value="0">
-
-          <div class="badges" style="margin-top:8px">
-            <span class="badge">MO: <b id="k_mo" class="mono">4</b></span>
-            <span class="badge">Initiative: <b id="k_init" class="mono">4</b></span>
-            <span class="badge">ET: <b id="k_et" class="mono">1</b></span>
-            <span class="badge">Condition DC: <b id="k_cdc" class="mono">6</b></span>
-          </div>
-        </div>
-
-        <!-- Right: resources -->
+    <!-- Personal -->
+    <div class="panel">
+      <div class="title">Personal</div>
+      <div class="grid-2">
         <div class="panel soft">
-          <div class="title">Resources</div>
-          <div class="res-grid">
-            <div class="kpi">
-              <span class="label">HP</span>
-              <div class="mono"><span id="hp_cur">100</span>/<span id="hp_max">100</span></div>
-              <div class="bar hp"><i id="hp_bar"></i></div>
-            </div>
-            <div class="kpi">
-              <span class="label">SP</span>
-              <div class="mono"><span id="sp_cur">0</span>/<span id="sp_max">10</span></div>
-              <div class="bar sp"><i id="sp_bar"></i></div>
-            </div>
-            <div class="kpi">
-              <span class="label">EN</span>
-              <div class="mono"><span id="en_cur">5</span>/<span id="en_max">5</span></div>
-              <div class="bar en"><i id="en_bar"></i></div>
-            </div>
-            <div class="kpi">
-              <span class="label">FO</span>
-              <div class="mono"><span id="fo_cur">2</span>/<span id="fo_max">2</span></div>
-              <div class="bar fo"><i id="fo_bar"></i></div>
-            </div>
-            <div class="kpi">
-              <span class="label">TX</span>
-              <div class="mono"><span id="tx_cur">0</span>/<span id="tx_max">0</span></div>
-              <div class="bar tx"><i id="tx_bar"></i></div>
-            </div>
-            <div class="kpi">
-              <span class="label">Enc</span>
-              <div class="mono"><span id="enc_cur">0</span>/<span id="enc_max">10</span></div>
-              <div class="bar"><i id="enc_bar"></i></div>
-            </div>
+          <div class="grid-3">
+            <label><span class="label">Height</span><input id="p_height" class="input" placeholder="175 cm"></label>
+            <label><span class="label">Weight</span><input id="p_weight" class="input" placeholder="70 kg"></label>
+            <label><span class="label">Birthday</span><input id="p_bday" class="input" placeholder="TBD"></label>
           </div>
-          <div class="hint">Max values are derived. Current values will be editable in combat/inventory later.</div>
+        </div>
+        <div class="panel soft">
+          <label><span class="label">Backstory</span><textarea id="p_backstory" class="input" rows="6" placeholder="Who are they?"></textarea></label>
+          <label style="margin-top:8px"><span class="label">Player Notes</span><textarea id="p_notes" class="input" rows="6" placeholder="Anything else"></textarea></label>
         </div>
       </div>
     </div>
 
-    <!-- Tabs -->
-    <div class="panel" style="margin-top:16px">
-      <div class="tabs">
-        <button class="tab active" data-tab="stats">Statistics</button>
-        <button class="tab" data-tab="inventory">Inventory</button>
-        <button class="tab" data-tab="abilities">Abilities</button>
-        <button class="tab" data-tab="combat">Combat</button>
-        <button class="tab" data-tab="personal">Personal</button>
-      </div>
-
-      <!-- Statistics -->
-      <div class="tabpan active" id="tab-stats">
-        <div class="two-grid">
-          <div class="panel soft">
-            <div class="label">Skill Points</div>
-            <div class="mono"><span id="sp_used">0</span> / <span id="sp_max">40</span> <span class="label">[cap <span id="skill_cap">3</span>]</span></div>
-          </div>
-          <div class="panel soft">
-            <div class="label">Characteristic Points</div>
-            <div class="mono"><span id="cp_used">0</span> / <span id="cp_max">22</span> <span class="label">[cap <span id="char_cap">10</span>]</span></div>
-          </div>
-        </div>
-
-        <!-- Sublimations -->
-        <div class="panel" style="margin-top:16px">
-          <div class="two-grid">
-            <div>
-              <div class="title">Sublimations</div>
-            </div>
-            <div style="text-align:right">
-              <button id="btnAddSub" class="btn subtle">Add Sublimation</button>
-            </div>
-          </div>
-          <table class="tbl" id="subTable">
-            <thead>
-              <tr>
-                <th style="width:260px">Type</th>
-                <th>Skill (for Excellence)</th>
-                <th style="width:140px">Tier</th>
-                <th class="right" style="width:80px">Slots</th>
-                <th style="width:80px"></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-          <div class="hint">Types: Lethality, Excellence (choose a skill), Blessing, Defense, Speed, Devastation, Clarity, Endurance.</div>
-          <div class="label" style="margin-top:6px">Sublimation: <span class="mono"><span id="sub_used">0</span> / <span id="sub_max">0</span></span>, tier cap <span class="mono" id="sub_tier">1</span> (I–IV)</div>
-        </div>
-
-        <!-- Characteristics & Skills -->
-        <div class="panel" style="margin-top:16px">
-          <div class="title">Characteristics & Skills</div>
-          <div id="charSkillContainer" class="stats-grid"></div>
-        </div>
-
-        <!-- Intensities -->
-        <div class="panel" style="margin-top:16px">
-          <div class="title">Intensities</div>
-          <table class="tbl" id="intensityTable">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Invested</th>
-                <th>Modifier</th>
-                <th>Base Value</th>
-                <th>ID</th>
-                <th>IV</th>
-                <th class="right">Res/Wk</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Other tabs (placeholders) -->
-      <div class="tabpan" id="tab-inventory"><div class="muted">Inventory – wire later.</div></div>
-      <div class="tabpan" id="tab-abilities"><div class="muted">Abilities – wire later.</div></div>
-      <div class="tabpan" id="tab-combat"><div class="muted">Combat – wire later.</div></div>
-      <div class="tabpan" id="tab-personal"><div class="muted">Personal – wire later.</div></div>
-    </div>
   </div>
 
-  <script src="/static/character.js"></script>
+  <script src="/static/character.js" defer></script>
 </body>
 </html>
