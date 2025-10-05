@@ -1,269 +1,208 @@
-/* Character Manager — 2-col stats, correct milestones, Excellence works, debounced autosave to /characters */
-
 (() => {
   const $  = (s,e=document)=>e.querySelector(s);
   const $$ = (s,e=document)=>Array.from(e.querySelectorAll(s));
   const num = v => (v===''||v==null) ? 0 : Number(v);
 
-  const saveStatus = $('#saveStatus');
-  const setStatus = (t,kind='')=>{
-    if(!saveStatus) return;
-    saveStatus.textContent=t;
-    saveStatus.classList.remove('good','danger');
-    if(kind) saveStatus.classList.add(kind);
-  };
+  // ---------------- Tabs ----------------
+  $$('.tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      $$('.tab').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const key = btn.dataset.tab;
+      $$('.tabpan').forEach(p=>p.classList.remove('active'));
+      $(`#tab-${key}`).classList.add('active');
+    });
+  });
 
-  // ---------- Data model ----------
+  // ---------------- Avatar ----------------
+  const avatarUrl = $('#avatarUrl');
+  const charAvatar = $('#charAvatar');
+  avatarUrl.addEventListener('input', ()=>{
+    charAvatar.src = avatarUrl.value || 'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg';
+  });
+
+  // ---------------- Static map (HTML is hard-coded) ----------------
   const GROUPS = [
-    { key:'ref', label:'Reflex (REF)',    investKey:'reflexp',    skills:[
-      {key:'technicity',label:'Technicity'},
-      {key:'dodge',label:'Dodge'},
-      {key:'tempo',label:'Tempo'},
-      {key:'reactivity',label:'Reactivity'},
-    ]},
-    { key:'dex', label:'Dexterity (DEX)', investKey:'dexterityp', skills:[
-      {key:'accuracy',label:'Accuracy'},
-      {key:'evasion',label:'Evasion'},
-      {key:'stealth',label:'Stealth'},
-      {key:'acrobatics',label:'Acrobatics'},
-    ]},
-    { key:'bod', label:'Body (BOD)',      investKey:'bodyp',      skills:[
-      {key:'brutality',label:'Brutality'},
-      {key:'blocking',label:'Blocking'},
-      {key:'resistance',label:'Resistance'},
-      {key:'athletics',label:'Athletics'},
-    ]},
-    { key:'wil', label:'Willpower (WIL)', investKey:'willpowerp', skills:[
-      {key:'intimidation',label:'Intimidation'},
-      {key:'spirit',label:'Spirit'},
-      {key:'instinct',label:'Instinct'},
-      {key:'absorption',label:'Absorption'},
-    ]},
-    { key:'mag', label:'Magic (MAG)',     investKey:'magicp',     skills:[
-      {key:'aura',label:'Aura'},
-      {key:'incantation',label:'Incantation'},
-      {key:'enchantment',label:'Enchantment'},
-      {key:'restoration',label:'Restoration'},
-      {key:'potential',label:'Potential'},
-    ]},
-    { key:'pre', label:'Presence (PRE)',  investKey:'presencep',  skills:[
-      {key:'taming',label:'Taming'},
-      {key:'charm',label:'Charm'},
-      {key:'charisma',label:'Charisma'},
-      {key:'deception',label:'Deception'},
-      {key:'persuasion',label:'Persuasion'},
-    ]},
-    { key:'wis', label:'Wisdom (WIS)',    investKey:'wisdomp',    skills:[
-      {key:'survival',label:'Survival'},
-      {key:'education',label:'Education'},
-      {key:'perception',label:'Perception'},
-      {key:'psychology',label:'Psychology'},
-      {key:'investigation',label:'Investigation'},
-    ]},
-    { key:'tec', label:'Tech (TEC)',      investKey:'techp',      skills:[
-      {key:'crafting',label:'Crafting'},
-      {key:'soh',label:'Sleight of hand'},
-      {key:'alchemy',label:'Alchemy'},
-      {key:'medecine',label:'Medicine'},
-      {key:'engineering',label:'Engineering'},
-    ]},
+    { key:'ref', invest:'reflexp',  skills:['technicity','dodge','tempo','reactivity'] },
+    { key:'dex', invest:'dexterityp',skills:['accuracy','evasion','stealth','acrobatics'] },
+    { key:'bod', invest:'bodyp',     skills:['brutality','blocking','resistance','athletics'] },
+    { key:'wil', invest:'willpowerp',skills:['intimidation','spirit','instinct','absorption'] },
+    { key:'mag', invest:'magicp',    skills:['aura','incantation','enchantment','restoration','potential'] },
+    { key:'pre', invest:'presencep', skills:['taming','charm','charisma','deception','persuasion'] },
+    { key:'wis', invest:'wisdomp',   skills:['survival','education','perception','psychology','investigation'] },
+    { key:'tec', invest:'techp',     skills:['crafting','soh','alchemy','medecine','engineering'] },
   ];
   const INTENSITIES = ['Fire','Water','Earth','Wind','Lightning','Moon','Sun','Ki'];
 
-  // ---------- Math helpers ----------
-  const modFromScore = score => Math.floor(score/2 - 5);   // Milestone = characteristic modifier
-  const scoreFromInvest = invest => 4 + invest;
-  const tens = lvl => Math.floor(lvl/10);
-
-  // ---------- Build UI (2-column) ----------
-  const charSkillContainer = $('#charSkillContainer');
-
-  function buildCharCards(){
-    charSkillContainer.innerHTML = '';
-    GROUPS.forEach(g => {
-      const card = document.createElement('div');
-      card.className = 'char-card';
-
-      card.innerHTML = `
-        <div class="char-head">
-          <div class="char-name">${g.label}</div>
-          <div class="char-metrics">[ <span>Total</span> | <span>Milestone</span> ]</div>
-          <div class="char-metrics"><b data-c-total="${g.key}">4</b> | <b data-c-milestone="${g.key}">-3</b></div>
-        </div>
-
-        <div class="char-invest">
-          <div class="muted">Characteristic</div>
-          <input class="input" type="number" min="0" max="16" value="0" data-c-invest="${g.investKey}">
-          <span class="badge mono">Milestone: <b data-c-milestone="${g.key}">-3</b></span>
-        </div>
-
-        <div class="skills" data-skill-group="${g.key}">
-          ${g.skills.map(s=>`
-            <div class="skill-row">
-              <div class="skill-name">— ${s.label}</div>
-              <input class="input" type="number" min="0" max="8" value="0" data-s-invest="${s.key}">
-              <div class="skill-base mono" data-s-base="${s.key}">0</div>
-            </div>
-          `).join('')}
-        </div>
-      `;
-      charSkillContainer.appendChild(card);
-    });
-  }
-
-  function buildIntensityTable(){
-    const tbody = $('#intensityTable tbody'); tbody.innerHTML = '';
-    INTENSITIES.forEach(nm=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${nm}</td>
-        <td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="${nm}"></td>
-        <td class="mono" data-i-mod="${nm}">0</td>
-        <td class="mono" data-i-base="${nm}">0</td>
-        <td class="mono" data-i-id="${nm}">—</td>
-        <td class="mono" data-i-iv="${nm}">—</td>
-        <td class="mono right" data-i-rw="${nm}">0</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  buildCharCards();
-  buildIntensityTable();
-
-  // ---------- Sublimations ----------
-  const SUB_TYPES = [
-    { id:'2', label:'Lethality' },
-    { id:'1', label:'Excellence' }, // needs skill
-    { id:'3', label:'Blessing' },
-    { id:'4', label:'Defense' },
-    { id:'5', label:'Speed' },
-    { id:'7', label:'Devastation' },
-    { id:'8', label:'Clarity' },
-    { id:'6', label:'Endurance' },
-  ];
-  const ALL_SKILLS = GROUPS.flatMap(g => g.skills).map(s => ({key:s.key,label:s.label}));
+  // ---------------- Sublimations ----------------
   const subBody = $('#subTable tbody');
-
-  function addSubRow(defaults={type:'2',skill:'',tier:1}){
-    const tr=document.createElement('tr');
-
-    const typeSel=document.createElement('select'); typeSel.className='input';
-    SUB_TYPES.forEach(t=>{ const o=document.createElement('option'); o.value=t.id; o.textContent=t.label; if(String(defaults.type)===t.id) o.selected=true; typeSel.appendChild(o); });
-
-    const skillSel=document.createElement('select'); skillSel.className='input';
-    const o0=document.createElement('option'); o0.value=''; o0.textContent='—'; skillSel.appendChild(o0);
-    ALL_SKILLS.forEach(s=>{ const o=document.createElement('option'); o.value=s.key; o.textContent=s.label; if(defaults.skill===s.key) o.selected=true; skillSel.appendChild(o); });
-
-    const tierInp=document.createElement('input'); tierInp.type='number'; tierInp.min='0'; tierInp.max='4'; tierInp.value=String(defaults.tier||1); tierInp.className='input xs';
-
-    const slotsCell=document.createElement('td'); slotsCell.className='right mono'; slotsCell.textContent=String(defaults.tier||1);
-
-    const delBtn=document.createElement('button'); delBtn.className='btn ghost'; delBtn.textContent='Remove';
-    delBtn.addEventListener('click',()=>{ tr.remove(); recompute(); triggerSave(); });
-
-    function toggleSkill(){ const ex=(typeSel.value==='1'); skillSel.disabled=!ex; skillSel.style.opacity=ex?1:.5; }
-    toggleSkill();
-
-    typeSel.addEventListener('change',()=>{ toggleSkill(); recompute(); triggerSave(); });
-    skillSel.addEventListener('change',()=>{ recompute(); triggerSave(); });
-    tierInp.addEventListener('input',()=>{ slotsCell.textContent=String(num(tierInp.value)); recompute(); triggerSave(); });
-
-    const td1=document.createElement('td'); td1.appendChild(typeSel);
-    const td2=document.createElement('td'); td2.appendChild(skillSel);
-    const td3=document.createElement('td'); td3.appendChild(tierInp);
-    const td5=document.createElement('td'); td5.appendChild(delBtn);
-
-    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(slotsCell); tr.appendChild(td5);
-    tr._refs={typeSel,skillSel,tierInp,slotsCell};
+  $('#btnAddSub').addEventListener('click', ()=> {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <select class="input" data-sub-type>
+          <option value="2">Lethality</option>
+          <option value="1">Excellence</option>
+          <option value="3">Blessing</option>
+          <option value="4">Defense</option>
+          <option value="5">Speed</option>
+          <option value="7">Devastation</option>
+          <option value="8">Clarity</option>
+          <option value="6">Endurance</option>
+        </select>
+      </td>
+      <td>
+        <select class="input" data-sub-skill disabled>
+          <option value="">—</option>
+          <option value="technicity">Technicity</option>
+          <option value="dodge">Dodge</option>
+          <option value="tempo">Tempo</option>
+          <option value="reactivity">Reactivity</option>
+          <option value="accuracy">Accuracy</option>
+          <option value="evasion">Evasion</option>
+          <option value="stealth">Stealth</option>
+          <option value="acrobatics">Acrobatics</option>
+          <option value="brutality">Brutality</option>
+          <option value="blocking">Blocking</option>
+          <option value="resistance">Resistance</option>
+          <option value="athletics">Athletics</option>
+          <option value="intimidation">Intimidation</option>
+          <option value="spirit">Spirit</option>
+          <option value="instinct">Instinct</option>
+          <option value="absorption">Absorption</option>
+          <option value="aura">Aura</option>
+          <option value="incantation">Incantation</option>
+          <option value="enchantment">Enchantment</option>
+          <option value="restoration">Restoration</option>
+          <option value="potential">Potential</option>
+          <option value="taming">Taming</option>
+          <option value="charm">Charm</option>
+          <option value="charisma">Charisma</option>
+          <option value="deception">Deception</option>
+          <option value="persuasion">Persuasion</option>
+          <option value="survival">Survival</option>
+          <option value="education">Education</option>
+          <option value="perception">Perception</option>
+          <option value="psychology">Psychology</option>
+          <option value="investigation">Investigation</option>
+          <option value="crafting">Crafting</option>
+          <option value="soh">Sleight of hand</option>
+          <option value="alchemy">Alchemy</option>
+          <option value="medecine">Medicine</option>
+          <option value="engineering">Engineering</option>
+        </select>
+      </td>
+      <td><input class="input xs" type="number" min="0" max="4" value="1" data-sub-tier></td>
+      <td class="right mono" data-sub-slots>1</td>
+      <td><button class="btn ghost" data-sub-remove>Remove</button></td>
+    `;
     subBody.appendChild(tr);
+    wireSubRow(tr);
+    recompute();
+  });
+
+  function wireSubRow(tr){
+    const typeSel = $('[data-sub-type]', tr);
+    const skillSel = $('[data-sub-skill]', tr);
+    const tierInp = $('[data-sub-tier]', tr);
+    const slotsCell = $('[data-sub-slots]', tr);
+    const delBtn = $('[data-sub-remove]', tr);
+
+    const toggle = ()=> {
+      const isEx = typeSel.value === '1';
+      skillSel.disabled = !isEx;
+      skillSel.style.opacity = isEx ? '1' : '.5';
+    };
+    toggle();
+
+    typeSel.addEventListener('change', ()=>{ toggle(); recompute(); });
+    skillSel.addEventListener('change', ()=> recompute());
+    tierInp.addEventListener('input', ()=> { slotsCell.textContent = String(num(tierInp.value)); recompute(); });
+    delBtn.addEventListener('click', ()=> { tr.remove(); recompute(); });
   }
-  if(!subBody.children.length) addSubRow();
+  // wire initial row
+  wireSubRow(subBody.querySelector('tr'));
 
-  // ---------- Recompute ----------
-  const modScore  = s => Math.floor(s/2 - 5);
-  const scoreFrom = inv => 4 + inv;
-
-  function readLevel(){
-    const lvl=num($('#c_level')?.value||1);
-    const xp =num($('#c_xp')?.value||0);
-    return Math.max(1,lvl||1);
-  }
-
-  function idIvFromBV(bv){
+  // ---------------- Math helpers ----------------
+  const scoreFromInvest = invest => 4 + invest;
+  const milestoneFromScore = score => Math.floor(score/2 - 5); // "Milestone" (positive milestones are >=0)
+  const idIvFromBV = (bv)=>{
     if (bv <= 0) return ['—','—'];
     if (bv <= 7)  return ['1d4', 2];
     if (bv <= 11) return ['1d6', 3];
     if (bv <= 15) return ['1d8', 4];
     if (bv <= 17) return ['1d10', 5];
     return ['1d12', 6];
-  }
+  };
 
+  // ---------------- Recompute ----------------
   function recompute(){
-    const lvl = readLevel();
+    const lvl = Math.max(1, num($('#c_level').value||1));
 
-    // Characteristics totals + milestones
-    const charMilestone = {};
+    // char milestones
+    const charMil = {};
     GROUPS.forEach(g=>{
-      const inv=num($(`[data-c-invest="${g.investKey}"]`).value||0);
-      const score=scoreFrom(inv);
-      const ms=modScore(score);
-      charMilestone[g.key]=ms;
-      $(`[data-c-total="${g.key}"]`).textContent = String(score);
-      $(`[data-c-milestone="${g.key}"]`).textContent = String(ms);
+      const inv = num($(`[data-invest-input="${g.invest}"]`).value || 0);
+      const score = scoreFromInvest(inv);
+      const ms = milestoneFromScore(score);
+      charMil[g.key] = ms;
+      $(`[data-total="${g.key}"]`).textContent = String(score);
+      $(`[data-milestone="${g.key}"]`).textContent = String(ms);
     });
 
-    // Sublimation Excellence map
-    const exMap={}; let subSlots=0;
-    Array.from(subBody.children).forEach(tr=>{
-      const {typeSel,skillSel,tierInp}=tr._refs;
-      const tier=Math.max(0,num(tierInp.value||0));
-      subSlots += tier;
-      if(typeSel.value==='1' && skillSel.value){
-        exMap[skillSel.value]=(exMap[skillSel.value]||0)+tier;
+    // sublimation slots & Excellence map
+    let subUsed = 0;
+    const exMap = {};
+    $$('#subTable tbody tr').forEach(tr=>{
+      const typeSel = $('[data-sub-type]', tr);
+      const skillSel = $('[data-sub-skill]', tr);
+      const tier = Math.max(0, num($('[data-sub-tier]', tr).value||0));
+      subUsed += tier;
+      if(typeSel.value === '1' && skillSel.value){
+        exMap[skillSel.value] = (exMap[skillSel.value]||0) + tier;
       }
     });
-    $('#sub_used').textContent = String(subSlots);
+    $('#sub_used').textContent = String(subUsed);
 
-    // Skills base: invested + Excellence(min(invested, tiers)) + characteristic milestone
+    // skills base: invested + min(excellence, invested) + char milestone
     GROUPS.forEach(g=>{
-      g.skills.forEach(s=>{
-        const inv=num($(`[data-s-invest="${s.key}"]`).value||0);
-        const ex = Math.min(inv, exMap[s.key]||0);
-        const base = inv + ex + (charMilestone[g.key]||0);
-        $(`[data-s-base="${s.key}"]`).textContent = String(base);
+      g.skills.forEach(sk=>{
+        const inv = num($(`[data-skill="${sk}"]`)?.value || 0);
+        const ex  = Math.min(inv, exMap[sk] || 0);
+        const base = inv + ex + (charMil[g.key]||0);
+        $(`[data-base="${sk}"]`).textContent = String(base);
       });
     });
 
-    // Simple caps/counters (front-end guidance; backend is truth)
+    // counters (front-end guidance)
     const skill_cap = (lvl >= 50 ? 8 : lvl >= 40 ? 7 : lvl >= 30 ? 6 : lvl >= 20 ? 5 : lvl >= 10 ? 4 : 3);
     const cp_max = 22 + Math.floor((lvl-1)/9)*3;
     const sp_max = 40 + (lvl-1)*2;
-    const cp_used = GROUPS.reduce((a,g)=>a+num($(`[data-c-invest="${g.investKey}"]`).value||0),0);
-    const sp_used = GROUPS.reduce((a,g)=>a+g.skills.reduce((aa,s)=>aa+num($(`[data-s-invest="${s.key}"]`).value||0),0),0);
-    $('#skill_cap').textContent=String(skill_cap);
-    $('#char_cap').textContent='10';
-    $('#cp_max').textContent=String(cp_max);
-    $('#sp_max').textContent=String(sp_max);
-    $('#cp_used').textContent=String(cp_used);
-    $('#sp_used').textContent=String(sp_used);
+    const cp_used = GROUPS.reduce((a,g)=> a + num($(`[data-invest-input="${g.invest}"]`).value||0), 0);
+    const sp_used = GROUPS.reduce((a,g)=> a + g.skills.reduce((aa,s)=> aa + num($(`[data-skill="${s}"]`).value||0), 0), 0);
+    $('#skill_cap').textContent = String(skill_cap);
+    $('#char_cap').textContent = '10';
+    $('#cp_max').textContent = String(cp_max);
+    $('#sp_max').textContent = String(sp_max);
+    $('#cp_used').textContent = String(cp_used);
+    $('#sp_used').textContent = String(sp_used);
 
-    // Derived badges (quick client mirrors)
-    const mile_ref = Math.max(charMilestone.ref||0,0);
-    const mile_dex = Math.max(charMilestone.dex||0,0);
-    const mile_mag = Math.max(charMilestone.mag||0,0);
-    const mo = 4 + mile_ref + mile_dex + (sumSubType('5')); // +Speed tiers
+    // badges
+    const mile_ref = Math.max(charMil.ref||0,0);
+    const mile_dex = Math.max(charMil.dex||0,0);
+    const mile_mag = Math.max(charMil.mag||0,0);
+    const mo = 4 + mile_ref + mile_dex + sumSubType('5');
     $('#k_mo').textContent = String(mo);
-    $('#k_init').textContent = String(mo + Math.max(charMilestone.ref||0,0));
+    $('#k_init').textContent = String(mo + Math.max(charMil.ref||0,0));
     $('#k_et').textContent = String(1 + Math.floor((lvl-1)/9) + mile_mag);
     $('#k_cdc').textContent = String(6 + Math.floor(lvl/10) + sumSubType('7'));
 
-    // Intensities quick math
-    const magic_mod = charMilestone.mag||0;
+    // intensities
+    const magic_mod = charMil.mag||0;
     INTENSITIES.forEach(nm=>{
-      const inv=num($(`[data-i-invest="${nm}"]`).value||0);
-      const base=(inv>0? inv + magic_mod : 0);
-      const [ID,IV]=idIvFromBV(base);
+      const inv = num($(`[data-i-invest="${nm}"]`).value || 0);
+      const base = inv>0 ? inv + magic_mod : 0;
+      const [ID, IV] = idIvFromBV(base);
       $(`[data-i-mod="${nm}"]`).textContent = String(magic_mod);
       $(`[data-i-base="${nm}"]`).textContent = String(base);
       $(`[data-i-id="${nm}"]`).textContent = String(ID);
@@ -271,12 +210,11 @@
       $(`[data-i-rw="${nm}"]`).textContent = '0';
     });
 
-    // Bars keep width coherent if numbers present
+    // resources bars (keep coherent widths)
     function setBar(curSel,maxSel,barSel){
-      const cur=num($(curSel)?.textContent||0);
-      const max=num($(maxSel)?.textContent||0);
-      const pct=max>0?Math.round((cur/max)*100):0;
-      $(barSel).style.width=`${pct}%`;
+      const cur = num($(curSel).textContent||0);
+      const max = num($(maxSel).textContent||0);
+      $(barSel).style.width = max>0 ? `${Math.round((cur/max)*100)}%` : '0%';
     }
     setBar('#hp_cur','#hp_max','#hp_bar');
     setBar('#sp_cur','#sp_max','#sp_bar');
@@ -287,159 +225,27 @@
   }
 
   function sumSubType(code){
-    return Array.from(subBody.children).reduce((acc,tr)=>{
-      const {typeSel,tierInp}=tr._refs; return acc + (typeSel.value===code? Math.max(0,num(tierInp.value||0)):0);
-    },0);
+    return $$('#subTable tbody tr').reduce((acc,tr)=>{
+      const typeSel = $('[data-sub-type]', tr);
+      const tier = Math.max(0, num($('[data-sub-tier]', tr).value||0));
+      return acc + (typeSel.value===code ? tier : 0);
+    }, 0);
   }
 
-  // ---------- API ----------
-  const API = {
-    async create(payload){
-      const r=await fetch('/characters',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});
-      if(!r.ok) throw new Error(await r.text()); return r.json();
-    },
-    async get(id){
-      const r=await fetch(`/characters/${encodeURIComponent(id)}`,{credentials:'include'});
-      if(!r.ok) throw new Error(await r.text()); return r.json();
-    },
-    async update(id,payload){
-      const r=await fetch(`/characters/${encodeURIComponent(id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});
-      if(!r.ok) throw new Error(await r.text()); return r.json();
-    }
-  };
+  // events (inputs)
+  ['#c_level','#c_xp','#c_name','#avatarUrl','#p_height','#p_weight','#p_bday','#p_backstory','#p_notes']
+    .forEach(sel=> $(sel)?.addEventListener('input', recompute));
 
-  // ---------- Collect payload ----------
-  function collectPayload(){
-    const payload={
-      name: ($('#c_name')?.value||'').trim(),
-      img:  ($('#avatarUrl')?.value||'').trim(),
-      xp_total: num($('#c_xp')?.value||0),
-      level_manual: ($('#c_level')?.value===''? null : num($('#c_level')?.value)),
-      characteristics:{}, skills:{}, sublimations:[],
-      bio:{
-        height:($('#p_height')?.value||'').trim(),
-        weight:($('#p_weight')?.value||'').trim(),
-        birthday:($('#p_bday')?.value||'').trim(),
-        backstory:($('#p_backstory')?.value||'').trim(),
-        notes:($('#p_notes')?.value||'').trim(),
-      }
-    };
-    GROUPS.forEach(g=>{
-      payload.characteristics[g.investKey]=num($(`[data-c-invest="${g.investKey}"]`)?.value||0);
-      g.skills.forEach(s=> payload.skills[s.key]=num($(`[data-s-invest="${s.key}"]`)?.value||0) );
-    });
-    INTENSITIES.forEach(nm=>{
-      const v=num($(`[data-i-invest="${nm}"]`)?.value||0);
-      payload.skills[nm.toLowerCase()]=v;
-    });
-    Array.from(subBody.children).forEach(tr=>{
-      const {typeSel,skillSel,tierInp}=tr._refs;
-      const m = { '1':'Excellence','2':'Lethality','3':'Blessing','4':'Defense','5':'Speed','6':'Endurance','7':'Devastation','8':'Clarity' };
-      payload.sublimations.push({
-        type: m[typeSel.value]||'Lethality',
-        tier: num(tierInp.value||0),
-        skill: (typeSel.value==='1' && skillSel.value) ? skillSel.value : null
-      });
-    });
-    return payload;
-  }
+  $$('#subTable').forEach(t=> t.addEventListener('input',recompute));
+  $$('#subTable').forEach(t=> t.addEventListener('change',recompute));
 
-  // ---------- Apply computed back from server ----------
-  function applyComputed(resp){
-    const c=resp?.computed; if(!c) return;
-    $('#k_mo').textContent   = String(c.derived.movement);
-    $('#k_init').textContent = String(c.derived.initiative);
-    $('#k_et').textContent   = String(c.derived.et);
-    $('#k_cdc').textContent  = String(c.derived.condition_dc);
+  GROUPS.forEach(g=>{
+    $(`[data-invest-input="${g.invest}"]`).addEventListener('input', recompute);
+    g.skills.forEach(sk=> $(`[data-skill="${sk}"]`).addEventListener('input', recompute));
+  });
 
-    function setRes(curSel,maxSel,barSel,cur,max){
-      $(curSel).textContent=String(cur); $(maxSel).textContent=String(max);
-      $(barSel).style.width = max>0?`${Math.round((cur/max)*100)}%`:'0%';
-    }
-    setRes('#hp_cur','#hp_max','#hp_bar', c.derived.hp_current ?? c.derived.hp_max, c.derived.hp_max);
-    setRes('#sp_cur','#sp_max','#sp_bar', c.derived.sp_current ?? c.derived.sp_max, c.derived.sp_max);
-    setRes('#en_cur','#en_max','#en_bar', c.derived.en_current ?? c.derived.en_max, c.derived.en_max);
-    setRes('#fo_cur','#fo_max','#fo_bar', c.derived.fo_current ?? c.derived.fo_max, c.derived.fo_max);
-    setRes('#tx_cur','#tx_max','#tx_bar', c.derived.tx_current ?? c.derived.tx_max, c.derived.tx_max);
-    setRes('#enc_cur','#enc_max','#enc_bar', c.derived.enc_current ?? c.derived.enc_max, c.derived.enc_max);
+  INTENSITIES.forEach(nm=> $(`[data-i-invest="${nm}"]`).addEventListener('input',recompute));
 
-    // Slots
-    $('#sub_max').textContent  = String(c.sublimations.slots_max);
-    $('#sub_used').textContent = String(c.sublimations.slots_used);
-  }
-
-  // ---------- Autosave ----------
-  const cidInput = $('#c_id');
-  let saveTimer=null;
-  function triggerSave(){ if(saveTimer) clearTimeout(saveTimer); saveTimer=setTimeout(saveNow, 500); }
-
-  async function saveNow(){
-    try{
-      setStatus('Saving…');
-      const payload=collectPayload();
-      const id=cidInput.value?.trim();
-      const resp=id? await API.update(id,payload) : await API.create(payload);
-      const newId=id || resp?.character?.id;
-      if(newId && !cidInput.value){
-        cidInput.value=newId;
-        const u=new URL(location.href); u.searchParams.set('id',newId); history.replaceState(null,'',u.toString());
-      }
-      applyComputed(resp);
-      setStatus('Saved','good');
-    }catch(e){
-      console.error(e);
-      setStatus('Error','danger');
-    }
-  }
-
-  // ---------- Bindings ----------
-  // generic inputs
-  ['#c_name','#c_level','#c_xp','#avatarUrl','#p_height','#p_weight','#p_bday','#p_backstory','#p_notes']
-    .forEach(sel=> $(sel)?.addEventListener('input', ()=>{ if(sel==='#avatarUrl'){ const u=$('#avatarUrl').value||'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg'; $('#charAvatar').src=u; } recompute(); triggerSave(); }));
-
-  // char + skills + intensities
-  $$('#charSkillContainer input').forEach(el=> el.addEventListener('input', ()=>{ recompute(); triggerSave(); }));
-  $$('#intensityTable [data-i-invest]').forEach(el=> el.addEventListener('input', ()=>{ recompute(); triggerSave(); }));
-
-  // add sub row
-  $('#btnAddSub')?.addEventListener('click', ()=> addSubRow({type:'2',tier:1}) );
-
-  // ---------- Load (if ?id=) ----------
-  (async function init(){
-    setStatus('Ready');
-    const qid=new URLSearchParams(location.search).get('id');
-    if(qid){
-      try{
-        setStatus('Loading…');
-        const resp=await API.get(qid);
-        const doc=resp.character||{};
-        cidInput.value=doc.id||'';
-        $('#c_name').value=doc.name||'';
-        $('#avatarUrl').value=doc.img||'';
-        $('#charAvatar').src=doc.img||'https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg';
-        $('#c_xp').value=Number(doc.xp_total||0);
-        $('#c_level').value=(doc.level_manual ?? 1);
-
-        // characteristics
-        const ch=doc.characteristics||{};
-        GROUPS.forEach(g=>{ const el=$(`[data-c-invest="${g.investKey}"]`); if(el) el.value=ch[g.investKey]??0; });
-
-        // skills
-        const sk=doc.skills||{};
-        GROUPS.forEach(g=> g.skills.forEach(s=>{ const el=$(`[data-s-invest="${s.key}"]`); if(el) el.value=sk[s.key]??0; }));
-        INTENSITIES.forEach(nm=>{ const el=$(`[data-i-invest="${nm}"]`); if(el) el.value=sk[nm.toLowerCase()]??0; });
-
-        // sublimations
-        subBody.innerHTML='';
-        (doc.sublimations||[]).forEach(s=>{
-          const map={Excellence:'1',Lethality:'2',Blessing:'3',Defense:'4',Speed:'5',Endurance:'6',Devastation:'7',Clarity:'8'};
-          addSubRow({type:map[s.type]||'2', skill:s.skill||'', tier:s.tier||1});
-        });
-
-        applyComputed(resp);
-        setStatus('Loaded','good');
-      }catch(e){ console.warn(e); setStatus('Load failed','danger'); }
-    }
-    recompute();
-  })();
+  // initial compute
+  recompute();
 })();

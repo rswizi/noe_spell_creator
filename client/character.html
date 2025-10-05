@@ -9,23 +9,19 @@
 <body>
   <div class="wrap">
 
-    <!-- Hidden id + small status pill -->
-    <input id="c_id" type="hidden">
-    <div id="saveStatus" class="statuspill">Ready</div>
-
     <!-- Header -->
     <div class="panel header">
       <div class="header-left">
         <img id="charAvatar" class="avatar" src="https://assets.forge-vtt.com/bazaar/core/icons/svg/mystery-man.svg" alt="">
         <label class="pill">
           <span>Image URL</span>
-          <input id="avatarUrl" class="input" placeholder="https://…" />
+          <input id="avatarUrl" class="input" placeholder="https://…">
         </label>
       </div>
 
       <div class="header-mid">
         <h1 class="title">Character</h1>
-        <label class="rowline"><span>Name</span><input id="c_name" class="input" placeholder="Akari of the East"></label>
+        <label class="rowline"><span>Name</span><input id="c_name" class="input" placeholder="Akari of the East" value=""></label>
         <label class="rowline"><span>Level</span><input id="c_level" class="input" type="number" min="1" max="100" value="1"></label>
         <label class="rowline"><span>XP</span><input id="c_xp" class="input" type="number" min="0" value="0"></label>
 
@@ -48,7 +44,7 @@
           <div class="kpi">
             <div class="kpi-head">SP</div>
             <div class="kpi-num"><span id="sp_cur">0</span>/<span id="sp_max">10</span></div>
-            <div class="bar sp"><i id="sp_bar"></i></div>
+            <div class="bar sp"><i id="sp_bar" style="width:0%"></i></div>
           </div>
           <div class="kpi">
             <div class="kpi-head">EN</div>
@@ -63,100 +59,483 @@
           <div class="kpi">
             <div class="kpi-head">TX</div>
             <div class="kpi-num"><span id="tx_cur">0</span>/<span id="tx_max">0</span></div>
-            <div class="bar tx"><i id="tx_bar"></i></div>
+            <div class="bar tx"><i id="tx_bar" style="width:0%"></i></div>
           </div>
           <div class="kpi">
             <div class="kpi-head">Enc</div>
             <div class="kpi-num"><span id="enc_cur">0</span>/<span id="enc_max">10</span></div>
-            <div class="bar"><i id="enc_bar"></i></div>
+            <div class="bar"><i id="enc_bar" style="width:0%"></i></div>
           </div>
         </div>
         <div class="hint">Max values are derived. Current values are editable in combat/inventory later.</div>
       </div>
     </div>
 
-    <!-- Stats meta row -->
-    <div class="panel soft counters">
-      <div class="counter-box">
-        <div class="label">Skill Points</div>
-        <div class="num mono"><span id="sp_used">0</span> / <span id="sp_max">40</span> <span class="mini">[cap <span id="skill_cap">3</span>]</span></div>
-      </div>
-      <div class="counter-box">
-        <div class="label">Characteristic Points</div>
-        <div class="num mono"><span id="cp_used">0</span> / <span id="cp_max">22</span> <span class="mini">[cap <span id="char_cap">10</span>]</span></div>
-      </div>
-      <div class="counter-box">
-        <div class="label">Sublimation</div>
-        <div class="num mono"><span id="sub_used">0</span> / <span id="sub_max">0</span></div>
-        <div class="mini">Tier cap: <span id="sub_tier">1</span> (I–IV)</div>
-      </div>
-    </div>
-
-    <!-- Sublimations -->
+    <!-- Tabs -->
     <div class="panel">
-      <div class="row header-row">
-        <div class="title">Sublimations</div>
-        <button id="btnAddSub" class="btn subtle">Add Sublimation</button>
+      <div class="tabs">
+        <button class="tab active" data-tab="stats">Statistics</button>
+        <button class="tab" data-tab="inventory">Inventory</button>
+        <button class="tab" data-tab="abilities">Abilities</button>
+        <button class="tab" data-tab="combat">Combat</button>
+        <button class="tab" data-tab="personal">Personal</button>
       </div>
-      <table class="tbl" id="subTable">
-        <thead>
-          <tr>
-            <th style="width:260px">Type</th>
-            <th>Skill (for Excellence)</th>
-            <th style="width:120px">Tier</th>
-            <th class="right" style="width:70px">Slots</th>
-            <th style="width:80px"></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <div class="hint">Types: Lethality, Excellence (choose a skill), Blessing, Defense, Speed, Devastation, Clarity, Endurance.</div>
-    </div>
 
-    <!-- Characteristics & Skills -->
-    <div class="panel">
-      <div class="title">Characteristics &amp; Skills</div>
-      <div id="charSkillContainer" class="grid-2"></div>
-    </div>
-
-    <!-- Intensities -->
-    <div class="panel">
-      <div class="title">Intensities</div>
-      <table class="tbl" id="intensityTable">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Invested</th>
-            <th>Modifier</th>
-            <th>Base Value</th>
-            <th>ID</th>
-            <th>IV</th>
-            <th class="right">Res/Wk</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <div class="hint">Specialist rule & resistance/weakness grid are computed automatically.</div>
-    </div>
-
-    <!-- Personal -->
-    <div class="panel">
-      <div class="title">Personal</div>
-      <div class="grid-2">
-        <div class="panel soft">
-          <div class="grid-3">
-            <label><span class="label">Height</span><input id="p_height" class="input" placeholder="175 cm"></label>
-            <label><span class="label">Weight</span><input id="p_weight" class="input" placeholder="70 kg"></label>
-            <label><span class="label">Birthday</span><input id="p_bday" class="input" placeholder="TBD"></label>
+      <!-- STATISTICS -->
+      <div class="tabpan active" id="tab-stats">
+        <div class="grid-3 counters">
+          <div class="counter-box">
+            <div class="label">Skill Points</div>
+            <div class="num mono"><span id="sp_used">0</span> / <span id="sp_max">40</span> <span class="mini">[cap <span id="skill_cap">3</span>]</span></div>
+          </div>
+          <div class="counter-box">
+            <div class="label">Characteristic Points</div>
+            <div class="num mono"><span id="cp_used">0</span> / <span id="cp_max">22</span> <span class="mini">[cap <span id="char_cap">10</span>]</span></div>
+          </div>
+          <div class="counter-box">
+            <div class="label">Sublimation</div>
+            <div class="num mono"><span id="sub_used">0</span> / <span id="sub_max">0</span></div>
+            <div class="mini">Tier cap: <span id="sub_tier">1</span> (I–IV)</div>
           </div>
         </div>
+
+        <!-- Sublimations -->
         <div class="panel soft">
-          <label><span class="label">Backstory</span><textarea id="p_backstory" class="input" rows="6" placeholder="Who are they?"></textarea></label>
-          <label style="margin-top:8px"><span class="label">Player Notes</span><textarea id="p_notes" class="input" rows="6" placeholder="Anything else"></textarea></label>
+          <div class="row header-row">
+            <div class="title sm">Sublimations</div>
+            <button id="btnAddSub" class="btn subtle">Add Sublimation</button>
+          </div>
+          <table class="tbl" id="subTable">
+            <thead>
+              <tr>
+                <th style="width:260px">Type</th>
+                <th>Skill (for Excellence)</th>
+                <th style="width:120px">Tier</th>
+                <th class="right" style="width:70px">Slots</th>
+                <th style="width:80px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Start with one row -->
+              <tr>
+                <td>
+                  <select class="input" data-sub-type>
+                    <option value="2">Lethality</option>
+                    <option value="1">Excellence</option>
+                    <option value="3">Blessing</option>
+                    <option value="4">Defense</option>
+                    <option value="5">Speed</option>
+                    <option value="7">Devastation</option>
+                    <option value="8">Clarity</option>
+                    <option value="6">Endurance</option>
+                  </select>
+                </td>
+                <td>
+                  <select class="input" data-sub-skill disabled>
+                    <option value="">—</option>
+                    <!-- all skills enumerated below so no JS building -->
+                    <option value="technicity">Technicity</option>
+                    <option value="dodge">Dodge</option>
+                    <option value="tempo">Tempo</option>
+                    <option value="reactivity">Reactivity</option>
+                    <option value="accuracy">Accuracy</option>
+                    <option value="evasion">Evasion</option>
+                    <option value="stealth">Stealth</option>
+                    <option value="acrobatics">Acrobatics</option>
+                    <option value="brutality">Brutality</option>
+                    <option value="blocking">Blocking</option>
+                    <option value="resistance">Resistance</option>
+                    <option value="athletics">Athletics</option>
+                    <option value="intimidation">Intimidation</option>
+                    <option value="spirit">Spirit</option>
+                    <option value="instinct">Instinct</option>
+                    <option value="absorption">Absorption</option>
+                    <option value="aura">Aura</option>
+                    <option value="incantation">Incantation</option>
+                    <option value="enchantment">Enchantment</option>
+                    <option value="restoration">Restoration</option>
+                    <option value="potential">Potential</option>
+                    <option value="taming">Taming</option>
+                    <option value="charm">Charm</option>
+                    <option value="charisma">Charisma</option>
+                    <option value="deception">Deception</option>
+                    <option value="persuasion">Persuasion</option>
+                    <option value="survival">Survival</option>
+                    <option value="education">Education</option>
+                    <option value="perception">Perception</option>
+                    <option value="psychology">Psychology</option>
+                    <option value="investigation">Investigation</option>
+                    <option value="crafting">Crafting</option>
+                    <option value="soh">Sleight of hand</option>
+                    <option value="alchemy">Alchemy</option>
+                    <option value="medecine">Medicine</option>
+                    <option value="engineering">Engineering</option>
+                  </select>
+                </td>
+                <td><input class="input xs" type="number" min="0" max="4" value="1" data-sub-tier></td>
+                <td class="right mono" data-sub-slots>1</td>
+                <td><button class="btn ghost" data-sub-remove>Remove</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="hint">Types: Lethality, Excellence (choose a skill), Blessing, Defense, Speed, Devastation, Clarity, Endurance.</div>
+        </div>
+
+        <!-- Characteristics & Skills (2 columns) -->
+        <div class="grid-2">
+          <!-- LEFT COLUMN -->
+          <div>
+            <!-- Reflex -->
+            <div class="char-card" data-char="ref" data-invest="reflexp">
+              <div class="char-head">
+                <div class="char-name">Reflex (REF)</div>
+                <div class="char-metrics"><b data-total="ref">4</b> | <b data-milestone="ref">-3</b></div>
+              </div>
+              <div class="char-invest">
+                <div class="muted">Characteristic</div>
+                <input class="input" type="number" min="0" max="16" value="0" data-invest-input="reflexp">
+                <span class="badge mono">Milestone: <b data-milestone="ref">-3</b></span>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Technicity</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="technicity">
+                <div class="skill-base mono" data-base="technicity">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Dodge</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="dodge">
+                <div class="skill-base mono" data-base="dodge">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Tempo</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="tempo">
+                <div class="skill-base mono" data-base="tempo">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Reactivity</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="reactivity">
+                <div class="skill-base mono" data-base="reactivity">0</div>
+              </div>
+            </div>
+
+            <!-- Body -->
+            <div class="char-card" data-char="bod" data-invest="bodyp">
+              <div class="char-head">
+                <div class="char-name">Body (BOD)</div>
+                <div class="char-metrics"><b data-total="bod">4</b> | <b data-milestone="bod">-3</b></div>
+              </div>
+              <div class="char-invest">
+                <div class="muted">Characteristic</div>
+                <input class="input" type="number" min="0" max="16" value="0" data-invest-input="bodyp">
+                <span class="badge mono">Milestone: <b data-milestone="bod">-3</b></span>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Brutality</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="brutality">
+                <div class="skill-base mono" data-base="brutality">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Blocking</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="blocking">
+                <div class="skill-base mono" data-base="blocking">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Resistance</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="resistance">
+                <div class="skill-base mono" data-base="resistance">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Athletics</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="athletics">
+                <div class="skill-base mono" data-base="athletics">0</div>
+              </div>
+            </div>
+
+            <!-- Magic -->
+            <div class="char-card" data-char="mag" data-invest="magicp">
+              <div class="char-head">
+                <div class="char-name">Magic (MAG)</div>
+                <div class="char-metrics"><b data-total="mag">4</b> | <b data-milestone="mag">-3</b></div>
+              </div>
+              <div class="char-invest">
+                <div class="muted">Characteristic</div>
+                <input class="input" type="number" min="0" max="16" value="0" data-invest-input="magicp">
+                <span class="badge mono">Milestone: <b data-milestone="mag">-3</b></span>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Aura</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="aura">
+                <div class="skill-base mono" data-base="aura">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Incantation</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="incantation">
+                <div class="skill-base mono" data-base="incantation">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Enchantment</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="enchantment">
+                <div class="skill-base mono" data-base="enchantment">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Restoration</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="restoration">
+                <div class="skill-base mono" data-base="restoration">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Potential</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="potential">
+                <div class="skill-base mono" data-base="potential">0</div>
+              </div>
+            </div>
+
+            <!-- Presence -->
+            <div class="char-card" data-char="pre" data-invest="presencep">
+              <div class="char-head">
+                <div class="char-name">Presence (PRE)</div>
+                <div class="char-metrics"><b data-total="pre">4</b> | <b data-milestone="pre">-3</b></div>
+              </div>
+              <div class="char-invest">
+                <div class="muted">Characteristic</div>
+                <input class="input" type="number" min="0" max="16" value="0" data-invest-input="presencep">
+                <span class="badge mono">Milestone: <b data-milestone="pre">-3</b></span>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Taming</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="taming">
+                <div class="skill-base mono" data-base="taming">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Charm</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="charm">
+                <div class="skill-base mono" data-base="charm">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Charisma</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="charisma">
+                <div class="skill-base mono" data-base="charisma">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Deception</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="deception">
+                <div class="skill-base mono" data-base="deception">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Persuasion</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="persuasion">
+                <div class="skill-base mono" data-base="persuasion">0</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN -->
+          <div>
+            <!-- Dexterity -->
+            <div class="char-card" data-char="dex" data-invest="dexterityp">
+              <div class="char-head">
+                <div class="char-name">Dexterity (DEX)</div>
+                <div class="char-metrics"><b data-total="dex">4</b> | <b data-milestone="dex">-3</b></div>
+              </div>
+              <div class="char-invest">
+                <div class="muted">Characteristic</div>
+                <input class="input" type="number" min="0" max="16" value="0" data-invest-input="dexterityp">
+                <span class="badge mono">Milestone: <b data-milestone="dex">-3</b></span>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Accuracy</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="accuracy">
+                <div class="skill-base mono" data-base="accuracy">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Evasion</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="evasion">
+                <div class="skill-base mono" data-base="evasion">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Stealth</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="stealth">
+                <div class="skill-base mono" data-base="stealth">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Acrobatics</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="acrobatics">
+                <div class="skill-base mono" data-base="acrobatics">0</div>
+              </div>
+            </div>
+
+            <!-- Willpower -->
+            <div class="char-card" data-char="wil" data-invest="willpowerp">
+              <div class="char-head">
+                <div class="char-name">Willpower (WIL)</div>
+                <div class="char-metrics"><b data-total="wil">4</b> | <b data-milestone="wil">-3</b></div>
+              </div>
+              <div class="char-invest">
+                <div class="muted">Characteristic</div>
+                <input class="input" type="number" min="0" max="16" value="0" data-invest-input="willpowerp">
+                <span class="badge mono">Milestone: <b data-milestone="wil">-3</b></span>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Intimidation</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="intimidation">
+                <div class="skill-base mono" data-base="intimidation">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Spirit</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="spirit">
+                <div class="skill-base mono" data-base="spirit">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Instinct</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="instinct">
+                <div class="skill-base mono" data-base="instinct">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Absorption</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="absorption">
+                <div class="skill-base mono" data-base="absorption">0</div>
+              </div>
+            </div>
+
+            <!-- Wisdom -->
+            <div class="char-card" data-char="wis" data-invest="wisdomp">
+              <div class="char-head">
+                <div class="char-name">Wisdom (WIS)</div>
+                <div class="char-metrics"><b data-total="wis">4</b> | <b data-milestone="wis">-3</b></div>
+              </div>
+              <div class="char-invest">
+                <div class="muted">Characteristic</div>
+                <input class="input" type="number" min="0" max="16" value="0" data-invest-input="wisdomp">
+                <span class="badge mono">Milestone: <b data-milestone="wis">-3</b></span>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Survival</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="survival">
+                <div class="skill-base mono" data-base="survival">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Education</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="education">
+                <div class="skill-base mono" data-base="education">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Perception</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="perception">
+                <div class="skill-base mono" data-base="perception">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Psychology</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="psychology">
+                <div class="skill-base mono" data-base="psychology">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Investigation</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="investigation">
+                <div class="skill-base mono" data-base="investigation">0</div>
+              </div>
+            </div>
+
+            <!-- Tech -->
+            <div class="char-card" data-char="tec" data-invest="techp">
+              <div class="char-head">
+                <div class="char-name">Tech (TEC)</div>
+                <div class="char-metrics"><b data-total="tec">4</b> | <b data-milestone="tec">-3</b></div>
+              </div>
+              <div class="char-invest">
+                <div class="muted">Characteristic</div>
+                <input class="input" type="number" min="0" max="16" value="0" data-invest-input="techp">
+                <span class="badge mono">Milestone: <b data-milestone="tec">-3</b></span>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Crafting</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="crafting">
+                <div class="skill-base mono" data-base="crafting">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Sleight of hand</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="soh">
+                <div class="skill-base mono" data-base="soh">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Alchemy</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="alchemy">
+                <div class="skill-base mono" data-base="alchemy">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Medicine</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="medecine">
+                <div class="skill-base mono" data-base="medecine">0</div>
+              </div>
+              <div class="skill-row">
+                <div class="skill-name">— Engineering</div>
+                <input class="input" type="number" min="0" max="8" value="0" data-skill="engineering">
+                <div class="skill-base mono" data-base="engineering">0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Intensities -->
+        <div class="panel soft" style="margin-top:14px">
+          <div class="title sm">Intensities</div>
+          <table class="tbl" id="intensityTable">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Invested</th>
+                <th>Modifier</th>
+                <th>Base Value</th>
+                <th>ID</th>
+                <th>IV</th>
+                <th class="right">Res/Wk</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-int="Fire"><td>Fire</td><td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="Fire"></td><td class="mono" data-i-mod="Fire">0</td><td class="mono" data-i-base="Fire">0</td><td class="mono" data-i-id="Fire">—</td><td class="mono" data-i-iv="Fire">—</td><td class="mono right" data-i-rw="Fire">0</td></tr>
+              <tr data-int="Water"><td>Water</td><td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="Water"></td><td class="mono" data-i-mod="Water">0</td><td class="mono" data-i-base="Water">0</td><td class="mono" data-i-id="Water">—</td><td class="mono" data-i-iv="Water">—</td><td class="mono right" data-i-rw="Water">0</td></tr>
+              <tr data-int="Earth"><td>Earth</td><td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="Earth"></td><td class="mono" data-i-mod="Earth">0</td><td class="mono" data-i-base="Earth">0</td><td class="mono" data-i-id="Earth">—</td><td class="mono" data-i-iv="Earth">—</td><td class="mono right" data-i-rw="Earth">0</td></tr>
+              <tr data-int="Wind"><td>Wind</td><td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="Wind"></td><td class="mono" data-i-mod="Wind">0</td><td class="mono" data-i-base="Wind">0</td><td class="mono" data-i-id="Wind">—</td><td class="mono" data-i-iv="Wind">—</td><td class="mono right" data-i-rw="Wind">0</td></tr>
+              <tr data-int="Lightning"><td>Lightning</td><td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="Lightning"></td><td class="mono" data-i-mod="Lightning">0</td><td class="mono" data-i-base="Lightning">0</td><td class="mono" data-i-id="Lightning">—</td><td class="mono" data-i-iv="Lightning">—</td><td class="mono right" data-i-rw="Lightning">0</td></tr>
+              <tr data-int="Moon"><td>Moon</td><td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="Moon"></td><td class="mono" data-i-mod="Moon">0</td><td class="mono" data-i-base="Moon">0</td><td class="mono" data-i-id="Moon">—</td><td class="mono" data-i-iv="Moon">—</td><td class="mono right" data-i-rw="Moon">0</td></tr>
+              <tr data-int="Sun"><td>Sun</td><td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="Sun"></td><td class="mono" data-i-mod="Sun">0</td><td class="mono" data-i-base="Sun">0</td><td class="mono" data-i-id="Sun">—</td><td class="mono" data-i-iv="Sun">—</td><td class="mono right" data-i-rw="Sun">0</td></tr>
+              <tr data-int="Ki"><td>Ki</td><td><input class="input" type="number" min="0" max="8" value="0" data-i-invest="Ki"></td><td class="mono" data-i-mod="Ki">0</td><td class="mono" data-i-base="Ki">0</td><td class="mono" data-i-id="Ki">—</td><td class="mono" data-i-iv="Ki">—</td><td class="mono right" data-i-rw="Ki">0</td></tr>
+            </tbody>
+          </table>
+          <div class="hint">Specialist rule & resistance/weakness grid are computed automatically.</div>
+        </div>
+      </div>
+
+      <!-- INVENTORY -->
+      <div class="tabpan" id="tab-inventory">
+        <p class="muted">Inventory UI will go here.</p>
+      </div>
+
+      <!-- ABILITIES -->
+      <div class="tabpan" id="tab-abilities">
+        <p class="muted">Talents, archetypes, passives and actives will go here.</p>
+      </div>
+
+      <!-- COMBAT -->
+      <div class="tabpan" id="tab-combat">
+        <p class="muted">Combat helpers, current resources, conditions, actives…</p>
+      </div>
+
+      <!-- PERSONAL -->
+      <div class="tabpan" id="tab-personal">
+        <div class="grid-2">
+          <div class="panel soft">
+            <div class="grid-3">
+              <label><span class="label">Height</span><input id="p_height" class="input" placeholder="175 cm"></label>
+              <label><span class="label">Weight</span><input id="p_weight" class="input" placeholder="70 kg"></label>
+              <label><span class="label">Birthday</span><input id="p_bday" class="input" placeholder="TBD"></label>
+            </div>
+          </div>
+          <div class="panel soft">
+            <label><span class="label">Backstory</span><textarea id="p_backstory" class="input" rows="6" placeholder="Who are they?"></textarea></label>
+            <label style="margin-top:8px"><span class="label">Player Notes</span><textarea id="p_notes" class="input" rows="6" placeholder="Anything else"></textarea></label>
+          </div>
         </div>
       </div>
     </div>
-
   </div>
 
   <script src="/static/character.js" defer></script>
