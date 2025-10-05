@@ -2945,3 +2945,125 @@ def admin_list_characters(request: Request, owner: str | None = Query(default=No
     items = list(col.find(q, {"_id": 0}).skip((page-1)*limit).limit(limit))
     items.sort(key=lambda d: (d.get("owner","").lower(), d.get("name","").lower()))
     return {"status":"success","characters": items, "page": page, "limit": limit, "total": total}
+
+CHAR_PUBLIC_FIELDS = {
+    # core identity
+    "name", "avatar_url", "level", "xp",
+    # resources (current values, max are derived)
+    "hp", "sp", "en", "fo", "tx", "enc",
+    # points
+    "char_points", "skill_points",
+    # characteristics / skills / intensities / sublimations
+    "characteristics", "skills", "intensities", "sublimations",
+    # personal tab
+    "height", "weight", "birthday", "backstory", "notes",
+}
+
+def _now():
+    return datetime.datetime.utcnow().isoformat() + "Z"
+
+def _sanitize_character(payload: dict) -> dict:
+    """Keep only allowed fields and force types where sensible."""
+    if not isinstance(payload, dict):
+        return {}
+    clean = {k: payload[k] for k in payload.keys() if k in CHAR_PUBLIC_FIELDS}
+
+    # numeric fallbacks
+    for k in ("level", "xp"):
+        try: clean[k] = int(clean.get(k, 1 if k=="level" else 0))
+        except Exception: clean[k] = 1 if k=="level" else 0
+
+    # nested structures default
+    clean["characteristics"] = dict(clean.get("characteristics") or {})
+    clean["skills"]          = dict(clean.get("skills") or {})
+    clean["intensities"]     = dict(clean.get("intensities") or {})
+    clean["sublimations"]    = list(clean.get("sublimations") or [])
+
+    # current resource values (max are derived on client for now)
+    for k in ("hp","sp","en","fo","tx","enc"):
+        try: clean[k] = int(clean.get(k, 0))
+        except Exception: clean[k] = 0
+
+    # points buckets if you persist them
+    for k in ("char_points","skill_points"):
+        try: clean[k] = int(clean.get(k, 0))
+        except Exception: clean[k] = 0
+
+    return clean
+
+def _character_can_access(doc, username, role):
+    return doc and (doc.get("owner") == username or role in ("admin","moderator"))
+
+@app.post("/characters")
+async def create_character(request: Request):
+    # any logged-in user can create their own character
+    user, _role = require_user_doc(request)
+    body = await request.json()
+    data = _sanitize_character(body or {})
+    data["id"] = next_id_str("characters", padding=4)
+    data["owner"] = user["username"]
+    data["created_at"] = _now()
+    data["updated_at"] = _now()
+
+    # if you have a compute_derived() call, do it here and store under e.g. data["derived"].
+    # data["derived"] = compute_derived(data)
+
+    get_col("characters").insert_one(dict(data))
+    return {"status":"success","character": {k:v for k,v in data.items() if k != "_id"}}
+
+@app.get("/characters/{cid}")
+def get_character(cid: str, request: Request):
+    user, role = require_user_doc(request)
+    doc = get_col("characters").find_one({"id": cid}, {"_id": 0})
+    if not _character_can_access(doc, user["username"], role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return {"status":"success","character": doc}
+
+@app.put("/characters/{cid}")
+async def update_character(cid: str, request: Request):
+    user, role = require_user_doc(request)
+    col = get_col("characters")
+    old = col.find_one({"id": cid})
+    if not _character_can_access(old, user["username"], role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    body = await request.json()
+    new_doc = _sanitize_character(body or {})
+    new_doc["updated_at"] = _now()
+
+    # Optionally recompute derived stats here
+    # new_doc["derived"] = compute_derived(new_doc)
+
+    r = col.update_one({"id": cid}, {"$set": new_doc})
+    if r.matched_count == 0:
+        return JSONResponse({"status":"error","message":"Not found"}, status_code=404)
+    fresh = col.find_one({"id": cid}, {"_id":0})
+    return {"status":"success","character": fresh}
+
+@app.patch("/characters/{cid}")
+async def patch_character(cid: str, request: Request):
+    user, role = require_user_doc(request)
+    col = get_col("characters")
+    old = col.find_one({"id": cid})
+    if not _character_can_access(old, user["username"], role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    body = await request.json()
+    delta = _sanitize_character(body or {})
+    delta["updated_at"] = _now()
+
+    # Optionally recompute derived from (old ⊕ delta)
+    # merged = dict(old); merged.update(delta)
+    # delta["derived"] = compute_derived(merged)
+
+    col.update_one({"id": cid}, {"$set": delta})
+    fresh = col.find_one({"id": cid}, {"_id":0})
+    return {"status":"success","character": fresh}
+
+@app.delete("/characters/{cid}")
+def delete_character(cid: str, request: Request):
+    user, role = require_user_doc(request)
+    doc = get_col("characters").find_one({"id": cid})
+    if not _character_can_access(doc, user["username"], role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    get_col("characters").delete_one({"id": cid})
+    return {"status":"success","deleted": cid}
