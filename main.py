@@ -4,11 +4,12 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, Request, HTTPException, Query, Body
+from fastapi import FastAPI, Request, HTTPException, Query, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import DuplicateKeyError
+from typing import Any
 
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
 
@@ -2991,79 +2992,100 @@ def _sanitize_character(payload: dict) -> dict:
 
     return clean
 
-def _character_can_access(doc, username, role):
-    return doc and (doc.get("owner") == username or role in ("admin","moderator"))
+def _require_user(request: Request):
+    token = get_auth_token(request)
+    if not token or token not in SESSIONS:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return SESSIONS[token]
+
+
+@app.get("/characters")
+def list_my_characters(request: Request, page: int = 1, limit: int = 50):
+    username, role = _require_user(request)
+    col = get_col("characters")
+    q = {"owner": username}
+    total = col.count_documents(q)
+    items = list(col.find(q, {"_id": 0}).skip((page-1)*limit).limit(limit))
+    items.sort(key=lambda c: (c.get("name","").lower(), c["id"]))
+    return {"status":"success","items":items,"page":page,"limit":limit,"total":total}
+
+@app.get("/admin/characters")
+def admin_list_characters(request: Request, owner: str | None = None, name: str | None = None,
+                          page: int = 1, limit: int = 100):
+    _, role = _require_user(request)
+    if role not in ("admin","moderator"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    col = get_col("characters")
+    q: dict[str, Any] = {}
+    if owner:
+        q["owner"] = {"$regex": owner, "$options": "i"}
+    if name:
+        q["name"] = {"$regex": name, "$options":"i"}
+    total = col.count_documents(q)
+    items = list(col.find(q, {"_id":0}).skip((page-1)*limit).limit(limit))
+    items.sort(key=lambda c: (c.get("owner","").lower(), c.get("name","").lower(), c["id"]))
+    return {"status":"success","items":items,"page":page,"limit":limit,"total":total}
+
+@app.get("/characters/{char_id}")
+def get_character(char_id: str, request: Request):
+    username, role = _require_user(request)
+    doc = get_col("characters").find_one({"id": char_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Character not found")
+    if role == "user" and doc.get("owner") != username:
+        raise HTTPException(403, "Forbidden")
+    return {"status":"success","character":doc}
 
 @app.post("/characters")
 async def create_character(request: Request):
-    # any logged-in user can create their own character
-    user, _role = require_user_doc(request)
+    username, _ = _require_user(request)
     body = await request.json()
-    data = _sanitize_character(body or {})
-    data["id"] = next_id_str("characters", padding=4)
-    data["owner"] = user["username"]
-    data["created_at"] = _now()
-    data["updated_at"] = _now()
-
-    # if you have a compute_derived() call, do it here and store under e.g. data["derived"].
-    # data["derived"] = compute_derived(data)
-
-    get_col("characters").insert_one(dict(data))
-    return {"status":"success","character": {k:v for k,v in data.items() if k != "_id"}}
-
-@app.get("/characters/{cid}")
-def get_character(cid: str, request: Request):
-    user, role = require_user_doc(request)
-    doc = get_col("characters").find_one({"id": cid}, {"_id": 0})
-    if not _character_can_access(doc, user["username"], role):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return {"status":"success","character": doc}
-
-@app.put("/characters/{cid}")
-async def update_character(cid: str, request: Request):
-    user, role = require_user_doc(request)
+    name   = (body.get("name") or "Unnamed").strip()
+    avatar = (body.get("avatar") or "").strip()
+    payload = body.get("payload") or {}
     col = get_col("characters")
-    old = col.find_one({"id": cid})
-    if not _character_can_access(old, user["username"], role):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    cid = next_id_str("characters", padding=6)
+    doc = {
+        "id": cid,
+        "owner": username,
+        "name": name,
+        "avatar": avatar,
+        "payload": payload,
+        "created_at": datetime.datetime.utcnow().isoformat()+"Z",
+        "updated_at": datetime.datetime.utcnow().isoformat()+"Z",
+    }
+    col.insert_one(dict(doc))
+    return {"status":"success","id":cid,"character":doc}
 
-    body = await request.json()
-    new_doc = _sanitize_character(body or {})
-    new_doc["updated_at"] = _now()
-
-    # Optionally recompute derived stats here
-    # new_doc["derived"] = compute_derived(new_doc)
-
-    r = col.update_one({"id": cid}, {"$set": new_doc})
-    if r.matched_count == 0:
-        return JSONResponse({"status":"error","message":"Not found"}, status_code=404)
-    fresh = col.find_one({"id": cid}, {"_id":0})
-    return {"status":"success","character": fresh}
-
-@app.patch("/characters/{cid}")
-async def patch_character(cid: str, request: Request):
-    user, role = require_user_doc(request)
+@app.put("/characters/{char_id}")
+async def update_character(char_id: str, request: Request):
+    username, role = _require_user(request)
     col = get_col("characters")
-    old = col.find_one({"id": cid})
-    if not _character_can_access(old, user["username"], role):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    before = col.find_one({"id": char_id})
+    if not before:
+        raise HTTPException(404, "Character not found")
+    if role == "user" and before.get("owner") != username:
+        raise HTTPException(403, "Forbidden")
+
     body = await request.json()
-    delta = _sanitize_character(body or {})
-    delta["updated_at"] = _now()
+    updates = {
+        "name": (body.get("name") or before.get("name","Unnamed")).strip(),
+        "avatar": (body.get("avatar") or before.get("avatar","")).strip(),
+        "payload": body.get("payload", before.get("payload", {})),
+        "updated_at": datetime.datetime.utcnow().isoformat()+"Z",
+    }
+    col.update_one({"id": char_id}, {"$set": updates})
+    after = col.find_one({"id": char_id}, {"_id":0})
+    return {"status":"success","character":after}
 
-    # Optionally recompute derived from (old ⊕ delta)
-    # merged = dict(old); merged.update(delta)
-    # delta["derived"] = compute_derived(merged)
-
-    col.update_one({"id": cid}, {"$set": delta})
-    fresh = col.find_one({"id": cid}, {"_id":0})
-    return {"status":"success","character": fresh}
-
-@app.delete("/characters/{cid}")
-def delete_character(cid: str, request: Request):
-    user, role = require_user_doc(request)
-    doc = get_col("characters").find_one({"id": cid})
-    if not _character_can_access(doc, user["username"], role):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    get_col("characters").delete_one({"id": cid})
-    return {"status":"success","deleted": cid}
+@app.delete("/characters/{char_id}")
+def delete_character(char_id: str, request: Request):
+    username, role = _require_user(request)
+    col = get_col("characters")
+    doc = col.find_one({"id": char_id})
+    if not doc:
+        raise HTTPException(404, "Character not found")
+    if role == "user" and doc.get("owner") != username:
+        raise HTTPException(403, "Forbidden")
+    col.delete_one({"id": char_id})
+    return {"status":"success","deleted":char_id}
