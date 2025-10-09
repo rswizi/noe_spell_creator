@@ -20,7 +20,6 @@ from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplic
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER
 from server.src.modules.allowed_pages import ALLOWED_PAGES
-from server.src.modules.character_helper import CHAR_COLLECTION, DEFAULT_CHARACTER, _effective_level, CharacterInput, SKILL_LINKS, compute_character, _validate_caps, _validate_sublimations, _sublimation_bonuses, _sum_sublimation_slots
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
