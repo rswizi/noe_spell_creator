@@ -2702,7 +2702,7 @@ def list_users_for_assignment(request: Request):
 
 # ---------- Characters (minimal v1) ----------
 def _can_view(doc, username, role):
-    if role == "admin": 
+    if role == "admin":
         return True
     return doc.get("owner") == username
 
@@ -2711,7 +2711,6 @@ def list_my_characters(request: Request):
     username, role = require_auth(request, roles=["user","moderator","admin"])
     q = {"owner": username} if role != "admin" else {"owner": {"$exists": True}}
     chars = list(get_col("characters").find(q, {"_id":0}))
-    # For admin view, we still return all here; client page restricts access.
     return {"status": "success", "characters": chars}
 
 @app.get("/admin/characters")
@@ -2726,54 +2725,54 @@ async def create_character(request: Request):
     try:
         body = await request.json()
     except Exception:
-        body = {{}}
+        body = {}
     name = (body.get("name") or "New Character").strip()
     cid = next_id_str("characters", padding=4)
-    doc = {{
+    doc = {
         "id": cid,
         "owner": username,
         "name": name,
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
-    }}
+    }
     get_col("characters").insert_one(dict(doc))
-    return {{"status":"success","id":cid,"character":doc}}
+    return {"status":"success","id":cid,"character":doc}
 
 @app.get("/characters/{cid}")
 def get_character(cid: str, request: Request):
     username, role = require_auth(request, roles=["user","moderator","admin"])
-    doc = get_col("characters").find_one({{"id": cid}}, {{"_id":0}})
-    if not doc: 
+    doc = get_col("characters").find_one({"id": cid}, {"_id":0})
+    if not doc:
         raise HTTPException(404, "Character not found")
-    if not _can_view(doc, username, role): 
+    if not _can_view(doc, username, role):
         raise HTTPException(403, "Forbidden")
-    return {{"status":"success","character":doc}}
+    return {"status":"success","character":doc}
 
 @app.put("/characters/{cid}")
 async def update_character(cid: str, request: Request):
     username, role = require_auth(request, roles=["user","moderator","admin"])
-    before = get_col("characters").find_one({{"id": cid}})
+    before = get_col("characters").find_one({"id": cid})
     if not before:
-        return JSONResponse({{"status":"error","message":"Character not found"}}, status_code=404)
+        return JSONResponse({"status":"error","message":"Character not found"}, status_code=404)
     if role != "admin" and before.get("owner") != username:
-        return JSONResponse({{"status":"error","message":"Forbidden"}}, status_code=403)
+        return JSONResponse({"status":"error","message":"Forbidden"}, status_code=403)
     try:
         body = await request.json()
     except Exception:
-        return JSONResponse({{"status":"error","message":"Invalid JSON"}}, status_code=400)
+        return JSONResponse({"status":"error","message":"Invalid JSON"}, status_code=400)
     name = (body.get("name") or before.get("name","")).strip()
-    updates = {{"name": name, "updated_at": datetime.datetime.utcnow().isoformat() + "Z"}}
-    get_col("characters").update_one({{"id": cid}}, {{"$set": updates}})
-    after = get_col("characters").find_one({{"id": cid}}, {{"_id":0}})
-    return {{"status":"success","character":after}}
+    updates = {"name": name, "updated_at": datetime.datetime.utcnow().isoformat() + "Z"}
+    get_col("characters").update_one({"id": cid}, {"$set": updates})
+    after = get_col("characters").find_one({"id": cid}, {"_id":0})
+    return {"status":"success","character":after}
 
 @app.delete("/characters/{cid}")
 def delete_character(cid: str, request: Request):
     username, role = require_auth(request, roles=["user","moderator","admin"])
-    doc = get_col("characters").find_one({{"id": cid}})
+    doc = get_col("characters").find_one({"id": cid})
     if not doc:
-        return {{"status":"error","message":"Character not found"}}
+        return {"status":"error","message":"Character not found"}
     if role != "admin" and doc.get("owner") != username:
-        return {{"status":"error","message":"Forbidden"}}
-    get_col("characters").delete_one({{"id": cid}})
-    return {{"status":"success","deleted": cid}}
+        return {"status":"error","message":"Forbidden"}
+    get_col("characters").delete_one({"id": cid})
+    return {"status":"success","deleted": cid}
