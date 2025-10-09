@@ -22,6 +22,7 @@
 </head>
 <body>
   <div class="topbar">
+    <span id="login-chip" class="muted" style="display:none;margin-left:auto;"></span>
     <h1>All Characters</h1>
     <a class="btn" href="characters.html">My Characters</a>
   </div>
@@ -33,19 +34,45 @@
 
   <div id="list" class="grid"></div>
 
-<script>
-const api = async (p, opt={}) => {
-  const r = await fetch(p, {credentials:'include', ...opt});
-  const ct = r.headers.get('content-type') || '';
-  if (!ct.includes('application/json')) {
-    const text = await r.text();
-    throw new Error(`HTTP ${r.status}: ${text.slice(0,180)}`);
-  }
-  const data = await r.json();
-  if (!r.ok || data.status === 'error') throw new Error(data.message || `HTTP ${r.status}`);
-  return data;
-};
 
+<script>
+function authHeaders() {
+  const tok = localStorage.getItem('auth_token');
+  return tok ? { 'Authorization': 'Bearer ' + tok } : {};
+}
+async function api(path, opt={}) {
+  const headers = Object.assign({}, opt.headers || {}, authHeaders());
+  const resp = await fetch(path, { credentials: 'include', ...opt, headers });
+  const ct = resp.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    const t = await resp.text();
+    throw new Error(`HTTP ${resp.status}: ${t.slice(0,180)}`);
+  }
+  const data = await resp.json();
+  if (data.status === 'error') throw new Error(data.message || 'Request failed');
+  return data;
+}
+async function ensureLoginBadge() {
+  try {
+    const me = await api('/auth/me');
+    if (me.status === 'success') {
+      const chip = document.getElementById('login-chip');
+      if (chip) { chip.textContent = me.username + ' (' + me.role + ')'; chip.style.display=''; }
+      const adminLink = document.getElementById('admin-link');
+      if (adminLink && me.role === 'admin') adminLink.style.display = '';
+      return true;
+    }
+  } catch (e) {
+    const chip = document.getElementById('login-chip');
+    if (chip) { chip.textContent = 'Not logged in'; chip.style.display=''; }
+    return false;
+  }
+}
+ensureLoginBadge();
+</script>
+
+<script>
+/* replaced by auth-aware api() */
 function el(tag, attrs={}, ...children) {
   const x = document.createElement(tag);
   for (const [k,v] of Object.entries(attrs)) {
@@ -102,6 +129,7 @@ document.getElementById('new-btn').addEventListener('click', createNew);
 document.getElementById('filter').addEventListener('input', render);
 
 loadAll();
+ensureLoginBadge();
 </script>
 </body>
 </html>
