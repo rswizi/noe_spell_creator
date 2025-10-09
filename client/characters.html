@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NoE — My Characters</title>
+  
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+  .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
+  .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card { border:1px solid #333; border-radius:16px; padding:14px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .muted { opacity:.8; font-size:.9rem; }
+  input, button, a.btn { padding:8px 12px; border-radius:10px; border:1px solid #444; background:#0d0d0d; color:#eaeaea; text-decoration:none; }
+  button.primary, a.btn.primary { background:#1f1f1f; border-color:#555; }
+  .right { margin-left:auto; }
+  .danger { color:#ff7575; }
+</style>
+
+</head>
+<body>
+  <div class="topbar">
+    <h1>My Characters</h1>
+    <a class="btn" href="portal.html">Portal</a>
+    <a class="btn right" id="admin-link" href="admin_characters.html" style="display:none">All Characters (Admin)</a>
+  </div>
+
+  <div class="row" style="margin-bottom:12px;">
+    <button id="new-btn" class="primary">+ New Character</button>
+    <span class="muted">Click a card to edit.</span>
+  </div>
+
+  <div id="list" class="grid"></div>
+
+<script>
+const api = (p, opt={}) => fetch(p, { credentials: 'include', ...opt }).then(r => r.json());
+let ROLE = 'user';
+
+async function checkMe() {
+  try {
+    const me = await api('/auth/me');
+    if (me.status === 'success') {
+      ROLE = me.role || 'user';
+      if (ROLE === 'admin') document.getElementById('admin-link').style.display = '';
+    }
+  } catch(e){ console.warn(e); }
+}
+
+function el(tag, attrs={}, ...children) {
+  const x = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)) {
+    if (k === 'class') x.className = v;
+    else if (k === 'onclick') x.addEventListener('click', v);
+    else x.setAttribute(k, v);
+  }
+  for (const c of children) x.append(c);
+  return x;
+}
+
+async function loadList() {
+  const data = await api('/characters');
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  for (const c of (data.characters || [])) {
+    const card = el('div', {class:'card', onclick: () => location.href = 'character_edit.html?id=' + encodeURIComponent(c.id)},
+      el('div', {class:'row'}, el('strong', {}, c.name || '(unnamed)')),
+      el('div', {class:'muted'}, 'ID: ' + c.id)
+    );
+    list.append(card);
+  }
+}
+
+async function createNew() {
+  const res = await api('/characters', {
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name: 'New Character' })
+  });
+  if (res.status === 'success') location.href = 'character_edit.html?id=' + encodeURIComponent(res.id);
+  else alert(res.message || 'Failed to create');
+}
+
+document.getElementById('new-btn').addEventListener('click', createNew);
+
+checkMe().then(loadList);
+</script>
+</body>
+</html>

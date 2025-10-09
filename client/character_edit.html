@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NoE — Edit Character</title>
+  
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+  .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
+  .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card { border:1px solid #333; border-radius:16px; padding:14px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .muted { opacity:.8; font-size:.9rem; }
+  input, button, a.btn { padding:8px 12px; border-radius:10px; border:1px solid #444; background:#0d0d0d; color:#eaeaea; text-decoration:none; }
+  button.primary, a.btn.primary { background:#1f1f1f; border-color:#555; }
+  .right { margin-left:auto; }
+  .danger { color:#ff7575; }
+</style>
+
+</head>
+<body>
+  <div class="topbar">
+    <h1 id="title">Edit Character</h1>
+    <a class="btn" href="characters.html">Back to My Characters</a>
+    <a class="btn" href="admin_characters.html" id="admin-link" style="display:none">All Characters</a>
+  </div>
+
+  <div class="card" style="max-width:720px;">
+    <label for="name">Name</label>
+    <input id="name" placeholder="Enter a name..." />
+    <div class="muted" id="status">Loaded.</div>
+  </div>
+
+<script>
+const api = (p, opt={}) => fetch(p, { credentials: 'include', ...opt }).then(r => r.json());
+const params = new URLSearchParams(location.search);
+const CID = params.get('id');
+
+let ROLE = 'user';
+let dirtyTimer = null;
+
+async function checkMe() {
+  try {
+    const me = await api('/auth/me');
+    if (me.status === 'success') {
+      ROLE = me.role || 'user';
+      if (ROLE === 'admin') document.getElementById('admin-link').style.display = '';
+    }
+  } catch(_){}
+}
+
+async function load() {
+  if (!CID) { document.getElementById('status').textContent = 'Missing id'; return; }
+  const res = await api('/characters/' + encodeURIComponent(CID));
+  if (res.status !== 'success') { document.getElementById('status').textContent = res.message || 'Failed to load.'; return; }
+  document.getElementById('title').textContent = 'Edit: ' + (res.character.name || '(unnamed)');
+  const name = document.getElementById('name');
+  name.value = res.character.name || '';
+  name.addEventListener('input', onChange);
+}
+
+function onChange(e) {
+  if (dirtyTimer) clearTimeout(dirtyTimer);
+  dirtyTimer = setTimeout(saveNow, 300);
+}
+
+async function saveNow() {
+  const name = document.getElementById('name').value;
+  document.getElementById('status').textContent = 'Saving...';
+  const res = await api('/characters/' + encodeURIComponent(CID), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  if (res.status === 'success') {
+    document.getElementById('status').textContent = 'Saved at ' + new Date().toLocaleTimeString();
+    document.getElementById('title').textContent = 'Edit: ' + (res.character.name || '(unnamed)');
+  } else {
+    document.getElementById('status').textContent = res.message || 'Save failed';
+  }
+}
+
+checkMe().then(load);
+</script>
+</body>
+</html>

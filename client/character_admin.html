@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NoE — All Characters (Admin)</title>
+  
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+  .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
+  .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card { border:1px solid #333; border-radius:16px; padding:14px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .muted { opacity:.8; font-size:.9rem; }
+  input, button, a.btn { padding:8px 12px; border-radius:10px; border:1px solid #444; background:#0d0d0d; color:#eaeaea; text-decoration:none; }
+  button.primary, a.btn.primary { background:#1f1f1f; border-color:#555; }
+  .right { margin-left:auto; }
+  .danger { color:#ff7575; }
+</style>
+
+</head>
+<body>
+  <div class="topbar">
+    <h1>All Characters</h1>
+    <a class="btn" href="characters.html">My Characters</a>
+  </div>
+
+  <div class="row" style="margin-bottom:12px;">
+    <button id="new-btn" class="primary">+ New Character</button>
+    <input id="filter" placeholder="Filter by owner or name..." style="min-width:280px" />
+  </div>
+
+  <div id="list" class="grid"></div>
+
+<script>
+const api = (p, opt={}) => fetch(p, { credentials: 'include', ...opt }).then(r => r.json());
+function el(tag, attrs={}, ...children) {
+  const x = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)) {
+    if (k === 'class') x.className = v;
+    else if (k === 'onclick') x.addEventListener('click', v);
+    else x.setAttribute(k, v);
+  }
+  for (const c of children) x.append(c);
+  return x;
+}
+
+let RAW = [];
+
+async function loadAll() {
+  const me = await api('/auth/me');
+  if (me.status !== 'success' || me.role !== 'admin') {
+    document.body.innerHTML = '<p class="danger">Admin access required.</p>';
+    return;
+  }
+  const data = await api('/admin/characters');
+  RAW = data.characters || [];
+  render();
+}
+
+function render() {
+  const q = (document.getElementById('filter').value || '').toLowerCase();
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  for (const c of RAW) {
+    if (q && !((c.name||'').toLowerCase().includes(q) || (c.owner||'').toLowerCase().includes(q))) continue;
+    const card = el('div', {class:'card'}, 
+      el('div', {class:'row'}, el('strong', {}, c.name || '(unnamed)')),
+      el('div', {class:'muted'}, 'ID: ' + c.id),
+      el('div', {class:'muted'}, 'Owner: ' + (c.owner || '—')),
+      el('div', {class:'row'}, 
+        el('button', {onclick: () => location.href = 'character_edit.html?id=' + encodeURIComponent(c.id)}, 'Edit')
+      )
+    );
+    list.append(card);
+  }
+}
+
+async function createNew() {
+  const res = await api('/characters', {
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name: 'New Character' })
+  });
+  if (res.status === 'success') location.href = 'character_edit.html?id=' + encodeURIComponent(res.id);
+  else alert(res.message || 'Failed to create');
+}
+
+document.getElementById('new-btn').addEventListener('click', createNew);
+document.getElementById('filter').addEventListener('input', render);
+
+loadAll();
+</script>
+</body>
+</html>

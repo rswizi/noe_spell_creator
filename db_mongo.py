@@ -48,7 +48,7 @@ def ensure_indexes() -> None:
     db.inventories.create_index("owner")
     db.characters.create_index("id", unique=True)
     db.characters.create_index("owner")
-    db.characters.create_index("name")
+    db.characters.create_index("name_key")
     db.spells.create_index(
         "sig_v1",
         unique=True,
