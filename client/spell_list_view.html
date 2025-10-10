@@ -233,6 +233,8 @@
     <div class="modal-card" style="max-width:1000px;">
       <header>
         <div class="modal-title">Add Spells</div>
+        <a class="btn btn-secondary" href="home.html" target="_blank" rel="noopener">Create Spell</a>
+        <button class="btn btn-secondary" id="reload-spells">Reload Spells</button>
         <button class="modal-close" id="addspells-close" aria-label="Close">✕</button>
       </header>
       <div class="row" style="gap:10px; margin-bottom:8px;">
@@ -262,6 +264,7 @@
           </thead>
           <tbody id="as-results"><tr><td colspan="5" class="empty">Search to begin.</td></tr></tbody>
         </table>
+        <div id="reload-summary" class="hint" style="margin-top:8px;"></div>
       </div>
       <div id="as-status" class="hint" style="margin-top:8px;"></div>
       <div class="modal-actions" style="margin-top:12px; display:flex; justify-content:flex-end;">
@@ -896,6 +899,51 @@ function computeAll(){
     return sum;
   }
 
+function msBonusForLinkedRules(school, variantUsedNatures) {
+  const list = loadBonuses() || [];
+  const linked = (school.linked_intensities || []).map(lc);
+  const usedSet = new Set((variantUsedNatures || []).map(lc)); // for variant rows
+  // how many natures are actually used in this row (1-nature option gate)
+  const usedCount = (variantUsedNatures && variantUsedNatures.length) ? variantUsedNatures.length
+                    : Math.min(2, linked.length); // for base school rows we’re using either 1+2 or 2
+
+  let sum = 0;
+  for (const b of list){
+    if (b.type !== "ms") continue;
+
+    // Gate by “apply only to 1 nature”
+    if (b.onlySingleNature && usedCount !== 1) continue;
+
+    const t = (b.targets || []).map(lc);
+
+    // Linked to elements (base + optional variants)
+    if (b.on === "linked_any" || b.on === "linked_all" || b.on === "linked_any_with_variants" || b.on === "linked_all_with_variants") {
+      const baseHitAny = t.some(x => linked.includes(x));
+      const baseHitAll = t.every(x => linked.includes(x));
+      const wantAll    = (b.on === "linked_all" || b.on === "linked_all_with_variants");
+      let hit = wantAll ? baseHitAll : baseHitAny;
+
+      // If “with_variants” is chosen, also consider the chosen variant natures
+      const includeVariants = (b.on === "linked_any_with_variants" || b.on === "linked_all_with_variants");
+      if (includeVariants && usedSet.size){
+        const usedHitAny = t.some(x => usedSet.has(x));
+        const usedHitAll = t.every(x => usedSet.has(x));
+        hit = wantAll ? (baseHitAll || usedHitAll) : (baseHitAny || usedHitAny);
+      }
+
+      if (hit) sum += +b.value || 0;
+      continue;
+    }
+
+    // Legacy “natures” = apply once if ALL chosen natures are used in this row
+    if (b.on === "natures"){
+      const usedHitAll = t.length && t.every(x => usedSet.has(x));
+      if (usedHitAll) sum += +b.value || 0;
+    }
+  }
+  return sum;
+}
+
   function msBonusForUsedNatures(usedNatures){
     const list = loadBonuses() || [];
     const usedSet = new Set((usedNatures||[]).map(lc));
@@ -921,7 +969,7 @@ function computeAll(){
   for (const sch of schools){
     if (sch.upgrade) continue;
     const b = bestMSForSchool(iv, sch, {forceTwo: isComplexNeedsTwo(sch)});
-    const extra = msBonusForSchoolId(sch.id) + msBonusForUsedNatures(b.pickNames);
+    const extra = msBonusForSchoolId(sch.id) + msBonusForUsedNatures(b.pickNames) + msBonusForLinkedRules(sch, b.pickNames);
     const ms = b.ms + extra;
     const cat = mapCategory(ms);
     out.push({ school: sch, ms, cat, breakdown: b, bonus: extra });
@@ -932,7 +980,7 @@ function computeAll(){
     const sch = schools.find(s => lc(s.id||"") === lc(v.schoolId||""));
     if (!sch || sch.upgrade) continue;
     const b = msWithChosenNatures(iv, sch, v.natures||[]);
-    const extra = msBonusForSchoolId(sch.id) + msBonusForUsedNatures(b.chosen);
+    const extra = msBonusForSchoolId(sch.id) + msBonusForUsedNatures(b.chosen) + msBonusForLinkedRules(sch, b.chosen);
     const ms = b.ms + extra;
     const cat = mapCategory(ms);
     out.push({ school: sch, ms, cat, breakdown: b, variant: {name:v.name, natures:v.natures}, bonus: extra });
@@ -1101,6 +1149,48 @@ async function loadMySpells(){
     });
   });
 
+  async function reloadSpellsAndSummarize(){
+  const before = Array.isArray(mySpells) ? JSON.parse(JSON.stringify(mySpells)) : [];
+  const beforeById = Object.fromEntries(before.map(s=>[String(s.id), s]));
+  const summary = { changed:0, name:0, category:0, schools:0 };
+
+  // re-fetch the list spells from server
+  mySpells = await fetchListSpells();
+
+  // diff
+  for (const sp of mySpells){
+    const old = beforeById[String(sp.id)];
+    if (!old) continue;
+    let changed = false;
+
+    if ((old.name||"") !== (sp.name||"")) { summary.name++; changed = true; }
+    if ((old.category||"") !== (sp.category||"")) { summary.category++; changed = true; }
+
+    const oldSch = (old.schools||[]).map(s=>s.name||s.id).sort().join(",");
+    const newSch = (sp.schools||[]).map(s=>s.name||s.id).sort().join(",");
+    if (oldSch !== newSch) { summary.schools++; changed = true; }
+
+    if (changed) summary.changed++;
+  }
+
+  // re-render the table and counts
+  await loadMySpells();
+
+  // print a short summary
+  const el = document.getElementById("reload-summary");
+  const parts = [];
+  if (summary.changed===0) parts.push("No differences detected.");
+  else {
+    parts.push(`${summary.changed} spells changed`);
+    if (summary.name) parts.push(`${summary.name} name`);
+    if (summary.category) parts.push(`${summary.category} category`);
+    if (summary.schools) parts.push(`${summary.schools} schools`);
+  }
+  el.textContent = `Reload complete — ${parts.join(", ")}.`;
+}
+
+document.getElementById("reload-spells").addEventListener("click", reloadSpellsAndSummarize);
+
   // Bind edit meta
   tbody.querySelectorAll("[data-meta]").forEach(btn=>{
     btn.addEventListener("click", ()=> openMetaEditor(btn.getAttribute("data-meta")));
@@ -1250,48 +1340,37 @@ const natureOptions = ['fire','water','wind','earth','sun','moon','lightning','k
   .join(" ");
 
 bonEditor.innerHTML = `
-  <div class="section">
-    <div class="row" style="margin-bottom:8px;">
-      <div style="flex:1;">
-        <label class="k">Name</label>
-        <input id="be-name" type="text" placeholder="e.g. Fire Focus">
-      </div>
-      <div>
-        <label class="k">Type</label>
-        <select id="be-type">
-          <option value="ms" selected>MS (additive)</option>
-        </select>
-      </div>
-      <div>
-        <label class="k">Value</label>
-        <input id="be-value" type="number" step="1" value="1">
+  <div class="row" style="margin-bottom:8px;">
+    <div style="min-width:260px;">
+      <label class="k">Target</label>
+      <select id="be-on">
+        <option value="all">All Schools of Magic</option>
+        <option value="schools">Some Schools (checked)</option>
+        <option value="linked_any">All schools originally linked to ≥1 of the elements checked</option>
+        <option value="linked_all">All schools originally linked to all the elements checked</option>
+        <option value="linked_any_with_variants">Schools originally linked (+ their Variants) to ≥1 of the elements checked</option>
+        <option value="linked_all_with_variants">Schools originally linked (+ their Variants) to all the elements checked</option>
+        <option value="natures">BONUS when ALL chosen natures are actually used</option>
+      </select>
+      <label class="mini" style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+        <input type="checkbox" id="be-only-one-nature"> Apply only to schools/variants that use 1 nature
+      </label>
+    </div>
+
+    <!-- Shown when picking “Some Schools” -->
+    <div id="be-schools-wrap" style="flex:1; display:none;">
+      <div class="k" style="margin-bottom:6px;">Pick Schools</div>
+      <div id="bonus-schools">
+        <!-- inserted from JS: list of checkboxes for base schools -->
       </div>
     </div>
 
-    <div class="row" style="margin-bottom:8px;">
-      <div>
-        <label class="k">Applies To</label>
-        <select id="be-on">
-          <option value="all">All Schools</option>
-          <option value="schools">Specific Schools</option>
-          <option value="natures">Specific Natures (used)</option>
-        </select>
+    <!-- Shown when picking linked/nature logic -->
+    <div id="be-natures-wrap" style="flex:1; display:none;">
+      <div class="k" style="margin-bottom:6px;">Pick Elements</div>
+      <div id="bonus-natures">
+        <!-- inserted from JS: fire/water/… -->
       </div>
-
-      <div id="be-schools-wrap" style="flex:1; display:none;">
-        <div class="k" style="margin-bottom:6px;">Pick Schools</div>
-        <div id="bonus-schools">${schoolOptions || '<span class="muted">No schools loaded.</span>'}</div>
-      </div>
-
-      <div id="be-natures-wrap" style="flex:1; display:none;">
-        <div class="k" style="margin-bottom:6px;">Pick Natures (ALL must be used)</div>
-        <div id="bonus-natures">${natureOptions}</div>
-      </div>
-    </div>
-
-    <div class="row" style="justify-content:flex-end; gap:8px;">
-      <button class="btn btn-secondary" id="be-cancel">Cancel</button>
-      <button class="btn" id="be-save">Save Bonus</button>
     </div>
   </div>
 `;
@@ -1302,10 +1381,13 @@ bonEditor.style.display = "block";
 const beOn = document.getElementById("be-on");
 const beSchoolsWrap = document.getElementById("be-schools-wrap");
 const beNaturesWrap = document.getElementById("be-natures-wrap");
-beOn.addEventListener("change", ()=>{
-  beSchoolsWrap.style.display = beOn.value === "schools" ? "block" : "none";
-  beNaturesWrap.style.display = beOn.value === "natures" ? "block" : "none";
-});
+function syncTargetVisibility() {
+  const v = beOn.value;
+  beSchoolsWrap.style.display = (v === "schools") ? "block" : "none";
+  beNaturesWrap.style.display = (v === "linked_any" || v === "linked_all" || v === "linked_any_with_variants" || v === "linked_all_with_variants" || v === "natures") ? "block" : "none";
+}
+beOn.addEventListener("change", syncTargetVisibility);
+syncTargetVisibility();
 
 // actions
 document.getElementById("be-cancel").addEventListener("click", ()=> bonEditor.style.display="none");
@@ -1314,6 +1396,7 @@ document.getElementById("be-save").addEventListener("click", ()=>{
   const type  = document.getElementById("be-type").value || "ms";
   const value = parseInt(document.getElementById("be-value").value || "0", 10);
   const on    = beOn.value;
+  const onlySingleNature = !!document.getElementById("be-only-one-nature").checked;
 
   if (!name){ alert("Enter a name."); return; }
   if (Number.isNaN(value)){ alert("Enter a numeric value."); return; }
@@ -1322,17 +1405,22 @@ document.getElementById("be-save").addEventListener("click", ()=>{
   if (on === "schools"){
     targets = Array.from(document.querySelectorAll("#bonus-schools input[type=checkbox]:checked")).map(c=>c.value);
     if (!targets.length){ alert("Pick at least one school."); return; }
-  } else if (on === "natures"){
+  } else if (on === "linked_any" || on === "linked_all" || on === "linked_any_with_variants" || on === "linked_all_with_variants" || on === "natures"){
     targets = Array.from(document.querySelectorAll("#bonus-natures input[type=checkbox]:checked")).map(c=>c.value);
-    if (!targets.length){ alert("Pick at least one nature."); return; }
+    if (!targets.length){ alert("Pick at least one element."); return; }
   }
 
   const list = loadBonuses() || [];
-  list.push({ id: `bon_${Date.now()}`, name, type, value, on, targets });
+  list.push({
+    id: `bon_${Date.now()}`,
+    name, type, value,
+    on,
+    targets, 
+    onlySingleNature
+  });
   saveBonuses(list);
   bonEditor.style.display = "none";
   renderBonuses();
-  // reflect immediately in table
   computed = computeAll();
   renderSchools();
 });
