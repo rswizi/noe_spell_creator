@@ -125,6 +125,18 @@ async function createNew() {
   else alert(res.message || 'Failed to create');
 }
 
+async function adminCreate() {
+  const name = prompt('Character name?', '')?.trim() || 'New Character';
+  const owner = prompt('Owner username? (leave empty for yourself)', '')?.trim();
+  const body = owner ? { name, owner } : { name };
+  const res = await api('/characters', {
+    method:'POST',
+    headers:{ 'content-type':'application/json' },
+    body: JSON.stringify(body)
+  });
+  location.href = 'character_edit.html?id=' + encodeURIComponent(res.id);
+}
+
 document.getElementById('new-btn').addEventListener('click', createNew);
 document.getElementById('filter').addEventListener('input', render);
 

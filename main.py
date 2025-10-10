@@ -2720,22 +2720,23 @@ def admin_list_characters(request: Request):
 
 @app.post("/characters")
 async def create_character(request: Request):
-    username, _ = require_auth(request, roles=["user","moderator","admin"])
+    username, role = require_auth(request, roles=["user","moderator","admin"])
     try:
         body = await request.json()
     except Exception:
         body = {}
+    owner = body.get("owner") if role == "admin" and body.get("owner") else username
     name = (body.get("name") or "New Character").strip()
     cid = next_id_str("characters", padding=4)
     doc = {
         "id": cid,
-        "owner": username,
+        "owner": owner,
         "name": name,
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
     }
     get_col("characters").insert_one(dict(doc))
-    return {"status":"success","id":cid,"character":doc}
+    return {"status":"success","id":cid,"character":{k:v for k,v in doc.items() if k != "_id"}}
 
 @app.get("/characters/{cid}")
 def get_character(cid: str, request: Request):

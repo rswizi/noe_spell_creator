@@ -7,34 +7,35 @@
   
 <style>
   :root { color-scheme: dark; }
-  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; }
+  .page { min-height: 100vh; display: grid; place-items: start center; }
+  .wrap { width: 100%; max-width: 880px; padding: 28px 16px; }
   .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
   .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .card { border:1px solid #333; border-radius:16px; padding:14px; }
-  .row { display:flex; gap:8px; align-items:center; }
+  .card { border:1px solid #333; border-radius:16px; padding:14px; background:#0d0d0d; }
   .muted { opacity:.8; font-size:.9rem; }
-  input, button, a.btn { padding:8px 12px; border-radius:10px; border:1px solid #444; background:#0d0d0d; color:#eaeaea; text-decoration:none; }
-  button.primary, a.btn.primary { background:#1f1f1f; border-color:#555; }
-  .right { margin-left:auto; }
-  .danger { color:#ff7575; }
+  button, a.btn, input { padding:8px 12px; border-radius:10px; border:1px solid #444; background:#111; color:#eaeaea; }
+  .primary { background:#1d1d1d; }
 </style>
 
 </head>
 <body>
-  <div class="topbar">
-    <span id="login-chip" class="muted" style="display:none;margin-left:auto;"></span>
-    <h1>My Characters</h1>
-    <a class="btn" href="portal.html">Portal</a>
-    <a class="btn right" id="admin-link" href="character_admin.html" style="display:none">All Characters (Admin)</a>
-  </div>
+  <div class="page"><div class="wrap">
+    <div class="topbar">
+      <h1>My Characters</h1>
+      <a class="btn" href="portal.html">Portal</a>
+      <span id="login-chip" class="muted" style="margin-left:auto;"></span>
+      <a class="btn" id="admin-link" href="character_admin.html" style="display:none">All Characters</a>
+    </div>
 
-  <div class="row" style="margin-bottom:12px;">
-    <button id="new-btn" class="primary">+ New Character</button>
-    <span class="muted">Click a card to edit.</span>
-  </div>
+    <div style="margin-bottom:12px;">
+      <button type="button" id="new-btn" class="primary">+ New Character</button>
+      <span class="muted">Click a card to edit.</span>
+    </div>
 
-  <div id="list" class="grid"></div>
-
+    <div id="list" class="grid"></div>
+    <p id="empty-msg" class="muted" style="display:none">No characters yet. Click “New Character”.</p>
+  </div></div>
 
 <script>
 function authHeaders() {
@@ -43,98 +44,58 @@ function authHeaders() {
 }
 async function api(path, opt={}) {
   const headers = Object.assign({}, opt.headers || {}, authHeaders());
-  const resp = await fetch(path, { credentials: 'include', ...opt, headers });
-  const ct = resp.headers.get('content-type') || '';
-  if (!ct.includes('application/json')) {
-    const t = await resp.text();
-    throw new Error(`HTTP ${resp.status}: ${t.slice(0,180)}`);
-  }
-  const data = await resp.json();
-  if (data.status === 'error') throw new Error(data.message || 'Request failed');
-  return data;
-}
-async function ensureLoginBadge() {
-  try {
-    const me = await api('/auth/me');
-    if (me.status === 'success') {
-      const chip = document.getElementById('login-chip');
-      if (chip) { chip.textContent = me.username + ' (' + me.role + ')'; chip.style.display=''; }
-      const adminLink = document.getElementById('admin-link');
-      if (adminLink && me.role === 'admin') adminLink.style.display = '';
-      return true;
-    }
-  } catch (e) {
-    const chip = document.getElementById('login-chip');
-    if (chip) { chip.textContent = 'Not logged in'; chip.style.display=''; }
-    return false;
-  }
-}
-ensureLoginBadge();
-</script>
-
-<script>
-const api = async (p, opt={}) => {
-  const r = await fetch(p, {credentials:'include', ...opt});
+  const r = await fetch(path, { credentials:'include', ...opt, headers });
   const ct = r.headers.get('content-type') || '';
-  if (!ct.includes('application/json')) {
-    const text = await r.text();
-    throw new Error(`HTTP ${r.status}: ${text.slice(0,180)}`);
-  }
-  const data = await r.json();
+  const data = ct.includes('application/json') ? await r.json() : { status:'error', message: await r.text() };
   if (!r.ok || data.status === 'error') throw new Error(data.message || `HTTP ${r.status}`);
   return data;
-};
-
-let ROLE = 'user';
-
+}
 async function checkMe() {
   try {
     const me = await api('/auth/me');
-    if (me.status === 'success') {
-      ROLE = me.role || 'user';
-      if (ROLE === 'admin') document.getElementById('admin-link').style.display = '';
-    }
-  } catch(e){ console.warn(e); }
-}
-
-function el(tag, attrs={}, ...children) {
-  const x = document.createElement(tag);
-  for (const [k,v] of Object.entries(attrs)) {
-    if (k === 'class') x.className = v;
-    else if (k === 'onclick') x.addEventListener('click', v);
-    else x.setAttribute(k, v);
+    document.getElementById('login-chip').textContent = me.username + ' (' + me.role + ')';
+    if (me.role === 'admin') document.getElementById('admin-link').style.display = '';
+    return me;
+  } catch (e) {
+    document.getElementById('login-chip').textContent = 'Not logged in';
+    throw e;
   }
-  for (const c of children) x.append(c);
-  return x;
 }
-
+function el(tag, attrs={}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)) (k==='class') ? (n.className=v) :
+    (k==='onclick') ? n.addEventListener('click', v) : n.setAttribute(k,v);
+  for (const k of kids) n.append(k);
+  return n;
+}
 async function loadList() {
   const data = await api('/characters');
   const list = document.getElementById('list');
   list.innerHTML = '';
-  for (const c of (data.characters || [])) {
-    const card = el('div', {class:'card', onclick: () => location.href = 'character_edit.html?id=' + encodeURIComponent(c.id)},
-      el('div', {class:'row'}, el('strong', {}, c.name || '(unnamed)')),
-      el('div', {class:'muted'}, 'ID: ' + c.id)
-    );
-    list.append(card);
+  const arr = data.characters || [];
+  document.getElementById('empty-msg').style.display = arr.length ? 'none' : '';
+  for (const c of arr) {
+    list.append(el('div', {class:'card', onclick: ()=>location.href='character_edit.html?id='+encodeURIComponent(c.id)},
+      el('div', {}, c.name || '(unnamed)'),
+      el('div', {class:'muted'}, 'ID: '+c.id)
+    ));
   }
 }
-
 async function createNew() {
+  const nm = prompt('Character name?', '') ?? '';
+  const name = nm.trim() || 'New Character';
   const res = await api('/characters', {
     method:'POST',
-    headers:{'content-type':'application/json'},
-    body: JSON.stringify({ name: 'New Character' })
+    headers:{ 'content-type':'application/json' },
+    body: JSON.stringify({ name })
   });
-  if (res.status === 'success') location.href = 'character_edit.html?id=' + encodeURIComponent(res.id);
-  else alert(res.message || 'Failed to create');
+  // immediately go edit it
+  location.href = 'character_edit.html?id=' + encodeURIComponent(res.id);
 }
-
 document.getElementById('new-btn').addEventListener('click', createNew);
 
-checkMe().then(loadList);
-ensureLoginBadge();
+// boot
+checkMe().then(loadList).catch(()=>{}); // if not logged in, the button will still show but calls will fail
 </script>
 </body>
 </html>
