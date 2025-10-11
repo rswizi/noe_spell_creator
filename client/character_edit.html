@@ -46,6 +46,10 @@
     .skill-line { display:grid; grid-template-columns: 1fr auto auto; gap:8px; align-items:center; }
     .skill-total { min-width:48px; text-align:right; font-variant-numeric: tabular-nums; }
     .charac-badge { font-variant-numeric: tabular-nums; }
+    .skill-line { display:grid; grid-template-columns: auto 1fr auto auto auto auto; gap:8px; align-items:center; }
+    .num { width:90px; }
+    .badge { border:1px solid #2f2f2f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; }
+    .smallmuted { opacity:.75; font-size:.85rem; }
 
     /* status line */
     .status { margin-top:10px; opacity:.8; }
@@ -88,6 +92,30 @@
       <!-- STATISTICS TAB -->
       <div id="tab-stat" class="tabpane">
         <div class="stats-grid" id="stats-grid"><!-- injected --></div>
+        <!-- Intensities (MAG) -->
+        <div class="panel" style="margin-top:12px;">
+          <details open class="panel">
+            <summary class="hdr">
+              <strong>Intensities</strong>
+              <span class="pill">Linked to MAG</span>
+              <span class="muted">(behaves like skills)</span>
+              <span class="grow"></span>
+              <span class="k">MAG Mod:</span>
+              <span id="int-mag-mod" class="pill">+0</span>
+            </summary>
+            <div class="panel-body">
+              <div id="intensities-list" class="skills" style="margin-top:8px"></div>
+
+              <div style="margin-top:14px; border-top:1px solid #222; padding-top:12px;">
+                <div class="hdr"><strong>Defense Summary</strong><span class="muted"> (from known natures & IV)</span></div>
+                <div id="defense-summary" class="skills" style="margin-top:8px"></div>
+                <p class="muted" style="margin-top:8px">
+                  N = Neutral, R = −2 per hit, VR = −4 per hit, V = +2 per hit, VV = +4 per hit.
+                </p>
+              </div>
+            </div>
+          </details>
+        </div>
       </div>
 
       <!-- Placeholders for other tabs (we'll wire later) -->
@@ -135,6 +163,38 @@ const CHARACS = [
   { key:'tech',       code:'TEC', name:'Tech',       skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
 ];
 
+const NATURES = ["Fire","Water","Earth","Wind","Lightning","Moon","Sun","Ki"];
+
+const INT_TABLE = [ // total → ID/IV tier mapping
+  { min:1,  max:7,  id:"1d4",  iv:2 },
+  { min:8,  max:11, id:"1d6",  iv:3 },
+  { min:12, max:15, id:"1d8",  iv:4 },
+  { min:16, max:17, id:"1d10", iv:5 },
+  { min:18, max:99, id:"1d12", iv:6 },  // capped
+];
+
+// Natural Defense matrix. Rows = incoming dmg, Cols = ATK → mastered nature
+// values: N, R, VR, V, VV
+const DEF_TABLE = {
+  Fire:      { Fire:"N", Lightning:"N", Water:"R",  Earth:"VR", Wind:"V", Sun:"N",  Moon:"VV", Ki:"N" },
+  Lightning: { Fire:"N", Lightning:"N", Water:"N", Earth:"R",  Wind:"VV", Sun:"V",  Moon:"VR", Ki:"N" },
+  Water:     { Fire:"V", Lightning:"N", Water:"N", Earth:"N", Wind:"VR", Sun:"VV", Moon:"R",  Ki:"N" },
+  Earth:     { Fire:"VV",Lightning:"V", Water:"N", Earth:"N", Wind:"R",  Sun:"VR", Moon:"N",  Ki:"N" },
+  Wind:      { Fire:"R", Lightning:"VR",Water:"VV",Earth:"V",  Wind:"N", Sun:"N",  Moon:"N",  Ki:"N" },
+  Sun:       { Fire:"N", Lightning:"R", Water:"VR",Earth:"VV", Wind:"N", Sun:"N",  Moon:"V",  Ki:"N" },
+  Moon:      { Fire:"VR",Lightning:"VV",Water:"V", Earth:"N",  Wind:"N", Sun:"R",  Moon:"N",  Ki:"N" },
+  Ki:        { Fire:"N", Lightning:"N", Water:"N", Earth:"N",  Wind:"N", Sun:"N",  Moon:"N",  Ki:"N" },
+};
+
+// Base per-hit points (we’ll weight by IV a little)
+const SYM_PTS = { N:0, R:-2, VR:-4, V:+2, VV:+4 };
+
+// Modest IV weight: iv 2..6 → factor 1..3
+function ivFactor(iv){
+  // 2->1.0, 3->1.5, 4->2.0, 5->2.5, 6->3.0
+  return Math.max(1, Math.min(3, 0.5 * iv));
+}
+
 function totalFromInvest(v){ const total = (parseInt(v||0,10) || 0) + 4; return total; }
 function modFromTotal(total){ return Math.floor((Number(total)-10)/2); }
 
@@ -174,10 +234,20 @@ function makeDefaultStats(){
   const stats = {};
   for (const c of CHARACS){
     const sk = {};
-    for (const s of c.skills) sk[s] = 0;   // invested points
+    for (const s of c.skills) sk[s] = 0;
     stats[c.key] = { invest: 0, skills: sk };
   }
+  const ints = {};
+  for (const n of NATURES){
+    ints[n] = { knows:false, invest:0 };
+  }
+  stats.intensities = ints;
   return stats;
+}
+
+if (!CHAR.stats) CHAR.stats = makeDefaultStats();
+if (!CHAR.stats.intensities) {
+  CHAR.stats.intensities = makeDefaultStats().intensities;
 }
 
 /* --- render Statistics tab --- */
@@ -227,6 +297,8 @@ function renderStatistics(){
     body.appendChild(skills);
     details.appendChild(body);
     gridEl.appendChild(details);
+    renderIntensities();
+    renderDefenseSummary();
   }
 
   // wire listeners (characteristics + skills)
@@ -266,6 +338,152 @@ function renderStatistics(){
   }
 }
 
+function magMod(){
+  const mag = CHAR.stats?.magic?.invest ?? 0;
+  const total = totalFromInvest(mag);
+  return modFromTotal(total);
+}
+
+function idIvFromTotal(t){
+  const v = Math.max(0, Math.min(99, Number(t)||0));
+  if (v <= 0) return { id:"—", iv:0 };
+  for (const row of INT_TABLE){
+    if (v >= row.min && v <= row.max) return { id: row.id, iv: row.iv };
+  }
+  return { id:"1d12", iv:6 };
+}
+
+function defenseFromKnown(){
+  const ints = CHAR.stats?.intensities || {};
+  const entries = NATURES.map(n=>{
+    const rec = ints[n] || {knows:false, invest:0};
+    const total = (rec.invest||0) + magMod();
+    const {iv} = idIvFromTotal(total);
+    return { nature:n, knows:!!rec.knows, iv, total };
+  });
+
+
+  const summary = {};
+  for (const incoming of NATURES){
+    let score = 0;
+    for (const m of entries){
+      if (!m.knows || m.iv<=0) continue;
+      const sym = DEF_TABLE[incoming][m.nature];
+      score += (SYM_PTS[sym] || 0) * ivFactor(m.iv);
+    }
+    summary[incoming] = score;
+  }
+  return summary; // numeric totals
+}
+
+function scoreToLabel(score){
+  // thresholds: tweak later if needed
+  if (score <= -6) return "VR";
+  if (score <= -2) return "R";
+  if (score >= +6) return "VV";
+  if (score >= +2) return "V";
+  return "N";
+}
+
+function renderIntensities(){
+  const list = document.getElementById('intensities-list');
+  const mm = magMod();
+  document.getElementById('int-mag-mod').textContent = (mm>=0? '+'+mm:mm);
+
+  const ints = CHAR.stats.intensities;
+  list.innerHTML = '';
+
+  // Header row
+  const hdr = document.createElement('div');
+  hdr.className = 'skill-line smallmuted';
+  hdr.innerHTML = `
+    <div style="min-width:110px">Nature</div>
+    <div>Knows?</div>
+    <div>Invest</div>
+    <div>Total</div>
+    <div>ID</div>
+    <div>IV</div>
+  `;
+  list.appendChild(hdr);
+
+  // Rows
+  for (const n of NATURES){
+    if (!ints[n]) ints[n] = { knows:false, invest:0 };
+    const rec = ints[n];
+    const total = (rec.invest||0) + mm;
+    const {id, iv} = idIvFromTotal(total);
+
+    const line = document.createElement('div');
+    line.className = 'skill-line';
+    line.innerHTML = `
+      <div class="k" style="min-width:110px">${n}</div>
+      <div><input type="checkbox" id="int_${n}_knows" ${rec.knows?'checked':''}></div>
+      <input type="number" class="num" min="0" id="int_${n}_invest" value="${Number(rec.invest)||0}">
+      <div class="badge" id="int_${n}_total">${total>=0? '+'+total:total}</div>
+      <div class="badge" id="int_${n}_id">${id}</div>
+      <div class="badge" id="int_${n}_iv">${iv||'—'}</div>
+    `;
+    list.appendChild(line);
+  }
+
+  // Hook events
+  for (const n of NATURES){
+    const k = document.getElementById(`int_${n}_knows`);
+    const i = document.getElementById(`int_${n}_invest`);
+    k.addEventListener('change', ()=>{
+      CHAR.stats.intensities[n].knows = !!k.checked;
+      renderDefenseSummary(); // knowing toggled affects defense
+      queueSave();
+    });
+    i.addEventListener('input', ()=>{
+      const v = parseInt(i.value||'0',10) || 0;
+      CHAR.stats.intensities[n].invest = v;
+      // recompute per-row
+      const mm2 = magMod();
+      const total = v + mm2;
+      const info = idIvFromTotal(total);
+      document.getElementById(`int_${n}_total`).textContent = (total>=0? '+'+total:total);
+      document.getElementById(`int_${n}_id`).textContent = info.id;
+      document.getElementById(`int_${n}_iv`).textContent = info.iv || '—';
+      renderDefenseSummary(); // IV may change
+      queueSave();
+    });
+  }
+}
+
+function renderDefenseSummary(){
+  const box = document.getElementById('defense-summary');
+  const scores = defenseFromKnown();
+  box.innerHTML = '';
+  // header
+  const hdr = document.createElement('div');
+  hdr.className = 'skill-line smallmuted';
+  hdr.innerHTML = `
+    <div style="min-width:110px">Incoming</div>
+    <div></div><div></div>
+    <div>Score</div>
+    <div>Level</div>
+    <div></div>
+  `;
+  box.appendChild(hdr);
+
+  for (const n of NATURES){
+    const s = scores[n] || 0;
+    const lab = scoreToLabel(s);
+    const row = document.createElement('div');
+    row.className = 'skill-line';
+    row.innerHTML = `
+      <div class="k" style="min-width:110px">${n}</div>
+      <div></div>
+      <div></div>
+      <div class="badge">${s.toFixed(1)}</div>
+      <div class="badge">${lab}</div>
+      <div></div>
+    `;
+    box.appendChild(row);
+  }
+}
+
 /* --- load & save --- */
 async function loadCharacter(){
   if (!CID){ statusEl.textContent = 'Missing id'; return; }
@@ -278,6 +496,8 @@ async function loadCharacter(){
   nameEl.addEventListener('input', ()=> queueSave());
   // Render Stats
   renderStatistics();
+  renderIntensities();
+  renderDefenseSummary();
 }
 
 function queueSave(){
