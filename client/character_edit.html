@@ -245,11 +245,6 @@ function makeDefaultStats(){
   return stats;
 }
 
-if (!CHAR.stats) CHAR.stats = makeDefaultStats();
-if (!CHAR.stats.intensities) {
-  CHAR.stats.intensities = makeDefaultStats().intensities;
-}
-
 /* --- render Statistics tab --- */
 function renderStatistics(){
   gridEl.innerHTML = '';
@@ -297,8 +292,6 @@ function renderStatistics(){
     body.appendChild(skills);
     details.appendChild(body);
     gridEl.appendChild(details);
-    renderIntensities();
-    renderDefenseSummary();
   }
 
   // wire listeners (characteristics + skills)
@@ -319,6 +312,10 @@ function renderStatistics(){
         const t = invested + mod;
         document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
       }
+        if (c.key === 'magic') {
+          renderIntensities();
+          renderDefenseSummary();
+        }
       queueSave();
     });
     // skills invest
@@ -490,6 +487,9 @@ async function loadCharacter(){
   const res = await api('/characters/' + encodeURIComponent(CID));
   CHAR = res.character || {};
   if (!CHAR.stats) CHAR.stats = makeDefaultStats();
+  if (!CHAR.stats.intensities) {
+    CHAR.stats.intensities = makeDefaultStats().intensities;
+  }
   // Name
   titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
   nameEl.value = CHAR.name || '';
