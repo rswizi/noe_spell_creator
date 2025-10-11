@@ -58,6 +58,32 @@ async function api(path, opt = {}) {
   if (!resp.ok || data.status === 'error') throw new Error(data.message || `HTTP ${resp.status}`);
   return data;
 }
+async function checkMe() {
+  const chip = document.getElementById("login-chip");
+  const adminLink = document.getElementById("admin-link");
+  chip.textContent = "Checking login...";
+  chip.style.display = "";
+
+  try {
+    const me = await api("/auth/me");
+    if (me.status !== "success") throw new Error(me.message || "Unauthenticated");
+
+    chip.textContent = `${me.username || "Unknown"} (${me.role || "user"})`;
+
+    if (me.role && me.role.toLowerCase() === "admin") {
+      if (adminLink) adminLink.style.display = "";
+    } else {
+      if (adminLink) adminLink.style.display = "none";
+    }
+
+    return me;
+  } catch (err) {
+    console.warn("Auth check failed:", err.message);
+    chip.textContent = "Not logged in";
+    if (adminLink) adminLink.style.display = "none";
+    return { status: "error", message: err.message };
+  }
+}
 function el(tag, attrs={}, ...kids) {
   const n = document.createElement(tag);
   for (const [k,v] of Object.entries(attrs)) (k==='class') ? (n.className=v) :
@@ -93,7 +119,7 @@ async function createNew() {
 document.getElementById('new-btn').addEventListener('click', createNew);
 
 // boot
-checkMe().then(loadList).catch(()=>{}); // if not logged in, the button will still show but calls will fail
+checkMe().then(loadList).catch(()=>{});
 </script>
 </body>
 </html>

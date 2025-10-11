@@ -2708,14 +2708,14 @@ def _can_view(doc, username, role):
 @app.get("/characters")
 def list_my_characters(request: Request):
     username, role = require_auth(request, roles=["user","moderator","admin"])
-    q = {"owner": username} if role != "admin" else {"owner": {"$exists": True}}
-    chars = list(get_col("characters").find(q, {"_id":0}))
+    q = {"owner": username}
+    chars = list(get_col("characters").find(q, {"_id": 0}))
     return {"status": "success", "characters": chars}
 
 @app.get("/admin/characters")
 def admin_list_characters(request: Request):
     require_auth(request, roles=["admin"])
-    chars = list(get_col("characters").find({}, {"_id":0}))
+    chars = list(get_col("characters").find({}, {"_id": 0}))
     return {"status": "success", "characters": chars}
 
 @app.post("/characters")
@@ -2725,7 +2725,7 @@ async def create_character(request: Request):
         body = await request.json()
     except Exception:
         body = {}
-    owner = body.get("owner") if role == "admin" and body.get("owner") else username
+    owner = body.get("owner") if (role == "admin" and body.get("owner")) else username
     name = (body.get("name") or "New Character").strip()
     cid = next_id_str("characters", padding=4)
     doc = {
@@ -2736,7 +2736,7 @@ async def create_character(request: Request):
         "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
     }
     get_col("characters").insert_one(dict(doc))
-    return {"status":"success","id":cid,"character":{k:v for k,v in doc.items() if k != "_id"}}
+    return {"status": "success", "id": cid, "character": {k: v for k, v in doc.items() if k != "_id"}}
 
 @app.get("/characters/{cid}")
 def get_character(cid: str, request: Request):
