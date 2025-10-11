@@ -38,28 +38,25 @@
   </div></div>
 
 <script>
+function getToken() {
+  return localStorage.getItem('auth_token') || '';
+}
+function setCookieToken(tok) {
+  if (!tok) return;
+  document.cookie = `token=${tok}; path=/; SameSite=Lax`;
+}
 function authHeaders() {
-  const tok = localStorage.getItem('auth_token');
-  return tok ? { 'Authorization': 'Bearer ' + tok } : {};
+  const tok = getToken();
+  if (tok) setCookieToken(tok);
+  return tok ? { 'Authorization': 'Bearer ' + tok, 'X-Auth-Token': tok } : {};
 }
-async function api(path, opt={}) {
+async function api(path, opt = {}) {
   const headers = Object.assign({}, opt.headers || {}, authHeaders());
-  const r = await fetch(path, { credentials:'include', ...opt, headers });
-  const ct = r.headers.get('content-type') || '';
-  const data = ct.includes('application/json') ? await r.json() : { status:'error', message: await r.text() };
-  if (!r.ok || data.status === 'error') throw new Error(data.message || `HTTP ${r.status}`);
+  const resp = await fetch(path, { credentials: 'include', ...opt, headers });
+  const ct = resp.headers.get('content-type') || '';
+  const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
+  if (!resp.ok || data.status === 'error') throw new Error(data.message || `HTTP ${resp.status}`);
   return data;
-}
-async function checkMe() {
-  try {
-    const me = await api('/auth/me');
-    document.getElementById('login-chip').textContent = me.username + ' (' + me.role + ')';
-    if (me.role === 'admin') document.getElementById('admin-link').style.display = '';
-    return me;
-  } catch (e) {
-    document.getElementById('login-chip').textContent = 'Not logged in';
-    throw e;
-  }
 }
 function el(tag, attrs={}, ...kids) {
   const n = document.createElement(tag);
@@ -81,6 +78,7 @@ async function loadList() {
     ));
   }
 }
+
 async function createNew() {
   const nm = prompt('Character name?', '') ?? '';
   const name = nm.trim() || 'New Character';
