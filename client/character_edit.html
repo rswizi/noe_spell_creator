@@ -4,124 +4,305 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NoE — Edit Character</title>
-  
-<style>
-  :root { color-scheme: dark; }
-  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
-  .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
-  .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .card { border:1px solid #333; border-radius:16px; padding:14px; }
-  .row { display:flex; gap:8px; align-items:center; }
-  .muted { opacity:.8; font-size:.9rem; }
-  input, button, a.btn { padding:8px 12px; border-radius:10px; border:1px solid #444; background:#0d0d0d; color:#eaeaea; text-decoration:none; }
-  button.primary, a.btn.primary { background:#1f1f1f; border-color:#555; }
-  .right { margin-left:auto; }
-  .danger { color:#ff7575; }
-</style>
 
+  <style>
+    :root { color-scheme: dark; }
+    html,body { height: 100%; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    /* centered page like the rest */
+    .page { min-height: 100vh; display: grid; place-items: start center; background: #0b0b0b; }
+    .wrap { width: 100%; max-width: 980px; padding: 28px 16px; }
+
+    /* chrome */
+    .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
+    .topbar h1 { font-size: 20px; margin: 0; }
+    a.btn, button, input { padding:8px 12px; border-radius:10px; border:1px solid #333; background:#121212; color:#f0f0f0; text-decoration:none; }
+    a.btn:hover, button:hover { background:#171717; }
+    .muted { opacity:.8; font-size:.9rem; }
+    .grow { flex: 1 1 auto; }
+    .right { margin-left:auto; }
+
+    /* tabs */
+    .tabs { display:flex; gap:8px; border-bottom:1px solid #222; margin:16px 0 12px; }
+    .tab { padding:10px 14px; border:1px solid #222; border-bottom:none; border-radius:12px 12px 0 0; background:#111; cursor:pointer; }
+    .tab.active { background:#191919; font-weight:600; }
+    .tabpanes { border:1px solid #222; border-radius:0 14px 14px 14px; background:#141414; padding:16px; }
+
+    /* statistics layout */
+    .stats-grid { display:grid; gap:12px; grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .panel { border:1px solid #2a2a2a; border-radius:14px; overflow:hidden; background:#101010; }
+    details.panel > summary { list-style:none; cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; }
+    details.panel > summary::-webkit-details-marker { display:none; }
+    .pill { font-size:.85rem; opacity:.85; border:1px solid #2f2f2f; border-radius:999px; padding:2px 8px; }
+    .panel-body { padding:0 14px 14px; }
+
+    .row { display:flex; align-items:center; gap:8px; }
+    .row > .grow { flex:1 1 auto; }
+    .k { opacity:.85; font-size:.9rem; }
+    .num { width:90px; }
+    .total { font-weight:600; }
+    .hdr { display:flex; align-items:center; gap:10px; }
+    .skills { display:grid; gap:8px; margin-top:10px; }
+    .skill-line { display:grid; grid-template-columns: 1fr auto auto; gap:8px; align-items:center; }
+    .skill-total { min-width:48px; text-align:right; font-variant-numeric: tabular-nums; }
+    .charac-badge { font-variant-numeric: tabular-nums; }
+
+    /* status line */
+    .status { margin-top:10px; opacity:.8; }
+  </style>
 </head>
 <body>
-  <div class="topbar">
-    <span id="login-chip" class="muted" style="display:none;margin-left:auto;"></span>
-    <h1 id="title">Edit Character</h1>
-    <a class="btn" href="characters.html">Back to My Characters</a>
-    <a class="btn" href="character_admin.html" id="admin-link" style="display:none">All Characters</a>
-  </div>
+  <div class="page"><div class="wrap">
 
-  <div class="card" style="max-width:720px;">
-    <label for="name">Name</label>
-    <input id="name" placeholder="Enter a name..." />
-    <div class="muted" id="status">Loaded.</div>
-  </div>
+    <div class="topbar">
+      <h1 id="title">Edit Character</h1>
+      <span id="login-chip" class="muted right"></span>
+      <a class="btn" href="characters.html">Back to My Characters</a>
+      <a class="btn" href="character_admin.html" id="admin-link" style="display:none">All Characters</a>
+    </div>
 
+    <!-- Name card -->
+    <div class="panel" style="margin-bottom:12px;">
+      <details open class="panel">
+        <summary class="hdr">
+          <strong>Name</strong>
+          <span class="muted">(autosaves)</span>
+          <span class="muted status" id="status">Loaded.</span>
+        </summary>
+        <div class="panel-body">
+          <input id="name" placeholder="Enter a name..." class="grow" />
+        </div>
+      </details>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" role="tablist">
+      <div class="tab active" data-tab="tab-stat">Statistic</div>
+      <div class="tab" data-tab="tab-inv">Inventory</div>
+      <div class="tab" data-tab="tab-abi">Abilities</div>
+      <div class="tab" data-tab="tab-com">Combat</div>
+      <div class="tab" data-tab="tab-per">Personal</div>
+    </div>
+
+    <div class="tabpanes">
+      <!-- STATISTICS TAB -->
+      <div id="tab-stat" class="tabpane">
+        <div class="stats-grid" id="stats-grid"><!-- injected --></div>
+      </div>
+
+      <!-- Placeholders for other tabs (we'll wire later) -->
+      <div id="tab-inv" class="tabpane" style="display:none;"><p class="muted">Inventory — coming next.</p></div>
+      <div id="tab-abi" class="tabpane" style="display:none;"><p class="muted">Abilities — coming next.</p></div>
+      <div id="tab-com" class="tabpane" style="display:none;"><p class="muted">Combat — coming next.</p></div>
+      <div id="tab-per" class="tabpane" style="display:none;"><p class="muted">Personal — coming next.</p></div>
+    </div>
+
+  </div></div>
 
 <script>
-function authHeaders() {
-  const tok = localStorage.getItem('auth_token');
-  return tok ? { 'Authorization': 'Bearer ' + tok } : {};
-}
-async function api(path, opt={}) {
-  const headers = Object.assign({}, opt.headers || {}, authHeaders());
-  const resp = await fetch(path, { credentials: 'include', ...opt, headers });
+/* --- auth helper (sends header + keeps cookie) --- */
+function getToken(){ return localStorage.getItem('auth_token') || ''; }
+function setCookieToken(tok){ if(!tok) return; document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
+function authHeaders(){ const t=getToken(); if(t) setCookieToken(t); return t?{'Authorization':'Bearer '+t,'X-Auth-Token':t}:{ }; }
+async function api(path,opt={}) {
+  const headers = Object.assign({}, opt.headers||{}, authHeaders());
+  const resp = await fetch(path, { credentials:'include', ...opt, headers });
   const ct = resp.headers.get('content-type') || '';
-  if (!ct.includes('application/json')) {
-    const t = await resp.text();
-    throw new Error(`HTTP ${resp.status}: ${t.slice(0,180)}`);
-  }
-  const data = await resp.json();
-  if (data.status === 'error') throw new Error(data.message || 'Request failed');
+  const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
+  if(!resp.ok || data.status==='error') throw new Error(data.message || `HTTP ${resp.status}`);
   return data;
 }
-async function ensureLoginBadge() {
-  try {
-    const me = await api('/auth/me');
-    if (me.status === 'success') {
-      const chip = document.getElementById('login-chip');
-      if (chip) { chip.textContent = me.username + ' (' + me.role + ')'; chip.style.display=''; }
-      const adminLink = document.getElementById('admin-link');
-      if (adminLink && me.role === 'admin') adminLink.style.display = '';
-      return true;
-    }
-  } catch (e) {
-    const chip = document.getElementById('login-chip');
-    if (chip) { chip.textContent = 'Not logged in'; chip.style.display=''; }
-    return false;
-  }
-}
-ensureLoginBadge();
-</script>
 
-<script>
-/* replaced by auth-aware api() */
+/* --- tabs --- */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    const target = t.getAttribute('data-tab');
+    document.querySelectorAll('.tabpane').forEach(p=>p.style.display = (p.id===target ? '' : 'none'));
+  });
+});
+
+/* --- constants & helpers for Statistics --- */
+const CHARACS = [
+  { key:'reflex',     code:'REF', name:'Reflex',     skills:['Technicity','Dodge','Tempo','Reactivity'] },
+  { key:'dexterity',  code:'DEX', name:'Dexterity',  skills:['Accuracy','Evasion','Stealth','Acrobatics'] },
+  { key:'body',       code:'BOD', name:'Body',       skills:['Brutality','Blocking','Resistance','Athletics'] },
+  { key:'willpower',  code:'WIL', name:'Willpower',  skills:['Intimidation','Spirit','Instinct','Absorption'] },
+  { key:'magic',      code:'MAG', name:'Magic',      skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
+  { key:'presence',   code:'PRE', name:'Presence',   skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
+  { key:'wisdom',     code:'WIS', name:'Wisdom',     skills:['Survival','Education','Perception','Psychology','Investigation'] },
+  { key:'tech',       code:'TEC', name:'Tech',       skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
+];
+
+function totalFromInvest(v){ const total = (parseInt(v||0,10) || 0) + 4; return total; }
+function modFromTotal(total){ return Math.floor((Number(total)-10)/2); }
+
+/* --- page state --- */
 const params = new URLSearchParams(location.search);
 const CID = params.get('id');
-
 let ROLE = 'user';
-let dirtyTimer = null;
+let SAVE_TIMER = null;
+let CHAR = null;
 
+/* --- UI refs --- */
+const loginChip = document.getElementById('login-chip');
+const adminLink = document.getElementById('admin-link');
+const titleEl   = document.getElementById('title');
+const statusEl  = document.getElementById('status');
+const nameEl    = document.getElementById('name');
+const gridEl    = document.getElementById('stats-grid');
+
+/* --- auth check for badge + admin link --- */
 async function checkMe() {
-  try {
+  loginChip.textContent = 'Checking login...';
+  try{
     const me = await api('/auth/me');
-    if (me.status === 'success') {
-      ROLE = me.role || 'user';
-      if (ROLE === 'admin') document.getElementById('admin-link').style.display = '';
-    }
-  } catch(_){}
-}
-
-async function load() {
-  if (!CID) { document.getElementById('status').textContent = 'Missing id'; return; }
-  const res = await api('/characters/' + encodeURIComponent(CID));
-  if (res.status !== 'success') { document.getElementById('status').textContent = res.message || 'Failed to load.'; return; }
-  document.getElementById('title').textContent = 'Edit: ' + (res.character.name || '(unnamed)');
-  const name = document.getElementById('name');
-  name.value = res.character.name || '';
-  name.addEventListener('input', onChange);
-}
-
-function onChange(e) {
-  if (dirtyTimer) clearTimeout(dirtyTimer);
-  dirtyTimer = setTimeout(saveNow, 300);
-}
-
-async function saveNow() {
-  const name = document.getElementById('name').value;
-  document.getElementById('status').textContent = 'Saving...';
-  const res = await api('/characters/' + encodeURIComponent(CID), {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name })
-  });
-  if (res.status === 'success') {
-    document.getElementById('status').textContent = 'Saved at ' + new Date().toLocaleTimeString();
-    document.getElementById('title').textContent = 'Edit: ' + (res.character.name || '(unnamed)');
-  } else {
-    document.getElementById('status').textContent = res.message || 'Save failed';
+    loginChip.textContent = `${me.username} (${me.role})`;
+    if ((me.role||'').toLowerCase()==='admin') adminLink.style.display='';
+    ROLE = me.role||'user';
+    return me;
+  } catch(e){
+    loginChip.textContent = 'Not logged in';
+    adminLink.style.display='none';
+    throw e;
   }
 }
 
-checkMe().then(load);
-ensureLoginBadge();
+/* --- build default stats shape --- */
+function makeDefaultStats(){
+  const stats = {};
+  for (const c of CHARACS){
+    const sk = {};
+    for (const s of c.skills) sk[s] = 0;   // invested points
+    stats[c.key] = { invest: 0, skills: sk };
+  }
+  return stats;
+}
+
+/* --- render Statistics tab --- */
+function renderStatistics(){
+  gridEl.innerHTML = '';
+  for (const c of CHARACS){
+    const rec = (CHAR.stats && CHAR.stats[c.key]) || { invest:0, skills:{} };
+    const total = totalFromInvest(rec.invest);
+    const mod = modFromTotal(total);
+
+    const details = document.createElement('details');
+    details.className = 'panel';
+    details.open = true;
+
+    const sum = document.createElement('summary');
+    sum.className = 'hdr';
+    sum.innerHTML = `
+      <strong>${c.name}</strong>
+      <span class="pill">${c.code}</span>
+      <span class="charac-badge">[ <span class="total" id="${c.key}-total">${total}</span> | <span id="${c.key}-mod">${mod>=0? '+'+mod : mod}</span> ]</span>
+      <span class="grow"></span>
+      <span class="k">Invested</span>
+      <input type="number" class="num" min="0" id="${c.key}-invest" value="${Number(rec.invest)||0}">
+    `;
+    details.appendChild(sum);
+
+    const body = document.createElement('div');
+    body.className = 'panel-body';
+
+    const skills = document.createElement('div');
+    skills.className = 'skills';
+
+    for (const s of c.skills){
+      const invested = Number((rec.skills||{})[s] || 0);
+      const totalSkill = invested + mod;
+
+      const line = document.createElement('div');
+      line.className = 'skill-line';
+      line.innerHTML = `
+        <div class="k">${s}</div>
+        <input type="number" class="num" min="0" id="${c.key}__${s}__invest" value="${invested}">
+        <div class="skill-total" id="${c.key}__${s}__total">${totalSkill>=0? '+'+totalSkill : totalSkill}</div>
+      `;
+      skills.appendChild(line);
+    }
+
+    body.appendChild(skills);
+    details.appendChild(body);
+    gridEl.appendChild(details);
+  }
+
+  // wire listeners (characteristics + skills)
+  // characteristics invest
+  for (const c of CHARACS){
+    const input = document.getElementById(`${c.key}-invest`);
+    input.addEventListener('input', ()=>{
+      const v = parseInt(input.value||'0', 10) || 0;
+      CHAR.stats[c.key].invest = v;
+      // update header total/mod
+      const total = totalFromInvest(v);
+      const mod = modFromTotal(total);
+      document.getElementById(`${c.key}-total`).textContent = total;
+      document.getElementById(`${c.key}-mod`).textContent = (mod>=0? '+'+mod : mod);
+      // update all skill totals under this charac
+      for (const s of c.skills){
+        const invested = Number(CHAR.stats[c.key].skills[s] || 0);
+        const t = invested + mod;
+        document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
+      }
+      queueSave();
+    });
+    // skills invest
+    for (const s of c.skills){
+      const sid = `${c.key}__${s}__invest`;
+      const inp = document.getElementById(sid);
+      inp.addEventListener('input', ()=>{
+        const v = parseInt(inp.value||'0', 10) || 0;
+        CHAR.stats[c.key].skills[s] = v;
+        const total = totalFromInvest(CHAR.stats[c.key].invest);
+        const mod = modFromTotal(total);
+        const t = v + mod;
+        document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
+        queueSave();
+      });
+    }
+  }
+}
+
+/* --- load & save --- */
+async function loadCharacter(){
+  if (!CID){ statusEl.textContent = 'Missing id'; return; }
+  const res = await api('/characters/' + encodeURIComponent(CID));
+  CHAR = res.character || {};
+  if (!CHAR.stats) CHAR.stats = makeDefaultStats();
+  // Name
+  titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
+  nameEl.value = CHAR.name || '';
+  nameEl.addEventListener('input', ()=> queueSave());
+  // Render Stats
+  renderStatistics();
+}
+
+function queueSave(){
+  statusEl.textContent = 'Saving...';
+  if (SAVE_TIMER) clearTimeout(SAVE_TIMER);
+  SAVE_TIMER = setTimeout(saveNow, 350);
+}
+
+async function saveNow(){
+  try{
+    const payload = { name: nameEl.value || '', stats: CHAR.stats };
+    const res = await api('/characters/' + encodeURIComponent(CID), {
+      method:'PUT',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify(payload)
+    });
+    titleEl.textContent = 'Edit: ' + (res.character?.name || '(unnamed)');
+    statusEl.textContent = 'Saved at ' + new Date().toLocaleTimeString();
+  }catch(err){
+    statusEl.textContent = 'Save failed: ' + err.message;
+  }
+}
+
+/* --- boot --- */
+checkMe().then(loadCharacter).catch(()=>{});
 </script>
 </body>
 </html>

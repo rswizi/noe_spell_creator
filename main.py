@@ -2756,12 +2756,19 @@ async def update_character(cid: str, request: Request):
         return JSONResponse({"status":"error","message":"Character not found"}, status_code=404)
     if role != "admin" and before.get("owner") != username:
         return JSONResponse({"status":"error","message":"Forbidden"}, status_code=403)
+
     try:
         body = await request.json()
     except Exception:
         return JSONResponse({"status":"error","message":"Invalid JSON"}, status_code=400)
-    name = (body.get("name") or before.get("name","")).strip()
+
+    name  = (body.get("name") or before.get("name","")).strip()
+    stats = body.get("stats", before.get("stats"))
+
     updates = {"name": name, "updated_at": datetime.datetime.utcnow().isoformat() + "Z"}
+    if isinstance(stats, dict):
+        updates["stats"] = stats
+
     get_col("characters").update_one({"id": cid}, {"$set": updates})
     after = get_col("characters").find_one({"id": cid}, {"_id":0})
     return {"status":"success","character":after}
