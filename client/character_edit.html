@@ -50,7 +50,34 @@
     .num { width:90px; }
     .badge { border:1px solid #2f2f2f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; }
     .smallmuted { opacity:.75; font-size:.85rem; }
+    .skill-line {
+    display: grid;
+    grid-template-columns: 140px 80px 80px 70px 70px 50px;
+    gap: 8px;
+    align-items: center;
+  }
 
+  .skill-line.smallmuted {
+    font-size: .85rem;
+    opacity: .75;
+  }
+
+  .skill-line input.num {
+    width: 70px;
+    text-align: right;
+  }
+
+  .skill-line .badge,
+  .skill-line .skill-total {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    min-width: 50px;
+  }
+
+  .skill-line .k {
+    font-size: .9rem;
+    opacity: .85;
+  }
     /* status line */
     .status { margin-top:10px; opacity:.8; }
   </style>
