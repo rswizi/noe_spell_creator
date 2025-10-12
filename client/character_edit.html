@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NoE — Edit Character</title>
+  <title>NoE — Edit Character (with Derived)</title>
 
   <style>
     :root { color-scheme: dark; }
@@ -29,7 +29,7 @@
     .tabpanes { border:1px solid #222; border-radius:0 14px 14px 14px; background:#141414; padding:16px; }
 
     /* statistics layout */
-    .stats-grid { display:grid; gap:12px; grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .stats-grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); align-items:start; }
     .panel { border:1px solid #2a2a2a; border-radius:14px; overflow:hidden; background:#101010; }
     details.panel > summary { list-style:none; cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; }
     details.panel > summary::-webkit-details-marker { display:none; }
@@ -43,43 +43,28 @@
     .total { font-weight:600; }
     .hdr { display:flex; align-items:center; gap:10px; }
     .skills { display:grid; gap:8px; margin-top:10px; }
-    .skill-line { display:grid; grid-template-columns: 1fr auto auto; gap:8px; align-items:center; }
+    .skill-line { display:grid; grid-template-columns: auto 1fr auto; gap:8px; align-items:center; }
     .skill-total { min-width:48px; text-align:right; font-variant-numeric: tabular-nums; }
     .charac-badge { font-variant-numeric: tabular-nums; }
     .skill-line { display:grid; grid-template-columns: auto 1fr auto auto auto auto; gap:8px; align-items:center; }
     .num { width:90px; }
     .badge { border:1px solid #2f2f2f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; }
     .smallmuted { opacity:.75; font-size:.85rem; }
-    .skill-line {
-    display: grid;
-    grid-template-columns: 140px 80px 80px 70px 70px 50px;
-    gap: 8px;
-    align-items: center;
-  }
 
-  .skill-line.smallmuted {
-    font-size: .85rem;
-    opacity: .75;
-  }
+    /* --- alignment fixes for all skill-line blocks --- */
+    .skill-line { display:grid; grid-template-columns: 140px 80px 80px 70px 70px 50px; gap:8px; align-items:center; }
+    .skill-line.smallmuted { font-size:.85rem; opacity:.75; }
+    .skill-line input.num { width:70px; text-align:right; }
+    .skill-line .badge, .skill-line .skill-total { text-align:center; font-variant-numeric: tabular-nums; min-width:50px; }
+    .skill-line .k { font-size:.9rem; opacity:.85; }
 
-  .skill-line input.num {
-    width: 70px;
-    text-align: right;
-  }
-
-  .skill-line .badge,
-  .skill-line .skill-total {
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-    min-width: 50px;
-  }
-
-  .skill-line .k {
-    font-size: .9rem;
-    opacity: .85;
-  }
     /* status line */
     .status { margin-top:10px; opacity:.8; }
+
+    /* Derived stats table */
+    .derived-grid { display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); }
+    .kv { display:grid; grid-template-columns: auto 1fr; gap:6px 8px; align-items:center; }
+    .kv .val { justify-self:end; font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
@@ -118,7 +103,34 @@
     <div class="tabpanes">
       <!-- STATISTICS TAB -->
       <div id="tab-stat" class="tabpane">
+
+        <!-- Level + Derived Stats -->
+        <div class="panel" style="margin-bottom:12px;">
+          <details open class="panel">
+            <summary class="hdr">
+              <strong>Derived Stats</strong>
+              <span class="muted">(auto from Level, Milestones & skills)</span>
+              <span class="grow"></span>
+              <span class="k">Level</span>
+              <input id="level" type="number" class="num" min="1" value="1" />
+            </summary>
+            <div class="panel-body">
+              <div class="derived-grid">
+                <div class="kv"><div class="k">HP</div> <div class="val badge" id="hp-val">—</div></div>
+                <div class="kv"><div class="k">EN</div> <div class="val badge" id="en-val">—</div></div>
+                <div class="kv"><div class="k">FO</div> <div class="val badge" id="fo-val">—</div></div>
+                <div class="kv"><div class="k">MO</div> <div class="val badge" id="mo-val">—</div></div>
+                <div class="kv"><div class="k">SP cap (10% HP)</div> <div class="val badge" id="spcap-val">—</div></div>
+                <div class="kv"><div class="k">Encumbrance</div> <div class="val badge" id="enc-val">—</div></div>
+                <div class="kv"><div class="k">Eclipse Threshold (ET)</div> <div class="val badge" id="et-val">—</div></div>
+                <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge" id="tx-val">—</div></div>
+              </div>
+            </div>
+          </details>
+        </div>
+
         <div class="stats-grid" id="stats-grid"><!-- injected --></div>
+
         <!-- Intensities (MAG) -->
         <div class="panel" style="margin-top:12px;">
           <details open class="panel">
@@ -225,6 +237,17 @@ function ivFactor(iv){
 function totalFromInvest(v){ const total = (parseInt(v||0,10) || 0) + 4; return total; }
 function modFromTotal(total){ return Math.floor((Number(total)-10)/2); }
 
+/* helpers */
+function charMod(key){
+  const invest = CHAR.stats?.[key]?.invest ?? 0;
+  return modFromTotal(totalFromInvest(invest));
+}
+function milestone(key){ return Math.max(0, charMod(key)); }
+function skillTotal(key, skill){
+  const invest = CHAR.stats?.[key]?.skills?.[skill] ?? 0;
+  return invest + charMod(key);
+}
+
 /* --- page state --- */
 const params = new URLSearchParams(location.search);
 const CID = params.get('id');
@@ -239,6 +262,17 @@ const titleEl   = document.getElementById('title');
 const statusEl  = document.getElementById('status');
 const nameEl    = document.getElementById('name');
 const gridEl    = document.getElementById('stats-grid');
+
+/* derived refs */
+const levelEl = document.getElementById('level');
+const hpEl = document.getElementById('hp-val');
+const enEl = document.getElementById('en-val');
+const foEl = document.getElementById('fo-val');
+const moEl = document.getElementById('mo-val');
+const spcapEl = document.getElementById('spcap-val');
+const encEl = document.getElementById('enc-val');
+const etEl = document.getElementById('et-val');
+const txEl = document.getElementById('tx-val');
 
 /* --- auth check for badge + admin link --- */
 async function checkMe() {
@@ -339,10 +373,11 @@ function renderStatistics(){
         const t = invested + mod;
         document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
       }
-        if (c.key === 'magic') {
-          renderIntensities();
-          renderDefenseSummary();
-        }
+      if (c.key === 'magic') {
+        renderIntensities();
+        renderDefenseSummary();
+      }
+      updateDerived();
       queueSave();
     });
     // skills invest
@@ -356,6 +391,7 @@ function renderStatistics(){
         const mod = modFromTotal(total);
         const t = v + mod;
         document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
+        updateDerived();
         queueSave();
       });
     }
@@ -421,7 +457,7 @@ function renderIntensities(){
   const hdr = document.createElement('div');
   hdr.className = 'skill-line smallmuted';
   hdr.innerHTML = `
-    <div style="min-width:110px">Nature</div>
+    <div>Nature</div>
     <div>Knows?</div>
     <div>Invest</div>
     <div>Total</div>
@@ -440,7 +476,7 @@ function renderIntensities(){
     const line = document.createElement('div');
     line.className = 'skill-line';
     line.innerHTML = `
-      <div class="k" style="min-width:110px">${n}</div>
+      <div class="k">${n}</div>
       <div><input type="checkbox" id="int_${n}_knows" ${rec.knows?'checked':''}></div>
       <input type="number" class="num" min="0" id="int_${n}_invest" value="${Number(rec.invest)||0}">
       <div class="badge" id="int_${n}_total">${total>=0? '+'+total:total}</div>
@@ -483,7 +519,7 @@ function renderDefenseSummary(){
   const hdr = document.createElement('div');
   hdr.className = 'skill-line smallmuted';
   hdr.innerHTML = `
-    <div style="min-width:110px">Incoming</div>
+    <div>Incoming</div>
     <div></div><div></div>
     <div>Score</div>
     <div>Level</div>
@@ -497,7 +533,7 @@ function renderDefenseSummary(){
     const row = document.createElement('div');
     row.className = 'skill-line';
     row.innerHTML = `
-      <div class="k" style="min-width:110px">${n}</div>
+      <div class="k">${n}</div>
       <div></div>
       <div></div>
       <div class="badge">${s.toFixed(1)}</div>
@@ -506,6 +542,57 @@ function renderDefenseSummary(){
     `;
     box.appendChild(row);
   }
+}
+
+/* --- Derived computations --- */
+function clampInt(x){ return Math.max(0, Math.floor(Number(x)||0)); }
+
+function updateDerived(){
+  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+
+  const msBOD = milestone('body');
+  const msWIL = milestone('willpower');
+  const msMAG = milestone('magic');
+  const msPRE = milestone('presence');
+  const msREF = milestone('reflex');
+  const msDEX = milestone('dexterity');
+
+  // HP: 100 + level + 12 per M(BOD) + 6 per M(WIL)
+  const hp = 100 + lvl + 12*msBOD + 6*msWIL;
+
+  // EN: 5 + floor(lvl/5) + 1 per Milestone in WIL + 2 per Milestone in MAG
+  const en = 5 + Math.floor(lvl/5) + msWIL + 2*msMAG;
+
+  // FO: 2 + floor(lvl/5) + 1 per Milestone in WIL + 1 per Milestone in PRE
+  const fo = 2 + Math.floor(lvl/5) + msWIL + msPRE;
+
+  // MO: 4 + 1 per Milestone in DEX + 1 per Milestone in REF
+  const mo = 4 + msDEX + msREF;
+
+  // SP cap: 10% of Max HP
+  const spcap = Math.floor(hp * 0.10);
+
+  // Encumbrance: 10 + Athletics*5 + Spirit*2 (using current totals)
+  const athletics = skillTotal('body','Athletics');
+  const spirit = skillTotal('willpower','Spirit');
+  const enc = 10 + (athletics*5) + (spirit*2);
+
+  // ET: 1 + floor(lvl/9) + 1 per Milestone in MAG
+  const et = 1 + Math.floor(lvl/9) + msMAG;
+
+  // Max TX: Resistance + Alchemy (totals)
+  const resistance = skillTotal('body','Resistance');
+  const alchemy = skillTotal('tech','Alchemy');
+  const tx = resistance + alchemy;
+
+  hpEl.textContent = hp;
+  enEl.textContent = en;
+  foEl.textContent = fo;
+  moEl.textContent = mo;
+  spcapEl.textContent = spcap;
+  encEl.textContent = enc;
+  etEl.textContent = et;
+  txEl.textContent = tx;
 }
 
 /* --- load & save --- */
@@ -517,14 +604,22 @@ async function loadCharacter(){
   if (!CHAR.stats.intensities) {
     CHAR.stats.intensities = makeDefaultStats().intensities;
   }
+  if (!('level' in CHAR)) CHAR.level = 1;
+
   // Name
   titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
   nameEl.value = CHAR.name || '';
   nameEl.addEventListener('input', ()=> queueSave());
+
+  // Level
+  levelEl.value = Math.max(1, Number(CHAR.level)||1);
+  levelEl.addEventListener('input', ()=>{ CHAR.level = Math.max(1, Math.floor(Number(levelEl.value)||1)); updateDerived(); queueSave(); });
+
   // Render Stats
   renderStatistics();
   renderIntensities();
   renderDefenseSummary();
+  updateDerived();
 }
 
 function queueSave(){
@@ -535,7 +630,7 @@ function queueSave(){
 
 async function saveNow(){
   try{
-    const payload = { name: nameEl.value || '', stats: CHAR.stats };
+    const payload = { name: nameEl.value || '', level: CHAR.level || 1, stats: CHAR.stats };
     const res = await api('/characters/' + encodeURIComponent(CID), {
       method:'PUT',
       headers:{ 'content-type':'application/json' },
