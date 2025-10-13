@@ -899,6 +899,58 @@ function computeAll(){
     return sum;
   }
 
+function msWithChosenNatures(iv, school, chosen) {
+  const mag = +((iv.mag ?? 0) || 0);
+  const skillKey = lc(school.linked_skill || "");
+  const skillVal = +((iv.skills?.[skillKey]) ?? 0);
+
+  const linked = (school.linked_intensities || []).map(lc);
+  // Keep only chosen natures that the school actually links to
+  const chosenKeys = (chosen || [])
+    .map(lc)
+    .filter(k => linked.includes(k));
+
+  // Fallback: if variant somehow has no valid choice, just use bestMSForSchool
+  if (!chosenKeys.length) {
+    const b = bestMSForSchool(iv, school, { forceTwo: isComplexNeedsTwo(school) });
+    return {
+      ms: b.ms,
+      useOne: b.useOne,
+      pick: Array.isArray(b.pick) ? b.pick : [b.top1, b.top2],
+      mag: b.mag,
+      skillVal: b.skillVal,
+      top1: b.top1,
+      top2: b.top2,
+      pickNames: b.pickNames || [],
+      chosen: b.pickNames || []
+    };
+  }
+
+  // Map to values, take up to 2 (since MS formula never uses more than 2)
+  const vals = chosenKeys
+    .map(k => ({ key: k, val: +((iv.natures?.[k]) ?? 0) }))
+    .sort((a,b) => (b.val - a.val) || a.key.localeCompare(b.key));
+
+  const top1 = vals[0] || { key: null, val: 0 };
+  const top2 = vals[1] || { key: null, val: 0 };
+
+  // For variants: sum the selected values (1 or 2), no “+2” substitution.
+  const usedVals = vals.slice(0, 2);
+  const natureSum = usedVals.reduce((acc, v) => acc + (+v.val || 0), 0);
+
+  return {
+    ms: mag + skillVal + natureSum,
+    useOne: chosenKeys.length === 1,
+    pick: usedVals.map(v => v.val),
+    mag,
+    skillVal,
+    top1: top1.val,
+    top2: top2.val,
+    pickNames: usedVals.map(v => v.key),
+    chosen: chosenKeys
+  };
+}
+
 function msBonusForLinkedRules(school, variantUsedNatures) {
   const list = loadBonuses() || [];
   const linked = (school.linked_intensities || []).map(lc);
