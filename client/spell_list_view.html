@@ -453,6 +453,7 @@
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <h3 style="margin:0;">Description</h3>
           <button class="btn btn-secondary" id="copy-description">Copy Description</button>
+          <button class="btn" id="copy-foundry">Copy All (Foundry Chat)</button>
         </div>
         <div id="description-preview" style="margin-top:8px; padding:12px; background:#121212; border:1px solid #c02d2d; border-radius:10px;"></div>
       </div>
@@ -1549,6 +1550,36 @@ async function copyRich(html){
   }
 }
 
+function buildFoundryHTML(titleText, fields, descHTML){
+  // one self-contained table with inline styles (safe for Foundry chat)
+  const fieldRows = fields.map(([label, val]) => `
+    <tr>
+      <td style="border:1px solid #666; padding:6px 8px; font-weight:600; white-space:nowrap;">${escapeHtml(label)}</td>
+      <td style="border:1px solid #666; padding:6px 8px;">${escapeHtml(String(val ?? "—"))}</td>
+    </tr>
+  `).join("");
+
+  return `
+  <div class="noe-spell" style="font-family: sans-serif; line-height:1.4;">
+    <table style="border-collapse:collapse; width:100%; margin:0;">
+      <thead>
+        <tr>
+          <th colspan="2" style="text-align:left; border:1px solid #666; padding:8px 10px; background:#111; color:#fff;">
+            ${escapeHtml(titleText)}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        ${fieldRows}
+        <tr>
+          <td style="border:1px solid #666; padding:6px 8px; font-weight:600; white-space:nowrap;">Description</td>
+          <td style="border:1px solid #666; padding:6px 8px;">${descHTML}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
 const expModal = document.getElementById("exp-modal");
 const expBackdrop = document.getElementById("exp-backdrop");
 let EXPORT_TARGET_ID = null;
@@ -1605,9 +1636,11 @@ async function continueExport(){
     document.getElementById("description-preview").innerHTML = descHTML;
     document.getElementById("copy-description").onclick = ()=>copyRich(descHTML);
 
-    // Keep any edited flavour as the saved one (optional: uncomment to persist)
-    // setSpellMeta(EXPORT_TARGET_ID, { flavor: flavourHTML });
-
+    document.getElementById("copy-foundry").onclick = ()=>{
+      const html = buildFoundryHTML(displayName, fields, descHTML);
+      copyRich(html);
+    };
+    
     closeExportModal();
     document.getElementById("export-view").style.display = "block";
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
