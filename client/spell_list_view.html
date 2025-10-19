@@ -523,36 +523,6 @@ async function logout() {
   closeLogin();
 }
 
-async function checkMe() {
-  const token = localStorage.getItem("auth_token");
-  if (!token) { setLoggedOutUI(); return; }
-  const res = await fetch(`${API_BASE}/auth/me`, {
-    headers: { "Authorization": `Bearer ${token}` }
-  });
-  const data = await res.json();
-  if (data.status === "success") setLoggedInUI(data.username, data.role);
-  else setLoggedOutUI();
-}
-
-// --- header UI state ---
-document.addEventListener("DOMContentLoaded", () => {
-
-  modal.classList.remove("open");
-  backdrop.classList.remove("open");
-
-  document.getElementById("open-login").addEventListener("click", (e) => { e.preventDefault(); openLogin(); });
-  document.getElementById("close-login").addEventListener("click", (e) => { e.preventDefault(); closeLogin(); });
-  document.getElementById("cancel-login").addEventListener("click", (e) => { e.preventDefault(); closeLogin(); });
-  document.getElementById("login-backdrop").addEventListener("click", closeLogin);
-  document.getElementById("login-btn").addEventListener("click", (e) => { e.preventDefault(); login(); });
-
-  document.getElementById("chip-logout").addEventListener("click", (e) => { e.preventDefault(); logout(); });
-
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLogin(); });
-
-  checkMe();
-});
-
 const CATS = [
   {name:"Avant-Garde", ms:92, days:50},
   {name:"Supreme Archmage", ms:82, days:46},
@@ -848,7 +818,7 @@ function loadPins(){
 function savePins(set){
   try{ localStorage.setItem(pinsKey(), JSON.stringify(Array.from(set||[]))); }catch{}
 }
-let PINNED = loadPins();
+let PINNED;
 function isPinned(sid){ return PINNED.has(String(sid)); }
 function togglePin(sid){
   const k = String(sid);
@@ -1277,8 +1247,9 @@ let varCurrentSchool = null;
 function openVariant(schoolId){
   varCurrentSchool = schools.find(s => (s.id||"").toLowerCase() === String(schoolId||"").toLowerCase());
   if (!varCurrentSchool) return;
+
   varTitle.textContent = `For: ${varCurrentSchool.name}`;
-  const complexTwo = isComplexNeedsTwo(varCurrentSchool);
+
   const ALL_NATURES = ["fire","water","wind","earth","sun","moon","lightning","ki"];
   varChoices.innerHTML = "";
   ALL_NATURES.forEach((k,i)=>{
@@ -1288,26 +1259,36 @@ function openVariant(schoolId){
     wrap.innerHTML = `<input type="checkbox" id="${id}" value="${k}" style="margin-right:6px;"> ${title(k)}`;
     varChoices.appendChild(wrap);
   });
-  if (ints.length===0) { varChoices.innerHTML = `<span class="muted">No intensities defined.</span>`; }
-  varRule.textContent = complexTwo ? "Complex school: select exactly 2 natures."
-                   : (ints.length<=1 ? "Only one linked nature available for this school."
-                                     : "Simple school: select 1 or 2 natures.");
+  const complexTwo = isComplexNeedsTwo(varCurrentSchool); // complex schools must pick exactly 2
+  varRule.textContent = complexTwo
+    ? "Complex school: select exactly 2 natures."
+    : "Simple school: select 1 or 2 natures.";
+
   document.getElementById("var-name").value = "";
   document.getElementById("var-status").textContent = "";
   openModal(varModal, varBackdrop);
 }
 function closeVariant(){ closeModal(varModal, varBackdrop); }
+
 function saveVariant(){
   const checks = Array.from(varChoices.querySelectorAll("input[type=checkbox]:checked"));
   const chosen = checks.map(c=>c.value);
   const name = document.getElementById("var-name").value.trim();
+  const statusEl = document.getElementById("var-status");
   const complexTwo = isComplexNeedsTwo(varCurrentSchool);
+
+  if (!name){ statusEl.textContent = "Enter a variant name."; return; }
   if (complexTwo && chosen.length !== 2){
     statusEl.textContent = "Select exactly 2 natures for complex schools."; return;
   }
   if (!complexTwo && (chosen.length < 1 || chosen.length > 2)){
     statusEl.textContent = "Select 1 or 2 natures."; return;
   }
+
+  addVariant(varCurrentSchool.id, name, chosen);
+  computed = computeAll();
+  renderSchools();
+  closeVariant();
 }
 // ===== Bonuses UI =====
 const bonModal = document.getElementById("bon-modal");
@@ -1644,6 +1625,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   // token & list
   token = localStorage.getItem("auth_token") || "";
   listId = qs("id");
+  PINNED = loadPins();
 
   // topbar auth chip minimal
   const me = await apiMe();
