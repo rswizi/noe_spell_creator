@@ -430,12 +430,11 @@ async def update_spell(spell_id: str, request: Request):
         except Exception:
             return JSONResponse({"status":"error","message":"duration must be an integer"}, status_code=400)
 
-        raw_effects = [str(e).strip() for e in (body.get("effects") or before.get("effects") or []) if str(e).strip()]
-        effect_ids, seen = [], set()
-        for eid in raw_effects:
-            if eid not in seen:
-                seen.add(eid)
-                effect_ids.append(eid)
+        effect_ids = [str(e).strip() for e in (body.get("effects") or before.get("effects") or []) if str(e).strip()]
+        unique_ids = {eid for eid in effect_ids}
+        missing = [eid for eid in unique_ids if not get_col("effects").find_one({"id": eid}, {"_id": 1})]
+        if missing:
+            return JSONResponse({"status":"error","message":f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
 
         missing = [eid for eid in effect_ids if not get_col("effects").find_one({"id": eid}, {"_id": 1})]
         if missing:
@@ -587,12 +586,12 @@ async def submit_spell(request: Request):
         except Exception:
             return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
 
-        raw_effects = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
-        effect_ids, seen = [], set()
-        for eid in raw_effects:
-            if eid not in seen:
-                seen.add(eid)
-                effect_ids.append(eid)
+        effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
+
+        unique_ids = {eid for eid in effect_ids}
+        missing = [eid for eid in unique_ids if not get_col("effects").find_one({"id": eid}, {"_id": 1})]
+        if missing:
+            return JSONResponse({"status": "error", "message": f"Unknown effect id(s): {', '.join(missing)}"}, status_code=400)
 
         if not effect_ids:
             return JSONResponse({"status": "error", "message": "At least one effect is required."}, status_code=400)
