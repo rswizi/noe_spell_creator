@@ -904,11 +904,10 @@ function msWithChosenNatures(iv, school, chosen) {
   const skillKey = lc(school.linked_skill || "");
   const skillVal = +((iv.skills?.[skillKey]) ?? 0);
 
-  const linked = (school.linked_intensities || []).map(lc);
-  // Keep only chosen natures that the school actually links to
+  const ALL_NATURES = ["fire","water","wind","earth","sun","moon","lightning","ki"];
   const chosenKeys = (chosen || [])
     .map(lc)
-    .filter(k => linked.includes(k));
+    .filter(k => ALL_NATURES.includes(k));
 
   // Fallback: if variant somehow has no valid choice, just use bestMSForSchool
   if (!chosenKeys.length) {
@@ -1280,9 +1279,9 @@ function openVariant(schoolId){
   if (!varCurrentSchool) return;
   varTitle.textContent = `For: ${varCurrentSchool.name}`;
   const complexTwo = isComplexNeedsTwo(varCurrentSchool);
-  const ints = (varCurrentSchool.linked_intensities || []).map(lc);
+  const ALL_NATURES = ["fire","water","wind","earth","sun","moon","lightning","ki"];
   varChoices.innerHTML = "";
-  ints.forEach((k,i)=>{
+  ALL_NATURES.forEach((k,i)=>{
     const id = `var-int-${i}`;
     const wrap = document.createElement("label");
     wrap.className = "pill"; wrap.style.cursor = "pointer";
@@ -1302,19 +1301,14 @@ function saveVariant(){
   const checks = Array.from(varChoices.querySelectorAll("input[type=checkbox]:checked"));
   const chosen = checks.map(c=>c.value);
   const name = document.getElementById("var-name").value.trim();
-  const ints = (varCurrentSchool?.linked_intensities || []);
   const complexTwo = isComplexNeedsTwo(varCurrentSchool);
-
-  const statusEl = document.getElementById("var-status");
-  if (!name){ statusEl.textContent = "Enter a variant name."; return; }
-  if (complexTwo && chosen.length !== 2){ statusEl.textContent = "Select exactly 2 natures for complex schools."; return; }
-  if (!complexTwo && ints.length > 1 && (chosen.length<1 || chosen.length>2)){ statusEl.textContent = "Select 1 or 2 natures."; return; }
-  if (ints.length===1 && chosen.length!==1){ statusEl.textContent = "This school only has one nature; select that one."; return; }
-
-  addVariant(varCurrentSchool.id, name, chosen);
-  computed = computeAll(); renderSchools(); closeVariant();
+  if (complexTwo && chosen.length !== 2){
+    statusEl.textContent = "Select exactly 2 natures for complex schools."; return;
+  }
+  if (!complexTwo && (chosen.length < 1 || chosen.length > 2)){
+    statusEl.textContent = "Select 1 or 2 natures."; return;
+  }
 }
-
 // ===== Bonuses UI =====
 const bonModal = document.getElementById("bon-modal");
 const bonBackdrop = document.getElementById("bon-backdrop");
