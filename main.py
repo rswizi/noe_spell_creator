@@ -2782,3 +2782,166 @@ def delete_character(cid: str, request: Request):
         return {"status":"error","message":"Forbidden"}
     get_col("characters").delete_one({"id": cid})
     return {"status":"success","deleted": cid}
+
+# ---------- Abilities & Traits ----------
+
+from fastapi import Body
+
+@app.post("/abilities")
+async def create_ability(request: Request, payload: dict = Body(...)):
+    """
+    Create a new Ability / Trait.
+    Types: active, passive, mixed
+    Sources: Specie, Talent, Archetype, Expertise, Awakening, Apotheosis, Other
+    """
+    username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    col = get_col("abilities")
+
+    name = (payload.get("name") or "Unnamed Ability").strip()
+    if not name:
+        return JSONResponse({"status": "error", "message": "Name is required"}, status_code=400)
+
+    ab_type = (payload.get("type") or "passive").strip().lower()
+    if ab_type not in ("active", "passive", "mixed"):
+        return JSONResponse({"status":"error","message":"Invalid type"}, status_code=400)
+
+    source_category = (payload.get("source_category") or "Other").strip()
+    source_ref      = (payload.get("source_ref") or "").strip()   # e.g. "Elf", "Boxer", "Expert Tracker"
+    tags = [str(t).strip() for t in (payload.get("tags") or []) if str(t).strip()]
+
+    description = (payload.get("description") or "").strip()
+
+    active_in  = payload.get("active") or {}
+    passive_in = payload.get("passive") or {}
+
+    # --- normalize active part ---
+    active_block = None
+    if ab_type in ("active", "mixed"):
+        activation = (active_in.get("activation") or "Action").strip()
+        try:
+            rng = int(active_in.get("range") or 0)
+        except Exception:
+            return JSONResponse({"status":"error","message":"Active range must be an integer"}, status_code=400)
+
+        aoe = (active_in.get("aoe") or "").strip()
+
+        # Costs: HP / EN / MP / FO / MO / TX / Other
+        costs_in = active_in.get("costs") or {}
+        def _num(key, default=0):
+            v = costs_in.get(key, default)
+            try:
+                return int(v or 0)
+            except Exception:
+                raise ValueError(key)
+
+        try:
+            costs = {
+                "HP": _num("HP"),
+                "EN": _num("EN"),
+                "MP": _num("MP"),
+                "FO": _num("FO"),
+                "MO": _num("MO"),
+                "TX": _num("TX"),
+            }
+        except ValueError as bad_key:
+            return JSONResponse({"status":"error","message":f"Cost {bad_key} must be an integer"}, status_code=400)
+
+        costs["other_label"] = (costs_in.get("other_label") or "").strip()
+        try:
+            costs["other_value"] = int(costs_in.get("other_value") or 0)
+        except Exception:
+            costs["other_value"] = 0
+
+        active_block = {
+            "activation": activation,   # "Action", "Free Action", "Ritual", "Special Action"
+            "range": rng,
+            "aoe": aoe,
+            "costs": costs,
+        }
+
+    # --- normalize passive part ---
+    passive_block = None
+    if ab_type in ("passive", "mixed"):
+        pdesc = (passive_in.get("description") or "").strip()
+        mods_in = passive_in.get("modifiers") or []
+        modifiers = []
+
+        for m in mods_in:
+            target = (m.get("target") or "").strip()  # e.g. "stats.hp_max", "skills.Acrobatics"
+            if not target:
+                continue
+            mode = (m.get("mode") or "add").strip().lower()
+            if mode not in ("add", "mul", "set"):
+                mode = "add"
+            try:
+                value = float(m.get("value") or 0)
+            except Exception:
+                return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
+            note = (m.get("note") or "").strip()
+            modifiers.append({
+                "target": target,
+                "mode": mode,    # add / mul / set
+                "value": value,
+                "note": note,
+            })
+
+        passive_block = {
+            "description": pdesc,
+            "modifiers": modifiers,
+        }
+
+    aid = next_id_str("abilities", padding=4)
+    now = datetime.datetime.utcnow().isoformat() + "Z"
+
+    doc = {
+        "id": aid,
+        "name": name,
+        "name_key": norm_key(name),
+        "type": ab_type,
+        "source_category": source_category,
+        "source_ref": source_ref,
+        "tags": tags,
+        "description": description,
+        "active": active_block,
+        "passive": passive_block,
+        "creator": username,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    col.insert_one(dict(doc))
+    # strip _id
+    out = {k: v for k, v in doc.items() if k != "_id"}
+    return {"status": "success", "ability": out}
+
+
+@app.get("/abilities")
+def list_abilities(
+    request: Request,
+    name: str | None = Query(default=None),
+    source: str | None = Query(default=None),
+    typ: str | None = Query(default=None),
+):
+    username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    col = get_col("abilities")
+    q: dict = {}
+
+    if name:
+        q["name"] = {"$regex": name, "$options": "i"}
+    if source:
+        q["source_category"] = {"$regex": source, "$options": "i"}
+    if typ:
+        q["type"] = {"$regex": typ, "$options": "i"}
+
+    # For now: everyone sees everything; if you want per-user, filter by creator=username
+    docs = list(col.find(q, {"_id": 0}))
+    docs.sort(key=lambda d: d.get("name", "").lower())
+    return {"status": "success", "abilities": docs}
+
+
+@app.get("/abilities/{aid}")
+def get_ability(aid: str):
+    doc = get_col("abilities").find_one({"id": aid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Ability not found")
+    return {"status": "success", "ability": doc}
