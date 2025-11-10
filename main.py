@@ -2789,12 +2789,7 @@ from fastapi import Body
 
 @app.post("/abilities")
 async def create_ability(request: Request, payload: dict = Body(...)):
-    """
-    Create a new Ability / Trait.
-    Types: active, passive, mixed
-    Sources: Specie, Talent, Archetype, Expertise, Awakening, Apotheosis, Other
-    """
-    username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    username, role = require_auth(request, roles=["moderator", "admin"])
     col = get_col("abilities")
 
     name = (payload.get("name") or "Unnamed Ability").strip()
@@ -2939,9 +2934,122 @@ def list_abilities(
     return {"status": "success", "abilities": docs}
 
 
-@app.get("/abilities/{aid}")
-def get_ability(aid: str):
-    doc = get_col("abilities").find_one({"id": aid}, {"_id": 0})
-    if not doc:
+@app.put("/abilities/{aid}")
+async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
+    username, role = require_auth(request, roles=["moderator", "admin"])
+    col = get_col("abilities")
+
+    existing = col.find_one({"id": aid})
+    if not existing:
         raise HTTPException(404, "Ability not found")
-    return {"status": "success", "ability": doc}
+
+    name = (payload.get("name") or existing.get("name") or "Unnamed Ability").strip()
+    if not name:
+        return JSONResponse({"status": "error", "message": "Name is required"}, status_code=400)
+
+    ab_type = (payload.get("type") or existing.get("type") or "passive").strip().lower()
+    if ab_type not in ("active", "passive", "mixed"):
+        return JSONResponse({"status":"error","message":"Invalid type"}, status_code=400)
+
+    source_category = (payload.get("source_category") or existing.get("source_category") or "Other").strip()
+    source_ref      = (payload.get("source_ref") or existing.get("source_ref") or "").strip()
+    tags = [str(t).strip() for t in (payload.get("tags") or existing.get("tags") or []) if str(t).strip()]
+
+    description = (payload.get("description") or existing.get("description") or "").strip()
+
+    active_in  = payload.get("active") or existing.get("active") or {}
+    passive_in = payload.get("passive") or existing.get("passive") or {}
+
+    active_block = None
+    if ab_type in ("active", "mixed"):
+        activation = (active_in.get("activation") or "Action").strip()
+        try:
+            rng = int(active_in.get("range") or 0)
+        except Exception:
+            return JSONResponse({"status":"error","message":"Active range must be an integer"}, status_code=400)
+
+        aoe = (active_in.get("aoe") or "").strip()
+
+        costs_in = active_in.get("costs") or {}
+        def _num(key, default=0):
+            v = costs_in.get(key, default)
+            try:
+                return int(v or 0)
+            except Exception:
+                raise ValueError(key)
+
+        try:
+            costs = {
+                "HP": _num("HP"),
+                "EN": _num("EN"),
+                "MP": _num("MP"),
+                "FO": _num("FO"),
+                "MO": _num("MO"),
+                "TX": _num("TX"),
+            }
+        except ValueError as bad_key:
+            return JSONResponse({"status":"error","message":f"Cost {bad_key} must be an integer"}, status_code=400)
+
+        costs["other_label"] = (costs_in.get("other_label") or "").strip()
+        try:
+            costs["other_value"] = int(costs_in.get("other_value") or 0)
+        except Exception:
+            costs["other_value"] = 0
+
+        active_block = {
+            "activation": activation,
+            "range": rng,
+            "aoe": aoe,
+            "costs": costs,
+        }
+
+    passive_block = None
+    if ab_type in ("passive", "mixed"):
+        pdesc = (passive_in.get("description") or "").strip()
+        mods_in = passive_in.get("modifiers") or []
+        modifiers = []
+        for m in mods_in:
+            target = (m.get("target") or "").strip()
+            if not target:
+                continue
+            mode = (m.get("mode") or "add").strip().lower()
+            if mode not in ("add","mul","set"):
+                mode = "add"
+            try:
+                value = float(m.get("value") or 0)
+            except Exception:
+                return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
+            note = (m.get("note") or "").strip()
+            modifiers.append({
+                "target": target,
+                "mode": mode,
+                "value": value,
+                "note": note,
+            })
+
+        passive_block = {
+            "description": pdesc,
+            "modifiers": modifiers,
+        }
+
+    now = datetime.datetime.utcnow().isoformat() + "Z"
+
+    updated = {
+        "name": name,
+        "name_key": norm_key(name),
+        "type": ab_type,
+        "source_category": source_category,
+        "source_ref": source_ref,
+        "tags": tags,
+        "description": description,
+        "active": active_block,
+        "passive": passive_block,
+        "updated_at": now,
+    }
+
+    # keep id, creator, created_at from existing
+    col.update_one({"id": aid}, {"$set": updated})
+    existing.update(updated)
+    existing.pop("_id", None)
+
+    return {"status": "success", "ability": existing}

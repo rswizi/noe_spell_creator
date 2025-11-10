@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NoE — Abilities Browser</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#050507; color:#f5f5f5; }
+    .page { min-height:100vh; display:grid; place-items:start center; }
+    .wrap { width:100%; max-width:1180px; padding:24px 16px 40px; }
+
+    .topbar { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+    .topbar h1 { margin:0; font-size:20px; }
+    .topbar .right { margin-left:auto; }
+    .muted { opacity:.8; font-size:.9rem; }
+
+    a.btn, button.btn, input, select, textarea {
+      border-radius:10px; border:1px solid #333; background:#111; color:#f0f0f0;
+      padding:8px 10px; font:inherit;
+    }
+    a.btn:hover, button.btn:hover { background:#181818; }
+    textarea { resize:vertical; min-height:80px; }
+
+    .grid { display:grid; gap:16px; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); align-items:start; }
+    @media (max-width:960px) { .grid { grid-template-columns:1fr; } }
+
+    .panel { border:1px solid #262626; border-radius:14px; background:#101010; padding:14px 14px 16px; }
+    .panel h2 { margin:0 0 8px; font-size:1rem; }
+    .panel h3 { margin:10px 0 6px; font-size:.95rem; }
+    .row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+    .row label { font-size:.88rem; opacity:.85; min-width:90px; }
+    .row .grow { flex:1 1 auto; }
+
+    .ability-list { max-height:430px; overflow:auto; margin-top:6px; font-size:.9rem; border-top:1px solid #222; padding-top:6px; }
+    .ability-item { padding:5px 6px; border-radius:8px; cursor:pointer; display:flex; justify-content:space-between; gap:6px; }
+    .ability-item:hover { background:#181818; }
+    .ability-item.active { background:#222; border:1px solid #3f3f3f; }
+
+    .badge { border-radius:999px; border:1px solid #333; padding:2px 8px; font-size:.8rem; }
+
+    .pill { font-size:.75rem; opacity:.85; border:1px solid #343434; border-radius:999px; padding:2px 7px; }
+
+    .subgrid-2 { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:8px; }
+    @media (max-width:700px) { .subgrid-2 { grid-template-columns:1fr; } }
+
+    .cost-grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:6px; margin-top:6px; }
+    .cost-grid label { font-size:.8rem; opacity:.85; }
+    .cost-grid input { width:100%; text-align:right; }
+
+    .mod-list { display:grid; gap:8px; margin-top:6px; }
+    .mod-row { display:grid; grid-template-columns: 1.2fr 0.7fr 0.7fr auto; gap:6px; align-items:center; }
+    .mod-row input, .mod-row select { width:100%; }
+    .mod-row button { padding:4px 8px; font-size:.8rem; }
+
+    .status-line { margin-top:10px; font-size:.85rem; opacity:.9; }
+  </style>
+</head>
+<body>
+  <div class="page"><div class="wrap">
+
+    <div class="topbar">
+      <h1>Browse & Edit Abilities</h1>
+      <span id="login-chip" class="muted right"></span>
+      <a class="btn" href="abilities_home.html">Back</a>
+    </div>
+
+    <div class="grid">
+      <!-- LEFT: list / filters -->
+      <div>
+        <div class="panel">
+          <h2>Search</h2>
+          <div class="row">
+            <label for="filter-name">Name</label>
+            <input id="filter-name" class="grow" placeholder="Search by name…" />
+          </div>
+          <div class="row">
+            <label for="filter-type">Type</label>
+            <select id="filter-type" class="grow">
+              <option value="">Any</option>
+              <option value="active">Active</option>
+              <option value="passive">Passive</option>
+              <option value="mixed">Mixed</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="filter-source">Source</label>
+            <select id="filter-source" class="grow">
+              <option value="">Any</option>
+              <option value="Specie">Specie</option>
+              <option value="Talent">Talent</option>
+              <option value="Archetype">Archetype</option>
+              <option value="Expertise">Expertise</option>
+              <option value="Awakening">Awakening</option>
+              <option value="Apotheosis">Apotheosis</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Abilities</h2>
+          <div id="ability-list" class="ability-list">
+            <div class="muted">No abilities loaded yet.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: editor -->
+      <div>
+        <div class="panel">
+          <h2>Selected Ability</h2>
+
+          <div class="row">
+            <label>ID</label>
+            <span id="ab-id" class="muted">None selected</span>
+          </div>
+
+          <div class="row">
+            <label for="ab-name">Name</label>
+            <input id="ab-name" class="grow" />
+          </div>
+
+          <div class="row">
+            <label for="ab-type">Type</label>
+            <select id="ab-type">
+              <option value="active">Active</option>
+              <option value="passive">Passive</option>
+              <option value="mixed">Mixed</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="ab-source-cat">Source</label>
+            <select id="ab-source-cat" class="grow">
+              <option value="Specie">Specie</option>
+              <option value="Talent">Talent</option>
+              <option value="Archetype">Archetype</option>
+              <option value="Expertise">Expertise</option>
+              <option value="Awakening">Awakening</option>
+              <option value="Apotheosis">Apotheosis</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="ab-source-ref">Source Detail</label>
+            <input id="ab-source-ref" class="grow" />
+          </div>
+
+          <div class="row">
+            <label for="ab-tags">Tags</label>
+            <input id="ab-tags" class="grow" />
+          </div>
+
+          <h3>Description</h3>
+          <textarea id="ab-description"></textarea>
+
+          <button class="btn" id="btn-save" type="button" style="margin-top:14px;">💾 Save Changes</button>
+          <div class="status-line" id="status-line">Select an ability to begin.</div>
+        </div>
+
+        <div class="panel" id="panel-passive">
+          <h2>Passive Part <span class="pill">always on</span></h2>
+          <h3>Passive Description</h3>
+          <textarea id="passive-desc"></textarea>
+
+          <h3 style="margin-top:10px;">Modifiers</h3>
+          <div class="muted" style="margin-bottom:4px;">
+            Use keys like <code>stats.hp_max</code>, <code>skills.Acrobatics</code>, <code>defense.Fire</code>, etc.
+          </div>
+
+          <div id="mod-list" class="mod-list"></div>
+          <button class="btn" id="btn-add-mod" type="button">+ Add Modifier</button>
+        </div>
+
+        <div class="panel" id="panel-active">
+          <h2>Active Part <span class="pill">needs activation</span></h2>
+
+          <div class="row">
+            <label for="act-activation">Activation</label>
+            <select id="act-activation" class="grow">
+              <option value="Action">Action</option>
+              <option value="Free Action">Free Action</option>
+              <option value="Special Action">Special Action</option>
+              <option value="Ritual">Ritual</option>
+            </select>
+          </div>
+
+          <div class="subgrid-2">
+            <div>
+              <label>Range</label>
+              <input id="act-range" type="number" min="0" step="1" />
+            </div>
+            <div>
+              <label>AoE</label>
+              <input id="act-aoe" />
+            </div>
+          </div>
+
+          <h3 style="margin-top:10px;">Costs</h3>
+          <div class="cost-grid">
+            <div><label>HP</label><input id="cost-hp" type="number" step="1" /></div>
+            <div><label>EN</label><input id="cost-en" type="number" step="1" /></div>
+            <div><label>MP</label><input id="cost-mp" type="number" step="1" /></div>
+            <div><label>FO</label><input id="cost-fo" type="number" step="1" /></div>
+            <div><label>MO</label><input id="cost-mo" type="number" step="1" /></div>
+            <div><label>TX</label><input id="cost-tx" type="number" step="1" /></div>
+            <div><label>Other label</label><input id="cost-other-label" /></div>
+            <div><label>Other value</label><input id="cost-other-value" type="number" step="1" /></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div></div>
+
+<script>
+function getToken(){ return localStorage.getItem('auth_token') || ''; }
+function setCookieToken(tok){ if(!tok) return; document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
+function authHeaders(){
+  const t=getToken(); if(t) setCookieToken(t);
+  return t ? {'Authorization':'Bearer '+t, 'X-Auth-Token':t} : {};
+}
+async function api(path,opt={}){
+  const headers = Object.assign({}, opt.headers||{}, authHeaders());
+  const resp = await fetch(path, { credentials:'include', ...opt, headers });
+  const ct = resp.headers.get('content-type') || '';
+  const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
+  if(!resp.ok || data.status==='error') throw new Error(data.message || ('HTTP '+resp.status));
+  return data;
+}
+
+const loginChip      = document.getElementById('login-chip');
+const abilityListEl  = document.getElementById('ability-list');
+const filterNameEl   = document.getElementById('filter-name');
+const filterTypeEl   = document.getElementById('filter-type');
+const filterSourceEl = document.getElementById('filter-source');
+
+const abIdEl       = document.getElementById('ab-id');
+const nameEl       = document.getElementById('ab-name');
+const typeEl       = document.getElementById('ab-type');
+const sourceCatEl  = document.getElementById('ab-source-cat');
+const sourceRefEl  = document.getElementById('ab-source-ref');
+const tagsEl       = document.getElementById('ab-tags');
+const descEl       = document.getElementById('ab-description');
+const statusLine   = document.getElementById('status-line');
+
+const panelActive  = document.getElementById('panel-active');
+const panelPassive = document.getElementById('panel-passive');
+const passiveDescEl= document.getElementById('passive-desc');
+const modListEl    = document.getElementById('mod-list');
+const btnAddMod    = document.getElementById('btn-add-mod');
+
+const actActivationEl = document.getElementById('act-activation');
+const actRangeEl      = document.getElementById('act-range');
+const actAoeEl        = document.getElementById('act-aoe');
+
+const costHpEl    = document.getElementById('cost-hp');
+const costEnEl    = document.getElementById('cost-en');
+const costMpEl    = document.getElementById('cost-mp');
+const costFoEl    = document.getElementById('cost-fo');
+const costMoEl    = document.getElementById('cost-mo');
+const costTxEl    = document.getElementById('cost-tx');
+const costOLabelEl= document.getElementById('cost-other-label');
+const costOValEl  = document.getElementById('cost-other-value');
+
+const btnSave     = document.getElementById('btn-save');
+
+let currentAbilityId = null;
+
+async function checkMe(){
+  try{
+    const me = await api('/auth/me');
+    loginChip.textContent = me.username + ' (' + me.role + ')';
+  }catch(e){
+    loginChip.textContent = 'Not logged in.';
+  }
+}
+
+function addModifierRow(initial){
+  const row = document.createElement('div');
+  row.className = 'mod-row';
+
+  const target = document.createElement('input');
+  target.placeholder = 'target key (e.g. stats.hp_max)';
+  target.value = initial?.target || '';
+
+  const mode = document.createElement('select');
+  ['add','mul','set'].forEach(m=>{
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    if ((initial?.mode || 'add') === m) opt.selected = true;
+    mode.appendChild(opt);
+  });
+
+  const value = document.createElement('input');
+  value.type = 'number';
+  value.step = '0.1';
+  value.value = initial?.value ?? 0;
+
+  const rm = document.createElement('button');
+  rm.type = 'button';
+  rm.textContent = '✕';
+  rm.className = 'btn';
+  rm.addEventListener('click', ()=> row.remove());
+
+  row.appendChild(target);
+  row.appendChild(mode);
+  row.appendChild(value);
+  row.appendChild(rm);
+  modListEl.appendChild(row);
+}
+
+btnAddMod.addEventListener('click', ()=> addModifierRow());
+
+function updateTypeVisibility(){
+  const t = typeEl.value;
+  panelActive.style.display  = (t === 'active' || t === 'mixed')  ? '' : 'none';
+  panelPassive.style.display = (t === 'passive' || t === 'mixed') ? '' : 'none';
+}
+typeEl.addEventListener('change', updateTypeVisibility);
+
+function buildPayloadFromForm(){
+  const tags = (tagsEl.value || '').split(',')
+    .map(t=>t.trim()).filter(Boolean);
+
+  const base = {
+    name: nameEl.value || '',
+    type: typeEl.value,
+    source_category: sourceCatEl.value,
+    source_ref: sourceRefEl.value || '',
+    tags,
+    description: descEl.value || '',
+  };
+
+  let active = null;
+  if (typeEl.value === 'active' || typeEl.value === 'mixed') {
+    active = {
+      activation: actActivationEl.value,
+      range: Number(actRangeEl.value || 0),
+      aoe: actAoeEl.value || '',
+      costs: {
+        HP: Number(costHpEl.value || 0),
+        EN: Number(costEnEl.value || 0),
+        MP: Number(costMpEl.value || 0),
+        FO: Number(costFoEl.value || 0),
+        MO: Number(costMoEl.value || 0),
+        TX: Number(costTxEl.value || 0),
+        other_label: costOLabelEl.value || '',
+        other_value: Number(costOValEl.value || 0),
+      }
+    };
+  }
+
+  let passive = null;
+  if (typeEl.value === 'passive' || typeEl.value === 'mixed') {
+    const mods = [];
+    modListEl.querySelectorAll('.mod-row').forEach(row=>{
+      const inputs = row.querySelectorAll('input, select');
+      const target = inputs[0].value.trim();
+      const mode   = inputs[1].value;
+      const value  = parseFloat(inputs[2].value || '0');
+      if (!target) return;
+      mods.push({ target, mode, value, note:'' });
+    });
+    passive = {
+      description: passiveDescEl.value || '',
+      modifiers: mods,
+    };
+  }
+
+  const out = base;
+  if (active) out.active = active;
+  if (passive) out.passive = passive;
+  return out;
+}
+
+function populateForm(a){
+  currentAbilityId = a.id;
+  abIdEl.textContent = a.id || '(no id)';
+  nameEl.value       = a.name || '';
+  typeEl.value       = a.type || 'passive';
+  sourceCatEl.value  = a.source_category || 'Other';
+  sourceRefEl.value  = a.source_ref || '';
+  tagsEl.value       = (a.tags || []).join(', ');
+  descEl.value       = a.description || '';
+
+  // passive
+  const passive = a.passive || {};
+  passiveDescEl.value = passive.description || '';
+  modListEl.innerHTML = '';
+  (passive.modifiers || []).forEach(m=> addModifierRow(m));
+
+  // active
+  const active = a.active || {};
+  actActivationEl.value = active.activation || 'Action';
+  actRangeEl.value      = active.range ?? 0;
+  actAoeEl.value        = active.aoe || '';
+
+  const costs = active.costs || {};
+  costHpEl.value     = costs.HP ?? 0;
+  costEnEl.value     = costs.EN ?? 0;
+  costMpEl.value     = costs.MP ?? 0;
+  costFoEl.value     = costs.FO ?? 0;
+  costMoEl.value     = costs.MO ?? 0;
+  costTxEl.value     = costs.TX ?? 0;
+  costOLabelEl.value = costs.other_label || '';
+  costOValEl.value   = costs.other_value ?? 0;
+
+  updateTypeVisibility();
+}
+
+async function loadAbilities(){
+  try{
+    const params = [];
+    if (filterNameEl.value) params.push('name='+encodeURIComponent(filterNameEl.value));
+    if (filterTypeEl.value) params.push('typ='+encodeURIComponent(filterTypeEl.value));
+    if (filterSourceEl.value) params.push('source='+encodeURIComponent(filterSourceEl.value));
+    const qs = params.length ? '?'+params.join('&') : '';
+    const res = await api('/abilities'+qs);
+    const arr = res.abilities || [];
+    abilityListEl.innerHTML = '';
+    if (!arr.length){
+      abilityListEl.innerHTML = '<div class="muted">No abilities found.</div>';
+      return;
+    }
+    arr.forEach(a=>{
+      const div = document.createElement('div');
+      div.className = 'ability-item';
+      if (a.id === currentAbilityId) div.classList.add('active');
+      const left = document.createElement('span');
+      left.textContent = a.name;
+      const right = document.createElement('span');
+      right.className = 'badge';
+      right.textContent = a.type || '';
+      div.appendChild(left);
+      div.appendChild(right);
+      div.addEventListener('click', async ()=>{
+        try{
+          const full = await api('/abilities/'+encodeURIComponent(a.id));
+          populateForm(full.ability);
+          document.querySelectorAll('.ability-item').forEach(x=>x.classList.remove('active'));
+          div.classList.add('active');
+          statusLine.textContent = 'Loaded '+a.id;
+        }catch(e){
+          statusLine.textContent = 'Error loading ability: '+e.message;
+        }
+      });
+      abilityListEl.appendChild(div);
+    });
+  }catch(err){
+    abilityListEl.innerHTML = '<div class="muted">Error: '+err.message+'</div>';
+  }
+}
+
+filterNameEl.addEventListener('input', ()=>{
+  clearTimeout(filterNameEl._t);
+  filterNameEl._t = setTimeout(loadAbilities, 250);
+});
+filterTypeEl.addEventListener('change', loadAbilities);
+filterSourceEl.addEventListener('change', loadAbilities);
+
+btnSave.addEventListener('click', async ()=>{
+  if (!currentAbilityId){
+    statusLine.textContent = 'No ability selected.';
+    return;
+  }
+  try{
+    statusLine.textContent = 'Saving…';
+    const payload = buildPayloadFromForm();
+    const res = await api('/abilities/'+encodeURIComponent(currentAbilityId), {
+      method:'PUT',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify(payload),
+    });
+    statusLine.textContent = 'Saved '+res.ability.id;
+    loadAbilities();
+  }catch(err){
+    statusLine.textContent = 'Error: '+err.message;
+  }
+});
+
+checkMe().then(loadAbilities);
+</script>
+</body>
+</html>
