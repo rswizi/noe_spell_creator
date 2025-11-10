@@ -2935,6 +2935,13 @@ def list_abilities(
 
 
 @app.put("/abilities/{aid}")
+def get_ability(aid: str, request: Request):
+    username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    col = get_col("abilities")
+    doc = col.find_one({"id": aid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Ability not found")
+    return {"status": "success", "ability": doc}
 async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
     username, role = require_auth(request, roles=["moderator", "admin"])
     col = get_col("abilities")
