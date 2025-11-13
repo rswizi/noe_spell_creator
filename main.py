@@ -2933,8 +2933,7 @@ def list_abilities(
     docs.sort(key=lambda d: d.get("name", "").lower())
     return {"status": "success", "abilities": docs}
 
-
-@app.put("/abilities/{aid}")
+@app.get("/abilities/{aid}")
 def get_ability(aid: str, request: Request):
     username, role = require_auth(request, roles=["user", "moderator", "admin"])
     col = get_col("abilities")
@@ -2942,6 +2941,8 @@ def get_ability(aid: str, request: Request):
     if not doc:
         raise HTTPException(404, "Ability not found")
     return {"status": "success", "ability": doc}
+
+@app.put("/abilities/{aid}")
 async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
     username, role = require_auth(request, roles=["moderator", "admin"])
     col = get_col("abilities")
