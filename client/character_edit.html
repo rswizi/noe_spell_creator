@@ -2,649 +2,568 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NoE — Edit Character (with Derived)</title>
-
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NoE — Character Editor</title>
+  <link rel="stylesheet" href="/static/style.css" />
   <style>
     :root { color-scheme: dark; }
-    html,body { height: 100%; }
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    /* centered page like the rest */
-    .page { min-height: 100vh; display: grid; place-items: start center; background: #0b0b0b; }
-    .wrap { width: 100%; max-width: 980px; padding: 28px 16px; }
+    body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#0b0b0b; color:#f5f5f5; }
+    .page { min-height:100vh; display:grid; place-items:start center; }
+    .wrap { width:100%; max-width:1280px; padding:24px 16px 44px; }
 
-    /* chrome */
-    .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
-    .topbar h1 { font-size: 20px; margin: 0; }
-    a.btn, button, input { padding:8px 12px; border-radius:10px; border:1px solid #333; background:#121212; color:#f0f0f0; text-decoration:none; }
-    a.btn:hover, button:hover { background:#171717; }
-    .muted { opacity:.8; font-size:.9rem; }
-    .grow { flex: 1 1 auto; }
-    .right { margin-left:auto; }
+    a.btn, button.btn, input, select, textarea {
+      border-radius:10px; border:1px solid #333; background:#111; color:#f0f0f0; padding:8px 10px; font:inherit;
+    }
+    a.btn:hover, button.btn:hover { background:#181818; }
+    textarea { resize:vertical; min-height:80px; }
+    .muted { opacity:.82; }
 
-    /* tabs */
-    .tabs { display:flex; gap:8px; border-bottom:1px solid #222; margin:16px 0 12px; }
-    .tab { padding:10px 14px; border:1px solid #222; border-bottom:none; border-radius:12px 12px 0 0; background:#111; cursor:pointer; }
-    .tab.active { background:#191919; font-weight:600; }
-    .tabpanes { border:1px solid #222; border-radius:0 14px 14px 14px; background:#141414; padding:16px; }
+    /* Topbar */
+    .topbar { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+    .topbar h1 { margin:0; font-size:20px; }
+    .topbar .right { margin-left:auto; }
 
-    /* statistics layout */
-    .stats-grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); align-items:start; }
-    .panel { border:1px solid #2a2a2a; border-radius:14px; overflow:hidden; background:#101010; }
-    details.panel > summary { list-style:none; cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; }
-    details.panel > summary::-webkit-details-marker { display:none; }
-    .pill { font-size:.85rem; opacity:.85; border:1px solid #2f2f2f; border-radius:999px; padding:2px 8px; }
-    .panel-body { padding:0 14px 14px; }
+    /* Panels / rows */
+    .panel { border:1px solid #262626; border-radius:14px; background:#101010; padding:14px 14px 16px; margin-top:12px; }
+    .row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+    .row .grow { flex:1 1 auto; }
 
-    .row { display:flex; align-items:center; gap:8px; }
-    .row > .grow { flex:1 1 auto; }
-    .k { opacity:.85; font-size:.9rem; }
-    .num { width:90px; }
-    .total { font-weight:600; }
-    .hdr { display:flex; align-items:center; gap:10px; }
-    .skills { display:grid; gap:8px; margin-top:10px; }
-    .skill-line { display:grid; grid-template-columns: auto 1fr auto; gap:8px; align-items:center; }
-    .skill-total { min-width:48px; text-align:right; font-variant-numeric: tabular-nums; }
-    .charac-badge { font-variant-numeric: tabular-nums; }
-    .skill-line { display:grid; grid-template-columns: auto 1fr auto auto auto auto; gap:8px; align-items:center; }
-    .num { width:90px; }
-    .badge { border:1px solid #2f2f2f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; }
-    .smallmuted { opacity:.75; font-size:.85rem; }
+    /* Tabs */
+    .tabs { display:flex; gap:8px; border-bottom:1px solid #222; margin:14px 0 10px; }
+    .tab-link { padding:8px 10px; border-radius:10px 10px 0 0; cursor:pointer; }
+    .tab-link.active { background:#111; border:1px solid #222; border-bottom:none; }
+    .tab-panel { display:none; }
 
-    /* --- alignment fixes for all skill-line blocks --- */
-    .skill-line { display:grid; grid-template-columns: 140px 80px 80px 70px 70px 50px; gap:8px; align-items:center; }
-    .skill-line.smallmuted { font-size:.85rem; opacity:.75; }
-    .skill-line input.num { width:70px; text-align:right; }
-    .skill-line .badge, .skill-line .skill-total { text-align:center; font-variant-numeric: tabular-nums; min-width:50px; }
-    .skill-line .k { font-size:.9rem; opacity:.85; }
+    /* Stats */
+    .stats-grid { display:grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap:10px; }
+    @media (max-width:1100px){ .stats-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); } }
+    @media (max-width:700px){ .stats-grid{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
+    .stat-card { border:1px solid #222; border-radius:12px; padding:10px 12px; background:#0f0f0f; }
+    .stat-name { font-size:.86rem; opacity:.8; }
+    .stat-val { font-size:1.2rem; font-weight:600; }
+    .stat-hover { text-decoration: dotted underline; cursor:help; }
 
-    /* status line */
-    .status { margin-top:10px; opacity:.8; }
+    /* Chips */
+    .chip-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .chip {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 8px; border:1px solid #333; border-radius:999px; background:#111; font-size:.9rem;
+    }
+    .chip .badges { display:inline-flex; gap:6px; margin-left:6px; }
+    .chip .rm { cursor:pointer; border:none; background:#181818; border-radius:6px; padding:2px 6px; color:#f5f5f5; }
+    .pill { border:1px solid #333; border-radius:999px; padding:1px 6px; font-size:.75rem; opacity:.9; }
 
-    /* Derived stats table */
-    .derived-grid { display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); }
-    .kv { display:grid; grid-template-columns: auto 1fr; gap:6px 8px; align-items:center; }
-    .kv .val { justify-self:end; font-variant-numeric: tabular-nums; }
+    /* Modal */
+    .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:9998; }
+    .modal { width:min(980px, calc(100vw - 24px)); max-height:80vh; overflow:auto; border:1px solid #333; border-radius:14px; background:#0f0f0f; box-shadow:0 24px 60px rgba(0,0,0,.6); }
+    .modal-head { display:flex; gap:10px; align-items:center; padding:12px; border-bottom:1px solid #222; position:sticky; top:0; background:inherit; }
+    .modal-body { display:grid; grid-template-columns: minmax(0,1.2fr) minmax(0,0.8fr); gap:12px; padding:12px; }
+    @media (max-width:900px){ .modal-body{ grid-template-columns:1fr; } }
+    .table { width:100%; border-collapse:collapse; font-size:.92rem; }
+    .table th, .table td { padding:7px 8px; border-bottom:1px solid #1c1c1c; vertical-align:top; }
+    .table tr:hover { background:#151515; }
+    .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+    .tag { border:1px solid #2b2b2b; border-radius:999px; padding:1px 6px; font-size:.72rem; opacity:.9; }
+
+    /* Tooltip */
+    .tooltip {
+      position:absolute; z-index:9999; max-width:380px; border:1px solid #333; background:#0d0d0d; color:#f5f5f5;
+      border-radius:10px; padding:8px 10px; font-size:.86rem; display:none; box-shadow:0 8px 24px rgba(0,0,0,.4);
+    }
+
+    /* Breakdown drawer */
+    .drawer { position:fixed; top:0; right:0; width:min(420px, 100vw); height:100vh; background:#0b0b0b; border-left:1px solid #222; box-shadow:-18px 0 40px rgba(0,0,0,.5); transform:translateX(100%); transition:transform .25s ease; z-index:9997; }
+    .drawer.open { transform:translateX(0); }
+    .drawer-head { display:flex; align-items:center; gap:10px; padding:12px; border-bottom:1px solid #222; }
+    .drawer-body { padding:12px; overflow:auto; height:calc(100vh - 56px); }
+    .kv { display:flex; justify-content:space-between; gap:12px; padding:6px 0; border-bottom:1px dashed #222; }
+    .sum { font-weight:700; }
   </style>
 </head>
 <body>
   <div class="page"><div class="wrap">
 
     <div class="topbar">
-      <h1 id="title">Edit Character</h1>
+      <h1>Character Editor</h1>
       <span id="login-chip" class="muted right"></span>
-      <a class="btn" href="characters.html">Back to My Characters</a>
-      <a class="btn" href="character_admin.html" id="admin-link" style="display:none">All Characters</a>
+      <a class="btn" href="portal.html">Back to Portal</a>
     </div>
 
-    <!-- Name card -->
-    <div class="panel" style="margin-bottom:12px;">
-      <details open class="panel">
-        <summary class="hdr">
-          <strong>Name</strong>
-          <span class="muted">(autosaves)</span>
-          <span class="muted status" id="status">Loaded.</span>
-        </summary>
-        <div class="panel-body">
-          <input id="name" placeholder="Enter a name..." class="grow" />
+    <!-- Character loader -->
+    <div class="panel">
+      <div class="row">
+        <label for="char-id">Character ID</label>
+        <input id="char-id" class="grow" placeholder="e.g., C001 or use ?id=C001" />
+        <button id="btn-load" class="btn" type="button">Load</button>
+      </div>
+      <div class="muted" id="char-name-line"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="panel">
+      <div style="display:flex; align-items:center; gap:8px; justify-content:space-between;">
+        <h2 style="margin:0;">Stats</h2>
+        <div>
+          <button class="btn" id="btn-open-drawer" type="button">📊 Open Breakdown</button>
         </div>
-      </details>
+      </div>
+      <div id="stats-grid" class="stats-grid"><!-- stat cards populate below --></div>
+      <div class="muted" style="margin-top:6px;">Hover any value to see modifier breakdown (origin + ability + mode/value, in <b>set → mul → add</b> order).</div>
+      <div id="tooltip" class="tooltip"></div>
     </div>
 
     <!-- Tabs -->
-    <div class="tabs" role="tablist">
-      <div class="tab active" data-tab="tab-stat">Statistic</div>
-      <div class="tab" data-tab="tab-inv">Inventory</div>
-      <div class="tab" data-tab="tab-abi">Abilities</div>
-      <div class="tab" data-tab="tab-com">Combat</div>
-      <div class="tab" data-tab="tab-per">Personal</div>
+    <div class="tabs">
+      <a class="tab-link active" data-tab="tab-abilities">Abilities</a>
     </div>
 
-    <div class="tabpanes">
-      <!-- STATISTICS TAB -->
-      <div id="tab-stat" class="tabpane">
+    <!-- Abilities Tab -->
+    <div id="tab-abilities" class="tab-panel" style="display:block;">
 
-        <!-- Level + Derived Stats -->
-        <div class="panel" style="margin-bottom:12px;">
-          <details open class="panel">
-            <summary class="hdr">
-              <strong>Derived Stats</strong>
-              <span class="muted">(auto from Level, Milestones & skills)</span>
-              <span class="grow"></span>
-              <span class="k">Level</span>
-              <input id="level" type="number" class="num" min="1" value="1" />
-            </summary>
-            <div class="panel-body">
-              <div class="derived-grid">
-                <div class="kv"><div class="k">HP</div> <div class="val badge" id="hp-val">—</div></div>
-                <div class="kv"><div class="k">EN</div> <div class="val badge" id="en-val">—</div></div>
-                <div class="kv"><div class="k">FO</div> <div class="val badge" id="fo-val">—</div></div>
-                <div class="kv"><div class="k">MO</div> <div class="val badge" id="mo-val">—</div></div>
-                <div class="kv"><div class="k">SP cap (10% HP)</div> <div class="val badge" id="spcap-val">—</div></div>
-                <div class="kv"><div class="k">Encumbrance</div> <div class="val badge" id="enc-val">—</div></div>
-                <div class="kv"><div class="k">Eclipse Threshold (ET)</div> <div class="val badge" id="et-val">—</div></div>
-                <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge" id="tx-val">—</div></div>
-              </div>
-            </div>
-          </details>
+      <!-- Archetype -->
+      <div class="panel">
+        <h2 style="margin:0 0 8px;">Archetype Abilities</h2>
+        <div class="row" style="align-items:flex-start;">
+          <input id="arch-search" class="grow" placeholder="Search catalog by name…" />
+          <button id="arch-open" class="btn" type="button">Browse</button>
         </div>
-
-        <div class="stats-grid" id="stats-grid"><!-- injected --></div>
-
-        <!-- Intensities (MAG) -->
-        <div class="panel" style="margin-top:12px;">
-          <details open class="panel">
-            <summary class="hdr">
-              <strong>Intensities</strong>
-              <span class="pill">Linked to MAG</span>
-              <span class="muted">(behaves like skills)</span>
-              <span class="grow"></span>
-              <span class="k">MAG Mod:</span>
-              <span id="int-mag-mod" class="pill">+0</span>
-            </summary>
-            <div class="panel-body">
-              <div id="intensities-list" class="skills" style="margin-top:8px"></div>
-
-              <div style="margin-top:14px; border-top:1px solid #222; padding-top:12px;">
-                <div class="hdr"><strong>Defense Summary</strong><span class="muted"> (from known natures & IV)</span></div>
-                <div id="defense-summary" class="skills" style="margin-top:8px"></div>
-                <p class="muted" style="margin-top:8px">
-                  N = Neutral, R = −2 per hit, VR = −4 per hit, V = +2 per hit, VV = +4 per hit.
-                </p>
-              </div>
-            </div>
-          </details>
-        </div>
+        <div id="arch-list" class="chip-list"></div>
       </div>
 
-      <!-- Placeholders for other tabs (we'll wire later) -->
-      <div id="tab-inv" class="tabpane" style="display:none;"><p class="muted">Inventory — coming next.</p></div>
-      <div id="tab-abi" class="tabpane" style="display:none;"><p class="muted">Abilities — coming next.</p></div>
-      <div id="tab-com" class="tabpane" style="display:none;"><p class="muted">Combat — coming next.</p></div>
-      <div id="tab-per" class="tabpane" style="display:none;"><p class="muted">Personal — coming next.</p></div>
+      <!-- Passive -->
+      <div class="panel">
+        <h2 style="margin:0 0 8px;">Passive Abilities (non-Archetype)</h2>
+        <div class="row" style="align-items:flex-start;">
+          <input id="passive-search" class="grow" placeholder="Search catalog by name…" />
+          <button id="passive-open" class="btn" type="button">Browse</button>
+        </div>
+        <div id="passive-list" class="chip-list"></div>
+      </div>
+
+      <!-- Active -->
+      <div class="panel">
+        <h2 style="margin:0 0 8px;">Active Abilities (non-Archetype)</h2>
+        <div class="row" style="align-items:flex-start;">
+          <input id="active-search" class="grow" placeholder="Search catalog by name…" />
+          <button id="active-open" class="btn" type="button">Browse</button>
+        </div>
+        <div id="active-list" class="chip-list"></div>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <button id="btn-save-abilities" class="btn" type="button">💾 Save Abilities to Character</button>
+        <span id="abilities-status" class="muted" style="margin-left:10px;"></span>
+      </div>
+    </div>
+
+    <!-- Ability Picker Modal -->
+    <div class="modal-backdrop" id="picker-bd">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Ability Picker">
+        <div class="modal-head">
+          <strong id="picker-title">Add Ability</strong>
+          <input id="picker-q" class="grow" placeholder="Search by name or tag…" />
+          <select id="picker-type">
+            <option value="">Type: Any</option>
+            <option value="active">Active</option>
+            <option value="passive">Passive</option>
+            <option value="mixed">Mixed</option>
+          </select>
+          <select id="picker-source">
+            <option value="">Source: Any</option>
+            <option>Specie</option><option>Talent</option><option>Archetype</option>
+            <option>Expertise</option><option>Awakening</option><option>Apotheosis</option><option>Other</option>
+          </select>
+          <button id="picker-close" class="btn" type="button">Close</button>
+        </div>
+        <div class="modal-body">
+          <div>
+            <table class="table" id="picker-table">
+              <thead>
+                <tr><th style="width:34%;">Name</th><th style="width:18%;">Type</th><th style="width:20%;">Source</th><th>Tags</th></tr>
+              </thead>
+              <tbody id="picker-tbody"><tr><td colspan="4" class="muted">Type to search…</td></tr></tbody>
+            </table>
+          </div>
+          <div id="picker-preview" style="border:1px solid #222; border-radius:12px; padding:10px;">
+            <div class="muted">Select an ability to preview.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Breakdown Drawer -->
+    <div class="drawer" id="drawer">
+      <div class="drawer-head">
+        <strong>Stats Breakdown</strong>
+        <button id="btn-close-drawer" class="btn" type="button" style="margin-left:auto;">Close</button>
+      </div>
+      <div class="drawer-body" id="drawer-body">
+        <!-- Filled programmatically -->
+      </div>
     </div>
 
   </div></div>
 
 <script>
-/* --- auth helper (sends header + keeps cookie) --- */
+/* -------------------- basic auth & api helpers -------------------- */
 function getToken(){ return localStorage.getItem('auth_token') || ''; }
 function setCookieToken(tok){ if(!tok) return; document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
-function authHeaders(){ const t=getToken(); if(t) setCookieToken(t); return t?{'Authorization':'Bearer '+t,'X-Auth-Token':t}:{ }; }
-async function api(path,opt={}) {
+function authHeaders(){ const t=getToken(); if(t) setCookieToken(t); return t ? {'Authorization':'Bearer '+t,'X-Auth-Token':t} : {}; }
+async function api(path,opt={}){
   const headers = Object.assign({}, opt.headers||{}, authHeaders());
   const resp = await fetch(path, { credentials:'include', ...opt, headers });
   const ct = resp.headers.get('content-type') || '';
   const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
-  if(!resp.ok || data.status==='error') throw new Error(data.message || `HTTP ${resp.status}`);
+  if(!resp.ok || data.status==='error') throw new Error(data.message || ('HTTP '+resp.status));
   return data;
 }
+(async function(){
+  try{ const me = await api('/auth/me'); document.getElementById('login-chip').textContent = me.username+' ('+me.role+')'; }
+  catch(e){ document.getElementById('login-chip').textContent = 'Not logged in.'; }
+})();
 
-/* --- tabs --- */
-document.querySelectorAll('.tab').forEach(t=>{
-  t.addEventListener('click', ()=>{
-    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-    t.classList.add('active');
-    const target = t.getAttribute('data-tab');
-    document.querySelectorAll('.tabpane').forEach(p=>p.style.display = (p.id===target ? '' : 'none'));
+/* -------------------- URL & character load helpers -------------------- */
+function qp(name){ const u=new URL(location.href); return u.searchParams.get(name); }
+const charIdEl = document.getElementById('char-id');
+const btnLoad  = document.getElementById('btn-load');
+const charNameLine = document.getElementById('char-name-line');
+
+let currentCharacterId = null;
+let currentCharacter   = null;
+
+btnLoad.addEventListener('click', ()=> {
+  const id = (charIdEl.value || '').trim();
+  if (!id) return alert('Enter a Character ID.');
+  loadCharacterIntoForm(id);
+});
+const qpId = qp('id'); if (qpId) charIdEl.value = qpId;
+
+/* -------------------- stats & tooltips -------------------- */
+const tipEl = document.getElementById('tooltip');
+let _computed_cache = null;
+
+function positionTooltip(ev, tip){ const pad=14; tip.style.left=(ev.pageX+pad)+'px'; tip.style.top=(ev.pageY+pad)+'px'; }
+function htmlesc(x){ return (x+'').replace(/[&<>'"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":"&#39;",'"':'&quot;' }[c])); }
+
+function renderTooltipHtml(key, list){
+  let html = `<div style="font-weight:600;margin-bottom:6px;">${htmlesc(key)}</div>`;
+  html += `<div style="opacity:.8;margin-bottom:6px;">Order: set → mul → add</div>`;
+  list.forEach(it=>{
+    const v = (it.mode==='mul') ? ('× '+it.value) : ((it.mode==='set') ? ('= '+it.value) : ((it.value>=0?'+':'')+it.value));
+    html += `<div style="display:flex;gap:6px;align-items:baseline;margin-bottom:2px;">
+      <span class="pill">${htmlesc(it.origin||'')}</span>
+      <span style="flex:1 1 auto;">${htmlesc(it.source||'')}</span>
+      <span style="opacity:.95;">${htmlesc(v)}</span>
+    </div>`;
+    if (it.note){
+      html += `<div style="opacity:.7;margin-left:62px;margin-top:-2px;">${htmlesc(it.note)}</div>`;
+    }
   });
+  return html;
+}
+
+function wireStatTooltips(){
+  document.querySelectorAll('.stat-hover').forEach(el=>{
+    el.addEventListener('mouseenter', (ev)=>{
+      const key = el.getAttribute('data-target');
+      const list = (_computed_cache?.breakdown || {})[key] || [];
+      if (!list.length) { tipEl.style.display='none'; return; }
+      tipEl.innerHTML = renderTooltipHtml(key, list);
+      positionTooltip(ev, tipEl);
+      tipEl.style.display='block';
+    });
+    el.addEventListener('mousemove', (ev)=> positionTooltip(ev, tipEl));
+    el.addEventListener('mouseleave', ()=> { tipEl.style.display='none'; });
+  });
+}
+
+function writeStatCard(grid, key, label, value){
+  const id = 'stat-'+key.replace(/\./g,'-');
+  let card = document.getElementById(id);
+  if (!card){
+    card = document.createElement('div');
+    card.className = 'stat-card';
+    card.id = id;
+    card.innerHTML = `<div class="stat-name">${htmlesc(label)}</div>
+      <div class="stat-val stat-hover" data-target="${htmlesc(key)}">--</div>`;
+    grid.appendChild(card);
+  }
+  const v = card.querySelector('.stat-val');
+  v.textContent = (value ?? '--');
+}
+
+async function refreshComputedAndRender(){
+  if (!currentCharacterId) return;
+  const res = await api('/characters/'+encodeURIComponent(currentCharacterId)+'/computed');
+  _computed_cache = res;
+  const f = res.final || {};
+  const fs = f.stats || {};
+  // Which stats to show, and labels
+  const statOrder = [
+    ['stats.hp_max','HP Max'], ['stats.en_max','EN Max'], ['stats.mp_max','MP Max'], ['stats.speed','Speed'],
+    // expand common combat stats by default; add more keys if you want
+    ['stats.attack','Attack'], ['stats.defense','Defense'],
+    ['stats.init','Initiative'], ['stats.accuracy','Accuracy'],
+  ];
+  const grid = document.getElementById('stats-grid');
+  grid.innerHTML = '';
+  for (const [k, label] of statOrder){
+    const parts = k.split('.'); let cur = f; for (const p of parts){ cur = (cur||{})[p]; }
+    writeStatCard(grid, k, label, cur);
+  }
+  // Also auto-add any other numeric stats not listed above
+  for (const [k,v] of Object.entries(fs)){
+    if (statOrder.find(x=>x[0]==='stats.'+k)) continue;
+    if (typeof v === 'number') writeStatCard(grid, 'stats.'+k, k, v);
+  }
+  wireStatTooltips();
+}
+
+/* -------------------- Abilities: 3 buckets + picker modal -------------------- */
+let archSel = [];
+let passiveSel = [];
+let activeSel = [];
+let _catalog_cache = []; // for chip names
+
+async function loadCatalogCache(){ const res = await api('/abilities'); _catalog_cache = res.abilities || []; }
+async function searchCatalog({q, typ, src}){
+  let url = '/abilities';
+  const qs=[]; if (q) qs.push('name='+encodeURIComponent(q));
+  if (typ) qs.push('typ='+encodeURIComponent(typ));
+  if (src) qs.push('source='+encodeURIComponent(src));
+  if (qs.length) url += '?'+qs.join('&');
+  return (await api(url)).abilities || [];
+}
+
+function renderChipList(el, arr){
+  el.innerHTML = '';
+  arr.forEach(id=>{
+    const ab = _catalog_cache.find(x=>x.id===id);
+    const name = ab ? ab.name : id;
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `${htmlesc(name)} <span class="badges"></span>`;
+    const badges = chip.querySelector('.badges');
+    if (ab?.type) badges.innerHTML += `<span class="pill">${htmlesc(ab.type)}</span>`;
+    if (ab?.source_category) badges.innerHTML += `<span class="pill">${htmlesc(ab.source_category)}</span>`;
+    const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '✕';
+    rm.addEventListener('click', ()=> { const i=arr.indexOf(id); if(i>=0){ arr.splice(i,1); renderAllChipLists(); refreshComputedAndRender(); }});
+    chip.appendChild(rm);
+    // quick preview
+    chip.title = 'Click for preview';
+    chip.addEventListener('click', async (e)=>{
+      if (e.target === rm) return;
+      try { const full = await api('/abilities/'+encodeURIComponent(id)); showPreview(full.ability); openPicker(true); } catch(e) {}
+    });
+    el.appendChild(chip);
+  });
+}
+
+function renderAllChipLists(){
+  renderChipList(document.getElementById('arch-list'),    archSel);
+  renderChipList(document.getElementById('passive-list'), passiveSel);
+  renderChipList(document.getElementById('active-list'),  activeSel);
+}
+
+/* ---- Picker Modal ---- */
+const pickerBd = document.getElementById('picker-bd');
+const pickerTitle = document.getElementById('picker-title');
+const pickerQ = document.getElementById('picker-q');
+const pickerType = document.getElementById('picker-type');
+const pickerSource = document.getElementById('picker-source');
+const pickerTbody = document.getElementById('picker-tbody');
+const pickerPrev = document.getElementById('picker-preview');
+document.getElementById('picker-close').addEventListener('click', ()=> openPicker(false));
+
+function openPicker(open){
+  pickerBd.style.display = open ? 'flex' : 'none';
+  if (open) pickerQ.focus();
+}
+function showPreview(a){
+  const tags = (a.tags||[]).map(t=>`<span class="tag">${htmlesc(t)}</span>`).join(' ');
+  const passive = a.passive||{};
+  const active = a.active||{};
+  const costs = active.costs || {};
+  pickerPrev.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
+      <h3 style="margin:0;">${htmlesc(a.name)}</h3>
+      <div style="display:flex;gap:6px;">
+        <span class="pill">${htmlesc(a.type)}</span>
+        <span class="pill">${htmlesc(a.source_category||'Other')}</span>
+      </div>
+    </div>
+    <div class="muted" style="margin-top:4px;">${htmlesc(a.description||'')}</div>
+    ${tags ? `<div class="tags" style="margin-top:6px;">${tags}</div>` : ''}
+
+    ${a.type!=='passive' ? `
+    <div style="margin-top:10px;">
+      <strong>Active</strong>
+      <div>Activation: ${htmlesc(active.activation||'Action')} • Range: ${htmlesc(active.range??0)} • AoE: ${htmlesc(active.aoe||'—')}</div>
+      <div class="tags" style="margin-top:4px;">
+        ${Object.entries({HP:costs.HP,EN:costs.EN,MP:costs.MP,FO:costs.FO,MO:costs.MO,TX:costs.TX})
+          .filter(([,v])=> (v??0)!==0).map(([k,v])=>`<span class="tag">${k}: ${v}</span>`).join('')}
+        ${costs.other_label && costs.other_value ? `<span class="tag">${htmlesc(costs.other_label)}: ${htmlesc(costs.other_value)}</span>`:''}
+      </div>
+    </div>` : ''}
+
+    ${(a.type!=='active') ? `
+    <div style="margin-top:10px;">
+      <strong>Passive</strong>
+      ${passive.description ? `<div style="margin-top:2px;">${htmlesc(passive.description)}</div>` : ''}
+      ${(passive.modifiers||[]).length ? `
+        <div style="margin-top:6px;">
+          <div class="muted">Modifiers:</div>
+          ${(passive.modifiers||[]).map(m=>`
+            <div style="display:flex;gap:6px;">
+              <span class="pill">${htmlesc(m.mode||'add')}</span>
+              <span>${htmlesc(m.target||'')}</span>
+              <span style="opacity:.95;">${htmlesc(m.value)}</span>
+              ${m.note ? `<span class="muted">(${htmlesc(m.note)})</span>`:''}
+            </div>`).join('')}
+        </div>` : ''}
+    </div>` : ''}
+  `;
+}
+
+async function refreshPickerTable(){
+  const q = pickerQ.value.trim(); const typ = pickerType.value; const src = pickerSource.value;
+  const list = await searchCatalog({ q, typ, src });
+  pickerTbody.innerHTML = '';
+  if (!list.length){ pickerTbody.innerHTML = `<tr><td colspan="4" class="muted">No results.</td></tr>`; return; }
+  list.forEach(a=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${htmlesc(a.name)}</td>
+      <td>${htmlesc(a.type||'')}</td>
+      <td>${htmlesc(a.source_category||'')}</td>
+      <td>${(a.tags||[]).map(t=>`<span class="tag">${htmlesc(t)}</span>`).join(' ')}</td>`;
+    tr.addEventListener('click', async ()=>{
+      showPreview(a);
+      _pickerCurrent = a;
+    });
+    tr.addEventListener('dblclick', ()=> _pickerAcceptCurrent());
+    pickerTbody.appendChild(tr);
+  });
+}
+
+let _pickerBucket = 'passive'; // which bucket we’re adding into
+let _pickerCurrent = null;
+
+function openPickerFor(bucket, title){
+  _pickerBucket = bucket; _pickerCurrent = null;
+  pickerTitle.textContent = title || 'Add Ability';
+  openPicker(true);
+  refreshPickerTable();
+}
+
+function _pickerAcceptCurrent(){
+  if (!_pickerCurrent) return;
+  const id = _pickerCurrent.id;
+  if (_pickerBucket==='archetype'){ archSel = Array.from(new Set([...archSel, id])); }
+  else if (_pickerBucket==='passive'){ passiveSel = Array.from(new Set([...passiveSel, id])); }
+  else { activeSel = Array.from(new Set([...activeSel, id])); }
+  renderAllChipLists();
+  refreshComputedAndRender();
+}
+
+/* open buttons */
+document.getElementById('arch-open').addEventListener('click', ()=> openPickerFor('archetype','Add Archetype Ability'));
+document.getElementById('passive-open').addEventListener('click', ()=> openPickerFor('passive','Add Passive Ability'));
+document.getElementById('active-open').addEventListener('click', ()=> openPickerFor('active','Add Active Ability'));
+pickerQ.addEventListener('input', ()=> { clearTimeout(pickerQ._t); pickerQ._t=setTimeout(refreshPickerTable, 200); });
+pickerType.addEventListener('change', refreshPickerTable);
+pickerSource.addEventListener('change', refreshPickerTable);
+document.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && pickerBd.style.display==='flex') _pickerAcceptCurrent(); });
+
+/* Save abilities to character */
+document.getElementById('btn-save-abilities').addEventListener('click', async ()=>{
+  const st = document.getElementById('abilities-status');
+  if (!currentCharacterId){ st.textContent='No character loaded.'; return; }
+  try{
+    st.textContent = 'Saving…';
+    await api('/characters/'+encodeURIComponent(currentCharacterId)+'/abilities', {
+      method:'PUT',
+      headers:{'content-type':'application/json'},
+      body: JSON.stringify({ archetype: archSel, passive: passiveSel, active: activeSel })
+    });
+    st.textContent = 'Saved.';
+    await refreshComputedAndRender();
+  }catch(e){
+    st.textContent = 'Error: '+e.message;
+  }
 });
 
-/* --- constants & helpers for Statistics --- */
-const CHARACS = [
-  { key:'reflex',     code:'REF', name:'Reflex',     skills:['Technicity','Dodge','Tempo','Reactivity'] },
-  { key:'dexterity',  code:'DEX', name:'Dexterity',  skills:['Accuracy','Evasion','Stealth','Acrobatics'] },
-  { key:'body',       code:'BOD', name:'Body',       skills:['Brutality','Blocking','Resistance','Athletics'] },
-  { key:'willpower',  code:'WIL', name:'Willpower',  skills:['Intimidation','Spirit','Instinct','Absorption'] },
-  { key:'magic',      code:'MAG', name:'Magic',      skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
-  { key:'presence',   code:'PRE', name:'Presence',   skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
-  { key:'wisdom',     code:'WIS', name:'Wisdom',     skills:['Survival','Education','Perception','Psychology','Investigation'] },
-  { key:'tech',       code:'TEC', name:'Tech',       skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
-];
+/* -------------------- Breakdown drawer -------------------- */
+const drawer = document.getElementById('drawer');
+const drawerBody = document.getElementById('drawer-body');
+document.getElementById('btn-open-drawer').addEventListener('click', ()=> { fillDrawer(); drawer.classList.add('open'); });
+document.getElementById('btn-close-drawer').addEventListener('click', ()=> drawer.classList.remove('open'));
 
-const NATURES = ["Fire","Water","Earth","Wind","Lightning","Moon","Sun","Ki"];
+function fillDrawer(){
+  const br = _computed_cache?.breakdown || {};
+  const final = _computed_cache?.final || {};
+  const fs = final.stats || {};
+  const keys = Object.keys(br).sort();
+  drawerBody.innerHTML = '';
+  if (!keys.length){ drawerBody.innerHTML = '<div class="muted">No modifiers are affecting stats.</div>'; return; }
 
-const INT_TABLE = [ // total → ID/IV tier mapping
-  { min:1,  max:7,  id:"1d4",  iv:2 },
-  { min:8,  max:11, id:"1d6",  iv:3 },
-  { min:12, max:15, id:"1d8",  iv:4 },
-  { min:16, max:17, id:"1d10", iv:5 },
-  { min:18, max:99, id:"1d12", iv:6 },  // capped
-];
-
-// Natural Defense matrix. Rows = incoming dmg, Cols = ATK → mastered nature
-// values: N, R, VR, V, VV
-const DEF_TABLE = {
-  Fire:      { Fire:"N", Lightning:"N", Water:"R",  Earth:"VR", Wind:"V", Sun:"N",  Moon:"VV", Ki:"N" },
-  Lightning: { Fire:"N", Lightning:"N", Water:"N", Earth:"R",  Wind:"VV", Sun:"V",  Moon:"VR", Ki:"N" },
-  Water:     { Fire:"V", Lightning:"N", Water:"N", Earth:"N", Wind:"VR", Sun:"VV", Moon:"R",  Ki:"N" },
-  Earth:     { Fire:"VV",Lightning:"V", Water:"N", Earth:"N", Wind:"R",  Sun:"VR", Moon:"N",  Ki:"N" },
-  Wind:      { Fire:"R", Lightning:"VR",Water:"VV",Earth:"V",  Wind:"N", Sun:"N",  Moon:"N",  Ki:"N" },
-  Sun:       { Fire:"N", Lightning:"R", Water:"VR",Earth:"VV", Wind:"N", Sun:"N",  Moon:"V",  Ki:"N" },
-  Moon:      { Fire:"VR",Lightning:"VV",Water:"V", Earth:"N",  Wind:"N", Sun:"R",  Moon:"N",  Ki:"N" },
-  Ki:        { Fire:"N", Lightning:"N", Water:"N", Earth:"N",  Wind:"N", Sun:"N",  Moon:"N",  Ki:"N" },
-};
-
-// Base per-hit points (we’ll weight by IV a little)
-const SYM_PTS = { N:0, R:-2, VR:-4, V:+2, VV:+4 };
-
-// Modest IV weight: iv 2..6 → factor 1..3
-function ivFactor(iv){
-  // 2->1.0, 3->1.5, 4->2.0, 5->2.5, 6->3.0
-  return Math.max(1, Math.min(3, 0.5 * iv));
-}
-
-function totalFromInvest(v){ const total = (parseInt(v||0,10) || 0) + 4; return total; }
-function modFromTotal(total){ return Math.floor((Number(total)-10)/2); }
-
-/* helpers */
-function charMod(key){
-  const invest = CHAR.stats?.[key]?.invest ?? 0;
-  return modFromTotal(totalFromInvest(invest));
-}
-function milestone(key){ return Math.max(0, charMod(key)); }
-function skillTotal(key, skill){
-  const invest = CHAR.stats?.[key]?.skills?.[skill] ?? 0;
-  return invest + charMod(key);
-}
-
-/* --- page state --- */
-const params = new URLSearchParams(location.search);
-const CID = params.get('id');
-let ROLE = 'user';
-let SAVE_TIMER = null;
-let CHAR = null;
-
-/* --- UI refs --- */
-const loginChip = document.getElementById('login-chip');
-const adminLink = document.getElementById('admin-link');
-const titleEl   = document.getElementById('title');
-const statusEl  = document.getElementById('status');
-const nameEl    = document.getElementById('name');
-const gridEl    = document.getElementById('stats-grid');
-
-/* derived refs */
-const levelEl = document.getElementById('level');
-const hpEl = document.getElementById('hp-val');
-const enEl = document.getElementById('en-val');
-const foEl = document.getElementById('fo-val');
-const moEl = document.getElementById('mo-val');
-const spcapEl = document.getElementById('spcap-val');
-const encEl = document.getElementById('enc-val');
-const etEl = document.getElementById('et-val');
-const txEl = document.getElementById('tx-val');
-
-/* --- auth check for badge + admin link --- */
-async function checkMe() {
-  loginChip.textContent = 'Checking login...';
-  try{
-    const me = await api('/auth/me');
-    loginChip.textContent = `${me.username} (${me.role})`;
-    if ((me.role||'').toLowerCase()==='admin') adminLink.style.display='';
-    ROLE = me.role||'user';
-    return me;
-  } catch(e){
-    loginChip.textContent = 'Not logged in';
-    adminLink.style.display='none';
-    throw e;
-  }
-}
-
-/* --- build default stats shape --- */
-function makeDefaultStats(){
-  const stats = {};
-  for (const c of CHARACS){
-    const sk = {};
-    for (const s of c.skills) sk[s] = 0;
-    stats[c.key] = { invest: 0, skills: sk };
-  }
-  const ints = {};
-  for (const n of NATURES){
-    ints[n] = { knows:false, invest:0 };
-  }
-  stats.intensities = ints;
-  return stats;
-}
-
-/* --- render Statistics tab --- */
-function renderStatistics(){
-  gridEl.innerHTML = '';
-  for (const c of CHARACS){
-    const rec = (CHAR.stats && CHAR.stats[c.key]) || { invest:0, skills:{} };
-    const total = totalFromInvest(rec.invest);
-    const mod = modFromTotal(total);
-
-    const details = document.createElement('details');
-    details.className = 'panel';
-    details.open = true;
-
-    const sum = document.createElement('summary');
-    sum.className = 'hdr';
-    sum.innerHTML = `
-      <strong>${c.name}</strong>
-      <span class="pill">${c.code}</span>
-      <span class="charac-badge">[ <span class="total" id="${c.key}-total">${total}</span> | <span id="${c.key}-mod">${mod>=0? '+'+mod : mod}</span> ]</span>
-      <span class="grow"></span>
-      <span class="k">Invested</span>
-      <input type="number" class="num" min="0" id="${c.key}-invest" value="${Number(rec.invest)||0}">
-    `;
-    details.appendChild(sum);
-
-    const body = document.createElement('div');
-    body.className = 'panel-body';
-
-    const skills = document.createElement('div');
-    skills.className = 'skills';
-
-    for (const s of c.skills){
-      const invested = Number((rec.skills||{})[s] || 0);
-      const totalSkill = invested + mod;
-
-      const line = document.createElement('div');
-      line.className = 'skill-line';
-      line.innerHTML = `
-        <div class="k">${s}</div>
-        <input type="number" class="num" min="0" id="${c.key}__${s}__invest" value="${invested}">
-        <div class="skill-total" id="${c.key}__${s}__total">${totalSkill>=0? '+'+totalSkill : totalSkill}</div>
-      `;
-      skills.appendChild(line);
-    }
-
-    body.appendChild(skills);
-    details.appendChild(body);
-    gridEl.appendChild(details);
-  }
-
-  // wire listeners (characteristics + skills)
-  // characteristics invest
-  for (const c of CHARACS){
-    const input = document.getElementById(`${c.key}-invest`);
-    input.addEventListener('input', ()=>{
-      const v = parseInt(input.value||'0', 10) || 0;
-      CHAR.stats[c.key].invest = v;
-      // update header total/mod
-      const total = totalFromInvest(v);
-      const mod = modFromTotal(total);
-      document.getElementById(`${c.key}-total`).textContent = total;
-      document.getElementById(`${c.key}-mod`).textContent = (mod>=0? '+'+mod : mod);
-      // update all skill totals under this charac
-      for (const s of c.skills){
-        const invested = Number(CHAR.stats[c.key].skills[s] || 0);
-        const t = invested + mod;
-        document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
-      }
-      if (c.key === 'magic') {
-        renderIntensities();
-        renderDefenseSummary();
-      }
-      updateDerived();
-      queueSave();
+  // Group by top-level stat (e.g., stats.hp_max)
+  keys.forEach(k=>{
+    const list = br[k] || [];
+    let total = 0, mul = 1, set = null;
+    list.forEach(m=>{
+      const mode = (m.mode||'add');
+      const val = Number(m.value||0);
+      if (mode==='set') set = val;
+      else if (mode==='mul') mul *= val;
+      else total += val;
     });
-    // skills invest
-    for (const s of c.skills){
-      const sid = `${c.key}__${s}__invest`;
-      const inp = document.getElementById(sid);
-      inp.addEventListener('input', ()=>{
-        const v = parseInt(inp.value||'0', 10) || 0;
-        CHAR.stats[c.key].skills[s] = v;
-        const total = totalFromInvest(CHAR.stats[c.key].invest);
-        const mod = modFromTotal(total);
-        const t = v + mod;
-        document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
-        updateDerived();
-        queueSave();
-      });
-    }
-  }
-}
-
-function magMod(){
-  const mag = CHAR.stats?.magic?.invest ?? 0;
-  const total = totalFromInvest(mag);
-  return modFromTotal(total);
-}
-
-function idIvFromTotal(t){
-  const v = Math.max(0, Math.min(99, Number(t)||0));
-  if (v <= 0) return { id:"—", iv:0 };
-  for (const row of INT_TABLE){
-    if (v >= row.min && v <= row.max) return { id: row.id, iv: row.iv };
-  }
-  return { id:"1d12", iv:6 };
-}
-
-function defenseFromKnown(){
-  const ints = CHAR.stats?.intensities || {};
-  const entries = NATURES.map(n=>{
-    const rec = ints[n] || {knows:false, invest:0};
-    const total = (rec.invest||0) + magMod();
-    const {iv} = idIvFromTotal(total);
-    return { nature:n, knows:!!rec.knows, iv, total };
+    let finalVal = fs?.[k.split('.').slice(1).join('.')] ?? null; // try to pick from final.stats
+    const sec = document.createElement('div');
+    sec.className='panel';
+    sec.innerHTML = `<div class="kv sum"><span>${htmlesc(k)}</span><span>${finalVal ?? ''}</span></div>`;
+    list.forEach(m=>{
+      const v = (m.mode==='mul') ? ('× '+m.value) : ((m.mode==='set') ? ('= '+m.value) : ((m.value>=0?'+':'')+m.value));
+      const row = document.createElement('div');
+      row.className = 'kv';
+      row.innerHTML = `<span><span class="pill">${htmlesc(m.origin||'')}</span> ${htmlesc(m.source||'')}</span>
+                       <span>${htmlesc(v)}</span>`;
+      sec.appendChild(row);
+      if (m.note){
+        const note = document.createElement('div');
+        note.className = 'muted';
+        note.style.margin = '2px 0 0 6px';
+        note.textContent = m.note;
+        sec.appendChild(note);
+      }
+    });
+    drawerBody.appendChild(sec);
   });
-
-
-  const summary = {};
-  for (const incoming of NATURES){
-    let score = 0;
-    for (const m of entries){
-      if (!m.knows || m.iv<=0) continue;
-      const sym = DEF_TABLE[incoming][m.nature];
-      score += (SYM_PTS[sym] || 0) * ivFactor(m.iv);
-    }
-    summary[incoming] = score;
-  }
-  return summary; // numeric totals
 }
 
-function scoreToLabel(score){
-  // thresholds: tweak later if needed
-  if (score <= -6) return "VR";
-  if (score <= -2) return "R";
-  if (score >= +6) return "VV";
-  if (score >= +2) return "V";
-  return "N";
+/* -------------------- load character -------------------- */
+async function loadCharacterIntoForm(charId){
+  currentCharacterId = charId;
+  const res = await api('/characters/'+encodeURIComponent(charId));
+  currentCharacter = res.character;
+
+  charNameLine.textContent = (currentCharacter.name ? ('Name: '+currentCharacter.name) : '') + '  •  ID: '+currentCharacterId;
+
+  const abil = currentCharacter.abilities || {};
+  archSel    = (abil.archetype || []).map(x=>x.id);
+  passiveSel = (abil.passive   || []).map(x=>x.id);
+  activeSel  = (abil.active    || []).map(x=>x.id);
+
+  if (!_catalog_cache.length) await loadCatalogCache();
+  renderAllChipLists();
+
+  await refreshComputedAndRender();
 }
 
-function renderIntensities(){
-  const list = document.getElementById('intensities-list');
-  const mm = magMod();
-  document.getElementById('int-mag-mod').textContent = (mm>=0? '+'+mm:mm);
-
-  const ints = CHAR.stats.intensities;
-  list.innerHTML = '';
-
-  // Header row
-  const hdr = document.createElement('div');
-  hdr.className = 'skill-line smallmuted';
-  hdr.innerHTML = `
-    <div>Nature</div>
-    <div>Knows?</div>
-    <div>Invest</div>
-    <div>Total</div>
-    <div>ID</div>
-    <div>IV</div>
-  `;
-  list.appendChild(hdr);
-
-  // Rows
-  for (const n of NATURES){
-    if (!ints[n]) ints[n] = { knows:false, invest:0 };
-    const rec = ints[n];
-    const total = (rec.invest||0) + mm;
-    const {id, iv} = idIvFromTotal(total);
-
-    const line = document.createElement('div');
-    line.className = 'skill-line';
-    line.innerHTML = `
-      <div class="k">${n}</div>
-      <div><input type="checkbox" id="int_${n}_knows" ${rec.knows?'checked':''}></div>
-      <input type="number" class="num" min="0" id="int_${n}_invest" value="${Number(rec.invest)||0}">
-      <div class="badge" id="int_${n}_total">${total>=0? '+'+total:total}</div>
-      <div class="badge" id="int_${n}_id">${id}</div>
-      <div class="badge" id="int_${n}_iv">${iv||'—'}</div>
-    `;
-    list.appendChild(line);
-  }
-
-  // Hook events
-  for (const n of NATURES){
-    const k = document.getElementById(`int_${n}_knows`);
-    const i = document.getElementById(`int_${n}_invest`);
-    k.addEventListener('change', ()=>{
-      CHAR.stats.intensities[n].knows = !!k.checked;
-      renderDefenseSummary(); // knowing toggled affects defense
-      queueSave();
-    });
-    i.addEventListener('input', ()=>{
-      const v = parseInt(i.value||'0',10) || 0;
-      CHAR.stats.intensities[n].invest = v;
-      // recompute per-row
-      const mm2 = magMod();
-      const total = v + mm2;
-      const info = idIvFromTotal(total);
-      document.getElementById(`int_${n}_total`).textContent = (total>=0? '+'+total:total);
-      document.getElementById(`int_${n}_id`).textContent = info.id;
-      document.getElementById(`int_${n}_iv`).textContent = info.iv || '—';
-      renderDefenseSummary(); // IV may change
-      queueSave();
-    });
-  }
-}
-
-function renderDefenseSummary(){
-  const box = document.getElementById('defense-summary');
-  const scores = defenseFromKnown();
-  box.innerHTML = '';
-  // header
-  const hdr = document.createElement('div');
-  hdr.className = 'skill-line smallmuted';
-  hdr.innerHTML = `
-    <div>Incoming</div>
-    <div></div><div></div>
-    <div>Score</div>
-    <div>Level</div>
-    <div></div>
-  `;
-  box.appendChild(hdr);
-
-  for (const n of NATURES){
-    const s = scores[n] || 0;
-    const lab = scoreToLabel(s);
-    const row = document.createElement('div');
-    row.className = 'skill-line';
-    row.innerHTML = `
-      <div class="k">${n}</div>
-      <div></div>
-      <div></div>
-      <div class="badge">${s.toFixed(1)}</div>
-      <div class="badge">${lab}</div>
-      <div></div>
-    `;
-    box.appendChild(row);
-  }
-}
-
-/* --- Derived computations --- */
-function clampInt(x){ return Math.max(0, Math.floor(Number(x)||0)); }
-
-function updateDerived(){
-  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-
-  const msBOD = milestone('body');
-  const msWIL = milestone('willpower');
-  const msMAG = milestone('magic');
-  const msPRE = milestone('presence');
-  const msREF = milestone('reflex');
-  const msDEX = milestone('dexterity');
-
-  // HP: 100 + level + 12 per M(BOD) + 6 per M(WIL)
-  const hp = 100 + lvl + 12*msBOD + 6*msWIL;
-
-  // EN: 5 + floor(lvl/5) + 1 per Milestone in WIL + 2 per Milestone in MAG
-  const en = 5 + Math.floor(lvl/5) + msWIL + 2*msMAG;
-
-  // FO: 2 + floor(lvl/5) + 1 per Milestone in WIL + 1 per Milestone in PRE
-  const fo = 2 + Math.floor(lvl/5) + msWIL + msPRE;
-
-  // MO: 4 + 1 per Milestone in DEX + 1 per Milestone in REF
-  const mo = 4 + msDEX + msREF;
-
-  // SP cap: 10% of Max HP
-  const spcap = Math.floor(hp * 0.10);
-
-  // Encumbrance: 10 + Athletics*5 + Spirit*2 (using current totals)
-  const athletics = skillTotal('body','Athletics');
-  const spirit = skillTotal('willpower','Spirit');
-  const enc = 10 + (athletics*5) + (spirit*2);
-
-  // ET: 1 + floor(lvl/9) + 1 per Milestone in MAG
-  const et = 1 + Math.floor(lvl/9) + msMAG;
-
-  // Max TX: Resistance + Alchemy (totals)
-  const resistance = skillTotal('body','Resistance');
-  const alchemy = skillTotal('tech','Alchemy');
-  const tx = resistance + alchemy;
-
-  hpEl.textContent = hp;
-  enEl.textContent = en;
-  foEl.textContent = fo;
-  moEl.textContent = mo;
-  spcapEl.textContent = spcap;
-  encEl.textContent = enc;
-  etEl.textContent = et;
-  txEl.textContent = tx;
-}
-
-/* --- load & save --- */
-async function loadCharacter(){
-  if (!CID){ statusEl.textContent = 'Missing id'; return; }
-  const res = await api('/characters/' + encodeURIComponent(CID));
-  CHAR = res.character || {};
-  if (!CHAR.stats) CHAR.stats = makeDefaultStats();
-  if (!CHAR.stats.intensities) {
-    CHAR.stats.intensities = makeDefaultStats().intensities;
-  }
-  if (!('level' in CHAR)) CHAR.level = 1;
-
-  // Name
-  titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
-  nameEl.value = CHAR.name || '';
-  nameEl.addEventListener('input', ()=> queueSave());
-
-  // Level
-  levelEl.value = Math.max(1, Number(CHAR.level)||1);
-  levelEl.addEventListener('input', ()=>{ CHAR.level = Math.max(1, Math.floor(Number(levelEl.value)||1)); updateDerived(); queueSave(); });
-
-  // Render Stats
-  renderStatistics();
-  renderIntensities();
-  renderDefenseSummary();
-  updateDerived();
-}
-
-function queueSave(){
-  statusEl.textContent = 'Saving...';
-  if (SAVE_TIMER) clearTimeout(SAVE_TIMER);
-  SAVE_TIMER = setTimeout(saveNow, 350);
-}
-
-async function saveNow(){
-  try{
-    const payload = { name: nameEl.value || '', level: CHAR.level || 1, stats: CHAR.stats };
-    const res = await api('/characters/' + encodeURIComponent(CID), {
-      method:'PUT',
-      headers:{ 'content-type':'application/json' },
-      body: JSON.stringify(payload)
-    });
-    titleEl.textContent = 'Edit: ' + (res.character?.name || '(unnamed)');
-    statusEl.textContent = 'Saved at ' + new Date().toLocaleTimeString();
-  }catch(err){
-    statusEl.textContent = 'Save failed: ' + err.message;
-  }
-}
-
-/* --- boot --- */
-checkMe().then(loadCharacter).catch(()=>{});
+/* -------------------- boot -------------------- */
+(async function boot(){
+  if (qpId) await loadCharacterIntoForm(qpId);
+})();
 </script>
 </body>
 </html>

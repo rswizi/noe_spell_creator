@@ -2783,6 +2783,167 @@ def delete_character(cid: str, request: Request):
     get_col("characters").delete_one({"id": cid})
     return {"status":"success","deleted": cid}
 
+def _load_abilities_by_id(ids: list[str]) -> list[dict]:
+    if not ids:
+        return []
+    col = get_col("abilities")
+    docs = list(col.find({"id": {"$in": ids}}, {"_id": 0}))
+    # index by id for fast lookup
+    idx = {d["id"]: d for d in docs}
+    # return in the same order as ids when possible
+    out = []
+    for i in ids:
+        d = idx.get(i)
+        if d:
+            out.append(d)
+    return out
+
+def _flatten_passive_modifiers(ability_docs: list[dict], origin_label: str) -> list[dict]:
+    """Extract passive modifiers with their origin info for breakdown."""
+    mods = []
+    for ab in ability_docs:
+        passive = (ab or {}).get("passive") or {}
+        for m in (passive.get("modifiers") or []):
+            mods.append({
+                "target": m.get("target", ""),
+                "mode":   (m.get("mode") or "add").lower(),
+                "value":  float(m.get("value") or 0),
+                "note":   m.get("note", ""),
+                "source": ab.get("name", "Ability"),
+                "origin": origin_label,
+                "ability_id": ab.get("id")
+            })
+    return mods
+
+def _apply_modifiers(base: dict, modifiers: list[dict]) -> tuple[dict, dict]:
+
+    import copy
+    final_stats = copy.deepcopy(base)
+    breakdown: dict[str, list[dict]] = {}
+
+    grouped: dict[str, list[dict]] = {}
+    for m in modifiers:
+        t = m.get("target")
+        if not t:
+            continue
+        grouped.setdefault(t, []).append(m)
+
+    def get_ref(obj, dotted, create=True):
+        parts = dotted.split(".")
+        cur = obj
+        for p in parts[:-1]:
+            if p not in cur:
+                if not create: return None, None
+                cur[p] = {}
+            cur = cur[p]
+        return cur, parts[-1]
+
+    for target, arr in grouped.items():
+        sets = [x for x in arr if (x.get("mode") or "add") == "set"]
+        muls = [x for x in arr if (x.get("mode") or "add") == "mul"]
+        adds = [x for x in arr if (x.get("mode") or "add") == "add"]
+        ordered = sets + muls + adds
+
+        breakdown[target] = [{
+            "source": x.get("source"),
+            "origin": x.get("origin"),
+            "mode": x.get("mode"),
+            "value": x.get("value"),
+            "note":  x.get("note"),
+            "ability_id": x.get("ability_id"),
+        } for x in ordered]
+
+        parent, leaf = get_ref(final_stats, target)
+        if parent is None:
+            continue
+        cur_val = parent.get(leaf, 0)
+
+        try:
+            cur_val = float(cur_val)
+        except Exception:
+            cur_val = 0.0
+
+        for m in ordered:
+            mode = (m.get("mode") or "add").lower()
+            val  = float(m.get("value") or 0)
+            if mode == "set":
+                cur_val = val
+            elif mode == "mul":
+                cur_val = cur_val * val
+            else:  # add
+                cur_val = cur_val + val
+
+        parent[leaf] = int(cur_val) if cur_val.is_integer() else cur_val
+
+    return final_stats, breakdown
+
+@app.get("/characters/{cid}/computed")
+def get_character_computed(cid: str, request: Request):
+    username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    col = get_col("characters")
+    ch = col.find_one({"id": cid}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Character not found")
+
+    base_stats = (ch.get("stats") or {}).copy()
+
+    abil = (ch.get("abilities") or {})
+    arch_ids    = [a["id"] for a in (abil.get("archetype") or [])]
+    passive_ids = [a["id"] for a in (abil.get("passive") or [])]
+    active_ids  = [a["id"] for a in (abil.get("active") or [])]
+
+    arch_docs    = _load_abilities_by_id(arch_ids)
+    passive_docs = _load_abilities_by_id(passive_ids)
+    active_docs  = _load_abilities_by_id(active_ids)
+
+    mods = []
+    mods += _flatten_passive_modifiers(arch_docs,    "Archetype")
+    mods += _flatten_passive_modifiers(passive_docs, "Passive")
+    mods += _flatten_passive_modifiers(active_docs,  "Active")
+
+    # 3) apply
+    final_stats, breakdown = _apply_modifiers(base_stats, mods)
+
+    return {
+        "status": "success",
+        "base": base_stats,
+        "final": final_stats,
+        "breakdown": breakdown,
+    }
+
+@app.get("/characters/{cid}/computed")
+def get_character_computed(cid: str, request: Request):
+    username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    col = get_col("characters")
+    ch = col.find_one({"id": cid}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Character not found")
+
+    base_stats = (ch.get("stats") or {}).copy()
+
+    abil = (ch.get("abilities") or {})
+    arch_ids    = [a["id"] for a in (abil.get("archetype") or [])]
+    passive_ids = [a["id"] for a in (abil.get("passive") or [])]
+    active_ids  = [a["id"] for a in (abil.get("active") or [])]
+
+    arch_docs    = _load_abilities_by_id(arch_ids)
+    passive_docs = _load_abilities_by_id(passive_ids)
+    active_docs  = _load_abilities_by_id(active_ids)
+
+    mods = []
+    mods += _flatten_passive_modifiers(arch_docs,    "Archetype")
+    mods += _flatten_passive_modifiers(passive_docs, "Passive")
+    mods += _flatten_passive_modifiers(active_docs,  "Active")   # only passive blocks inside mixed actives
+
+    final_stats, breakdown = _apply_modifiers(base_stats, mods)
+
+    return {
+        "status": "success",
+        "base": base_stats,
+        "final": final_stats,
+        "breakdown": breakdown,
+    }
+
 # ---------- Abilities & Traits ----------
 
 from fastapi import Body
