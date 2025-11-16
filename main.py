@@ -3222,3 +3222,17 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
     existing.pop("_id", None)
 
     return {"status": "success", "ability": existing}
+
+@app.get("/abilities/bulk")
+def bulk_abilities(ids: str = Query(..., description="Comma-separated ability IDs"), request: Request = None):
+    # Small helper for the character editor
+    username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    raw = [i.strip() for i in (ids or "").split(",") if i.strip()]
+    if not raw:
+        return {"status": "success", "abilities": []}
+    col = get_col("abilities")
+    docs = list(col.find({"id": {"$in": raw}}, {"_id": 0}))
+    # return in the same order as requested (where possible)
+    order = {v: i for i, v in enumerate(raw)}
+    docs.sort(key=lambda d: order.get(d.get("id",""), 10**9))
+    return {"status": "success", "abilities": docs}
