@@ -2763,10 +2763,21 @@ async def update_character(cid: str, request: Request):
 
     name  = (body.get("name") or before.get("name","")).strip()
     stats = body.get("stats", before.get("stats"))
+    abilities_in = body.get("abilities", before.get("abilities"))
 
     updates = {"name": name, "updated_at": datetime.datetime.utcnow().isoformat() + "Z"}
     if isinstance(stats, dict):
         updates["stats"] = stats
+        
+    if isinstance(abilities_in, list):
+        cleaned: list[str] = []
+        for item in abilities_in:
+            if isinstance(item, str):
+                if item.strip():
+                    cleaned.append(item.strip())
+            elif isinstance(item, dict) and item.get("id"):
+                cleaned.append(str(item["id"]).strip())
+        updates["abilities"] = cleaned
 
     get_col("characters").update_one({"id": cid}, {"$set": updates})
     after = get_col("characters").find_one({"id": cid}, {"_id":0})
