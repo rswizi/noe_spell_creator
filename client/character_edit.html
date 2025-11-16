@@ -3,32 +3,28 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NoE — Edit Character (with Derived)</title>
+  <title>NoE — Edit Character (with Abilities)</title>
 
   <style>
     :root { color-scheme: dark; }
     html,body { height: 100%; }
     body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    /* centered page like the rest */
     .page { min-height: 100vh; display: grid; place-items: start center; background: #0b0b0b; }
     .wrap { width: 100%; max-width: 980px; padding: 28px 16px; }
 
-    /* chrome */
     .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
     .topbar h1 { font-size: 20px; margin: 0; }
-    a.btn, button, input { padding:8px 12px; border-radius:10px; border:1px solid #333; background:#121212; color:#f0f0f0; text-decoration:none; }
+    a.btn, button, input, select, textarea { padding:8px 12px; border-radius:10px; border:1px solid #333; background:#121212; color:#f0f0f0; text-decoration:none; }
     a.btn:hover, button:hover { background:#171717; }
     .muted { opacity:.8; font-size:.9rem; }
     .grow { flex: 1 1 auto; }
     .right { margin-left:auto; }
 
-    /* tabs */
     .tabs { display:flex; gap:8px; border-bottom:1px solid #222; margin:16px 0 12px; }
     .tab { padding:10px 14px; border:1px solid #222; border-bottom:none; border-radius:12px 12px 0 0; background:#111; cursor:pointer; }
     .tab.active { background:#191919; font-weight:600; }
     .tabpanes { border:1px solid #222; border-radius:0 14px 14px 14px; background:#141414; padding:16px; }
 
-    /* statistics layout */
     .stats-grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); align-items:start; }
     .panel { border:1px solid #2a2a2a; border-radius:14px; overflow:hidden; background:#101010; }
     details.panel > summary { list-style:none; cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; }
@@ -46,32 +42,31 @@
     .skill-line { display:grid; grid-template-columns: auto 1fr auto; gap:8px; align-items:center; }
     .skill-total { min-width:48px; text-align:right; font-variant-numeric: tabular-nums; }
     .charac-badge { font-variant-numeric: tabular-nums; }
-    .skill-line { display:grid; grid-template-columns: auto 1fr auto auto auto auto; gap:8px; align-items:center; }
     .num { width:90px; }
     .badge { border:1px solid #2f2f2f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; }
     .smallmuted { opacity:.75; font-size:.85rem; }
 
-    /* --- alignment fixes for all skill-line blocks --- */
     .skill-line { display:grid; grid-template-columns: 140px 80px 80px 70px 70px 50px; gap:8px; align-items:center; }
     .skill-line.smallmuted { font-size:.85rem; opacity:.75; }
     .skill-line input.num { width:70px; text-align:right; }
     .skill-line .badge, .skill-line .skill-total { text-align:center; font-variant-numeric: tabular-nums; min-width:50px; }
     .skill-line .k { font-size:.9rem; opacity:.85; }
 
-    /* status line */
     .status { margin-top:10px; opacity:.8; }
-
-    /* Derived stats table */
     .derived-grid { display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); }
     .kv { display:grid; grid-template-columns: auto 1fr; gap:6px 8px; align-items:center; }
     .kv .val { justify-self:end; font-variant-numeric: tabular-nums; }
 
-    /* --- Abilities chips + tooltips (added) --- */
-    .chip-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
-    .chip { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid #333; border-radius:999px; background:#111; font-size:.9rem; }
-    .chip .rm { cursor:pointer; border:none; background:#181818; border-radius:6px; padding:2px 6px; }
-    .stat-hover { text-decoration: dotted underline; cursor:help; }
-    .tooltip { position:absolute; z-index:9999; max-width:320px; border:1px solid #333; background:#0d0d0d; color:#f5f5f5; border-radius:10px; padding:8px 10px; font-size:.85rem; display:none; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+    /* Abilities tab */
+    .abi-grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .abi-bucket h3 { margin:6px 0 8px; font-size:1rem; }
+    .abi-list { display:grid; gap:6px; }
+    .abi-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #2b2b2b; border-radius:10px; background:#0f0f0f; }
+    .abi-item .tag { border:1px solid #3b3b3b; border-radius:999px; padding:2px 6px; font-size:.75rem; opacity:.85; }
+    .abi-item button { padding:4px 8px; font-size:.85rem; }
+    .abi-add { display:flex; gap:8px; align-items:center; }
+    .abi-add input, .abi-add select { flex:1 1 auto; }
+    .abi-hint { opacity:.75; font-size:.85rem; margin-top:6px; }
   </style>
 </head>
 <body>
@@ -110,8 +105,6 @@
     <div class="tabpanes">
       <!-- STATISTICS TAB -->
       <div id="tab-stat" class="tabpane">
-
-        <!-- Level + Derived Stats -->
         <div class="panel" style="margin-bottom:12px;">
           <details open class="panel">
             <summary class="hdr">
@@ -123,14 +116,14 @@
             </summary>
             <div class="panel-body">
               <div class="derived-grid">
-                <div class="kv"><div class="k">HP</div> <div class="val badge stat-hover" id="hp-val" data-target="stats.hp_max">—</div></div>
-                <div class="kv"><div class="k">EN</div> <div class="val badge stat-hover" id="en-val" data-target="stats.en_max">—</div></div>
-                <div class="kv"><div class="k">FO</div> <div class="val badge" id="fo-val">—</div></div>
-                <div class="kv"><div class="k">MO</div> <div class="val badge" id="mo-val">—</div></div>
-                <div class="kv"><div class="k">SP cap (10% HP)</div> <div class="val badge" id="spcap-val">—</div></div>
-                <div class="kv"><div class="k">Encumbrance</div> <div class="val badge" id="enc-val">—</div></div>
-                <div class="kv"><div class="k">Eclipse Threshold (ET)</div> <div class="val badge" id="et-val">—</div></div>
-                <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge" id="tx-val">—</div></div>
+                <div class="kv"><div class="k">HP</div> <div class="val badge" id="hp-val" title="">—</div></div>
+                <div class="kv"><div class="k">EN</div> <div class="val badge" id="en-val" title="">—</div></div>
+                <div class="kv"><div class="k">FO</div> <div class="val badge" id="fo-val" title="">—</div></div>
+                <div class="kv"><div class="k">MO</div> <div class="val badge" id="mo-val" title="">—</div></div>
+                <div class="kv"><div class="k">SP cap (10% HP)</div> <div class="val badge" id="spcap-val" title="">—</div></div>
+                <div class="kv"><div class="k">Encumbrance</div> <div class="val badge" id="enc-val" title="">—</div></div>
+                <div class="kv"><div class="k">Eclipse Threshold (ET)</div> <div class="val badge" id="et-val" title="">—</div></div>
+                <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge" id="tx-val" title="">—</div></div>
               </div>
             </div>
           </details>
@@ -164,59 +157,64 @@
         </div>
       </div>
 
-      <!-- Inventory tab placeholder -->
+      <!-- INVENTORY placeholder -->
       <div id="tab-inv" class="tabpane" style="display:none;"><p class="muted">Inventory — coming next.</p></div>
 
-      <!-- ABILITIES TAB (patched) -->
+      <!-- ABILITIES TAB -->
       <div id="tab-abi" class="tabpane" style="display:none;">
-        <div class="panel" style="margin-bottom:12px;">
+        <div class="panel">
           <details open class="panel">
-            <summary class="hdr"><strong>Archetype Abilities</strong></summary>
+            <summary class="hdr">
+              <strong>Abilities on this Character</strong>
+              <span class="muted">(Archetype / Passive / Active)</span>
+              <span class="grow"></span>
+              <span class="muted">Autosaves</span>
+            </summary>
             <div class="panel-body">
-              <div class="row" style="gap:6px; align-items:flex-start;">
-                <input id="arch-search" class="grow" placeholder="Search catalog (name)…" />
-                <button id="arch-add" class="btn" type="button">Add</button>
+              <!-- Add / search row -->
+              <div class="abi-add" style="margin-bottom:10px;">
+                <input id="abi-search" placeholder="Search ability by name…" />
+                <select id="abi-filter-type">
+                  <option value="">Any type</option>
+                  <option value="active">Active</option>
+                  <option value="passive">Passive</option>
+                  <option value="mixed">Mixed</option>
+                </select>
+                <select id="abi-filter-source">
+                  <option value="">Any source</option>
+                  <option value="Specie">Specie</option>
+                  <option value="Talent">Talent</option>
+                  <option value="Archetype">Archetype</option>
+                  <option value="Expertise">Expertise</option>
+                  <option value="Awakening">Awakening</option>
+                  <option value="Apotheosis">Apotheosis</option>
+                  <option value="Other">Other</option>
+                </select>
+                <button id="abi-search-btn">Find</button>
               </div>
-              <div id="arch-list" class="chip-list"></div>
+              <div id="abi-results" class="abi-list" style="margin-bottom:12px;"></div>
+              <div class="abi-hint">Tip: click a result to add it; click the 🗑 on an assigned ability to remove it.</div>
+
+              <div class="abi-grid" style="margin-top:16px;">
+                <div class="abi-bucket">
+                  <h3>Archetype</h3>
+                  <div id="abi-list-archetype" class="abi-list"></div>
+                </div>
+                <div class="abi-bucket">
+                  <h3>Passive (non-Archetype)</h3>
+                  <div id="abi-list-passive" class="abi-list"></div>
+                </div>
+                <div class="abi-bucket">
+                  <h3>Active (non-Archetype)</h3>
+                  <div id="abi-list-active" class="abi-list"></div>
+                </div>
+              </div>
             </div>
           </details>
         </div>
-
-        <div class="panel" style="margin-bottom:12px;">
-          <details open class="panel">
-            <summary class="hdr"><strong>Passive Abilities (non-Archetype)</strong></summary>
-            <div class="panel-body">
-              <div class="row" style="gap:6px; align-items:flex-start;">
-                <input id="passive-search" class="grow" placeholder="Search catalog (name)…" />
-                <button id="passive-add" class="btn" type="button">Add</button>
-              </div>
-              <div id="passive-list" class="chip-list"></div>
-            </div>
-          </details>
-        </div>
-
-        <div class="panel" style="margin-bottom:12px;">
-          <details open class="panel">
-            <summary class="hdr"><strong>Active Abilities (non-Archetype)</strong></summary>
-            <div class="panel-body">
-              <div class="row" style="gap:6px; align-items:flex-start;">
-                <input id="active-search" class="grow" placeholder="Search catalog (name)…" />
-                <button id="active-add" class="btn" type="button">Add</button>
-              </div>
-              <div id="active-list" class="chip-list"></div>
-            </div>
-          </details>
-        </div>
-
-        <div class="row" style="margin-top:10px;">
-          <button id="btn-save-abilities" class="btn" type="button">💾 Save Abilities to Character</button>
-          <span id="abilities-status" class="muted" style="margin-left:10px;"></span>
-        </div>
-
-        <div id="tooltip" class="tooltip"></div>
       </div>
 
-      <!-- other placeholders -->
+      <!-- COMBAT / PERSONAL placeholders -->
       <div id="tab-com" class="tabpane" style="display:none;"><p class="muted">Combat — coming next.</p></div>
       <div id="tab-per" class="tabpane" style="display:none;"><p class="muted">Personal — coming next.</p></div>
     </div>
@@ -224,224 +222,534 @@
   </div></div>
 
 <script>
-/* --- auth helper (sends header + keeps cookie) --- */
+/* --- auth helper --- */
 function getToken(){ return localStorage.getItem('auth_token') || ''; }
 function setCookieToken(tok){ if(!tok) return; document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
-function authHeaders(){ const t=getToken(); if(t) setCookieToken(t); return t?{'Authorization':'Bearer '+t,'X-Auth-Token':t}:{ }; }
-async function api(path,opt={}) {
-  const headers = Object.assign({}, opt.headers||{}, authHeaders());
-  const resp = await fetch(path, { credentials:'include', ...opt, headers });
-  const ct = resp.headers.get('content-type') || '';
-  const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
-  if(!resp.ok || data.status==='error') throw new Error(data.message || `HTTP ${resp.status}`);
-  return data;
-}
+function authHeaders(){ const t=getToken(); if(t) setCookieToken(t); return t? {'Authorization':'Bearer '+t, 'X-Auth-Token':t} : {}; }
+async function api(path,opt={}){ const headers = Object.assign({}, opt.headers||{}, authHeaders()); const resp = await fetch(path, { credentials:'include', ...opt, headers }); const ct = resp.headers.get('content-type') || ''; const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() }; if(!resp.ok || data.status==='error') throw new Error(data.message || ('HTTP '+resp.status)); return data; }
 
-/* --- tabs --- */
-document.querySelectorAll('.tab').forEach(t=>{
-  t.addEventListener('click', ()=>{
-    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-    t.classList.add('active');
-    const target = t.getAttribute('data-tab');
-    document.querySelectorAll('.tabpane').forEach(p=>p.style.display = (p.id===target ? '' : 'none'));
-  });
-});
-
-/* --- constants & helpers for Statistics (unchanged content trimmed for brevity) --- */
+/* Constants replicated from your sheet */
 const CHARACS = [
-  { key:'reflex',     code:'REF', name:'Reflex',     skills:['Technicity','Dodge','Tempo','Reactivity'] },
-  { key:'dexterity',  code:'DEX', name:'Dexterity',  skills:['Accuracy','Evasion','Stealth','Acrobatics'] },
-  { key:'body',       code:'BOD', name:'Body',       skills:['Brutality','Blocking','Resistance','Athletics'] },
-  { key:'willpower',  code:'WIL', name:'Willpower',  skills:['Intimidation','Spirit','Instinct','Absorption'] },
-  { key:'magic',      code:'MAG', name:'Magic',      skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
-  { key:'presence',   code:'PRE', name:'Presence',   skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
-  { key:'wisdom',     code:'WIS', name:'Wisdom',     skills:['Survival','Education','Perception','Psychology','Investigation'] },
-  { key:'tech',       code:'TEC', name:'Tech',       skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
+  { key:'body',      code:'BOD', name:'Body',      skills:['Athletics','Resistance','Melee','Brawl'] },
+  { key:'willpower', code:'WIL', name:'Willpower', skills:['Spirit','Courage','Discipline','Insight'] },
+  { key:'magic',     code:'MAG', name:'Magic',     skills:['Arcana','Spellwork','Alchemy','Ritual'] },
+  { key:'presence',  code:'PRE', name:'Presence',  skills:['Charm','Intimidation','Deception','Performance'] },
+  { key:'reflex',    code:'REF', name:'Reflex',    skills:['Stealth','Acrobatics','Aim','Perception'] },
+  { key:'dexterity', code:'DEX', name:'Dexterity', skills:['Craft','Lockpicking','Tinkering','Drive'] },
 ];
 
-const NATURES = ["Fire","Water","Earth","Wind","Lightning","Moon","Sun","Ki"];
+const NATURES = ['Fire','Lightning','Water','Earth','Wind','Sun','Moon','Ki'];
 const INT_TABLE = [
-  { min:1,  max:7,  id:"1d4",  iv:2 },
-  { min:8,  max:11, id:"1d6",  iv:3 },
-  { min:12, max:15, id:"1d8",  iv:4 },
-  { min:16, max:17, id:"1d10", iv:5 },
-  { min:18, max:99, id:"1d12", iv:6 },
+  {min:1,max:1, id:'1d4', iv:2},{min:2,max:3, id:'1d6', iv:3},{min:4,max:7, id:'1d8', iv:4},
+  {min:8,max:15, id:'1d10', iv:5},{min:16,max:99, id:'1d12', iv:6}
 ];
+const DEF_TABLE = {
+  Fire:{Fire:"N",Lightning:"N",Water:"R",Earth:"VR",Wind:"V",Sun:"N",Moon:"VR",Ki:"N"},
+  Lightning:{Fire:"N",Lightning:"N",Water:"N",Earth:"V",Wind:"VR",Sun:"VR",Moon:"VV",Ki:"N"},
+  Water:{Fire:"V",Lightning:"N",Water:"N",Earth:"N",Wind:"VV",Sun:"R",Moon:"R",Ki:"N"},
+  Earth:{Fire:"VV",Lightning:"V",Water:"N",Earth:"N",Wind:"R",Sun:"VR",Moon:"N",Ki:"N"},
+  Wind:{Fire:"R",Lightning:"VR",Water:"VV",Earth:"V",Wind:"N",Sun:"N",Moon:"N",Ki:"N"},
+  Sun:{Fire:"N",Lightning:"R",Water:"VR",Earth:"VV",Wind:"N",Sun:"N",Moon:"V",Ki:"N"},
+  Moon:{Fire:"VR",Lightning:"VV",Water:"V",Earth:"N",Wind:"N",Sun:"R",Moon:"N",Ki:"N"},
+  Ki:{Fire:"N",Lightning:"N",Water:"N",Earth:"N",Wind:"N",Sun:"N",Moon:"N",Ki:"N"},
+};
+const SYM_PTS = { N:0, R:-2, VR:-4, V:+2, VV:+4 };
+function ivFactor(iv){ return Math.max(1, Math.min(3, 0.5 * iv)); }
+function totalFromInvest(v){ const total = (parseInt(v||0,10) || 0) + 4; return total; }
+function modFromTotal(total){ return Math.floor((Number(total)-10)/2); }
+function charMod(key){ const invest = CHAR.stats?.[key]?.invest ?? 0; return modFromTotal(totalFromInvest(invest)); }
+function milestone(key){ return Math.max(0, charMod(key)); }
+function skillTotal(key, skill){ const invest = CHAR.stats?.[key]?.skills?.[skill] ?? 0; return invest + charMod(key); }
 
-/* --- Abilities integration (added) --- */
-let currentCharacterId = null;
-let currentCharacter = null;
+/* state + refs */
+const params = new URLSearchParams(location.search);
+const CID = params.get('id');
+let ROLE = 'user';
+let SAVE_TIMER = null;
+let CHAR = null;
+let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
 
-let archSel = [];
-let passiveSel = [];
-let activeSel = [];
+/* DOM refs */
+const loginChip = document.getElementById('login-chip');
+const adminLink = document.getElementById('admin-link');
+const titleEl   = document.getElementById('title');
+const statusEl  = document.getElementById('status');
+const nameEl    = document.getElementById('name');
+const gridEl    = document.getElementById('stats-grid');
 
-let _catalog_cache = [];
+/* derived refs */
+const levelEl = document.getElementById('level');
+const hpEl = document.getElementById('hp-val');
+const enEl = document.getElementById('en-val');
+const foEl = document.getElementById('fo-val');
+const moEl = document.getElementById('mo-val');
+const spcapEl = document.getElementById('spcap-val');
+const encEl = document.getElementById('enc-val');
+const etEl = document.getElementById('et-val');
+const txEl = document.getElementById('tx-val');
 
-function getParam(name){
-  const url = new URL(location.href);
-  return url.searchParams.get(name);
-}
+/* Abilities tab refs */
+const abiSearchEl = document.getElementById('abi-search');
+const abiFilterTypeEl = document.getElementById('abi-filter-type');
+const abiFilterSrcEl  = document.getElementById('abi-filter-source');
+const abiSearchBtn = document.getElementById('abi-search-btn');
+const abiResultsEl = document.getElementById('abi-results');
+const listArchetypeEl = document.getElementById('abi-list-archetype');
+const listPassiveEl   = document.getElementById('abi-list-passive');
+const listActiveEl    = document.getElementById('abi-list-active');
 
-async function searchAbilitiesByName(q) {
-  const res = await api('/abilities?name=' + encodeURIComponent(q || ''));
-  return res.abilities || [];
-}
-
-async function loadCatalogCache() {
-  const res = await api('/abilities');
-  _catalog_cache = res.abilities || [];
-}
-
-function renderChipList(el, arr, catalog) {
-  el.innerHTML = '';
-  arr.forEach(id => {
-    const ab = catalog.find(x=>x.id===id);
-    const name = ab ? ab.name : id;
-    const chip = document.createElement('span');
-    chip.className = 'chip';
-    chip.textContent = name;
-    const rm = document.createElement('button');
-    rm.className = 'rm';
-    rm.textContent = '✕';
-    rm.addEventListener('click', ()=> {
-      const i = arr.indexOf(id);
-      if (i>=0) { arr.splice(i,1); renderAllChipLists(); }
-    });
-    chip.appendChild(rm);
-    el.appendChild(chip);
+/* tabs switching */
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tabpane').forEach(p=>p.style.display='none');
+    tab.classList.add('active');
+    const id = tab.getAttribute('data-tab');
+    document.getElementById(id).style.display='';
   });
-}
-
-function renderAllChipLists() {
-  renderChipList(document.getElementById('arch-list'),    archSel,    _catalog_cache);
-  renderChipList(document.getElementById('passive-list'), passiveSel, _catalog_cache);
-  renderChipList(document.getElementById('active-list'),  activeSel,  _catalog_cache);
-}
-
-document.getElementById('arch-add').addEventListener('click', async ()=>{
-  const q = document.getElementById('arch-search').value.trim();
-  const arr = await searchAbilitiesByName(q);
-  if (!arr.length) return alert('No ability found');
-  archSel.push(arr[0].id);
-  archSel = [...new Set(archSel)];
-  renderAllChipLists();
-});
-document.getElementById('passive-add').addEventListener('click', async ()=>{
-  const q = document.getElementById('passive-search').value.trim();
-  const arr = await searchAbilitiesByName(q);
-  if (!arr.length) return alert('No ability found');
-  passiveSel.push(arr[0].id);
-  passiveSel = [...new Set(passiveSel)];
-  renderAllChipLists();
-});
-document.getElementById('active-add').addEventListener('click', async ()=>{
-  const q = document.getElementById('active-search').value.trim();
-  const arr = await searchAbilitiesByName(q);
-  if (!arr.length) return alert('No ability found');
-  activeSel.push(arr[0].id);
-  activeSel = [...new Set(activeSel)];
-  renderAllChipLists();
 });
 
-document.getElementById('btn-save-abilities').addEventListener('click', async ()=>{
-  const st = document.getElementById('abilities-status');
-  if (!currentCharacterId) { st.textContent = 'No character selected.'; return; }
-  try {
-    st.textContent = 'Saving…';
-    await api('/characters/'+encodeURIComponent(currentCharacterId)+'/abilities', {
-      method:'PUT',
-      headers:{'content-type':'application/json'},
-      body: JSON.stringify({ archetype: archSel, passive: passiveSel, active: activeSel })
-    });
-    st.textContent = 'Saved.';
-    await refreshComputedAndApplyTooltips();
+/* auth */
+async function checkMe() {
+  loginChip.textContent = 'Checking login...';
+  try{
+    const me = await api('/auth/me');
+    loginChip.textContent = `${me.username} (${me.role})`;
+    if ((me.role||'').toLowerCase()==='admin') adminLink.style.display='';
+    ROLE = me.role||'user';
+    return me;
   } catch(e){
-    st.textContent = 'Error: '+e.message;
+    loginChip.textContent = 'Not logged in';
+    adminLink.style.display='none';
+    throw e;
   }
-});
-
-/* --- tooltips from /characters/{cid}/computed --- */
-let _computed_cache = null;
-
-async function refreshComputedAndApplyTooltips(){
-  if (!currentCharacterId) return;
-  const res = await api('/characters/'+encodeURIComponent(currentCharacterId)+'/computed');
-  _computed_cache = res;
-
-  // optional numeric updates if you wish
-  const final = res.final || {};
-  const hpMax = (((final.stats || {}).hp_max) ?? undefined);
-  const enMax = (((final.stats || {}).en_max) ?? undefined);
-  const elHp  = document.getElementById('hp-val'); if(elHp && hpMax!==undefined)  elHp.textContent  = hpMax;
-  const elEn  = document.getElementById('en-val'); if(elEn && enMax!==undefined)  elEn.textContent  = enMax;
-
-  const tip = document.getElementById('tooltip');
-  document.querySelectorAll('.stat-hover').forEach(el=>{
-    // remove old listeners (avoid stacking)
-    el.onmouseenter = null; el.onmousemove = null; el.onmouseleave = null;
-
-    el.addEventListener('mouseenter', (ev)=>{
-      const key = el.getAttribute('data-target');
-      const list = (res.breakdown || {})[key] || [];
-      if (!list.length) { tip.style.display='none'; return; }
-      tip.innerHTML = renderTooltipHtml(key, list);
-      positionTooltip(ev, tip);
-      tip.style.display='block';
-    });
-    el.addEventListener('mousemove', (ev)=> positionTooltip(ev, tip));
-    el.addEventListener('mouseleave', ()=> { tip.style.display='none'; });
-  });
 }
 
-function renderTooltipHtml(key, list){
-  let html = `<div style="font-weight:600;margin-bottom:6px;">${key}</div>`;
-  html += `<div style="opacity:.8;margin-bottom:6px;">Order: set → mul → add</div>`;
-  list.forEach(it=>{
-    const mode = (it.mode||'add').toLowerCase();
-    const v = mode==='mul' ? ('× '+it.value) : (mode==='set' ? ('= '+it.value) : ((it.value>=0?'+':'')+it.value));
-    html += `<div style="display:flex;gap:6px;align-items:baseline;">
-      <span class="pill" style="border:1px solid #333;padding:1px 6px;border-radius:10px;">${it.origin||''}</span>
-      <span style="flex:1 1 auto;">${it.source||'Ability'}</span>
-      <span style="opacity:.9;">${v}</span>
-    </div>`;
-    if (it.note){
-      html += `<div style="opacity:.7;margin-left:60px;">${it.note}</div>`;
+/* defaults */
+function makeDefaultStats(){
+  const stats = {};
+  for (const c of CHARACS){
+    const sk = {};
+    for (const s of c.skills) sk[s] = 0;
+    stats[c.key] = { invest: 0, skills: sk };
+  }
+  const ints = {};
+  for (const n of NATURES){ ints[n] = {knows:false, invest:0}; }
+  stats.intensities = ints;
+  return stats;
+}
+
+/* render stats/skills */
+function renderStatistics(){
+  gridEl.innerHTML = '';
+  for (const c of CHARACS){
+    const rec = (CHAR.stats && CHAR.stats[c.key]) || { invest:0, skills:{} };
+    const total = totalFromInvest(rec.invest);
+    const mod = modFromTotal(total);
+
+    const details = document.createElement('details'); details.className='panel'; details.open = true;
+    const sum = document.createElement('summary'); sum.className='hdr';
+    sum.innerHTML = `
+      <strong>${c.name}</strong>
+      <span class="pill">${c.code}</span>
+      <span class="charac-badge">[ <span class="total" id="${c.key}-total">${total}</span> | <span id="${c.key}-mod">${mod>=0? '+'+mod : mod}</span> ]</span>
+      <span class="grow"></span>
+      <span class="k">Invested</span>
+      <input type="number" class="num" min="0" id="${c.key}-invest" value="${Number(rec.invest)||0}">
+    `;
+    details.appendChild(sum);
+
+    const body = document.createElement('div'); body.className='panel-body';
+    const skills = document.createElement('div'); skills.className='skills';
+
+    for (const s of c.skills){
+      const invested = Number((rec.skills||{})[s] || 0);
+      const totalSkill = invested + mod;
+      const line = document.createElement('div'); line.className='skill-line';
+      line.innerHTML = `
+        <div class="k">${s}</div>
+        <input type="number" class="num" min="0" id="${c.key}__${s}__invest" value="${invested}">
+        <div class="skill-total" id="${c.key}__${s}__total">${totalSkill>=0? '+'+totalSkill : totalSkill}</div>
+      `;
+      skills.appendChild(line);
     }
-  });
-  return html;
-}
-function positionTooltip(ev, tip){
-  const pad = 14;
-  tip.style.left = (ev.pageX + pad) + 'px';
-  tip.style.top  = (ev.pageY + pad) + 'px';
-}
 
-/* --- initialization for abilities on load --- */
-async function loadCharacterAbilities(charId){
-  const res = await api('/characters/'+encodeURIComponent(charId));
-  currentCharacter = res.character || {};
-  const abil = currentCharacter.abilities || {};
-  archSel    = (abil.archetype || []).map(x=>x.id);
-  passiveSel = (abil.passive   || []).map(x=>x.id);
-  activeSel  = (abil.active    || []).map(x=>x.id);
-
-  if (!_catalog_cache.length) await loadCatalogCache();
-  renderAllChipLists();
-  await refreshComputedAndApplyTooltips();
-}
-
-/* --- boot: infer character id from URL so we don't touch your other logic --- */
-(async function bootAbilities(){
-  try {
-    const cid = getParam('id');
-    if (!cid) return; // no-op if page wasn't opened with ?id=
-    currentCharacterId = cid;
-    await loadCharacterAbilities(cid);
-  } catch (e) {
-    console.warn('Abilities init skipped:', e);
+    body.appendChild(skills);
+    details.appendChild(body);
+    gridEl.appendChild(details);
   }
-})();
+
+  // Wire listeners
+  for (const c of CHARACS){
+    const input = document.getElementById(`${c.key}-invest`);
+    input.addEventListener('input', ()=>{
+      const v = parseInt(input.value||'0', 10) || 0;
+      CHAR.stats[c.key].invest = v;
+      const total = totalFromInvest(v);
+      const mod = modFromTotal(total);
+      document.getElementById(`${c.key}-total`).textContent = total;
+      document.getElementById(`${c.key}-mod`).textContent = (mod>=0? '+'+mod : mod);
+      for (const s of c.skills){
+        const invested = Number(CHAR.stats[c.key].skills[s] || 0);
+        const t = invested + mod;
+        document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
+      }
+      if (c.key === 'magic') {
+        renderIntensities();
+        renderDefenseSummary();
+      }
+      updateDerived();
+      queueSave();
+    });
+    for (const s of c.skills){
+      const sid = `${c.key}__${s}__invest`;
+      const inp = document.getElementById(sid);
+      inp.addEventListener('input', ()=>{
+        const v = parseInt(inp.value||'0', 10) || 0;
+        CHAR.stats[c.key].skills[s] = v;
+        const total = totalFromInvest(CHAR.stats[c.key].invest);
+        const mod = modFromTotal(total);
+        const t = v + mod;
+        document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
+        updateDerived();
+        queueSave();
+      });
+    }
+  }
+}
+
+/* Intensities & defense (unchanged) */
+function magMod(){ const mag = CHAR.stats?.magic?.invest ?? 0; const total = totalFromInvest(mag); return modFromTotal(total); }
+function idIvFromTotal(t){ const v = Math.max(0, Math.min(99, Number(t)||0)); if (v <= 0) return { id:"—", iv:0 }; for (const row of INT_TABLE){ if (v >= row.min && v <= row.max) return { id: row.id, iv: row.iv }; } return { id:"1d12", iv:6 }; }
+function defenseFromKnown(){
+  const ints = CHAR.stats?.intensities || {};
+  const entries = NATURES.map(n=>{ const rec = ints[n] || {knows:false, invest:0}; const total = (rec.invest||0) + magMod(); const {iv} = idIvFromTotal(total); return { nature:n, knows:!!rec.knows, iv, total }; });
+  const summary = {};
+  for (const incoming of NATURES){
+    let score = 0;
+    for (const m of entries){
+      if (!m.knows || m.iv<=0) continue;
+      const sym = DEF_TABLE[incoming][m.nature];
+      score += (SYM_PTS[sym] || 0) * ivFactor(m.iv);
+    }
+    summary[incoming] = score;
+  }
+  return summary;
+}
+function scoreToLabel(score){ if (score <= -6) return "VR"; if (score <= -2) return "R"; if (score >= +6) return "VV"; if (score >= +2) return "V"; return "N"; }
+function renderIntensities(){
+  const list = document.getElementById('intensities-list');
+  const im = magMod();
+  document.getElementById('int-mag-mod').textContent = (im>=0? '+'+im : im);
+  list.innerHTML = '';
+  for (const n of NATURES){
+    const rec = CHAR.stats.intensities[n];
+    const total = (rec.invest||0) + im;
+    const info = idIvFromTotal(total);
+    const row = document.createElement('div');
+    row.className = 'skill-line';
+    row.innerHTML = `
+      <div class="k">${n}</div>
+      <input type="checkbox" id="int_${n}_knows" ${rec.knows?'checked':''} />
+      <input type="number" class="num" id="int_${n}_invest" min="0" value="${rec.invest||0}" />
+      <div class="badge" id="int_${n}_total">${total>=0? '+'+total:total}</div>
+      <div class="badge" id="int_${n}_id">${info.id}</div>
+      <div class="badge" id="int_${n}_iv">${info.iv || '—'}</div>
+    `;
+    list.appendChild(row);
+  }
+  // Hooks
+  for (const n of NATURES){
+    const k = document.getElementById(`int_${n}_knows`);
+    const i = document.getElementById(`int_${n}_invest`);
+    k.addEventListener('change', ()=>{ CHAR.stats.intensities[n].knows = !!k.checked; renderDefenseSummary(); queueSave(); });
+    i.addEventListener('input', ()=>{ const v = parseInt(i.value||'0',10) || 0; CHAR.stats.intensities[n].invest = v; const mm2 = magMod(); const total = v + mm2; const info = idIvFromTotal(total); document.getElementById(`int_${n}_total`).textContent = (total>=0? '+'+total:total); document.getElementById(`int_${n}_id`).textContent = info.id; document.getElementById(`int_${n}_iv`).textContent = info.iv || '—'; renderDefenseSummary(); queueSave(); });
+  }
+}
+function renderDefenseSummary(){
+  const box = document.getElementById('defense-summary');
+  const scores = defenseFromKnown();
+  box.innerHTML = '';
+  const hdr = document.createElement('div'); hdr.className='skill-line smallmuted'; hdr.innerHTML = `<div>Incoming</div><div></div><div></div><div>Score</div><div>Level</div><div></div>`; box.appendChild(hdr);
+  for (const n of NATURES){
+    const s = scores[n] || 0;
+    const lab = scoreToLabel(s);
+    const row = document.createElement('div'); row.className='skill-line';
+    row.innerHTML = `<div class="k">${n}</div><div></div><div></div><div class="badge">${s.toFixed(1)}</div><div class="badge">${lab}</div><div></div>`;
+    box.appendChild(row);
+  }
+}
+
+/* PASSIVE MODIFIERS APPLICATION
+   We support targets like:
+   - derived.hp / derived.en / derived.fo / derived.mo / derived.et / derived.tx / derived.enc
+   Modes: add / mul / set (order: set → mul → add)
+*/
+function applyPassiveModifiersToDerived(base){
+  const out = { ...base };
+  const notes = {
+    hp: [`Base = ${base.hp}`],
+    en: [`Base = ${base.en}`],
+    fo: [`Base = ${base.fo}`],
+    mo: [`Base = ${base.mo}`],
+    et: [`Base = ${base.et}`],
+    tx: [`Base = ${base.tx}`],
+    enc:[`Base = ${base.enc}`],
+    spcap:[`Base = ${base.spcap}`],
+  };
+
+  const ops = { set:[], mul:[], add:[] };
+
+  const passiveAbilities = (ASSIGNED||[]).filter(a=>{
+    const t = (a.type||'').toLowerCase();
+    return t==='passive' || t==='mixed';
+  });
+
+  for (const ab of passiveAbilities){
+    const mods = (ab.passive && ab.passive.modifiers) || [];
+    for (const m of mods){
+      const target = (m.target||'').toLowerCase().trim();
+      const mode = (m.mode||'add').toLowerCase();
+      const val = Number(m.value||0);
+      const note = m.note ? ` (${m.note})` : '';
+      const origin = `${ab.name}${note}`;
+      const map = {
+        'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo',
+        'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap'
+      };
+      if (map[target]){
+        ops[mode]?.push({ k: map[target], v: val, origin });
+      }
+    }
+  }
+
+  // Apply in order: set, mul, add
+  for (const item of ops.set){ out[item.k] = item.v; notes[item.k].push(`Set to ${item.v} ← ${item.origin}`); }
+  for (const item of ops.mul){ out[item.k] = Math.round(out[item.k] * item.v); notes[item.k].push(`×${item.v} ← ${item.origin}`); }
+  for (const item of ops.add){ out[item.k] = out[item.k] + item.v; const s = item.v>=0? `+${item.v}`: `${item.v}`; notes[item.k].push(`${s} ← ${item.origin}`); }
+
+  // Titles
+  hpEl.title = notes.hp.join('\n');
+  enEl.title = notes.en.join('\n');
+  foEl.title = notes.fo.join('\n');
+  moEl.title = notes.mo.join('\n');
+  etEl.title = notes.et.join('\n');
+  txEl.title = notes.tx.join('\n');
+  encEl.title = notes.enc.join('\n');
+  spcapEl.title = notes.spcap.join('\n');
+
+  return out;
+}
+
+/* Derived computations */
+function clampInt(x){ return Math.max(0, Math.floor(Number(x)||0)); }
+function updateDerived(){
+  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const msBOD = milestone('body'); const msWIL = milestone('willpower'); const msMAG = milestone('magic'); const msPRE = milestone('presence'); const msREF = milestone('reflex'); const msDEX = milestone('dexterity');
+
+  // Base
+  const base = {};
+  base.hp = 100 + lvl + 12*msBOD + 6*msWIL;
+  base.en = 5 + Math.floor(lvl/5) + msWIL + 2*msMAG;
+  base.fo = 2 + Math.floor(lvl/5) + msWIL + msPRE;
+  base.mo = 4 + msDEX + msREF;
+  base.spcap = Math.floor(base.hp * 0.10);
+  const athletics = skillTotal('body','Athletics');
+  const spirit = skillTotal('willpower','Spirit');
+  base.enc = 10 + (athletics*5) + (spirit*2);
+  base.et = 1 + Math.floor(lvl/9) + msMAG;
+  const resistance = skillTotal('body','Resistance');
+  const alchemy = skillTotal('tech','Alchemy');
+  base.tx = resistance + alchemy;
+
+  // Apply passive modifiers
+  const final = applyPassiveModifiersToDerived(base);
+
+  // Display
+  hpEl.textContent = final.hp;
+  enEl.textContent = final.en;
+  foEl.textContent = final.fo;
+  moEl.textContent = final.mo;
+  spcapEl.textContent = final.spcap;
+  encEl.textContent = final.enc;
+  etEl.textContent = final.et;
+  txEl.textContent = final.tx;
+}
+
+/* LOAD & SAVE */
+async function loadCharacter(){
+  if (!CID){ statusEl.textContent = 'Missing id'; return; }
+  const res = await api('/characters/' + encodeURIComponent(CID));
+  CHAR = res.character || {};
+  if (!CHAR.stats) CHAR.stats = makeDefaultStats();
+  if (!CHAR.stats.intensities) CHAR.stats.intensities = makeDefaultStats().intensities;
+  if (!('level' in CHAR)) CHAR.level = 1;
+  if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
+
+  // Name
+  titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
+  nameEl.value = CHAR.name || '';
+  nameEl.addEventListener('input', ()=> queueSave());
+
+  // Level
+  levelEl.value = Math.max(1, Number(CHAR.level)||1);
+  levelEl.addEventListener('input', ()=>{ CHAR.level = Math.max(1, Math.floor(Number(levelEl.value)||1)); updateDerived(); queueSave(); });
+
+  // Render stuff
+  renderStatistics();
+  renderIntensities();
+  renderDefenseSummary();
+
+  // Load assigned abilities (docs)
+  await resolveAssignedAbilities();
+  renderAbilitiesTab();
+
+  updateDerived();
+}
+
+function queueSave(){
+  statusEl.textContent = 'Saving...';
+  if (SAVE_TIMER) clearTimeout(SAVE_TIMER);
+  SAVE_TIMER = setTimeout(saveNow, 350);
+}
+
+async function saveNow(){
+  try{
+    const payload = { name: nameEl.value || '', level: CHAR.level || 1, stats: CHAR.stats, abilities: CHAR.abilities || [] };
+    const res = await api('/characters/' + encodeURIComponent(CID), {
+      method:'PUT', headers:{ 'content-type':'application/json' }, body: JSON.stringify(payload)
+    });
+    titleEl.textContent = 'Edit: ' + (res.character?.name || '(unnamed)');
+    statusEl.textContent = 'Saved at ' + new Date().toLocaleTimeString();
+  }catch(err){
+    statusEl.textContent = 'Save failed: ' + err.message;
+  }
+}
+
+/* ------- Abilities: search/add/remove/render ------- */
+async function searchAbilities(){
+  try{
+    const params = [];
+    if (abiSearchEl.value) params.push('name='+encodeURIComponent(abiSearchEl.value));
+    if (abiFilterTypeEl.value) params.push('typ='+encodeURIComponent(abiFilterTypeEl.value));
+    if (abiFilterSrcEl.value) params.push('source='+encodeURIComponent(abiFilterSrcEl.value));
+    const qs = params.length ? '?'+params.join('&') : '';
+    const res = await api('/abilities'+qs); // list endpoint (:contentReference[oaicite:6]{index=6})
+    const arr = res.abilities || [];
+    renderSearchResults(arr);
+  }catch(e){
+    abiResultsEl.innerHTML = `<div class="muted">Error: ${e.message}</div>`;
+  }
+}
+abiSearchBtn.addEventListener('click', searchAbilities);
+abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
+
+function renderSearchResults(arr){
+  abiResultsEl.innerHTML = '';
+  if (!arr.length){ abiResultsEl.innerHTML = '<div class="muted">No results.</div>'; return; }
+  for (const a of arr){
+    const div = document.createElement('div');
+    div.className = 'abi-item';
+    div.innerHTML = `
+      <div class="grow">
+        <div><strong>${a.name}</strong></div>
+        <div class="muted" style="font-size:.85rem">${a.description||''}</div>
+      </div>
+      <span class="tag">${a.type||''}</span>
+      <span class="tag">${a.source_category||''}</span>
+      <button>Add</button>
+    `;
+    div.querySelector('button').addEventListener('click', ()=> addAbilityToChar(a.id));
+    abiResultsEl.appendChild(div);
+  }
+}
+
+async function addAbilityToChar(aid){
+  if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
+  if (CHAR.abilities.includes(aid)) return; // already there
+  CHAR.abilities.push(aid);
+  queueSave();
+  await resolveAssignedAbilities();
+  renderAbilitiesTab();
+  updateDerived();
+}
+
+async function removeAbilityFromChar(aid){
+  CHAR.abilities = (CHAR.abilities||[]).filter(x=>x!==aid);
+  queueSave();
+  await resolveAssignedAbilities();
+  renderAbilitiesTab();
+  updateDerived();
+}
+
+async function resolveAssignedAbilities(){
+  const ids = (CHAR.abilities||[]);
+  if (!ids.length){ ASSIGNED = []; return; }
+  // Try bulk API first; if not present, fetch one by one.
+  try{
+    const qs = '?ids=' + encodeURIComponent(ids.join(','));
+    const bulk = await api('/abilities/bulk'+qs);
+    ASSIGNED = (bulk.abilities||[]);
+    // Fill any missing via per-id (in case)
+    const gotIds = new Set(ASSIGNED.map(a=>a.id));
+    const missing = ids.filter(i=>!gotIds.has(i));
+    for (const mid of missing){
+      const one = await api('/abilities/'+encodeURIComponent(mid));
+      if (one && one.ability) ASSIGNED.push(one.ability);
+    }
+  }catch(_e){
+    // Fallback: per-id
+    const arr = [];
+    for (const id of ids){
+      try{
+        const one = await api('/abilities/'+encodeURIComponent(id));
+        if (one && one.ability) arr.push(one.ability);
+      }catch(e){}
+    }
+    ASSIGNED = arr;
+  }
+}
+
+function renderAbilitiesBucket(el, list){
+  el.innerHTML = '';
+  if (!list.length){ el.innerHTML = '<div class="muted">—</div>'; return; }
+  for (const a of list){
+    const div = document.createElement('div');
+    div.className = 'abi-item';
+    const isPassive = (a.type||'').toLowerCase()!=='active';
+    div.innerHTML = `
+      <div class="grow">
+        <div><strong>${a.name}</strong></div>
+        <div class="muted" style="font-size:.85rem">${isPassive ? (a.passive?.description||a.description||'') : (a.description||'')}</div>
+      </div>
+      <span class="tag">${a.type||''}</span>
+      <span class="tag">${a.source_category||''}</span>
+      <button title="Remove">🗑</button>
+    `;
+    div.querySelector('button').addEventListener('click', ()=> removeAbilityFromChar(a.id));
+    el.appendChild(div);
+  }
+}
+
+function renderAbilitiesTab(){
+  const docs = ASSIGNED.slice();
+
+  // Buckets:
+  const isArchetype = (a)=> (a.source_category||'').toLowerCase()==='archetype';
+  const isPassiveLike = (a)=> ['passive','mixed'].includes((a.type||'').toLowerCase());
+  const isActiveLike  = (a)=> ['active','mixed'].includes((a.type||'').toLowerCase());
+
+  const bucketArchetype = docs.filter(isArchetype);
+  const bucketPassive   = docs.filter(a=>!isArchetype(a) && isPassiveLike(a));
+  const bucketActive    = docs.filter(a=>!isArchetype(a) && isActiveLike(a));
+
+  renderAbilitiesBucket(listArchetypeEl, bucketArchetype);
+  renderAbilitiesBucket(listPassiveEl,   bucketPassive);
+  renderAbilitiesBucket(listActiveEl,    bucketActive);
+}
+
+/* boot */
+checkMe().then(loadCharacter).catch(()=>{});
 </script>
 </body>
 </html>
