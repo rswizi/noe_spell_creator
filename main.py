@@ -2944,9 +2944,8 @@ def get_character_computed(cid: str, request: Request):
         "breakdown": breakdown,
     }
 
-# ---------- Abilities & Traits ----------
-
-from fastapi import Body
+# -------------------- Abilities & Traits --------------------
+from fastapi import Body, Query
 
 @app.post("/abilities")
 async def create_ability(request: Request, payload: dict = Body(...)):
@@ -2959,12 +2958,11 @@ async def create_ability(request: Request, payload: dict = Body(...)):
 
     ab_type = (payload.get("type") or "passive").strip().lower()
     if ab_type not in ("active", "passive", "mixed"):
-        return JSONResponse({"status":"error","message":"Invalid type"}, status_code=400)
+        return JSONResponse({"status": "error", "message": "Invalid type"}, status_code=400)
 
     source_category = (payload.get("source_category") or "Other").strip()
-    source_ref      = (payload.get("source_ref") or "").strip()   # e.g. "Elf", "Boxer", "Expert Tracker"
+    source_ref      = (payload.get("source_ref") or "").strip()
     tags = [str(t).strip() for t in (payload.get("tags") or []) if str(t).strip()]
-
     description = (payload.get("description") or "").strip()
 
     active_in  = payload.get("active") or {}
@@ -2977,11 +2975,9 @@ async def create_ability(request: Request, payload: dict = Body(...)):
         try:
             rng = int(active_in.get("range") or 0)
         except Exception:
-            return JSONResponse({"status":"error","message":"Active range must be an integer"}, status_code=400)
-
+            return JSONResponse({"status": "error", "message": "Active range must be an integer"}, status_code=400)
         aoe = (active_in.get("aoe") or "").strip()
 
-        # Costs: HP / EN / MP / FO / MO / TX / Other
         costs_in = active_in.get("costs") or {}
         def _num(key, default=0):
             v = costs_in.get(key, default)
@@ -3000,7 +2996,7 @@ async def create_ability(request: Request, payload: dict = Body(...)):
                 "TX": _num("TX"),
             }
         except ValueError as bad_key:
-            return JSONResponse({"status":"error","message":f"Cost {bad_key} must be an integer"}, status_code=400)
+            return JSONResponse({"status": "error", "message": f"Cost {bad_key} must be an integer"}, status_code=400)
 
         costs["other_label"] = (costs_in.get("other_label") or "").strip()
         try:
@@ -3009,7 +3005,7 @@ async def create_ability(request: Request, payload: dict = Body(...)):
             costs["other_value"] = 0
 
         active_block = {
-            "activation": activation,   # "Action", "Free Action", "Ritual", "Special Action"
+            "activation": activation,     # "Action" | "Free Action" | "Ritual" | "Special Action"
             "range": rng,
             "aoe": aoe,
             "costs": costs,
@@ -3021,9 +3017,8 @@ async def create_ability(request: Request, payload: dict = Body(...)):
         pdesc = (passive_in.get("description") or "").strip()
         mods_in = passive_in.get("modifiers") or []
         modifiers = []
-
         for m in mods_in:
-            target = (m.get("target") or "").strip()  # e.g. "stats.hp_max", "skills.Acrobatics"
+            target = (m.get("target") or "").strip()  # e.g. "derived.hp"
             if not target:
                 continue
             mode = (m.get("mode") or "add").strip().lower()
@@ -3032,11 +3027,11 @@ async def create_ability(request: Request, payload: dict = Body(...)):
             try:
                 value = float(m.get("value") or 0)
             except Exception:
-                return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
+                return JSONResponse({"status": "error", "message": f"Invalid modifier value for {target}"}, status_code=400)
             note = (m.get("note") or "").strip()
             modifiers.append({
                 "target": target,
-                "mode": mode,    # add / mul / set
+                "mode": mode,
                 "value": value,
                 "note": note,
             })
@@ -3053,8 +3048,8 @@ async def create_ability(request: Request, payload: dict = Body(...)):
         "id": aid,
         "name": name,
         "name_key": norm_key(name),
-        "type": ab_type,
-        "source_category": source_category,
+        "type": ab_type,                     # "active" | "passive" | "mixed"
+        "source_category": source_category,  # Archetype, Specie, Talent, Expertise, Awakening, Apotheosis, Other
         "source_ref": source_ref,
         "tags": tags,
         "description": description,
@@ -3066,7 +3061,6 @@ async def create_ability(request: Request, payload: dict = Body(...)):
     }
 
     col.insert_one(dict(doc))
-    # strip _id
     out = {k: v for k, v in doc.items() if k != "_id"}
     return {"status": "success", "ability": out}
 
@@ -3089,19 +3083,19 @@ def list_abilities(
     if typ:
         q["type"] = {"$regex": typ, "$options": "i"}
 
-    # For now: everyone sees everything; if you want per-user, filter by creator=username
     docs = list(col.find(q, {"_id": 0}))
     docs.sort(key=lambda d: d.get("name", "").lower())
     return {"status": "success", "abilities": docs}
 
+
 @app.get("/abilities/{aid}")
-def get_ability(aid: str, request: Request):
+async def get_ability(aid: str, request: Request):
     username, role = require_auth(request, roles=["user", "moderator", "admin"])
-    col = get_col("abilities")
-    doc = col.find_one({"id": aid}, {"_id": 0})
+    doc = get_col("abilities").find_one({"id": aid}, {"_id": 0})
     if not doc:
-        raise HTTPException(404, "Ability not found")
+        raise HTTPException(status_code=404, detail="Not found")
     return {"status": "success", "ability": doc}
+
 
 @app.put("/abilities/{aid}")
 async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
@@ -3118,25 +3112,24 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
 
     ab_type = (payload.get("type") or existing.get("type") or "passive").strip().lower()
     if ab_type not in ("active", "passive", "mixed"):
-        return JSONResponse({"status":"error","message":"Invalid type"}, status_code=400)
+        return JSONResponse({"status": "error", "message": "Invalid type"}, status_code=400)
 
     source_category = (payload.get("source_category") or existing.get("source_category") or "Other").strip()
     source_ref      = (payload.get("source_ref") or existing.get("source_ref") or "").strip()
     tags = [str(t).strip() for t in (payload.get("tags") or existing.get("tags") or []) if str(t).strip()]
-
     description = (payload.get("description") or existing.get("description") or "").strip()
 
     active_in  = payload.get("active") or existing.get("active") or {}
     passive_in = payload.get("passive") or existing.get("passive") or {}
 
+    # --- active ---
     active_block = None
     if ab_type in ("active", "mixed"):
         activation = (active_in.get("activation") or "Action").strip()
         try:
             rng = int(active_in.get("range") or 0)
         except Exception:
-            return JSONResponse({"status":"error","message":"Active range must be an integer"}, status_code=400)
-
+            return JSONResponse({"status": "error", "message": "Active range must be an integer"}, status_code=400)
         aoe = (active_in.get("aoe") or "").strip()
 
         costs_in = active_in.get("costs") or {}
@@ -3157,7 +3150,7 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
                 "TX": _num("TX"),
             }
         except ValueError as bad_key:
-            return JSONResponse({"status":"error","message":f"Cost {bad_key} must be an integer"}, status_code=400)
+            return JSONResponse({"status": "error", "message": f"Cost {bad_key} must be an integer"}, status_code=400)
 
         costs["other_label"] = (costs_in.get("other_label") or "").strip()
         try:
@@ -3172,6 +3165,7 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
             "costs": costs,
         }
 
+    # --- passive ---
     passive_block = None
     if ab_type in ("passive", "mixed"):
         pdesc = (passive_in.get("description") or "").strip()
@@ -3182,12 +3176,12 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
             if not target:
                 continue
             mode = (m.get("mode") or "add").strip().lower()
-            if mode not in ("add","mul","set"):
+            if mode not in ("add", "mul", "set"):
                 mode = "add"
             try:
                 value = float(m.get("value") or 0)
             except Exception:
-                return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
+                return JSONResponse({"status": "error", "message": f"Invalid modifier value for {target}"}, status_code=400)
             note = (m.get("note") or "").strip()
             modifiers.append({
                 "target": target,
@@ -3202,7 +3196,6 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
         }
 
     now = datetime.datetime.utcnow().isoformat() + "Z"
-
     updated = {
         "name": name,
         "name_key": norm_key(name),
@@ -3216,23 +3209,27 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
         "updated_at": now,
     }
 
-    # keep id, creator, created_at from existing
     col.update_one({"id": aid}, {"$set": updated})
     existing.update(updated)
     existing.pop("_id", None)
-
     return {"status": "success", "ability": existing}
 
+
 @app.get("/abilities/bulk")
-def bulk_abilities(ids: str = Query(..., description="Comma-separated ability IDs"), request: Request = None):
-    # Small helper for the character editor
+async def bulk_abilities(
+    ids: str = Query(..., description="Comma-separated ability IDs"),
+    request: Request = None
+):
+    # auth: user or higher can read
     username, role = require_auth(request, roles=["user", "moderator", "admin"])
-    raw = [i.strip() for i in (ids or "").split(",") if i.strip()]
-    if not raw:
+    id_list = [s.strip() for s in (ids or "").split(",") if s.strip()]
+    if not id_list:
         return {"status": "success", "abilities": []}
+
     col = get_col("abilities")
-    docs = list(col.find({"id": {"$in": raw}}, {"_id": 0}))
-    # return in the same order as requested (where possible)
-    order = {v: i for i, v in enumerate(raw)}
-    docs.sort(key=lambda d: order.get(d.get("id",""), 10**9))
-    return {"status": "success", "abilities": docs}
+    docs = list(col.find({"id": {"$in": id_list}}, {"_id": 0}))
+
+    # keep the incoming order
+    index = {d["id"]: d for d in docs}
+    ordered = [index[i] for i in id_list if i in index]
+    return {"status": "success", "abilities": ordered}
