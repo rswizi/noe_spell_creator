@@ -2968,7 +2968,7 @@ async def create_ability(request: Request, payload: dict = Body(...)):
     active_in  = payload.get("active") or {}
     passive_in = payload.get("passive") or {}
 
-    # --- normalize active part ---
+    # --- active part ---
     active_block = None
     if ab_type in ("active", "mixed"):
         activation = (active_in.get("activation") or "Action").strip()
@@ -2979,77 +2979,50 @@ async def create_ability(request: Request, payload: dict = Body(...)):
         aoe = (active_in.get("aoe") or "").strip()
 
         costs_in = active_in.get("costs") or {}
-        def _num(key, default=0):
-            v = costs_in.get(key, default)
-            try:
-                return int(v or 0)
-            except Exception:
-                raise ValueError(key)
+        def _num(k, d=0):
+            v = costs_in.get(k, d)
+            try: return int(v or 0)
+            except Exception: raise ValueError(k)
 
         try:
-            costs = {
-                "HP": _num("HP"),
-                "EN": _num("EN"),
-                "MP": _num("MP"),
-                "FO": _num("FO"),
-                "MO": _num("MO"),
-                "TX": _num("TX"),
-            }
-        except ValueError as bad_key:
-            return JSONResponse({"status": "error", "message": f"Cost {bad_key} must be an integer"}, status_code=400)
+            costs = {"HP":_num("HP"),"EN":_num("EN"),"MP":_num("MP"),"FO":_num("FO"),"MO":_num("MO"),"TX":_num("TX")}
+        except ValueError as bad:
+            return JSONResponse({"status":"error","message":f"Cost {bad} must be an integer"}, status_code=400)
 
         costs["other_label"] = (costs_in.get("other_label") or "").strip()
-        try:
-            costs["other_value"] = int(costs_in.get("other_value") or 0)
-        except Exception:
-            costs["other_value"] = 0
+        try: costs["other_value"] = int(costs_in.get("other_value") or 0)
+        except Exception: costs["other_value"] = 0
 
-        active_block = {
-            "activation": activation,     # "Action" | "Free Action" | "Ritual" | "Special Action"
-            "range": rng,
-            "aoe": aoe,
-            "costs": costs,
-        }
+        active_block = {"activation":activation,"range":rng,"aoe":aoe,"costs":costs}
 
-    # --- normalize passive part ---
+    # --- passive part ---
     passive_block = None
     if ab_type in ("passive", "mixed"):
         pdesc = (passive_in.get("description") or "").strip()
         mods_in = passive_in.get("modifiers") or []
         modifiers = []
         for m in mods_in:
-            target = (m.get("target") or "").strip()  # e.g. "derived.hp"
-            if not target:
-                continue
+            target = (m.get("target") or "").strip()
+            if not target: continue
             mode = (m.get("mode") or "add").strip().lower()
-            if mode not in ("add", "mul", "set"):
-                mode = "add"
+            if mode not in ("add","mul","set"): mode = "add"
             try:
                 value = float(m.get("value") or 0)
             except Exception:
-                return JSONResponse({"status": "error", "message": f"Invalid modifier value for {target}"}, status_code=400)
+                return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
             note = (m.get("note") or "").strip()
-            modifiers.append({
-                "target": target,
-                "mode": mode,
-                "value": value,
-                "note": note,
-            })
-
-        passive_block = {
-            "description": pdesc,
-            "modifiers": modifiers,
-        }
+            modifiers.append({"target":target,"mode":mode,"value":value,"note":note})
+        passive_block = {"description":pdesc,"modifiers":modifiers}
 
     aid = next_id_str("abilities", padding=4)
-    now = datetime.datetime.utcnow().isoformat() + "Z"
+    now = datetime.datetime.utcnow().isoformat()+"Z"
 
     doc = {
         "id": aid,
         "name": name,
         "name_key": norm_key(name),
-        "type": ab_type,                     # "active" | "passive" | "mixed"
-        "source_category": source_category,  # Archetype, Specie, Talent, Expertise, Awakening, Apotheosis, Other
+        "type": ab_type,
+        "source_category": source_category,
         "source_ref": source_ref,
         "tags": tags,
         "description": description,
@@ -3059,11 +3032,9 @@ async def create_ability(request: Request, payload: dict = Body(...)):
         "created_at": now,
         "updated_at": now,
     }
-
     col.insert_one(dict(doc))
-    out = {k: v for k, v in doc.items() if k != "_id"}
-    return {"status": "success", "ability": out}
-
+    doc.pop("_id", None)
+    return {"status":"success","ability": doc}
 
 @app.get("/abilities")
 def list_abilities(
@@ -3075,27 +3046,37 @@ def list_abilities(
     username, role = require_auth(request, roles=["user", "moderator", "admin"])
     col = get_col("abilities")
     q: dict = {}
-
-    if name:
-        q["name"] = {"$regex": name, "$options": "i"}
-    if source:
-        q["source_category"] = {"$regex": source, "$options": "i"}
-    if typ:
-        q["type"] = {"$regex": typ, "$options": "i"}
-
+    if name:   q["name"] = {"$regex": name, "$options": "i"}
+    if source: q["source_category"] = {"$regex": source, "$options": "i"}
+    if typ:    q["type"] = {"$regex": typ, "$options": "i"}
     docs = list(col.find(q, {"_id": 0}))
-    docs.sort(key=lambda d: d.get("name", "").lower())
-    return {"status": "success", "abilities": docs}
+    docs.sort(key=lambda d: d.get("name","").lower())
+    return {"status":"success","abilities": docs}
 
+# ---- define bulk BEFORE the /{aid} route (also add trailing-slash twin) ----
+@app.get("/abilities/bulk")
+@app.get("/abilities/bulk/")
+async def bulk_abilities(
+    request: Request,
+    ids: str = Query(..., description="Comma-separated ability IDs")
+):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    id_list = [s.strip() for s in (ids or "").split(",") if s.strip()]
+    if not id_list:
+        return {"status":"success","abilities": []}
+    col = get_col("abilities")
+    docs = list(col.find({"id": {"$in": id_list}}, {"_id": 0}))
+    idx = {d["id"]: d for d in docs}
+    ordered = [idx[i] for i in id_list if i in idx]
+    return {"status":"success","abilities": ordered}
 
 @app.get("/abilities/{aid}")
 async def get_ability(aid: str, request: Request):
-    username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    username, role = require_auth(request, roles=["user","moderator","admin"])
     doc = get_col("abilities").find_one({"id": aid}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Not found")
-    return {"status": "success", "ability": doc}
-
+    return {"status":"success","ability": doc}
 
 @app.put("/abilities/{aid}")
 async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
@@ -3108,94 +3089,61 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
 
     name = (payload.get("name") or existing.get("name") or "Unnamed Ability").strip()
     if not name:
-        return JSONResponse({"status": "error", "message": "Name is required"}, status_code=400)
+        return JSONResponse({"status":"error","message":"Name is required"}, status_code=400)
 
     ab_type = (payload.get("type") or existing.get("type") or "passive").strip().lower()
-    if ab_type not in ("active", "passive", "mixed"):
-        return JSONResponse({"status": "error", "message": "Invalid type"}, status_code=400)
+    if ab_type not in ("active","passive","mixed"):
+        return JSONResponse({"status":"error","message":"Invalid type"}, status_code=400)
 
     source_category = (payload.get("source_category") or existing.get("source_category") or "Other").strip()
     source_ref      = (payload.get("source_ref") or existing.get("source_ref") or "").strip()
     tags = [str(t).strip() for t in (payload.get("tags") or existing.get("tags") or []) if str(t).strip()]
     description = (payload.get("description") or existing.get("description") or "").strip()
 
-    active_in  = payload.get("active") or existing.get("active") or {}
+    active_in  = payload.get("active")  or existing.get("active")  or {}
     passive_in = payload.get("passive") or existing.get("passive") or {}
 
-    # --- active ---
     active_block = None
-    if ab_type in ("active", "mixed"):
+    if ab_type in ("active","mixed"):
         activation = (active_in.get("activation") or "Action").strip()
         try:
             rng = int(active_in.get("range") or 0)
         except Exception:
-            return JSONResponse({"status": "error", "message": "Active range must be an integer"}, status_code=400)
+            return JSONResponse({"status":"error","message":"Active range must be an integer"}, status_code=400)
         aoe = (active_in.get("aoe") or "").strip()
-
         costs_in = active_in.get("costs") or {}
-        def _num(key, default=0):
-            v = costs_in.get(key, default)
-            try:
-                return int(v or 0)
-            except Exception:
-                raise ValueError(key)
-
+        def _num(k,d=0):
+            v = costs_in.get(k,d)
+            try: return int(v or 0)
+            except Exception: raise ValueError(k)
         try:
-            costs = {
-                "HP": _num("HP"),
-                "EN": _num("EN"),
-                "MP": _num("MP"),
-                "FO": _num("FO"),
-                "MO": _num("MO"),
-                "TX": _num("TX"),
-            }
-        except ValueError as bad_key:
-            return JSONResponse({"status": "error", "message": f"Cost {bad_key} must be an integer"}, status_code=400)
-
+            costs = {"HP":_num("HP"),"EN":_num("EN"),"MP":_num("MP"),"FO":_num("FO"),"MO":_num("MO"),"TX":_num("TX")}
+        except ValueError as bad:
+            return JSONResponse({"status":"error","message":f"Cost {bad} must be an integer"}, status_code=400)
         costs["other_label"] = (costs_in.get("other_label") or "").strip()
-        try:
-            costs["other_value"] = int(costs_in.get("other_value") or 0)
-        except Exception:
-            costs["other_value"] = 0
+        try: costs["other_value"] = int(costs_in.get("other_value") or 0)
+        except Exception: costs["other_value"] = 0
+        active_block = {"activation":activation,"range":rng,"aoe":aoe,"costs":costs}
 
-        active_block = {
-            "activation": activation,
-            "range": rng,
-            "aoe": aoe,
-            "costs": costs,
-        }
-
-    # --- passive ---
     passive_block = None
-    if ab_type in ("passive", "mixed"):
+    if ab_type in ("passive","mixed"):
         pdesc = (passive_in.get("description") or "").strip()
         mods_in = passive_in.get("modifiers") or []
         modifiers = []
         for m in mods_in:
             target = (m.get("target") or "").strip()
-            if not target:
-                continue
+            if not target: continue
             mode = (m.get("mode") or "add").strip().lower()
-            if mode not in ("add", "mul", "set"):
-                mode = "add"
+            if mode not in ("add","mul","set"): mode = "add"
             try:
                 value = float(m.get("value") or 0)
             except Exception:
-                return JSONResponse({"status": "error", "message": f"Invalid modifier value for {target}"}, status_code=400)
+                return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
             note = (m.get("note") or "").strip()
-            modifiers.append({
-                "target": target,
-                "mode": mode,
-                "value": value,
-                "note": note,
-            })
+            modifiers.append({"target":target,"mode":mode,"value":value,"note":note})
+        passive_block = {"description":pdesc,"modifiers":modifiers}
 
-        passive_block = {
-            "description": pdesc,
-            "modifiers": modifiers,
-        }
-
-    now = datetime.datetime.utcnow().isoformat() + "Z"
+    now = datetime.datetime.utcnow().isoformat()+"Z"
     updated = {
         "name": name,
         "name_key": norm_key(name),
@@ -3208,28 +3156,7 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
         "passive": passive_block,
         "updated_at": now,
     }
-
     col.update_one({"id": aid}, {"$set": updated})
     existing.update(updated)
     existing.pop("_id", None)
-    return {"status": "success", "ability": existing}
-
-
-@app.get("/abilities/bulk")
-async def bulk_abilities(
-    ids: str = Query(..., description="Comma-separated ability IDs"),
-    request: Request = None
-):
-    # auth: user or higher can read
-    username, role = require_auth(request, roles=["user", "moderator", "admin"])
-    id_list = [s.strip() for s in (ids or "").split(",") if s.strip()]
-    if not id_list:
-        return {"status": "success", "abilities": []}
-
-    col = get_col("abilities")
-    docs = list(col.find({"id": {"$in": id_list}}, {"_id": 0}))
-
-    # keep the incoming order
-    index = {d["id"]: d for d in docs}
-    ordered = [index[i] for i in id_list if i in index]
-    return {"status": "success", "abilities": ordered}
+    return {"status":"success","ability": existing}
