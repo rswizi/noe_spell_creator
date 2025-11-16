@@ -42,17 +42,8 @@
     .skill-line { display:grid; grid-template-columns: auto 1fr auto; gap:8px; align-items:center; }
     .skill-total { min-width:48px; text-align:right; font-variant-numeric: tabular-nums; }
     .charac-badge { font-variant-numeric: tabular-nums; }
-    .num { width:90px; }
     .badge { border:1px solid #2f2f2f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; }
-    .smallmuted { opacity:.75; font-size:.85rem; }
 
-    .skill-line { display:grid; grid-template-columns: 140px 80px 80px 70px 70px 50px; gap:8px; align-items:center; }
-    .skill-line.smallmuted { font-size:.85rem; opacity:.75; }
-    .skill-line input.num { width:70px; text-align:right; }
-    .skill-line .badge, .skill-line .skill-total { text-align:center; font-variant-numeric: tabular-nums; min-width:50px; }
-    .skill-line .k { font-size:.9rem; opacity:.85; }
-
-    .status { margin-top:10px; opacity:.8; }
     .derived-grid { display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); }
     .kv { display:grid; grid-template-columns: auto 1fr; gap:6px 8px; align-items:center; }
     .kv .val { justify-self:end; font-variant-numeric: tabular-nums; }
@@ -131,28 +122,11 @@
 
         <div class="stats-grid" id="stats-grid"><!-- injected --></div>
 
-        <!-- Intensities (MAG) -->
+        <!-- (optional Defense summary panel kept minimal) -->
         <div class="panel" style="margin-top:12px;">
           <details open class="panel">
-            <summary class="hdr">
-              <strong>Intensities</strong>
-              <span class="pill">Linked to MAG</span>
-              <span class="muted">(behaves like skills)</span>
-              <span class="grow"></span>
-              <span class="k">MAG Mod:</span>
-              <span id="int-mag-mod" class="pill">+0</span>
-            </summary>
-            <div class="panel-body">
-              <div id="intensities-list" class="skills" style="margin-top:8px"></div>
-
-              <div style="margin-top:14px; border-top:1px solid #222; padding-top:12px;">
-                <div class="hdr"><strong>Defense Summary</strong><span class="muted"> (from known natures & IV)</span></div>
-                <div id="defense-summary" class="skills" style="margin-top:8px"></div>
-                <p class="muted" style="margin-top:8px">
-                  N = Neutral, R = −2 per hit, VR = −4 per hit, V = +2 per hit, VV = +4 per hit.
-                </p>
-              </div>
-            </div>
+            <summary class="hdr"><strong>Defense Summary</strong></summary>
+            <div class="panel-body" id="defense-summary"></div>
           </details>
         </div>
       </div>
@@ -216,7 +190,7 @@
 
       <!-- COMBAT / PERSONAL placeholders -->
       <div id="tab-com" class="tabpane" style="display:none;"><p class="muted">Combat — coming next.</p></div>
-      <div id="tab-per" class="tabpane" style="display:none;"><p class="muted">Personal — coming next.</p></div>
+      <div id="tab-per" class="tabpane" style="display:none;"><p class="muted">Bio — coming next.</p></div>
     </div>
 
   </div></div>
@@ -228,7 +202,7 @@ function setCookieToken(tok){ if(!tok) return; document.cookie = `token=${tok}; 
 function authHeaders(){ const t=getToken(); if(t) setCookieToken(t); return t? {'Authorization':'Bearer '+t, 'X-Auth-Token':t} : {}; }
 async function api(path,opt={}){ const headers = Object.assign({}, opt.headers||{}, authHeaders()); const resp = await fetch(path, { credentials:'include', ...opt, headers }); const ct = resp.headers.get('content-type') || ''; const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() }; if(!resp.ok || data.status==='error') throw new Error(data.message || ('HTTP '+resp.status)); return data; }
 
-/* Constants replicated from your sheet */
+/* Constants */
 const CHARACS = [
   { key:'body',      code:'BOD', name:'Body',      skills:['Athletics','Resistance','Melee','Brawl'] },
   { key:'willpower', code:'WIL', name:'Willpower', skills:['Spirit','Courage','Discipline','Insight'] },
@@ -236,38 +210,26 @@ const CHARACS = [
   { key:'presence',  code:'PRE', name:'Presence',  skills:['Charm','Intimidation','Deception','Performance'] },
   { key:'reflex',    code:'REF', name:'Reflex',    skills:['Stealth','Acrobatics','Aim','Perception'] },
   { key:'dexterity', code:'DEX', name:'Dexterity', skills:['Craft','Lockpicking','Tinkering','Drive'] },
+  { key:'tech',      code:'TECH',name:'Tech',      skills:['Alchemy'] },
 ];
 
 const NATURES = ['Fire','Lightning','Water','Earth','Wind','Sun','Moon','Ki'];
-const INT_TABLE = [
-  {min:1,max:1, id:'1d4', iv:2},{min:2,max:3, id:'1d6', iv:3},{min:4,max:7, id:'1d8', iv:4},
-  {min:8,max:15, id:'1d10', iv:5},{min:16,max:99, id:'1d12', iv:6}
-];
-const DEF_TABLE = {
-  Fire:{Fire:"N",Lightning:"N",Water:"R",Earth:"VR",Wind:"V",Sun:"N",Moon:"VR",Ki:"N"},
-  Lightning:{Fire:"N",Lightning:"N",Water:"N",Earth:"V",Wind:"VR",Sun:"VR",Moon:"VV",Ki:"N"},
-  Water:{Fire:"V",Lightning:"N",Water:"N",Earth:"N",Wind:"VV",Sun:"R",Moon:"R",Ki:"N"},
-  Earth:{Fire:"VV",Lightning:"V",Water:"N",Earth:"N",Wind:"R",Sun:"VR",Moon:"N",Ki:"N"},
-  Wind:{Fire:"R",Lightning:"VR",Water:"VV",Earth:"V",Wind:"N",Sun:"N",Moon:"N",Ki:"N"},
-  Sun:{Fire:"N",Lightning:"R",Water:"VR",Earth:"VV",Wind:"N",Sun:"N",Moon:"V",Ki:"N"},
-  Moon:{Fire:"VR",Lightning:"VV",Water:"V",Earth:"N",Wind:"N",Sun:"R",Moon:"N",Ki:"N"},
-  Ki:{Fire:"N",Lightning:"N",Water:"N",Earth:"N",Wind:"N",Sun:"N",Moon:"N",Ki:"N"},
-};
-const SYM_PTS = { N:0, R:-2, VR:-4, V:+2, VV:+4 };
-function ivFactor(iv){ return Math.max(1, Math.min(3, 0.5 * iv)); }
-function totalFromInvest(v){ const total = (parseInt(v||0,10) || 0) + 4; return total; }
+function totalFromInvest(v){ return (parseInt(v||0,10) || 0) + 4; }
 function modFromTotal(total){ return Math.floor((Number(total)-10)/2); }
-function charMod(key){ const invest = CHAR.stats?.[key]?.invest ?? 0; return modFromTotal(totalFromInvest(invest)); }
-function milestone(key){ return Math.max(0, charMod(key)); }
-function skillTotal(key, skill){ const invest = CHAR.stats?.[key]?.skills?.[skill] ?? 0; return invest + charMod(key); }
 
-/* state + refs */
+/* State */
 const params = new URLSearchParams(location.search);
 const CID = params.get('id');
 let ROLE = 'user';
 let SAVE_TIMER = null;
 let CHAR = null;
 let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
+
+/* Passive bonus aggregations (recomputed whenever ASSIGNED changes) */
+let PASSIVE = {
+  char: {},     // key -> { set:[], mul:[], add:[], notes:[] }  (applied to characteristic MOD)
+  skill: {},    // "key|skill" -> { set:[], mul:[], add:[], notes:[] } (applied to skill TOTAL)
+};
 
 /* DOM refs */
 const loginChip = document.getElementById('login-chip');
@@ -339,20 +301,101 @@ function makeDefaultStats(){
   return stats;
 }
 
-/* render stats/skills */
+/* ---------- PASSIVE AGGREGATION (char & skills) ---------- */
+function resetPassiveAgg(){
+  PASSIVE = { char:{}, skill:{} };
+}
+function ensureAgg(obj, key){
+  if (!obj[key]) obj[key] = { set:[], mul:[], add:[], notes:[] };
+  return obj[key];
+}
+function recomputePassiveAgg(){
+  resetPassiveAgg();
+  const passiveAbilities = (ASSIGNED||[]).filter(a=>{
+    const t = (a.type||'').toLowerCase();
+    return t==='passive' || t==='mixed';
+  });
+  for (const ab of passiveAbilities){
+    const mods = (ab.passive && ab.passive.modifiers) || [];
+    for (const m of mods){
+      const t = (m.target||'').trim();
+      const mode = ((m.mode||'add')+'').toLowerCase();
+      const val = Number(m.value||0);
+      const note = m.note ? ` (${m.note})` : '';
+      const origin = `${ab.name}${note}`;
+      if (!t) continue;
+
+      // char.<key>
+      const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech)$/i);
+      if (cm){
+        const key = cm[1].toLowerCase();
+        const agg = ensureAgg(PASSIVE.char, key);
+        (agg[mode]||agg.add).push({v:val, origin});
+        agg.notes.push(`${mode} ${val>=0?'+':''}${val} ← ${origin}`);
+        continue;
+      }
+      // skills.<char>.<skill>
+      const sm = t.match(/^skills\.(body|willpower|magic|presence|reflex|dexterity|tech)\.(.+)$/i);
+      if (sm){
+        const ckey = sm[1].toLowerCase();
+        const skName = sm[2];
+        const k = `${ckey}|${skName}`;
+        const agg = ensureAgg(PASSIVE.skill, k);
+        (agg[mode]||agg.add).push({v:val, origin});
+        agg.notes.push(`${mode} ${val>=0?'+':''}${val} ← ${origin}`);
+        continue;
+      }
+      // derived.* handled elsewhere
+    }
+  }
+}
+
+/* Helpers to apply ops to a base number, and produce a tooltip */
+function applyOps(base, agg){
+  if (!agg) return { value: base, notes: [`Base = ${base}`] };
+  const notes = [`Base = ${base}`];
+  let v = base;
+  // set → mul → add
+  for (const x of (agg.set||[])){ v = x.v; notes.push(`Set to ${x.v} ← ${x.origin}`); }
+  for (const x of (agg.mul||[])){ const before = v; v = Math.round(v * x.v); notes.push(`×${x.v} (from ${before}) ← ${x.origin}`); }
+  for (const x of (agg.add||[])){ v = v + x.v; notes.push(`${x.v>=0?'+':''}${x.v} ← ${x.origin}`); }
+  return { value: v, notes };
+}
+
+/* ---------- Rendering: Statistics & Skills ---------- */
+function charBaseMod(key){
+  const invest = CHAR.stats?.[key]?.invest ?? 0;
+  return modFromTotal(totalFromInvest(invest));
+}
+function charAdjMod(key){
+  const base = charBaseMod(key);
+  const { value, notes } = applyOps(base, PASSIVE.char[key]);
+  return { mod:value, notes };
+}
+function skillBaseTotal(key, skill){
+  const inv = CHAR.stats?.[key]?.skills?.[skill] ?? 0;
+  return inv + charBaseMod(key);
+}
+function skillAdjTotal(key, skill){
+  const base = skillBaseTotal(key, skill);
+  const agg = PASSIVE.skill[`${key}|${skill}`];
+  const { value, notes } = applyOps(base, agg);
+  return { total:value, notes };
+}
+
 function renderStatistics(){
   gridEl.innerHTML = '';
   for (const c of CHARACS){
     const rec = (CHAR.stats && CHAR.stats[c.key]) || { invest:0, skills:{} };
     const total = totalFromInvest(rec.invest);
-    const mod = modFromTotal(total);
+    const modInfo = charAdjMod(c.key);
 
     const details = document.createElement('details'); details.className='panel'; details.open = true;
     const sum = document.createElement('summary'); sum.className='hdr';
     sum.innerHTML = `
       <strong>${c.name}</strong>
       <span class="pill">${c.code}</span>
-      <span class="charac-badge">[ <span class="total" id="${c.key}-total">${total}</span> | <span id="${c.key}-mod">${mod>=0? '+'+mod : mod}</span> ]</span>
+      <span class="charac-badge" title="${modInfo.notes.join('\n')}">[ <span class="total" id="${c.key}-total">${total}</span> | <span id="${c.key}-mod">${modInfo.mod>=0? '+'+modInfo.mod : modInfo.mod}</span> ]</span>
       <span class="grow"></span>
       <span class="k">Invested</span>
       <input type="number" class="num" min="0" id="${c.key}-invest" value="${Number(rec.invest)||0}">
@@ -364,12 +407,12 @@ function renderStatistics(){
 
     for (const s of c.skills){
       const invested = Number((rec.skills||{})[s] || 0);
-      const totalSkill = invested + mod;
+      const adj = skillAdjTotal(c.key, s);
       const line = document.createElement('div'); line.className='skill-line';
       line.innerHTML = `
         <div class="k">${s}</div>
         <input type="number" class="num" min="0" id="${c.key}__${s}__invest" value="${invested}">
-        <div class="skill-total" id="${c.key}__${s}__total">${totalSkill>=0? '+'+totalSkill : totalSkill}</div>
+        <div class="skill-total badge" id="${c.key}__${s}__total" title="${adj.notes.join('\n')}">${adj.total>=0? '+'+adj.total : adj.total}</div>
       `;
       skills.appendChild(line);
     }
@@ -383,34 +426,36 @@ function renderStatistics(){
   for (const c of CHARACS){
     const input = document.getElementById(`${c.key}-invest`);
     input.addEventListener('input', ()=>{
-      const v = parseInt(input.value||'0', 10) || 0;
-      CHAR.stats[c.key].invest = v;
-      const total = totalFromInvest(v);
-      const mod = modFromTotal(total);
+      const val = Math.max(0, Math.floor(Number(input.value)||0));
+      CHAR.stats[c.key].invest = val;
+
+      // update characteristic header
+      const total = totalFromInvest(val);
+      const modInfo = charAdjMod(c.key);
       document.getElementById(`${c.key}-total`).textContent = total;
-      document.getElementById(`${c.key}-mod`).textContent = (mod>=0? '+'+mod : mod);
+      document.getElementById(`${c.key}-mod`).textContent = (modInfo.mod>=0? '+'+modInfo.mod : modInfo.mod);
+      document.querySelector(`#${c.key}-mod`).parentElement.title = modInfo.notes.join('\n');
+
+      // update skill rows
       for (const s of c.skills){
-        const invested = Number(CHAR.stats[c.key].skills[s] || 0);
-        const t = invested + mod;
-        document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
-      }
-      if (c.key === 'magic') {
-        renderIntensities();
-        renderDefenseSummary();
+        const adj = skillAdjTotal(c.key, s);
+        const el = document.getElementById(`${c.key}__${s}__total`);
+        el.textContent = (adj.total>=0? '+'+adj.total : adj.total);
+        el.title = adj.notes.join('\n');
       }
       updateDerived();
       queueSave();
     });
+
     for (const s of c.skills){
-      const sid = `${c.key}__${s}__invest`;
-      const inp = document.getElementById(sid);
-      inp.addEventListener('input', ()=>{
-        const v = parseInt(inp.value||'0', 10) || 0;
-        CHAR.stats[c.key].skills[s] = v;
-        const total = totalFromInvest(CHAR.stats[c.key].invest);
-        const mod = modFromTotal(total);
-        const t = v + mod;
-        document.getElementById(`${c.key}__${s}__total`).textContent = (t>=0? '+'+t : t);
+      const si = document.getElementById(`${c.key}__${s}__invest`);
+      si.addEventListener('input', ()=>{
+        const val = Math.max(0, Math.floor(Number(si.value)||0));
+        CHAR.stats[c.key].skills[s] = val;
+        const adj = skillAdjTotal(c.key, s);
+        const el = document.getElementById(`${c.key}__${s}__total`);
+        el.textContent = (adj.total>=0? '+'+adj.total : adj.total);
+        el.title = adj.notes.join('\n');
         updateDerived();
         queueSave();
       });
@@ -418,73 +463,13 @@ function renderStatistics(){
   }
 }
 
-/* Intensities & defense (unchanged) */
-function magMod(){ const mag = CHAR.stats?.magic?.invest ?? 0; const total = totalFromInvest(mag); return modFromTotal(total); }
-function idIvFromTotal(t){ const v = Math.max(0, Math.min(99, Number(t)||0)); if (v <= 0) return { id:"—", iv:0 }; for (const row of INT_TABLE){ if (v >= row.min && v <= row.max) return { id: row.id, iv: row.iv }; } return { id:"1d12", iv:6 }; }
-function defenseFromKnown(){
-  const ints = CHAR.stats?.intensities || {};
-  const entries = NATURES.map(n=>{ const rec = ints[n] || {knows:false, invest:0}; const total = (rec.invest||0) + magMod(); const {iv} = idIvFromTotal(total); return { nature:n, knows:!!rec.knows, iv, total }; });
-  const summary = {};
-  for (const incoming of NATURES){
-    let score = 0;
-    for (const m of entries){
-      if (!m.knows || m.iv<=0) continue;
-      const sym = DEF_TABLE[incoming][m.nature];
-      score += (SYM_PTS[sym] || 0) * ivFactor(m.iv);
-    }
-    summary[incoming] = score;
-  }
-  return summary;
-}
-function scoreToLabel(score){ if (score <= -6) return "VR"; if (score <= -2) return "R"; if (score >= +6) return "VV"; if (score >= +2) return "V"; return "N"; }
-function renderIntensities(){
-  const list = document.getElementById('intensities-list');
-  const im = magMod();
-  document.getElementById('int-mag-mod').textContent = (im>=0? '+'+im : im);
-  list.innerHTML = '';
-  for (const n of NATURES){
-    const rec = CHAR.stats.intensities[n];
-    const total = (rec.invest||0) + im;
-    const info = idIvFromTotal(total);
-    const row = document.createElement('div');
-    row.className = 'skill-line';
-    row.innerHTML = `
-      <div class="k">${n}</div>
-      <input type="checkbox" id="int_${n}_knows" ${rec.knows?'checked':''} />
-      <input type="number" class="num" id="int_${n}_invest" min="0" value="${rec.invest||0}" />
-      <div class="badge" id="int_${n}_total">${total>=0? '+'+total:total}</div>
-      <div class="badge" id="int_${n}_id">${info.id}</div>
-      <div class="badge" id="int_${n}_iv">${info.iv || '—'}</div>
-    `;
-    list.appendChild(row);
-  }
-  // Hooks
-  for (const n of NATURES){
-    const k = document.getElementById(`int_${n}_knows`);
-    const i = document.getElementById(`int_${n}_invest`);
-    k.addEventListener('change', ()=>{ CHAR.stats.intensities[n].knows = !!k.checked; renderDefenseSummary(); queueSave(); });
-    i.addEventListener('input', ()=>{ const v = parseInt(i.value||'0',10) || 0; CHAR.stats.intensities[n].invest = v; const mm2 = magMod(); const total = v + mm2; const info = idIvFromTotal(total); document.getElementById(`int_${n}_total`).textContent = (total>=0? '+'+total:total); document.getElementById(`int_${n}_id`).textContent = info.id; document.getElementById(`int_${n}_iv`).textContent = info.iv || '—'; renderDefenseSummary(); queueSave(); });
-  }
-}
+/* simple defense placeholder */
 function renderDefenseSummary(){
   const box = document.getElementById('defense-summary');
-  const scores = defenseFromKnown();
-  box.innerHTML = '';
-  const hdr = document.createElement('div'); hdr.className='skill-line smallmuted'; hdr.innerHTML = `<div>Incoming</div><div></div><div></div><div>Score</div><div>Level</div><div></div>`; box.appendChild(hdr);
-  for (const n of NATURES){
-    const s = scores[n] || 0;
-    const lab = scoreToLabel(s);
-    const row = document.createElement('div'); row.className='skill-line';
-    row.innerHTML = `<div class="k">${n}</div><div></div><div></div><div class="badge">${s.toFixed(1)}</div><div class="badge">${lab}</div><div></div>`;
-    box.appendChild(row);
-  }
+  box.innerHTML = '<div class="muted">—</div>';
 }
 
-/* PASSIVE MODIFIERS APPLICATION
-   We support targets like:
-   - derived.hp / derived.en / derived.fo / derived.mo / derived.et / derived.tx / derived.enc
-   Modes: add / mul / set (order: set → mul → add)
-*/
+/* --------- PASSIVE on DERIVED (existing behavior) ---------- */
 function applyPassiveModifiersToDerived(base){
   const out = { ...base };
   const notes = {
@@ -499,7 +484,6 @@ function applyPassiveModifiersToDerived(base){
   };
 
   const ops = { set:[], mul:[], add:[] };
-
   const passiveAbilities = (ASSIGNED||[]).filter(a=>{
     const t = (a.type||'').toLowerCase();
     return t==='passive' || t==='mixed';
@@ -523,26 +507,33 @@ function applyPassiveModifiersToDerived(base){
     }
   }
 
-  // Apply in order: set, mul, add
-  for (const item of ops.set){ out[item.k] = item.v; notes[item.k].push(`Set to ${item.v} ← ${item.origin}`); }
-  for (const item of ops.mul){ out[item.k] = Math.round(out[item.k] * item.v); notes[item.k].push(`×${item.v} ← ${item.origin}`); }
-  for (const item of ops.add){ out[item.k] = out[item.k] + item.v; const s = item.v>=0? `+${item.v}`: `${item.v}`; notes[item.k].push(`${s} ← ${item.origin}`); }
+  // set → mul → add
+  for (const op of ops.set){ out[op.k] = op.v; notes[op.k].push(`Set to ${op.v} ← ${op.origin}`); }
+  for (const op of ops.mul){ const before = out[op.k]; out[op.k] = Math.round(before * op.v); notes[op.k].push(`×${op.v} (from ${before}) ← ${op.origin}`); }
+  for (const op of ops.add){ out[op.k] = out[op.k] + op.v; notes[op.k].push(`${op.v>=0?'+':''}${op.v} ← ${op.origin}`); }
 
-  // Titles
+  // Tooltips with breakdown
   hpEl.title = notes.hp.join('\n');
   enEl.title = notes.en.join('\n');
   foEl.title = notes.fo.join('\n');
   moEl.title = notes.mo.join('\n');
+  spcapEl.title = notes.spcap.join('\n');
+  encEl.title = notes.enc.join('\n');
   etEl.title = notes.et.join('\n');
   txEl.title = notes.tx.join('\n');
-  encEl.title = notes.enc.join('\n');
-  spcapEl.title = notes.spcap.join('\n');
 
   return out;
 }
 
-/* Derived computations */
-function clampInt(x){ return Math.max(0, Math.floor(Number(x)||0)); }
+/* Derived computations (use characteristic mods & skills that may be adjusted) */
+function milestone(key){
+  // milestone uses the **adjusted** characteristic mod (>=0)
+  return Math.max(0, charAdjMod(key).mod);
+}
+function skillTotalAdjustedFor(key, name){
+  return skillAdjTotal(key, name).total;
+}
+
 function updateDerived(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
   const msBOD = milestone('body'); const msWIL = milestone('willpower'); const msMAG = milestone('magic'); const msPRE = milestone('presence'); const msREF = milestone('reflex'); const msDEX = milestone('dexterity');
@@ -554,15 +545,15 @@ function updateDerived(){
   base.fo = 2 + Math.floor(lvl/5) + msWIL + msPRE;
   base.mo = 4 + msDEX + msREF;
   base.spcap = Math.floor(base.hp * 0.10);
-  const athletics = skillTotal('body','Athletics');
-  const spirit = skillTotal('willpower','Spirit');
+  const athletics = skillTotalAdjustedFor('body','Athletics');
+  const spirit = skillTotalAdjustedFor('willpower','Spirit');
   base.enc = 10 + (athletics*5) + (spirit*2);
   base.et = 1 + Math.floor(lvl/9) + msMAG;
-  const resistance = skillTotal('body','Resistance');
-  const alchemy = skillTotal('tech','Alchemy');
+  const resistance = skillTotalAdjustedFor('body','Resistance');
+  const alchemy = skillTotalAdjustedFor('tech','Alchemy') || 0;
   base.tx = resistance + alchemy;
 
-  // Apply passive modifiers
+  // Apply passive modifiers to derived
   const final = applyPassiveModifiersToDerived(base);
 
   // Display
@@ -595,15 +586,15 @@ async function loadCharacter(){
   levelEl.value = Math.max(1, Number(CHAR.level)||1);
   levelEl.addEventListener('input', ()=>{ CHAR.level = Math.max(1, Math.floor(Number(levelEl.value)||1)); updateDerived(); queueSave(); });
 
-  // Render stuff
+  // Render stats/skills
   renderStatistics();
-  renderIntensities();
-  renderDefenseSummary();
 
-  // Load assigned abilities (docs)
+  // Resolve abilities → recalc passive agg → render abilities → derived
   await resolveAssignedAbilities();
+  recomputePassiveAgg();
   renderAbilitiesTab();
-
+  // refresh visuals that depend on passive agg
+  renderStatistics();
   updateDerived();
 }
 
@@ -634,7 +625,7 @@ async function searchAbilities(){
     if (abiFilterTypeEl.value) params.push('typ='+encodeURIComponent(abiFilterTypeEl.value));
     if (abiFilterSrcEl.value) params.push('source='+encodeURIComponent(abiFilterSrcEl.value));
     const qs = params.length ? '?'+params.join('&') : '';
-    const res = await api('/abilities'+qs); // list endpoint (:contentReference[oaicite:6]{index=6})
+    const res = await api('/abilities'+qs);
     const arr = res.abilities || [];
     renderSearchResults(arr);
   }catch(e){
@@ -664,13 +655,23 @@ function renderSearchResults(arr){
   }
 }
 
+async function resolveAssignedAbilities(){
+  const ids = (CHAR.abilities||[]);
+  if (!ids.length){ ASSIGNED = []; return; }
+  const qs = '?ids=' + encodeURIComponent(ids.join(','));
+  const bulk = await api('/abilities/bulk'+qs);
+  ASSIGNED = (bulk.abilities||[]);
+}
+
 async function addAbilityToChar(aid){
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   if (CHAR.abilities.includes(aid)) return; // already there
   CHAR.abilities.push(aid);
   queueSave();
   await resolveAssignedAbilities();
+  recomputePassiveAgg();
   renderAbilitiesTab();
+  renderStatistics();
   updateDerived();
 }
 
@@ -678,36 +679,10 @@ async function removeAbilityFromChar(aid){
   CHAR.abilities = (CHAR.abilities||[]).filter(x=>x!==aid);
   queueSave();
   await resolveAssignedAbilities();
+  recomputePassiveAgg();
   renderAbilitiesTab();
+  renderStatistics();
   updateDerived();
-}
-
-async function resolveAssignedAbilities(){
-  const ids = (CHAR.abilities||[]);
-  if (!ids.length){ ASSIGNED = []; return; }
-  // Try bulk API first; if not present, fetch one by one.
-  try{
-    const qs = '?ids=' + encodeURIComponent(ids.join(','));
-    const bulk = await api('/abilities/bulk'+qs);
-    ASSIGNED = (bulk.abilities||[]);
-    // Fill any missing via per-id (in case)
-    const gotIds = new Set(ASSIGNED.map(a=>a.id));
-    const missing = ids.filter(i=>!gotIds.has(i));
-    for (const mid of missing){
-      const one = await api('/abilities/'+encodeURIComponent(mid));
-      if (one && one.ability) ASSIGNED.push(one.ability);
-    }
-  }catch(_e){
-    // Fallback: per-id
-    const arr = [];
-    for (const id of ids){
-      try{
-        const one = await api('/abilities/'+encodeURIComponent(id));
-        if (one && one.ability) arr.push(one.ability);
-      }catch(e){}
-    }
-    ASSIGNED = arr;
-  }
 }
 
 function renderAbilitiesBucket(el, list){
@@ -733,23 +708,18 @@ function renderAbilitiesBucket(el, list){
 
 function renderAbilitiesTab(){
   const docs = ASSIGNED.slice();
+  const archetype = docs.filter(a=>(a.source_category||'').toLowerCase()==='archetype');
+  const passive   = docs.filter(a=> (a.source_category||'').toLowerCase()!=='archetype' && ((a.type||'').toLowerCase()!=='active'));
+  const active    = docs.filter(a=> (a.source_category||'').toLowerCase()!=='archetype' && ((a.type||'').toLowerCase()==='active'));
 
-  // Buckets:
-  const isArchetype = (a)=> (a.source_category||'').toLowerCase()==='archetype';
-  const isPassiveLike = (a)=> ['passive','mixed'].includes((a.type||'').toLowerCase());
-  const isActiveLike  = (a)=> ['active','mixed'].includes((a.type||'').toLowerCase());
-
-  const bucketArchetype = docs.filter(isArchetype);
-  const bucketPassive   = docs.filter(a=>!isArchetype(a) && isPassiveLike(a));
-  const bucketActive    = docs.filter(a=>!isArchetype(a) && isActiveLike(a));
-
-  renderAbilitiesBucket(listArchetypeEl, bucketArchetype);
-  renderAbilitiesBucket(listPassiveEl,   bucketPassive);
-  renderAbilitiesBucket(listActiveEl,    bucketActive);
+  renderAbilitiesBucket(listArchetypeEl, archetype);
+  renderAbilitiesBucket(listPassiveEl,   passive);
+  renderAbilitiesBucket(listActiveEl,    active);
 }
 
 /* boot */
-checkMe().then(loadCharacter).catch(()=>{});
+checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
+
 </body>
 </html>
