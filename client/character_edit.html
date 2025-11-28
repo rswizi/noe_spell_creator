@@ -318,7 +318,7 @@ function recomputePassiveAgg(){
   for (const ab of passiveAbilities){
     const mods = (ab.passive && ab.passive.modifiers) || [];
     for (const m of mods){
-      const t = (m.target||'').trim();
+      const t = (m.target || m.key || '').trim();
       const mode = ((m.mode||'add')+'').toLowerCase();
       const val = Number(m.value||0);
       const note = m.note ? ` (${m.note})` : '';
@@ -492,7 +492,7 @@ function applyPassiveModifiersToDerived(base){
   for (const ab of passiveAbilities){
     const mods = (ab.passive && ab.passive.modifiers) || [];
     for (const m of mods){
-      const target = (m.target||'').toLowerCase().trim();
+      const target = (m.target || m.key || '').toLowerCase().trim();
       const mode = (m.mode||'add').toLowerCase();
       const val = Number(m.value||0);
       const note = m.note ? ` (${m.note})` : '';

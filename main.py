@@ -2815,8 +2815,11 @@ def _flatten_passive_modifiers(ability_docs: list[dict], origin_label: str) -> l
     for ab in ability_docs:
         passive = (ab or {}).get("passive") or {}
         for m in (passive.get("modifiers") or []):
+            # Some older ability records stored the target under "key".
+            # Support both so modifiers are not dropped when flattening.
+            target = m.get("target") or m.get("key") or ""
             mods.append({
-                "target": m.get("target", ""),
+                "target": target,
                 "mode":   (m.get("mode") or "add").lower(),
                 "value":  float(m.get("value") or 0),
                 "note":   m.get("note", ""),
