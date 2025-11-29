@@ -58,6 +58,10 @@
     .abi-add { display:flex; gap:8px; align-items:center; }
     .abi-add input, .abi-add select { flex:1 1 auto; }
     .abi-hint { opacity:.75; font-size:.85rem; margin-top:6px; }
+    /* Modifiers breakdown */
+    .mod-list { margin:6px 0 4px 16px; padding:0; list-style:disc; display:none; opacity:0.9; }
+    .mod-list li { margin:0 0 3px 0; font-size:0.9rem; }
+    .mod-toggle { cursor:pointer; }
   </style>
 </head>
 <body>
@@ -107,14 +111,22 @@
             </summary>
             <div class="panel-body">
               <div class="derived-grid">
-                <div class="kv"><div class="k">HP</div> <div class="val badge" id="hp-val" title="">--</div></div>
-                <div class="kv"><div class="k">EN</div> <div class="val badge" id="en-val" title="">--</div></div>
-                <div class="kv"><div class="k">FO</div> <div class="val badge" id="fo-val" title="">--</div></div>
-                <div class="kv"><div class="k">MO</div> <div class="val badge" id="mo-val" title="">--</div></div>
-                <div class="kv"><div class="k">SP cap (10% HP)</div> <div class="val badge" id="spcap-val" title="">--</div></div>
-                <div class="kv"><div class="k">Encumbrance</div> <div class="val badge" id="enc-val" title="">--</div></div>
-                <div class="kv"><div class="k">Eclipse Threshold (ET)</div> <div class="val badge" id="et-val" title="">--</div></div>
-                <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge" id="tx-val" title="">--</div></div>
+                <div class="kv"><div class="k">HP</div> <div class="val badge mod-toggle" id="hp-val" data-target="mods-derived-hp" title="">--</div>
+                <ul class="mod-list" id="mods-derived-hp" style="display:none"></ul></div>
+                <div class="kv"><div class="k">EN</div> <div class="val badge mod-toggle" id="en-val" data-target="mods-derived-en" title="">--</div>
+                <ul class="mod-list" id="mods-derived-en" style="display:none"></ul></div>
+                <div class="kv"><div class="k">FO</div> <div class="val badge mod-toggle" id="fo-val" data-target="mods-derived-fo" title="">--</div>
+                <ul class="mod-list" id="mods-derived-fo" style="display:none"></ul></div>
+                <div class="kv"><div class="k">MO</div> <div class="val badge mod-toggle" id="mo-val" data-target="mods-derived-mo" title="">--</div>
+                <ul class="mod-list" id="mods-derived-mo" style="display:none"></ul></div>
+                <div class="kv"><div class="k">SP cap (10% HP)</div> <div class="val badge mod-toggle" id="spcap-val" data-target="mods-derived-spcap" title="">--</div>
+                <ul class="mod-list" id="mods-derived-spcap" style="display:none"></ul></div>
+                <div class="kv"><div class="k">Encumbrance</div> <div class="val badge mod-toggle" id="enc-val" data-target="mods-derived-enc" title="">--</div>
+                <ul class="mod-list" id="mods-derived-enc" style="display:none"></ul></div>
+                <div class="kv"><div class="k">Eclipse Threshold (ET)</div> <div class="val badge mod-toggle" id="et-val" data-target="mods-derived-et" title="">--</div>
+                <ul class="mod-list" id="mods-derived-et" style="display:none"></ul></div>
+                <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge mod-toggle" id="tx-val" data-target="mods-derived-tx" title="">--</div>
+                <ul class="mod-list" id="mods-derived-tx" style="display:none"></ul></div>
               </div>
             </div>
           </details>
@@ -364,6 +376,42 @@ function skillId(key, skill, suffix){
   const slug = (skill || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
   return `${key}__${slug}__${suffix}`;
 }
+function skillId(key, skill, suffix){
+  const slug = (skill || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  return `${key}__${slug}__${suffix}`;
+}
+
+function setNotesList(id, notes){
+  let el = document.getElementById(id);
+  if (!el){
+    el = document.createElement('ul');
+    el.className = 'mod-list';
+    el.id = id;
+    el.style.display = 'none';
+  }else{
+    el.innerHTML = '';
+  }
+  (notes || []).forEach(n=>{
+    const li = document.createElement('li');
+    li.textContent = n;
+    el.appendChild(li);
+  });
+  return el;
+}
+
+function toggleModList(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = (el.style.display === 'none' || !el.style.display) ? '' : 'none';
+}
+
+document.addEventListener('click', (e)=>{
+  const t = e.target.closest('.mod-toggle');
+  if (!t) return;
+  const id = t.getAttribute('data-target');
+  if (id) toggleModList(id);
+});
+
 function charBaseMod(key){
   const invest = CHAR.stats?.[key]?.invest ?? 0;
   return modFromTotal(totalFromInvest(invest));
@@ -396,7 +444,7 @@ function renderStatistics(){
     sum.innerHTML = `
       <strong>${c.name}</strong>
       <span class="pill">${c.code}</span>
-      <span class="charac-badge" title="${modInfo.notes.join('\n')}">[ <span class="total" id="${c.key}-total">${total}</span> | <span id="${c.key}-mod">${modInfo.mod>=0? '+'+modInfo.mod : modInfo.mod}</span> ]</span>
+      <span class="charac-badge mod-toggle" data-target="mods-char-${c.key}" title="${modInfo.notes.join('\n')}">[ <span class="total" id="${c.key}-total">${total}</span> | <span id="${c.key}-mod">${modInfo.mod>=0? '+'+modInfo.mod : modInfo.mod}</span> ]</span>
       <span class="grow"></span>
       <span class="k">Invested</span>
       <input type="number" class="num" min="0" id="${c.key}-invest" value="${Number(rec.invest)||0}">
@@ -415,11 +463,15 @@ function renderStatistics(){
       line.innerHTML = `
         <div class="k">${s}</div>
         <input type="number" class="num" min="0" id="${investId}" value="${invested}">
-        <div class="skill-total badge" id="${totalId}" title="${adj.notes.join('\n')}">${adj.total>=0? '+'+adj.total : adj.total}</div>
+        <div class="skill-total badge mod-toggle" data-target="mods-${totalId}" id="${totalId}" title="${adj.notes.join('\n')}">${adj.total>=0? '+'+adj.total : adj.total}</div>
       `;
+      const noteList = setNotesList(`mods-${totalId}`, adj.notes);
+      line.appendChild(noteList);
       skills.appendChild(line);
     }
 
+    const charNotesList = setNotesList(`mods-char-${c.key}`, modInfo.notes);
+    body.appendChild(charNotesList);
     body.appendChild(skills);
     details.appendChild(body);
     gridEl.appendChild(details);
@@ -438,6 +490,7 @@ function renderStatistics(){
       document.getElementById(`${c.key}-total`).textContent = total;
       document.getElementById(`${c.key}-mod`).textContent = (modInfo.mod>=0? '+'+modInfo.mod : modInfo.mod);
       document.querySelector(`#${c.key}-mod`).parentElement.title = modInfo.notes.join('\\n');
+      setNotesList(`mods-char-${c.key}`, modInfo.notes);
 
       // update skill rows
       for (const s of c.skills){
@@ -445,6 +498,7 @@ function renderStatistics(){
         const el = document.getElementById(skillId(c.key, s, 'total'));
         el.textContent = (adj.total>=0? '+'+adj.total : adj.total);
         el.title = adj.notes.join('\\n');
+        setNotesList(`mods-${skillId(c.key, s, 'total')}`, adj.notes);
       }
       updateDerived();
       queueSave();
@@ -459,6 +513,7 @@ function renderStatistics(){
         const el = document.getElementById(skillId(c.key, s, 'total'));
         el.textContent = (adj.total>=0? '+'+adj.total : adj.total);
         el.title = adj.notes.join('\\n');
+        setNotesList(`mods-${skillId(c.key, s, 'total')}`, adj.notes);
         updateDerived();
         queueSave();
       });
@@ -515,14 +570,14 @@ function applyPassiveModifiersToDerived(base){
   for (const op of ops.add){ out[op.k] = out[op.k] + op.v; notes[op.k].push(`${op.v>=0?'+':''}${op.v} -> ${op.origin}`); }
 
   // Tooltips with breakdown
-  hpEl.title = notes.hp.join('\n');
-  enEl.title = notes.en.join('\n');
-  foEl.title = notes.fo.join('\n');
-  moEl.title = notes.mo.join('\n');
-  spcapEl.title = notes.spcap.join('\n');
-  encEl.title = notes.enc.join('\n');
-  etEl.title = notes.et.join('\n');
-  txEl.title = notes.tx.join('\n');
+  hpEl.title = notes.hp.join('\n');   setNotesList('mods-derived-hp', notes.hp);
+  enEl.title = notes.en.join('\n');   setNotesList('mods-derived-en', notes.en);
+  foEl.title = notes.fo.join('\n');   setNotesList('mods-derived-fo', notes.fo);
+  moEl.title = notes.mo.join('\n');   setNotesList('mods-derived-mo', notes.mo);
+  spcapEl.title = notes.spcap.join('\n'); setNotesList('mods-derived-spcap', notes.spcap);
+  encEl.title = notes.enc.join('\n'); setNotesList('mods-derived-enc', notes.enc);
+  etEl.title = notes.et.join('\n');   setNotesList('mods-derived-et', notes.et);
+  txEl.title = notes.tx.join('\n');   setNotesList('mods-derived-tx', notes.tx);
 
   return out;
 }
@@ -666,14 +721,16 @@ function renderSearchResults(arr){
 async function resolveAssignedAbilities(){
   const ids = (CHAR.abilities||[]);
   if (!ids.length){ ASSIGNED = []; return; }
-  const qs = '?ids=' + encodeURIComponent(ids.join(','));
+  const uniqueIds = Array.from(new Set(ids));
+  const qs = '?ids=' + encodeURIComponent(uniqueIds.join(','));
   const bulk = await api('/abilities/bulk'+qs);
-  ASSIGNED = (bulk.abilities||[]);
+  const byId = {};
+  (bulk.abilities||[]).forEach(a=>{ if (a && a.id) byId[a.id] = a; });
+  ASSIGNED = ids.map(id=> byId[id]).filter(Boolean); // preserve order and duplicates
 }
 
 async function addAbilityToChar(aid){
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
-  if (CHAR.abilities.includes(aid)) return; // already there
   CHAR.abilities.push(aid);
   queueSave();
   await resolveAssignedAbilities();
@@ -684,7 +741,10 @@ async function addAbilityToChar(aid){
 }
 
 async function removeAbilityFromChar(aid){
-  CHAR.abilities = (CHAR.abilities||[]).filter(x=>x!==aid);
+  const arr = CHAR.abilities || [];
+  const idx = arr.indexOf(aid);
+  if (idx >= 0) arr.splice(idx, 1);
+  CHAR.abilities = arr;
   queueSave();
   await resolveAssignedAbilities();
   recomputePassiveAgg();
