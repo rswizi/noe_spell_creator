@@ -44,6 +44,7 @@
     .mod-row { display:grid; grid-template-columns: 1.2fr 0.7fr 0.7fr auto; gap:6px; align-items:center; }
     .mod-row input, .mod-row select { width:100%; }
     .mod-row button { padding:4px 8px; font-size:.8rem; }
+    .mod-row .mod-target-custom { grid-column:1 / span 3; }
 
     .status-line { margin-top:10px; font-size:.85rem; opacity:.9; }
   </style>
@@ -115,8 +116,8 @@
 
           <h3 style="margin-top:10px;">Modifiers (optional)</h3>
           <div class="muted" style="margin-bottom:4px;">
-            These will later be applied to the character sheet. Use generic keys like
-            <code>stats.hp_max</code>, <code>skills.Acrobatics</code>, <code>defense.Fire</code>, etc.
+            These will later be applied to the character sheet. Pick from the dropdown (skills, characteristics, derived resources) or use
+            a custom path if you need something special.
           </div>
 
           <div class="mod-list" id="mod-list"></div>
@@ -213,6 +214,44 @@ const costOValEl  = document.getElementById('cost-other-value');
 
 const btnSave     = document.getElementById('btn-save');
 
+const CUSTOM_TARGET_VALUE = '__custom__';
+const PASSIVE_TARGET_GROUPS = (()=>{
+  const characteristics = [
+    { key:'body', label:'Body' },
+    { key:'willpower', label:'Willpower' },
+    { key:'magic', label:'Magic' },
+    { key:'presence', label:'Presence' },
+    { key:'reflex', label:'Reflex' },
+    { key:'dexterity', label:'Dexterity' },
+    { key:'tech', label:'Tech' },
+  ];
+  const skills = [
+    { key:'body', label:'Body', skills:['Athletics','Resistance','Melee','Brawl'] },
+    { key:'willpower', label:'Willpower', skills:['Spirit','Courage','Discipline','Insight'] },
+    { key:'magic', label:'Magic', skills:['Arcana','Spellwork','Alchemy','Ritual'] },
+    { key:'presence', label:'Presence', skills:['Charm','Intimidation','Deception','Performance'] },
+    { key:'reflex', label:'Reflex', skills:['Stealth','Acrobatics','Aim','Perception'] },
+    { key:'dexterity', label:'Dexterity', skills:['Craft','Lockpicking','Tinkering','Drive'] },
+    { key:'tech', label:'Tech', skills:['Alchemy'] },
+  ];
+  const derived = [
+    { key:'hp', label:'HP' },
+    { key:'en', label:'EN' },
+    { key:'fo', label:'FO' },
+    { key:'mo', label:'MO' },
+    { key:'spcap', label:'SP cap (10% HP)' },
+    { key:'enc', label:'Encumbrance' },
+    { key:'et', label:'Eclipse Threshold (ET)' },
+    { key:'tx', label:'Max Toxicity (TX)' },
+  ];
+  return [
+    { label:'Characteristics', options: characteristics.map(c=>({ value:`char.${c.key}`, label:`${c.label} (modifier)` })) },
+    { label:'Skills', options: skills.flatMap(c=> c.skills.map(s=>({ value:`skills.${c.key}.${s}`, label:`${s} (${c.label})` }))) },
+    { label:'Derived / Resources', options: derived.map(d=>({ value:`derived.${d.key}`, label:d.label })) },
+    { label:'Custom', options:[{ value:CUSTOM_TARGET_VALUE, label:'Custom path...' }]},
+  ];
+})();
+
 async function checkMe(){
   try{
     const me = await api('/auth/me');
@@ -227,11 +266,45 @@ function addModifierRow(initial){
   const row = document.createElement('div');
   row.className = 'mod-row';
 
-  const target = document.createElement('input');
-  target.placeholder = 'target key (e.g. stats.hp_max)';
-  target.value = initial?.target || '';
+  const target = document.createElement('select');
+  target.className = 'mod-target';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select target...';
+  placeholder.disabled = true;
+  target.appendChild(placeholder);
+
+  let matchedPreset = false;
+  PASSIVE_TARGET_GROUPS.forEach(group=>{
+    const og = document.createElement('optgroup');
+    og.label = group.label;
+    group.options.forEach(o=>{
+      const opt = document.createElement('option');
+      opt.value = o.value;
+      opt.textContent = o.label;
+      if (initial?.target === o.value){ opt.selected = true; matchedPreset = true; }
+      og.appendChild(opt);
+    });
+    target.appendChild(og);
+  });
+  if (!matchedPreset){
+    target.value = initial?.target ? CUSTOM_TARGET_VALUE : '';
+  }
+
+  const customTarget = document.createElement('input');
+  customTarget.className = 'mod-target-custom';
+  customTarget.placeholder = 'Custom path (ex: derived.hp)';
+  customTarget.value = matchedPreset ? '' : (initial?.target || '');
+  customTarget.style.display = (target.value === CUSTOM_TARGET_VALUE) ? '' : 'none';
+
+  target.addEventListener('change', ()=>{
+    const useCustom = target.value === CUSTOM_TARGET_VALUE;
+    customTarget.style.display = useCustom ? '' : 'none';
+    if (!useCustom) customTarget.value = '';
+  });
 
   const mode = document.createElement('select');
+  mode.className = 'mod-mode';
   ['add','mul','set'].forEach(m=>{
     const opt = document.createElement('option');
     opt.value = m; opt.textContent = m;
@@ -240,13 +313,14 @@ function addModifierRow(initial){
   });
 
   const value = document.createElement('input');
+  value.className = 'mod-value';
   value.type = 'number';
   value.step = '0.1';
   value.value = initial?.value ?? 0;
 
   const rm = document.createElement('button');
   rm.type = 'button';
-  rm.textContent = '✕';
+  rm.textContent = 'Remove';
   rm.className = 'btn';
   rm.addEventListener('click', ()=> row.remove());
 
@@ -254,6 +328,7 @@ function addModifierRow(initial){
   row.appendChild(mode);
   row.appendChild(value);
   row.appendChild(rm);
+  row.appendChild(customTarget);
   modListEl.appendChild(row);
 }
 btnAddMod.addEventListener('click', ()=> addModifierRow());
@@ -303,12 +378,14 @@ function buildPayload(){
   if (typeEl.value === 'passive' || typeEl.value === 'mixed') {
     const mods = [];
     modListEl.querySelectorAll('.mod-row').forEach(row=>{
-      const inputs = row.querySelectorAll('input, select');
-      const target = inputs[0].value.trim();
-      const mode   = inputs[1].value;
-      const value  = parseFloat(inputs[2].value || '0');
-      if (!target) return;
-      mods.push({ target, mode, value, note:'' });
+      const targetSel = row.querySelector('.mod-target');
+      const customTarget = row.querySelector('.mod-target-custom');
+      const modeEl   = row.querySelector('.mod-mode');
+      const valueEl  = row.querySelector('.mod-value');
+      const resolvedTarget = targetSel.value === CUSTOM_TARGET_VALUE ? (customTarget.value || '').trim() : targetSel.value.trim();
+      const parsedValue = parseFloat(valueEl.value || '0');
+      if (!resolvedTarget) return;
+      mods.push({ target: resolvedTarget, mode: modeEl.value, value: parsedValue, note:'' });
     });
     passive = {
       description: passiveDescEl.value || '',
