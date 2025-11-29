@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NoE — Edit Character (with Abilities)</title>
+  <title>NoE -- Edit Character (with Abilities)</title>
 
   <style>
     :root { color-scheme: dark; }
@@ -107,14 +107,14 @@
             </summary>
             <div class="panel-body">
               <div class="derived-grid">
-                <div class="kv"><div class="k">HP</div> <div class="val badge" id="hp-val" title="">—</div></div>
-                <div class="kv"><div class="k">EN</div> <div class="val badge" id="en-val" title="">—</div></div>
-                <div class="kv"><div class="k">FO</div> <div class="val badge" id="fo-val" title="">—</div></div>
-                <div class="kv"><div class="k">MO</div> <div class="val badge" id="mo-val" title="">—</div></div>
-                <div class="kv"><div class="k">SP cap (10% HP)</div> <div class="val badge" id="spcap-val" title="">—</div></div>
-                <div class="kv"><div class="k">Encumbrance</div> <div class="val badge" id="enc-val" title="">—</div></div>
-                <div class="kv"><div class="k">Eclipse Threshold (ET)</div> <div class="val badge" id="et-val" title="">—</div></div>
-                <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge" id="tx-val" title="">—</div></div>
+                <div class="kv"><div class="k">HP</div> <div class="val badge" id="hp-val" title="">--</div></div>
+                <div class="kv"><div class="k">EN</div> <div class="val badge" id="en-val" title="">--</div></div>
+                <div class="kv"><div class="k">FO</div> <div class="val badge" id="fo-val" title="">--</div></div>
+                <div class="kv"><div class="k">MO</div> <div class="val badge" id="mo-val" title="">--</div></div>
+                <div class="kv"><div class="k">SP cap (10% HP)</div> <div class="val badge" id="spcap-val" title="">--</div></div>
+                <div class="kv"><div class="k">Encumbrance</div> <div class="val badge" id="enc-val" title="">--</div></div>
+                <div class="kv"><div class="k">Eclipse Threshold (ET)</div> <div class="val badge" id="et-val" title="">--</div></div>
+                <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge" id="tx-val" title="">--</div></div>
               </div>
             </div>
           </details>
@@ -132,7 +132,7 @@
       </div>
 
       <!-- INVENTORY placeholder -->
-      <div id="tab-inv" class="tabpane" style="display:none;"><p class="muted">Inventory — coming next.</p></div>
+      <div id="tab-inv" class="tabpane" style="display:none;"><p class="muted">Inventory -- coming next.</p></div>
 
       <!-- ABILITIES TAB -->
       <div id="tab-abi" class="tabpane" style="display:none;">
@@ -189,8 +189,8 @@
       </div>
 
       <!-- COMBAT / PERSONAL placeholders -->
-      <div id="tab-com" class="tabpane" style="display:none;"><p class="muted">Combat — coming next.</p></div>
-      <div id="tab-per" class="tabpane" style="display:none;"><p class="muted">Bio — coming next.</p></div>
+      <div id="tab-com" class="tabpane" style="display:none;"><p class="muted">Combat -- coming next.</p></div>
+      <div id="tab-per" class="tabpane" style="display:none;"><p class="muted">Bio -- coming next.</p></div>
     </div>
 
   </div></div>
@@ -199,18 +199,19 @@
 /* --- auth helper --- */
 function getToken(){ return localStorage.getItem('auth_token') || ''; }
 function setCookieToken(tok){ if(!tok) return; document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
-function authHeaders(){ const t=getToken(); if(t) setCookieToken(t); return t? {'Authorization':'Bearer '+t, 'X-Auth-Token':t} : {}; }
+function authHeaders(){ const t=getToken(); if(t) setCookieToken(t); return t ? {'Authorization':'Bearer '+t, 'X-Auth-Token':t} : {}; }
 async function api(path,opt={}){ const headers = Object.assign({}, opt.headers||{}, authHeaders()); const resp = await fetch(path, { credentials:'include', ...opt, headers }); const ct = resp.headers.get('content-type') || ''; const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() }; if(!resp.ok || data.status==='error') throw new Error(data.message || ('HTTP '+resp.status)); return data; }
 
 /* Constants */
 const CHARACS = [
-  { key:'body',      code:'BOD', name:'Body',      skills:['Athletics','Resistance','Melee','Brawl'] },
-  { key:'willpower', code:'WIL', name:'Willpower', skills:['Spirit','Courage','Discipline','Insight'] },
-  { key:'magic',     code:'MAG', name:'Magic',     skills:['Arcana','Spellwork','Alchemy','Ritual'] },
-  { key:'presence',  code:'PRE', name:'Presence',  skills:['Charm','Intimidation','Deception','Performance'] },
-  { key:'reflex',    code:'REF', name:'Reflex',    skills:['Stealth','Acrobatics','Aim','Perception'] },
-  { key:'dexterity', code:'DEX', name:'Dexterity', skills:['Craft','Lockpicking','Tinkering','Drive'] },
-  { key:'tech',      code:'TECH',name:'Tech',      skills:['Alchemy'] },
+  { key:'reflex',    code:'REF', name:'Reflex',    skills:['Technicity','Dodge','Counter','Reactivity'] },
+  { key:'dexterity', code:'DEX', name:'Dexterity', skills:['Accuracy','Evasion','Stealth','Acrobatics'] },
+  { key:'body',      code:'BOD', name:'Body',      skills:['Brutality','Blocking','Resistance','Athletics'] },
+  { key:'wisdom',    code:'WIS', name:'Wisdom',    skills:['Survival','Education','Perception','Psychology','Investigation'] },
+  { key:'presence',  code:'PRE', name:'Presence',  skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
+  { key:'magic',     code:'MAG', name:'Magic',     skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
+  { key:'willpower', code:'WIL', name:'Willpower', skills:['Intimidation','Spirit','Instinct','Absorption'] },
+  { key:'tech',      code:'TECH',name:'Tech',      skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
 ];
 
 const NATURES = ['Fire','Lightning','Water','Earth','Wind','Sun','Moon','Ki'];
@@ -325,44 +326,44 @@ function recomputePassiveAgg(){
       const origin = `${ab.name}${note}`;
       if (!t) continue;
 
-      // char.<key>
-      const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech)$/i);
+      const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
       if (cm){
         const key = cm[1].toLowerCase();
         const agg = ensureAgg(PASSIVE.char, key);
         (agg[mode]||agg.add).push({v:val, origin});
-        agg.notes.push(`${mode} ${val>=0?'+':''}${val} ← ${origin}`);
+        agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
         continue;
       }
-      // skills.<char>.<skill>
-      const sm = t.match(/^skills\.(body|willpower|magic|presence|reflex|dexterity|tech)\.(.+)$/i);
+
+      const sm = t.match(/^skills\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)\.(.+)$/i);
       if (sm){
         const ckey = sm[1].toLowerCase();
         const skName = sm[2];
         const k = `${ckey}|${skName}`;
         const agg = ensureAgg(PASSIVE.skill, k);
         (agg[mode]||agg.add).push({v:val, origin});
-        agg.notes.push(`${mode} ${val>=0?'+':''}${val} ← ${origin}`);
+        agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
         continue;
       }
-      // derived.* handled elsewhere
     }
   }
 }
-
-/* Helpers to apply ops to a base number, and produce a tooltip */
 function applyOps(base, agg){
   if (!agg) return { value: base, notes: [`Base = ${base}`] };
   const notes = [`Base = ${base}`];
   let v = base;
-  // set → mul → add
-  for (const x of (agg.set||[])){ v = x.v; notes.push(`Set to ${x.v} ← ${x.origin}`); }
-  for (const x of (agg.mul||[])){ const before = v; v = Math.round(v * x.v); notes.push(`×${x.v} (from ${before}) ← ${x.origin}`); }
-  for (const x of (agg.add||[])){ v = v + x.v; notes.push(`${x.v>=0?'+':''}${x.v} ← ${x.origin}`); }
+  // set -> mul -> add
+  for (const x of (agg.set||[])){ v = x.v; notes.push(`Set to ${x.v} -> ${x.origin}`); }
+  for (const x of (agg.mul||[])){ const before = v; v = Math.round(v * x.v); notes.push(`*${x.v} (from ${before}) -> ${x.origin}`); }
+  for (const x of (agg.add||[])){ v = v + x.v; notes.push(`${x.v>=0?'+':''}${x.v} -> ${x.origin}`); }
   return { value: v, notes };
 }
 
 /* ---------- Rendering: Statistics & Skills ---------- */
+function skillId(key, skill, suffix){
+  const slug = (skill || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  return `${key}__${slug}__${suffix}`;
+}
 function charBaseMod(key){
   const invest = CHAR.stats?.[key]?.invest ?? 0;
   return modFromTotal(totalFromInvest(invest));
@@ -408,11 +409,13 @@ function renderStatistics(){
     for (const s of c.skills){
       const invested = Number((rec.skills||{})[s] || 0);
       const adj = skillAdjTotal(c.key, s);
+      const investId = skillId(c.key, s, 'invest');
+      const totalId = skillId(c.key, s, 'total');
       const line = document.createElement('div'); line.className='skill-line';
       line.innerHTML = `
         <div class="k">${s}</div>
-        <input type="number" class="num" min="0" id="${c.key}__${s}__invest" value="${invested}">
-        <div class="skill-total badge" id="${c.key}__${s}__total" title="${adj.notes.join('\n')}">${adj.total>=0? '+'+adj.total : adj.total}</div>
+        <input type="number" class="num" min="0" id="${investId}" value="${invested}">
+        <div class="skill-total badge" id="${totalId}" title="${adj.notes.join('\n')}">${adj.total>=0? '+'+adj.total : adj.total}</div>
       `;
       skills.appendChild(line);
     }
@@ -434,39 +437,41 @@ function renderStatistics(){
       const modInfo = charAdjMod(c.key);
       document.getElementById(`${c.key}-total`).textContent = total;
       document.getElementById(`${c.key}-mod`).textContent = (modInfo.mod>=0? '+'+modInfo.mod : modInfo.mod);
-      document.querySelector(`#${c.key}-mod`).parentElement.title = modInfo.notes.join('\n');
+      document.querySelector(`#${c.key}-mod`).parentElement.title = modInfo.notes.join('
+');
 
       // update skill rows
       for (const s of c.skills){
         const adj = skillAdjTotal(c.key, s);
-        const el = document.getElementById(`${c.key}__${s}__total`);
+        const el = document.getElementById(skillId(c.key, s, 'total'));
         el.textContent = (adj.total>=0? '+'+adj.total : adj.total);
-        el.title = adj.notes.join('\n');
+        el.title = adj.notes.join('
+');
       }
       updateDerived();
       queueSave();
     });
 
     for (const s of c.skills){
-      const si = document.getElementById(`${c.key}__${s}__invest`);
+      const si = document.getElementById(skillId(c.key, s, 'invest'));
       si.addEventListener('input', ()=>{
         const val = Math.max(0, Math.floor(Number(si.value)||0));
         CHAR.stats[c.key].skills[s] = val;
         const adj = skillAdjTotal(c.key, s);
-        const el = document.getElementById(`${c.key}__${s}__total`);
+        const el = document.getElementById(skillId(c.key, s, 'total'));
         el.textContent = (adj.total>=0? '+'+adj.total : adj.total);
-        el.title = adj.notes.join('\n');
+        el.title = adj.notes.join('
+');
         updateDerived();
         queueSave();
       });
     }
   }
 }
-
 /* simple defense placeholder */
 function renderDefenseSummary(){
   const box = document.getElementById('defense-summary');
-  box.innerHTML = '<div class="muted">—</div>';
+  box.innerHTML = '<div class="muted">--</div>';
 }
 
 /* --------- PASSIVE on DERIVED (existing behavior) ---------- */
@@ -507,10 +512,10 @@ function applyPassiveModifiersToDerived(base){
     }
   }
 
-  // set → mul → add
-  for (const op of ops.set){ out[op.k] = op.v; notes[op.k].push(`Set to ${op.v} ← ${op.origin}`); }
-  for (const op of ops.mul){ const before = out[op.k]; out[op.k] = Math.round(before * op.v); notes[op.k].push(`×${op.v} (from ${before}) ← ${op.origin}`); }
-  for (const op of ops.add){ out[op.k] = out[op.k] + op.v; notes[op.k].push(`${op.v>=0?'+':''}${op.v} ← ${op.origin}`); }
+  // set -> mul -> add
+  for (const op of ops.set){ out[op.k] = op.v; notes[op.k].push(`Set to ${op.v} -> ${op.origin}`); }
+  for (const op of ops.mul){ const before = out[op.k]; out[op.k] = Math.round(before * op.v); notes[op.k].push(`*${op.v} (from ${before}) -> ${op.origin}`); }
+  for (const op of ops.add){ out[op.k] = out[op.k] + op.v; notes[op.k].push(`${op.v>=0?'+':''}${op.v} -> ${op.origin}`); }
 
   // Tooltips with breakdown
   hpEl.title = notes.hp.join('\n');
@@ -536,13 +541,19 @@ function skillTotalAdjustedFor(key, name){
 
 function updateDerived(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const msBOD = milestone('body'); const msWIL = milestone('willpower'); const msMAG = milestone('magic'); const msPRE = milestone('presence'); const msREF = milestone('reflex'); const msDEX = milestone('dexterity');
+  const msBOD = milestone('body');
+  const msWIL = milestone('willpower');
+  const msMAG = milestone('magic');
+  const msPRE = milestone('presence');
+  const msREF = milestone('reflex');
+  const msDEX = milestone('dexterity');
+  const msWIS = milestone('wisdom');
 
   // Base
   const base = {};
   base.hp = 100 + lvl + 12*msBOD + 6*msWIL;
   base.en = 5 + Math.floor(lvl/5) + msWIL + 2*msMAG;
-  base.fo = 2 + Math.floor(lvl/5) + msWIL + msPRE;
+  base.fo = 2 + Math.floor(lvl/5) + msWIL + (2*msPRE) + msWIS;
   base.mo = 4 + msDEX + msREF;
   base.spcap = Math.floor(base.hp * 0.10);
   const athletics = skillTotalAdjustedFor('body','Athletics');
@@ -687,7 +698,7 @@ async function removeAbilityFromChar(aid){
 
 function renderAbilitiesBucket(el, list){
   el.innerHTML = '';
-  if (!list.length){ el.innerHTML = '<div class="muted">—</div>'; return; }
+  if (!list.length){ el.innerHTML = '<div class="muted">--</div>'; return; }
   for (const a of list){
     const div = document.createElement('div');
     div.className = 'abi-item';

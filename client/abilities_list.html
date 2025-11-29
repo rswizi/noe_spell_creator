@@ -272,22 +272,24 @@ const btnSave     = document.getElementById('btn-save');
 const CUSTOM_TARGET_VALUE = '__custom__';
 const PASSIVE_TARGET_GROUPS = (()=>{
   const characteristics = [
-    { key:'body', label:'Body' },
-    { key:'willpower', label:'Willpower' },
-    { key:'magic', label:'Magic' },
-    { key:'presence', label:'Presence' },
-    { key:'reflex', label:'Reflex' },
+    { key:'reflex',    label:'Reflex' },
     { key:'dexterity', label:'Dexterity' },
-    { key:'tech', label:'Tech' },
+    { key:'body',      label:'Body' },
+    { key:'wisdom',    label:'Wisdom' },
+    { key:'presence',  label:'Presence' },
+    { key:'magic',     label:'Magic' },
+    { key:'willpower', label:'Willpower' },
+    { key:'tech',      label:'Tech' },
   ];
   const skills = [
-    { key:'body', label:'Body', skills:['Athletics','Resistance','Melee','Brawl'] },
-    { key:'willpower', label:'Willpower', skills:['Spirit','Courage','Discipline','Insight'] },
-    { key:'magic', label:'Magic', skills:['Arcana','Spellwork','Alchemy','Ritual'] },
-    { key:'presence', label:'Presence', skills:['Charm','Intimidation','Deception','Performance'] },
-    { key:'reflex', label:'Reflex', skills:['Stealth','Acrobatics','Aim','Perception'] },
-    { key:'dexterity', label:'Dexterity', skills:['Craft','Lockpicking','Tinkering','Drive'] },
-    { key:'tech', label:'Tech', skills:['Alchemy'] },
+    { key:'reflex',    label:'Reflex',    skills:['Technicity','Dodge','Counter','Reactivity'] },
+    { key:'dexterity', label:'Dexterity', skills:['Accuracy','Evasion','Stealth','Acrobatics'] },
+    { key:'body',      label:'Body',      skills:['Brutality','Blocking','Resistance','Athletics'] },
+    { key:'wisdom',    label:'Wisdom',    skills:['Survival','Education','Perception','Psychology','Investigation'] },
+    { key:'presence',  label:'Presence',  skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
+    { key:'magic',     label:'Magic',     skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
+    { key:'willpower', label:'Willpower', skills:['Intimidation','Spirit','Instinct','Absorption'] },
+    { key:'tech',      label:'Tech',      skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
   ];
   const derived = [
     { key:'hp', label:'HP' },
