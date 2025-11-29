@@ -437,16 +437,14 @@ function renderStatistics(){
       const modInfo = charAdjMod(c.key);
       document.getElementById(`${c.key}-total`).textContent = total;
       document.getElementById(`${c.key}-mod`).textContent = (modInfo.mod>=0? '+'+modInfo.mod : modInfo.mod);
-      document.querySelector(`#${c.key}-mod`).parentElement.title = modInfo.notes.join('
-');
+      document.querySelector(`#${c.key}-mod`).parentElement.title = modInfo.notes.join('\\n');
 
       // update skill rows
       for (const s of c.skills){
         const adj = skillAdjTotal(c.key, s);
         const el = document.getElementById(skillId(c.key, s, 'total'));
         el.textContent = (adj.total>=0? '+'+adj.total : adj.total);
-        el.title = adj.notes.join('
-');
+        el.title = adj.notes.join('\\n');
       }
       updateDerived();
       queueSave();
@@ -460,8 +458,7 @@ function renderStatistics(){
         const adj = skillAdjTotal(c.key, s);
         const el = document.getElementById(skillId(c.key, s, 'total'));
         el.textContent = (adj.total>=0? '+'+adj.total : adj.total);
-        el.title = adj.notes.join('
-');
+        el.title = adj.notes.join('\\n');
         updateDerived();
         queueSave();
       });
