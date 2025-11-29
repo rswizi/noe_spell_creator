@@ -143,8 +143,41 @@
         </div>
       </div>
 
-      <!-- INVENTORY placeholder -->
-      <div id="tab-inv" class="tabpane" style="display:none;"><p class="muted">Inventory -- coming next.</p></div>
+      <!-- INVENTORY -->
+      <div id="tab-inv" class="tabpane" style="display:none;">
+        <div class="panel">
+          <details open class="panel">
+            <summary class="hdr">
+              <strong>Inventory</strong>
+              <span class="muted">(link + manage inline)</span>
+            </summary>
+            <div class="panel-body">
+              <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                <select id="inv-select" class="grow"></select>
+                <button id="inv-load-btn">Load</button>
+                <a class="btn" id="inv-open-btn" target="_blank" rel="noopener">Open manager</a>
+                <a class="btn" href="inventory_create.html" target="_blank" rel="noopener">Create inventory</a>
+                <span id="inv-status" class="muted"></span>
+              </div>
+
+              <div id="inv-summary" class="muted" style="margin-bottom:8px;"></div>
+
+              <div class="panel" style="border-color:#222; background:#0f0f0f;">
+                <div class="hdr" style="padding:10px 12px; gap:6px;">
+                  <strong>Inventory Modifiers</strong>
+                  <span class="muted">(only equipped apply)</span>
+                  <span class="grow"></span>
+                  <button id="inv-save-mods" class="btn" type="button">Save mods</button>
+                </div>
+                <div class="panel-body">
+                  <div id="inv-mod-list" class="mod-list" style="display:block; list-style:none; padding:0;"></div>
+                  <button id="inv-add-mod" class="btn" type="button">+ Add modifier</button>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
 
       <!-- ABILITIES TAB -->
       <div id="tab-abi" class="tabpane" style="display:none;">
@@ -227,6 +260,67 @@ const CHARACS = [
 ];
 
 const NATURES = ['Fire','Lightning','Water','Earth','Wind','Sun','Moon','Ki'];
+const TARGET_GROUPS = [
+  { label:'Characteristics', options:[
+    { value:'char.reflex', label:'Reflex (modifier)' },
+    { value:'char.dexterity', label:'Dexterity (modifier)' },
+    { value:'char.body', label:'Body (modifier)' },
+    { value:'char.wisdom', label:'Wisdom (modifier)' },
+    { value:'char.presence', label:'Presence (modifier)' },
+    { value:'char.magic', label:'Magic (modifier)' },
+    { value:'char.willpower', label:'Willpower (modifier)' },
+    { value:'char.tech', label:'Tech (modifier)' },
+  ]},
+  { label:'Skills', options:[
+    { value:'skills.reflex.Technicity', label:'Technicity (Reflex)' },
+    { value:'skills.reflex.Dodge', label:'Dodge (Reflex)' },
+    { value:'skills.reflex.Counter', label:'Counter (Reflex)' },
+    { value:'skills.reflex.Reactivity', label:'Reactivity (Reflex)' },
+    { value:'skills.dexterity.Accuracy', label:'Accuracy (Dexterity)' },
+    { value:'skills.dexterity.Evasion', label:'Evasion (Dexterity)' },
+    { value:'skills.dexterity.Stealth', label:'Stealth (Dexterity)' },
+    { value:'skills.dexterity.Acrobatics', label:'Acrobatics (Dexterity)' },
+    { value:'skills.body.Brutality', label:'Brutality (Body)' },
+    { value:'skills.body.Blocking', label:'Blocking (Body)' },
+    { value:'skills.body.Resistance', label:'Resistance (Body)' },
+    { value:'skills.body.Athletics', label:'Athletics (Body)' },
+    { value:'skills.wisdom.Survival', label:'Survival (Wisdom)' },
+    { value:'skills.wisdom.Education', label:'Education (Wisdom)' },
+    { value:'skills.wisdom.Perception', label:'Perception (Wisdom)' },
+    { value:'skills.wisdom.Psychology', label:'Psychology (Wisdom)' },
+    { value:'skills.wisdom.Investigation', label:'Investigation (Wisdom)' },
+    { value:'skills.presence.Taming', label:'Taming (Presence)' },
+    { value:'skills.presence.Charm', label:'Charm (Presence)' },
+    { value:'skills.presence.Charisma', label:'Charisma (Presence)' },
+    { value:'skills.presence.Deception', label:'Deception (Presence)' },
+    { value:'skills.presence.Persuasion', label:'Persuasion (Presence)' },
+    { value:'skills.magic.Aura', label:'Aura (Magic)' },
+    { value:'skills.magic.Incantation', label:'Incantation (Magic)' },
+    { value:'skills.magic.Enchantment', label:'Enchantment (Magic)' },
+    { value:'skills.magic.Restoration', label:'Restoration (Magic)' },
+    { value:'skills.magic.Potential', label:'Potential (Magic)' },
+    { value:'skills.willpower.Intimidation', label:'Intimidation (Willpower)' },
+    { value:'skills.willpower.Spirit', label:'Spirit (Willpower)' },
+    { value:'skills.willpower.Instinct', label:'Instinct (Willpower)' },
+    { value:'skills.willpower.Absorption', label:'Absorption (Willpower)' },
+    { value:'skills.tech.Crafting', label:'Crafting (Tech)' },
+    { value:'skills.tech.Sleight of hand', label:'Sleight of hand (Tech)' },
+    { value:'skills.tech.Alchemy', label:'Alchemy (Tech)' },
+    { value:'skills.tech.Medicine', label:'Medicine (Tech)' },
+    { value:'skills.tech.Engineering', label:'Engineering (Tech)' },
+  ]},
+  { label:'Derived / Resources', options:[
+    { value:'derived.hp', label:'HP' },
+    { value:'derived.en', label:'EN' },
+    { value:'derived.fo', label:'FO' },
+    { value:'derived.mo', label:'MO' },
+    { value:'derived.spcap', label:'SP cap' },
+    { value:'derived.enc', label:'Encumbrance' },
+    { value:'derived.et', label:'Eclipse Threshold (ET)' },
+    { value:'derived.tx', label:'Max Toxicity (TX)' },
+  ]},
+  { label:'Custom', options:[{ value:'__custom__', label:'Custom path...' }]}
+];
 function totalFromInvest(v){ return (parseInt(v||0,10) || 0) + 4; }
 function modFromTotal(total){ return Math.floor((Number(total)-10)/2); }
 
@@ -237,6 +331,9 @@ let ROLE = 'user';
 let SAVE_TIMER = null;
 let CHAR = null;
 let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
+let INVENTORIES = [];
+let LINKED_INV = null;
+let SELECTED_INV_ID = '';
 
 /* Passive bonus aggregations (recomputed whenever ASSIGNED changes) */
 let PASSIVE = {
@@ -272,6 +369,15 @@ const abiResultsEl = document.getElementById('abi-results');
 const listArchetypeEl = document.getElementById('abi-list-archetype');
 const listPassiveEl   = document.getElementById('abi-list-passive');
 const listActiveEl    = document.getElementById('abi-list-active');
+/* Inventory tab refs */
+const invSelectEl = document.getElementById('inv-select');
+const invLoadBtn = document.getElementById('inv-load-btn');
+const invOpenBtn = document.getElementById('inv-open-btn');
+const invStatusEl = document.getElementById('inv-status');
+const invSummaryEl = document.getElementById('inv-summary');
+const invModListEl = document.getElementById('inv-mod-list');
+const invAddModBtn = document.getElementById('inv-add-mod');
+const invSaveModsBtn = document.getElementById('inv-save-mods');
 
 /* tabs switching */
 document.querySelectorAll('.tab').forEach(tab=>{
@@ -359,6 +465,31 @@ function recomputePassiveAgg(){
       }
     }
   }
+  for (const m of getEquippedInventoryModifiers()){
+    const t = (m.target||'').trim();
+    const mode = (m.mode||'add').toLowerCase();
+    const val = Number(m.value||0);
+    const origin = m.origin || 'Inventory';
+    if (!t) continue;
+    const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
+    if (cm){
+      const key = cm[1].toLowerCase();
+      const agg = ensureAgg(PASSIVE.char, key);
+      (agg[mode]||agg.add).push({v:val, origin});
+      agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      continue;
+    }
+    const sm = t.match(/^skills\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)\.(.+)$/i);
+    if (sm){
+      const ckey = sm[1].toLowerCase();
+      const skName = sm[2];
+      const k = `${ckey}|${skName}`;
+      const agg = ensureAgg(PASSIVE.skill, k);
+      (agg[mode]||agg.add).push({v:val, origin});
+      agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      continue;
+    }
+  }
 }
 function applyOps(base, agg){
   if (!agg) return { value: base, notes: [`Base = ${base}`] };
@@ -372,10 +503,6 @@ function applyOps(base, agg){
 }
 
 /* ---------- Rendering: Statistics & Skills ---------- */
-function skillId(key, skill, suffix){
-  const slug = (skill || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
-  return `${key}__${slug}__${suffix}`;
-}
 function skillId(key, skill, suffix){
   const slug = (skill || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
   return `${key}__${slug}__${suffix}`;
@@ -411,6 +538,213 @@ document.addEventListener('click', (e)=>{
   const id = t.getAttribute('data-target');
   if (id) toggleModList(id);
 });
+
+function getEquippedInventoryModifiers(){
+  if (!LINKED_INV) return [];
+  const name = LINKED_INV.name || 'Inventory';
+  return (LINKED_INV.modifiers || [])
+    .filter(m=> m.equipped !== false)
+    .map(m=>{
+      const note = m.note ? ` (${m.note})` : '';
+      return { target: (m.target||m.key||'').trim(), mode: (m.mode||'add').toLowerCase(), value: Number(m.value||0), origin:`[Inv] ${name}${note}` };
+    });
+}
+
+/* ---------- Inventory helpers ---------- */
+function buildTargetSelect(initial){
+  const sel = document.createElement('select');
+  sel.className = 'mod-target';
+  TARGET_GROUPS.forEach(g=>{
+    const og = document.createElement('optgroup');
+    og.label = g.label;
+    g.options.forEach(o=>{
+      const opt = document.createElement('option');
+      opt.value = o.value;
+      opt.textContent = o.label;
+      if (o.value === initial) opt.selected = true;
+      og.appendChild(opt);
+    });
+    sel.appendChild(og);
+  });
+  return sel;
+}
+
+function addInventoryModRow(initial={}){
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.style.flexWrap = 'wrap';
+  row.style.gap = '6px';
+
+  const targetSel = buildTargetSelect(initial.target || '');
+  const custom = document.createElement('input');
+  custom.placeholder = 'Custom path';
+  custom.style.minWidth = '200px';
+  custom.value = (initial.target && initial.target.startsWith('derived.')===false && !TARGET_GROUPS.some(g=>g.options.find(o=>o.value===initial.target))) ? initial.target : '';
+  custom.style.display = (targetSel.value === '__custom__') ? '' : 'none';
+  targetSel.addEventListener('change', ()=>{
+    custom.style.display = (targetSel.value === '__custom__') ? '' : 'none';
+    if (targetSel.value !== '__custom__') custom.value = '';
+  });
+
+  const mode = document.createElement('select');
+  ['add','mul','set'].forEach(m=>{
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    if ((initial.mode||'add') === m) opt.selected = true;
+    mode.appendChild(opt);
+  });
+
+  const val = document.createElement('input');
+  val.type = 'number';
+  val.step = '0.1';
+  val.style.width = '90px';
+  val.value = initial.value ?? 0;
+
+  const note = document.createElement('input');
+  note.placeholder = 'Note (optional)';
+  note.value = initial.note || '';
+  note.style.flex = '1';
+
+  const equip = document.createElement('label');
+  equip.className = 'row';
+  equip.style.gap = '4px';
+  equip.style.alignItems = 'center';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = initial.equipped !== false;
+  equip.appendChild(cb);
+  equip.appendChild(document.createTextNode('Equipped'));
+  equip.style.minWidth = '90px';
+
+  const rm = document.createElement('button');
+  rm.type = 'button';
+  rm.className = 'btn';
+  rm.textContent = 'Remove';
+  rm.addEventListener('click', ()=> row.remove());
+
+  row.appendChild(targetSel);
+  row.appendChild(custom);
+  row.appendChild(mode);
+  row.appendChild(val);
+  row.appendChild(note);
+  row.appendChild(equip);
+  row.appendChild(rm);
+
+  row.dataset.type = 'inv-mod-row';
+  invModListEl.appendChild(row);
+}
+
+function collectInventoryModifiers(){
+  const mods = [];
+  invModListEl.querySelectorAll('[data-type="inv-mod-row"]').forEach(row=>{
+    const targetSel = row.querySelector('.mod-target');
+    const custom = row.querySelector('input[placeholder="Custom path"]');
+    const mode = row.querySelector('select:nth-of-type(2)') || row.querySelector('select.mod-mode');
+    const val = row.querySelector('input[type="number"]');
+    const note = row.querySelector('input[placeholder="Note (optional)"]');
+    const equipped = row.querySelector('input[type="checkbox"]');
+    const targetVal = targetSel.value === '__custom__' ? (custom.value||'').trim() : targetSel.value;
+    if (!targetVal) return;
+    mods.push({
+      target: targetVal,
+      mode: mode.value,
+      value: parseFloat(val.value||'0'),
+      note: note.value || '',
+      equipped: equipped.checked
+    });
+  });
+  return mods;
+}
+
+function renderInventoryModifiers(){
+  invModListEl.innerHTML = '';
+  const mods = LINKED_INV?.modifiers || [];
+  mods.forEach(m=> addInventoryModRow(m));
+}
+
+async function loadInventoriesList(){
+  invStatusEl.textContent = 'Loading inventories...';
+  try{
+    const res = await api('/inventories');
+    INVENTORIES = res.inventories || [];
+    invSelectEl.innerHTML = '<option value="">-- Select inventory --</option>';
+    INVENTORIES.forEach(inv=>{
+      const opt = document.createElement('option');
+      opt.value = inv.id;
+      opt.textContent = inv.name || inv.id;
+      if (inv.id === SELECTED_INV_ID) opt.selected = true;
+      invSelectEl.appendChild(opt);
+    });
+    invStatusEl.textContent = '';
+  }catch(e){
+    invStatusEl.textContent = 'Load failed: ' + e.message;
+  }
+}
+
+function renderInventorySummary(){
+  if (!LINKED_INV){
+    invSummaryEl.textContent = 'No inventory linked.';
+    invOpenBtn.style.display = 'none';
+    invModListEl.innerHTML = '';
+    return;
+  }
+  const enc = Number(LINKED_INV.enc_total || 0);
+  const cur = LINKED_INV.currencies || {};
+  const curText = Object.keys(cur).length ? Object.entries(cur).map(([k,v])=>`${k}: ${v}`).join(' | ') : 'no currencies';
+  invSummaryEl.textContent = `${LINKED_INV.name || 'Inventory'} — Encumbrance: ${enc.toFixed(1)} | ${curText}`;
+  invOpenBtn.style.display = '';
+  invOpenBtn.href = `inventory_view.html?inv=${encodeURIComponent(LINKED_INV.id || '')}`;
+  renderInventoryModifiers();
+  updateDerived();
+}
+
+async function loadInventoryById(id){
+  if (!id){ LINKED_INV=null; SELECTED_INV_ID=''; CHAR.inventory_id=''; renderInventorySummary(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave(); return; }
+  invStatusEl.textContent = 'Loading inventory...';
+  try{
+    const res = await api('/inventories/' + encodeURIComponent(id));
+    if (res.inventory){
+      LINKED_INV = res.inventory;
+      SELECTED_INV_ID = LINKED_INV.id || id;
+      CHAR.inventory_id = SELECTED_INV_ID;
+      renderInventorySummary();
+      recomputePassiveAgg();
+      renderStatistics();
+      updateDerived();
+      invStatusEl.textContent = 'Inventory loaded';
+      queueSave();
+    }else{
+      throw new Error('Not found');
+    }
+  }catch(e){
+    invStatusEl.textContent = 'Load failed: ' + e.message;
+  }
+}
+
+async function saveInventoryModifiers(){
+  if (!LINKED_INV || !LINKED_INV.id){ invStatusEl.textContent = 'No inventory selected.'; return; }
+  const mods = collectInventoryModifiers();
+  invStatusEl.textContent = 'Saving modifiers...';
+  try{
+    const res = await api('/inventories/' + encodeURIComponent(LINKED_INV.id), {
+      method:'PUT',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify({ modifiers: mods })
+    });
+    if (res.inventory){
+      LINKED_INV = res.inventory;
+    }else{
+      LINKED_INV.modifiers = mods;
+    }
+    renderInventoryModifiers();
+    invStatusEl.textContent = 'Modifiers saved.';
+    recomputePassiveAgg();
+    renderStatistics();
+    updateDerived();
+  }catch(e){
+    invStatusEl.textContent = 'Save failed: ' + e.message;
+  }
+}
 
 function charBaseMod(key){
   const invest = CHAR.stats?.[key]?.invest ?? 0;
@@ -539,6 +873,11 @@ function applyPassiveModifiersToDerived(base){
     enc:[`Base = ${base.enc}`],
     spcap:[`Base = ${base.spcap}`],
   };
+  if (base._notes){
+    Object.entries(base._notes).forEach(([k, arr])=>{
+      if (notes[k]) notes[k].push(...arr);
+    });
+  }
 
   const ops = { set:[], mul:[], add:[] };
   const passiveAbilities = (ASSIGNED||[]).filter(a=>{
@@ -546,21 +885,34 @@ function applyPassiveModifiersToDerived(base){
     return t==='passive' || t==='mixed';
   });
 
+  const allMods = [];
   for (const ab of passiveAbilities){
     const mods = (ab.passive && ab.passive.modifiers) || [];
     for (const m of mods){
-      const target = (m.target || m.key || '').toLowerCase().trim();
-      const mode = (m.mode||'add').toLowerCase();
-      const val = Number(m.value||0);
-      const note = m.note ? ` (${m.note})` : '';
-      const origin = `${ab.name}${note}`;
-      const map = {
-        'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo',
-        'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap'
-      };
-      if (map[target]){
-        ops[mode]?.push({ k: map[target], v: val, origin });
-      }
+      allMods.push({
+        target:(m.target || m.key || '').toLowerCase().trim(),
+        mode:(m.mode||'add').toLowerCase(),
+        val:Number(m.value||0),
+        origin:`${ab.name}${m.note?` (${m.note})`:''}`
+      });
+    }
+  }
+  for (const m of getEquippedInventoryModifiers()){
+    allMods.push({
+      target:(m.target||'').toLowerCase(),
+      mode:(m.mode||'add').toLowerCase(),
+      val:Number(m.value||0),
+      origin:m.origin
+    });
+  }
+
+  const map = {
+    'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo',
+    'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap'
+  };
+  for (const m of allMods){
+    if (map[m.target]){
+      ops[m.mode]?.push({ k: map[m.target], v: m.val, origin: m.origin });
     }
   }
 
@@ -611,6 +963,11 @@ function updateDerived(){
   const athletics = skillTotalAdjustedFor('body','Athletics');
   const spirit = skillTotalAdjustedFor('willpower','Spirit');
   base.enc = 10 + (athletics*5) + (spirit*2);
+  const invEnc = LINKED_INV?.enc_total || 0;
+  if (invEnc){
+    base.enc += invEnc;
+    base._notes = Object.assign({}, base._notes, { enc: [`+${invEnc} inventory encumbrance`] });
+  }
   base.et = 1 + Math.floor(lvl/9) + msMAG;
   const resistance = skillTotalAdjustedFor('body','Resistance');
   const alchemy = skillTotalAdjustedFor('tech','Alchemy') || 0;
@@ -639,6 +996,7 @@ async function loadCharacter(){
   if (!CHAR.stats.intensities) CHAR.stats.intensities = makeDefaultStats().intensities;
   if (!('level' in CHAR)) CHAR.level = 1;
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
+  SELECTED_INV_ID = CHAR.inventory_id || '';
 
   // Name
   titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
@@ -659,6 +1017,8 @@ async function loadCharacter(){
   // refresh visuals that depend on passive agg
   renderStatistics();
   updateDerived();
+  await loadInventoriesList();
+  if (SELECTED_INV_ID) loadInventoryById(SELECTED_INV_ID);
 }
 
 function queueSave(){
@@ -669,7 +1029,7 @@ function queueSave(){
 
 async function saveNow(){
   try{
-    const payload = { name: nameEl.value || '', level: CHAR.level || 1, stats: CHAR.stats, abilities: CHAR.abilities || [] };
+    const payload = { name: nameEl.value || '', level: CHAR.level || 1, stats: CHAR.stats, abilities: CHAR.abilities || [], inventory_id: SELECTED_INV_ID || '' };
     const res = await api('/characters/' + encodeURIComponent(CID), {
       method:'PUT', headers:{ 'content-type':'application/json' }, body: JSON.stringify(payload)
     });
@@ -697,6 +1057,11 @@ async function searchAbilities(){
 }
 abiSearchBtn.addEventListener('click', searchAbilities);
 abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
+
+invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
+invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));
+invAddModBtn.addEventListener('click', ()=> addInventoryModRow());
+invSaveModsBtn.addEventListener('click', saveInventoryModifiers);
 
 function renderSearchResults(arr){
   abiResultsEl.innerHTML = '';

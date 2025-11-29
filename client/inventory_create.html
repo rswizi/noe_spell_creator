@@ -9,6 +9,8 @@
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
     .muted{opacity:.8}
+    .mod-row{display:grid;grid-template-columns:1.4fr 0.9fr 0.7fr 0.7fr 1fr auto;gap:6px;align-items:center;margin-top:6px}
+    .mod-row input,.mod-row select{width:100%}
   </style>
 </head>
 <body>
@@ -40,6 +42,12 @@
       <div id="cont-wrap"></div>
       <div class="row">
         <button id="add-cont" class="btn small">+ Container</button>
+      </div>
+
+      <h4 style="margin-top:14px;">Modifiers (optional, set as equipped to apply)</h4>
+      <div id="mod-wrap"></div>
+      <div class="row">
+        <button id="add-mod" class="btn small" type="button">+ Modifier</button>
       </div>
     </div>
 
@@ -101,6 +109,74 @@ document.getElementById("add-cur").onclick = ()=> addCurrencyRow("",0);
 document.getElementById("add-cont").onclick = ()=> addContainerRow("Pouch");
 addContainerRow("Backpack");
 
+const TARGET_GROUPS = [
+  {label:"Characteristics", options:["char.reflex","char.dexterity","char.body","char.wisdom","char.presence","char.magic","char.willpower","char.tech"]},
+  {label:"Skills", options:[
+    "skills.reflex.Technicity","skills.reflex.Dodge","skills.reflex.Counter","skills.reflex.Reactivity",
+    "skills.dexterity.Accuracy","skills.dexterity.Evasion","skills.dexterity.Stealth","skills.dexterity.Acrobatics",
+    "skills.body.Brutality","skills.body.Blocking","skills.body.Resistance","skills.body.Athletics",
+    "skills.wisdom.Survival","skills.wisdom.Education","skills.wisdom.Perception","skills.wisdom.Psychology","skills.wisdom.Investigation",
+    "skills.presence.Taming","skills.presence.Charm","skills.presence.Charisma","skills.presence.Deception","skills.presence.Persuasion",
+    "skills.magic.Aura","skills.magic.Incantation","skills.magic.Enchantment","skills.magic.Restoration","skills.magic.Potential",
+    "skills.willpower.Intimidation","skills.willpower.Spirit","skills.willpower.Instinct","skills.willpower.Absorption",
+    "skills.tech.Crafting","skills.tech.Sleight of hand","skills.tech.Alchemy","skills.tech.Medicine","skills.tech.Engineering"
+  ]},
+  {label:"Derived", options:["derived.hp","derived.en","derived.fo","derived.mo","derived.spcap","derived.enc","derived.et","derived.tx"]},
+  {label:"Custom", options:["__custom__"]},
+];
+
+function addModRow(initial={}){
+  const row = document.createElement("div");
+  row.className = "mod-row";
+
+  const target = document.createElement("select");
+  TARGET_GROUPS.forEach(g=>{
+    const og = document.createElement("optgroup"); og.label = g.label;
+    g.options.forEach(v=>{
+      const opt = document.createElement("option");
+      opt.value = v; opt.textContent = v==="__custom__" ? "Custom path..." : v;
+      if (v === initial.target) opt.selected = true;
+      og.appendChild(opt);
+    });
+    target.appendChild(og);
+  });
+
+  const custom = document.createElement("input");
+  custom.placeholder = "Custom path";
+  custom.value = (!TARGET_GROUPS.some(g=>g.options.includes(initial.target)) && initial.target) ? initial.target : "";
+  custom.style.display = target.value === "__custom__" ? "" : "none";
+  target.addEventListener("change", ()=>{
+    custom.style.display = target.value === "__custom__" ? "" : "none";
+    if (target.value !== "__custom__") custom.value = "";
+  });
+
+  const mode = document.createElement("select");
+  ["add","mul","set"].forEach(m=>{
+    const opt = document.createElement("option"); opt.value = m; opt.textContent = m;
+    if ((initial.mode||"add") === m) opt.selected = true;
+    mode.appendChild(opt);
+  });
+
+  const val = document.createElement("input"); val.type="number"; val.step="0.1"; val.value = initial.value ?? 0;
+  const note = document.createElement("input"); note.placeholder = "Note"; note.value = initial.note || "";
+
+  const equip = document.createElement("label"); equip.className="row"; equip.style.gap="4px"; equip.style.alignItems="center";
+  const cb = document.createElement("input"); cb.type="checkbox"; cb.checked = initial.equipped !== false;
+  equip.appendChild(cb); equip.appendChild(document.createTextNode("Equipped"));
+
+  const rm = document.createElement("button"); rm.className="btn btn-secondary small"; rm.type="button"; rm.textContent="Remove"; rm.onclick = ()=> row.remove();
+
+  row.appendChild(target);
+  row.appendChild(custom);
+  row.appendChild(mode);
+  row.appendChild(val);
+  row.appendChild(note);
+  row.appendChild(equip);
+  row.appendChild(rm);
+  modWrap.appendChild(row);
+}
+document.getElementById("add-mod").onclick = ()=> addModRow();
+
 document.getElementById("create").onclick = async ()=>{
   const name = ($("#inv-name").value || "Inventory").trim();
   const jelly = Number($("#cur-jelly").value||0);
@@ -116,12 +192,27 @@ document.getElementById("create").onclick = async ()=>{
     name: r.querySelector('[data-k="name"]').value.trim() || "Container"
   }));
 
-  $("#msg").textContent = "Creating…";
+  const modifiers = [];
+  modWrap.querySelectorAll(".mod-row").forEach(row=>{
+    const targetSel = row.querySelector("select");
+    const custom = row.querySelector('input[placeholder="Custom path"]');
+    const target = targetSel.value === "__custom__" ? (custom.value||"").trim() : targetSel.value;
+    if (!target) return;
+    modifiers.push({
+      target,
+      mode: row.querySelectorAll("select")[1]?.value || "add",
+      value: parseFloat(row.querySelector('input[type="number"]').value || "0"),
+      note: row.querySelector('input[placeholder="Note"]').value || "",
+      equipped: row.querySelector('input[type="checkbox"]').checked
+    });
+  });
+
+  $("#msg").textContent = "Creating...";
   try{
     const r = await fetch("/inventories", {
       method:"POST",
       headers: { "Content-Type":"application/json", ...authHeaders() },
-      body: JSON.stringify({ name, currencies, containers })
+      body: JSON.stringify({ name, currencies, containers, modifiers })
     });
     const j = await r.json().catch(()=>({}));
     if (j.status !== "success") throw new Error(j.message || "Create failed");
