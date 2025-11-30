@@ -599,7 +599,8 @@ function renderInventorySummary(){
   invOpenBtn.href = `inventory_view.html?inv=${encodeURIComponent(LINKED_INV.id || '')}`;
   if (invEmbedWrap && invEmbed){
     invEmbedWrap.style.display = '';
-    invEmbed.src = `inventory_view.html?inv=${encodeURIComponent(LINKED_INV.id || '')}&embed=1`;
+    const targetSrc = `inventory_view.html?inv=${encodeURIComponent(LINKED_INV.id || '')}&embed=1`;
+    if (invEmbed.src !== targetSrc) invEmbed.src = targetSrc;
   }
   updateDerived();
 }
