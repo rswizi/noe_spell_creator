@@ -9,6 +9,7 @@
     .grid { display:grid; gap:8px; grid-template-columns: 1fr 120px 80px auto; align-items:center; }
     .row  { display:flex; gap:8px; align-items:center; }
     .muted{opacity:.8}
+    .mod-row{display:grid;grid-template-columns:1fr 0.9fr 0.6fr 1fr auto;gap:6px;align-items:center}
   </style>
 </head>
 <body>
@@ -43,7 +44,14 @@
       <label style="flex:1">Modifiers (JSON array)<br/>
         <textarea id="m-mods" rows="3" style="width:100%;" placeholder='[{"target":"char.body","mode":"add","value":1}]'></textarea>
       </label>
-    </div><div class="row" style="margin-top:10px;justify-content:flex-end;">
+    </div>    <div class="row" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:8px;">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>Modifiers</strong>
+        <button id="mod-add" class="btn small" type="button">+ Modifier</button>
+      </div>
+      <div id="mod-list"></div>
+    </div>
+<div class="row" style="margin-top:10px;justify-content:flex-end;">
       <button id="save" class="btn">Save</button>
     </div>
   </div>
@@ -56,6 +64,62 @@ const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
 
 let CACHE = [];
 let EDIT_ID = null;
+const modListEl = document.getElementById("mod-list");
+const MOD_TARGETS = [
+  "char.reflex","char.dexterity","char.body","char.wisdom","char.presence","char.magic","char.willpower","char.tech",
+  "derived.hp","derived.en","derived.fo","derived.mo","derived.spcap","derived.enc","derived.et","derived.tx",
+  "__custom__"
+];
+
+function addModRow(container, initial={}){
+  const row = document.createElement("div");
+  row.className = "mod-row";
+  const sel = document.createElement("select");
+  MOD_TARGETS.forEach(t=>{
+    const opt=document.createElement("option");
+    opt.value=t; opt.textContent = t==="__custom__" ? "Custom..." : t;
+    if (t === (initial.target||"")) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  const custom=document.createElement("input");
+  custom.placeholder="Custom target";
+  custom.value = (!MOD_TARGETS.includes(initial.target) ? (initial.target||"") : "");
+  custom.style.display = sel.value === "__custom__" ? "" : "none";
+  sel.addEventListener("change", ()=>{
+    custom.style.display = sel.value === "__custom__" ? "" : "none";
+    if (sel.value !== "__custom__") custom.value = "";
+  });
+  const mode=document.createElement("select");
+  ["add","mul","set"].forEach(m=>{
+    const opt=document.createElement("option"); opt.value=m; opt.textContent=m;
+    if ((initial.mode||"add")===m) opt.selected=true;
+    mode.appendChild(opt);
+  });
+  const val=document.createElement("input"); val.type="number"; val.step="0.1"; val.value=initial.value ?? 0;
+  const note=document.createElement("input"); note.placeholder="Note"; note.value=initial.note||"";
+  const rm=document.createElement("button"); rm.className="btn btn-secondary small"; rm.type="button"; rm.textContent="Remove"; rm.onclick=()=>row.remove();
+  row.appendChild(sel); row.appendChild(custom); row.appendChild(mode); row.appendChild(val); row.appendChild(note); row.appendChild(rm);
+  container.appendChild(row);
+}
+function setModifiers(container, mods){
+  container.innerHTML = "";
+  if (mods && mods.length){ mods.forEach(m=> addModRow(container, m)); }
+  else { addModRow(container, {}); }
+}
+function collectModifiers(container){
+  const mods=[];
+  container.querySelectorAll(".mod-row").forEach(row=>{
+    const sel=row.querySelector("select");
+    const custom=row.querySelector("input[placeholder='Custom target']");
+    const target = sel.value === "__custom__" ? (custom.value||"").trim() : sel.value;
+    if (!target) return;
+    const mode = row.querySelectorAll("select")[1]?.value || "add";
+    const val = parseFloat(row.querySelector("input[type='number']").value||"0");
+    const note = row.querySelector("input[placeholder='Note']").value || "";
+    mods.push({ target, mode, value: val, note });
+  });
+  return mods;
+}
 
 function row(o){
   return `
@@ -94,9 +158,7 @@ function openEdit(id){
   document.getElementById("m-name").value  = o.name || "";
   document.getElementById("m-price").value = o.price ?? 0;
   document.getElementById("m-enc").value   = o.enc ?? 0;
-  document.getElementById("m-desc").value  = o.description || "";
-  document.getElementById("m-mods").value  = JSON.stringify(o.modifiers || [], null, 2);
-  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("m-desc").value  = o.description || "";\n  setModifiers(modListEl, o.modifiers || []);\n  document.getElementById("modal").classList.remove("hidden");
   document.getElementById("modal").setAttribute("aria-hidden","false");
 }
 function closeEdit(){
@@ -159,6 +221,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
 </script>
 </body>
 </html>
+
+
 
 
 

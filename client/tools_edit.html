@@ -183,14 +183,14 @@ function syncDerived(){
 
 function openEdit(id){
   const t = CACHE.find(x=>x.id===id); if(!t) return;
-  EDIT_ID=id;
-  document.getElementById("m-name").value = t.name||"";
-  document.getElementById("m-tier").value = t.tier||"";
+  EDIT_ID = id;
+  document.getElementById("m-name").value = t.name || "";
+  document.getElementById("m-tier").value = t.tier || "";
   document.getElementById("m-enc").value  = t.enc ?? 0;
   document.getElementById("m-method").value = t.method || "crafting";
-  document.getElementById("m-desc").value = t.description||"";
+  document.getElementById("m-desc").value = t.description || "";
   setModifiers(modListEl, t.modifiers || []);
-  document.getElementById("m-title").textContent = Edit Tool ??"  [];
+  document.getElementById("m-title").textContent = "Edit Tool - " + (t.name || "") + " [" + t.id + "]";
   syncDerived();
   document.getElementById("modal").classList.remove("hidden");
   document.getElementById("modal").setAttribute("aria-hidden","false");
@@ -243,6 +243,7 @@ document.addEventListener("DOMContentLoaded", ()=>{ load(); document.getElementB
 </script>
 </body>
 </html>
+
 
 
 
