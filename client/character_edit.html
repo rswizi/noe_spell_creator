@@ -368,6 +368,25 @@ const invSummaryEl = document.getElementById('inv-summary');
 const invEmbedWrap = document.getElementById('inv-embed-wrap');
 const invEmbed = document.getElementById('inv-embed');
 
+// Listen for inventory iframe updates to refresh mods live
+window.addEventListener('message', (event)=>{
+  if (event.origin !== location.origin) return;
+  const data = event.data || {};
+  if (data.type === 'inventory-updated' && data.inventory){
+    const inv = data.inventory;
+    const match = LINKED_INV && (LINKED_INV.id === inv.id || SELECTED_INV_ID === inv.id);
+    if (match){
+      LINKED_INV = inv;
+      SELECTED_INV_ID = inv.id || SELECTED_INV_ID;
+      if (CHAR) CHAR.inventory_id = SELECTED_INV_ID;
+      renderInventorySummary();
+      recomputePassiveAgg();
+      renderStatistics();
+      updateDerived();
+    }
+  }
+});
+
 /* tabs switching */
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click', ()=>{
@@ -575,7 +594,7 @@ function renderInventorySummary(){
   const enc = Number(LINKED_INV.enc_total || 0);
   const cur = LINKED_INV.currencies || {};
   const curText = Object.keys(cur).length ? Object.entries(cur).map(([k,v])=>`${k}: ${v}`).join(' | ') : 'no currencies';
-  invSummaryEl.textContent = `${LINKED_INV.name || 'Inventory'} — Encumbrance: ${enc.toFixed(1)} | ${curText}`;
+  invSummaryEl.textContent = `${LINKED_INV.name || 'Inventory'} - Current encumbrance: ${enc.toFixed(1)} | ${curText}`;
   invOpenBtn.style.display = '';
   invOpenBtn.href = `inventory_view.html?inv=${encodeURIComponent(LINKED_INV.id || '')}`;
   if (invEmbedWrap && invEmbed){
@@ -723,7 +742,7 @@ function renderDefenseSummary(){
 }
 
 /* --------- PASSIVE on DERIVED (existing behavior) ---------- */
-function applyPassiveModifiersToDerived(base){
+function applyPassiveModifiersToDerived(base, currentEnc = 0){
   const out = { ...base };
   const notes = {
     hp: [`Base = ${base.hp}`],
@@ -735,6 +754,7 @@ function applyPassiveModifiersToDerived(base){
     enc:[`Base = ${base.enc}`],
     spcap:[`Base = ${base.spcap}`],
   };
+  notes.enc.unshift(`Current enc = ${Number(currentEnc||0).toFixed(1)}`);
   if (base._notes){
     Object.entries(base._notes).forEach(([k, arr])=>{
       if (notes[k]) notes[k].push(...arr);
@@ -793,6 +813,8 @@ function applyPassiveModifiersToDerived(base){
   etEl.title = notes.et.join('\n');   setNotesList('mods-derived-et', notes.et);
   txEl.title = notes.tx.join('\n');   setNotesList('mods-derived-tx', notes.tx);
 
+  out.current_enc = Number(currentEnc || 0);
+  out.enc_max = out.enc;
   return out;
 }
 
@@ -826,17 +848,13 @@ function updateDerived(){
   const spirit = skillTotalAdjustedFor('willpower','Spirit');
   base.enc = 10 + (athletics*5) + (spirit*2);
   const invEnc = LINKED_INV?.enc_total || 0;
-  if (invEnc){
-    base.enc += invEnc;
-    base._notes = Object.assign({}, base._notes, { enc: [`+${invEnc} inventory encumbrance`] });
-  }
   base.et = 1 + Math.floor(lvl/9) + msMAG;
   const resistance = skillTotalAdjustedFor('body','Resistance');
   const alchemy = skillTotalAdjustedFor('tech','Alchemy') || 0;
   base.tx = resistance + alchemy;
 
   // Apply passive modifiers to derived
-  const final = applyPassiveModifiersToDerived(base);
+  const final = applyPassiveModifiersToDerived(base, invEnc);
 
   // Display
   hpEl.textContent = final.hp;
@@ -844,7 +862,7 @@ function updateDerived(){
   foEl.textContent = final.fo;
   moEl.textContent = final.mo;
   spcapEl.textContent = final.spcap;
-  encEl.textContent = final.enc;
+  encEl.textContent = `${Number(final.current_enc || 0).toFixed(1)} / ${final.enc}`;
   etEl.textContent = final.et;
   txEl.textContent = final.tx;
 }

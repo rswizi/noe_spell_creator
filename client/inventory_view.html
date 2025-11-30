@@ -149,7 +149,10 @@
 const $ = s => document.querySelector(s);
 const token = localStorage.getItem("auth_token") || "";
 const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
-const invId = new URLSearchParams(location.search).get("inv");
+const params = new URLSearchParams(location.search);
+const invId = params.get("inv");
+const isEmbed = params.get("embed") === "1";
+const SELF_CONTAINER_ID = "self";
 
 let INV = null;
 let LAST_RESULTS = [];
@@ -157,6 +160,21 @@ let FILTERED = [];
 
 const KIND_PLURAL = { object: "objects", weapon: "weapons", equipment: "equipment", tool: "tools" };
 const QUALITIES = ["Adequate","Good","Very Good","Excellent","Legendary","Mythical","Epic","Divine","Unreal"];
+
+
+function broadcastInventoryUpdate(){
+  if (!INV) return;
+  if (window.parent && window.parent !== window && isEmbed){
+    window.parent.postMessage({ type: "inventory-updated", inventory: INV }, location.origin);
+  }
+}
+
+function applyInventory(inv){
+  INV = inv;
+  renderInventory();
+  populateGlobals();
+  broadcastInventoryUpdate();
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   loadInventory();
@@ -174,9 +192,7 @@ async function loadInventory(){
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}`, { headers: authHeaders() });
   const j = await r.json();
   if (j.status !== "success") { alert(j.message || "Load failed"); return; }
-  INV = j.inventory;
-  renderInventory();
-  populateGlobals();
+  applyInventory(j.inventory);
 }
 
 function renderInventory(){
@@ -205,29 +221,41 @@ function renderInventory(){
   // group items by container
   const grouped = {};
   for (const it of (INV.items || [])){
-    const cid = it.container_id || "";
+    const cid = (it.equipped !== false) ? SELF_CONTAINER_ID : (it.container_id || "");
     (grouped[cid] ||= []).push(it);
   }
 
   // containers
   const box = $("#containers");
   box.innerHTML = "";
-  for (const c of (INV.containers || [])){
+  const containers = (INV.containers || []).slice().sort((a,b)=>{
+    if (a.id === SELF_CONTAINER_ID) return -1;
+    if (b.id === SELF_CONTAINER_ID) return 1;
+    return String(a.name||"").localeCompare(String(b.name||""));
+  });
+  for (const c of containers){
     const items = grouped[c.id] || [];
+    const isSelf = c.id === SELF_CONTAINER_ID;
     const card = document.createElement("div");
     card.className = "container-card";
 
     const head = document.createElement("div");
     head.className = "container-head";
     head.innerHTML = `
-      <input value="${escapeHtml(c.name)}" data-id="${c.id}" class="cname" type="text">
-      <label class="row" style="gap:6px;">
+      ${isSelf
+        ? `<strong>Self (equipped items)</strong>`
+        : `<input value="${escapeHtml(c.name)}" data-id="${c.id}" class="cname" type="text">`
+      }
+      ${isSelf
+        ? `<span class="pill">Always included</span>`
+        : `<label class="row" style="gap:6px;">
         <input type="checkbox" class="cinc" data-id="${c.id}" ${c.include ? "checked" : ""}>
         include in total
-      </label>
+      </label>`
+      }
       <span class="pill">enc: <b>${Number(c.enc_total||0).toFixed(1)}</b></span>
       <span class="pill">items: <b>${items.length}</b></span>
-      <button class="btn btn-secondary small rename" data-id="${c.id}">Save</button>
+      ${isSelf ? "" : `<button class="btn btn-secondary small rename" data-id="${c.id}">Save</button>`}
     `;
     card.appendChild(head);
 
@@ -246,14 +274,44 @@ function renderInventory(){
         const displayName = it.alt_name ? `${escapeHtml(it.alt_name)} <span class="muted">(${escapeHtml(it.name||"Item")})</span>` : escapeHtml(it.name||"Item");
         const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
         const equipped = it.equipped !== false;
+        const stowedId = it.stowed_container_id || (it.container_id !== SELF_CONTAINER_ID ? it.container_id : "");
 
         const info = document.createElement("div");
         info.className = "grow";
         info.innerHTML = `
           <div><b>${displayName}</b></div>
-          <div class="muted">x${it.quantity||1} • enc: ${totalEnc.toFixed(1)}</div>
+          <div class="muted">x${it.quantity||1} | enc: ${totalEnc.toFixed(1)}</div>
           <div class="muted">${equipped ? '<span class="pill">Equipped</span>' : '<span class="pill" style="background:#331515;border-color:#662222">Unequipped</span>'}</div>
         `;
+        const moveTargets = (INV.containers || []).filter(c => c.id !== SELF_CONTAINER_ID);
+        const moveWrap = document.createElement("div");
+        moveWrap.className = "row";
+        moveWrap.style.marginTop = "6px";
+        moveWrap.style.gap = "6px";
+        const select = document.createElement("select");
+        select.className = "move-target";
+        select.dataset.id = it.item_id;
+        for (const mc of moveTargets){
+          const opt = document.createElement("option");
+          opt.value = mc.id; opt.textContent = mc.name;
+          select.appendChild(opt);
+        }
+        const preferred = moveTargets.find(mc => mc.id === stowedId);
+        if (preferred){ select.value = preferred.id; }
+        const moveBtn = document.createElement("button");
+        moveBtn.className = "btn small move-btn";
+        moveBtn.dataset.id = it.item_id;
+        moveBtn.textContent = "Move";
+        if (moveTargets.length){
+          moveWrap.appendChild(select);
+          moveWrap.appendChild(moveBtn);
+        }else{
+          const hint = document.createElement("div");
+          hint.className = "muted";
+          hint.textContent = "Add another container to move items.";
+          moveWrap.appendChild(hint);
+        }
+        info.appendChild(moveWrap);
 
         const toggle = document.createElement("button");
         toggle.className = "btn small";
@@ -301,6 +359,14 @@ function renderInventory(){
       openItemModal(it);
     });
   });
+  box.querySelectorAll(".move-btn").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const id = btn.dataset.id;
+      const sel = box.querySelector(`select.move-target[data-id="${id}"]`);
+      const target = sel ? sel.value : "";
+      await moveItem(id, target);
+    });
+  });
 
   // transactions
   const tx = $("#tx"); tx.innerHTML = "";
@@ -316,11 +382,14 @@ function populateGlobals(){
   // Container selector (global)
   const selC = $("#global-cont");
   selC.innerHTML = "";
-  (INV.containers || []).forEach(c=>{
+  const conts = (INV.containers || []);
+  conts.forEach(c=>{
     const opt = document.createElement("option");
     opt.value = c.id; opt.textContent = c.name;
     selC.appendChild(opt);
   });
+  const preferred = conts.find(c=>c.id !== SELF_CONTAINER_ID) || conts[0];
+  if (preferred){ selC.value = preferred.id; }
 
   // Currency selector (global)
   const selCur = $("#global-cur");
@@ -344,9 +413,7 @@ async function patchContainer(cid, body){
   });
   const j = await r.json();
   if (j.status !== "success") { alert(j.message || "Update failed"); return; }
-  INV = j.inventory;
-  renderInventory();
-  populateGlobals();
+  applyInventory(j.inventory);
 }
 
 async function addContainer(){
@@ -358,10 +425,8 @@ async function addContainer(){
   });
   const j = await r.json();
   if (j.status !== "success") { alert(j.message || "Create failed"); return; }
-  INV = j.inventory;
   $("#new-cont-name").value = "";
-  renderInventory();
-  populateGlobals();
+  applyInventory(j.inventory);
 }
 
 /* ------------- Add Funds ------------- */
@@ -381,9 +446,7 @@ async function addFunds(){
   if (j.status !== "success"){ alert(j.message || "Deposit failed"); return; }
   $("#fund-amt").value = "";
   $("#fund-note").value = "";
-  INV = j.inventory;
-  renderInventory();
-  populateGlobals();
+  applyInventory(j.inventory);
 }
 
 /* ------------- Catalog search & filter ------------- */
@@ -508,9 +571,20 @@ async function buyItem(kind, ref_id, quantity, container_id, currency){
   });
   const j = await r.json();
   if (j.status !== "success") { alert(j.message || "Purchase failed"); return; }
-  INV = j.inventory;
-  renderInventory();
-  populateGlobals();
+  applyInventory(j.inventory);
+}
+
+
+async function moveItem(item_id, container_id){
+  if (!container_id){ alert("Pick a target container."); return; }
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ container_id })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Move failed"); return; }
+  applyInventory(j.inventory);
 }
 
 async function toggleEquip(item_id, equipped){
@@ -521,8 +595,7 @@ async function toggleEquip(item_id, equipped){
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ alert(j.message || "Update failed"); return; }
-  INV = j.inventory;
-  renderInventory();
+  applyInventory(j.inventory);
 }
 
 /* ------- Item Details Modal (incl. upgrades/quality/alt name) ------- */
@@ -654,9 +727,8 @@ async function saveAltName(item_id, alt_name){
   });
   const j = await r.json();
   if (j.status !== "success"){ alert(j.message || "Save failed"); return; }
-  INV = j.inventory;
   closeItemModal();
-  renderInventory();
+  applyInventory(j.inventory);
 }
 
 async function upgradeQuality(item_id, to){
@@ -667,9 +739,8 @@ async function upgradeQuality(item_id, to){
   });
   const j = await r.json();
   if (j.status !== "success"){ alert(j.message || "Upgrade failed"); return; }
-  INV = j.inventory;
   closeItemModal();
-  renderInventory();
+  applyInventory(j.inventory);
 }
 
 async function installUpgrade(item_id, upgrade){
@@ -680,9 +751,8 @@ async function installUpgrade(item_id, upgrade){
   });
   const j = await r.json();
   if (j.status !== "success"){ alert(j.message || "Install failed"); return; }
-  INV = j.inventory;
   closeItemModal();
-  renderInventory();
+  applyInventory(j.inventory);
 }
 
 /* ------- utils ------- */

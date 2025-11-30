@@ -2193,6 +2193,62 @@ def _new_container(name: str) -> dict:
         "enc_total": 0.0        # running encumbrance stored in this container
     }
 
+# Special bucket to host equipped items directly on the character
+SELF_CONTAINER_ID = "self"
+SELF_CONTAINER_NAME = "Self"
+
+
+def _ensure_self_container(containers: list[dict]) -> list[dict]:
+    containers = containers or []
+    found = next((c for c in containers if c.get("id") == SELF_CONTAINER_ID), None)
+    if found:
+        found["name"] = found.get("name") or SELF_CONTAINER_NAME
+        found["include"] = bool(found.get("include", True))
+        found["enc_total"] = float(found.get("enc_total", 0.0))
+        found["built_in"] = True
+        return containers
+    # keep Self first for visibility
+    self_c = {
+        "id": SELF_CONTAINER_ID,
+        "name": SELF_CONTAINER_NAME,
+        "include": True,
+        "enc_total": 0.0,
+        "built_in": True,
+    }
+    return [self_c, *containers]
+
+
+def _default_stow_container(containers: list[dict]) -> str:
+    for c in containers or []:
+        if c.get("id") != SELF_CONTAINER_ID:
+            return c.get("id")
+    return (containers or [{}])[0].get("id", "")
+
+
+def _recompute_encumbrance(items: list[dict], containers: list[dict]) -> tuple[list[dict], float]:
+    """Recalculate per-container and inventory encumbrance from items."""
+    containers = _ensure_self_container(containers or [])
+    cont_map = {c["id"]: c for c in containers}
+    for c in containers:
+        c["enc_total"] = 0.0
+    inv_total = 0.0
+
+    for it in items or []:
+        enc_val = float(it.get("enc") or 0.0) * int(it.get("quantity") or 1)
+        cid = it.get("container_id") or SELF_CONTAINER_ID
+        if it.get("equipped") is not False:
+            cid = SELF_CONTAINER_ID
+        dest = cont_map.get(cid) or cont_map.get(SELF_CONTAINER_ID)
+        if dest is None and containers:
+            dest = containers[0]
+        if dest is None:
+            continue
+        dest["enc_total"] = float(dest.get("enc_total", 0.0)) + enc_val
+        if bool(dest.get("include", True)):
+            inv_total += enc_val
+
+    return containers, inv_total
+
 @app.post("/inventories")
 def create_inventory(request: Request, payload: dict = Body(...)):
     user, role = require_auth(request)
@@ -2200,7 +2256,8 @@ def create_inventory(request: Request, payload: dict = Body(...)):
     name = (payload.get("name") or "Inventory").strip()
     currencies = payload.get("currencies") or {}
     containers = payload.get("containers") or []
-    containers = [_new_container(c.get("name")) for c in containers] or [_new_container("Backpack")]
+    containers = [_new_container(c.get("name")) for c in containers if isinstance(c, dict)] or [_new_container("Backpack")]
+    containers = _ensure_self_container(containers)
     inv = {
         "id": next_id_str("inventory", padding=4),
         "name": name,
@@ -2219,7 +2276,15 @@ def create_inventory(request: Request, payload: dict = Body(...)):
 def list_inventories(request: Request):
     user, role = require_auth(request)
     db = get_db()
-    invs = list(db.inventories.find({"owner": user}, {"_id":0}))
+    invs = []
+    for inv in db.inventories.find({"owner": user}, {"_id":0}):
+        containers = _ensure_self_container(inv.get("containers") or [])
+        containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
+        if containers != (inv.get("containers") or []) or inv.get("enc_total") != inv_total:
+            db.inventories.update_one({"id": inv.get("id")}, {"$set": {"containers": containers, "enc_total": inv_total}})
+        inv["containers"] = containers
+        inv["enc_total"] = inv_total
+        invs.append(inv)
     return {"status":"success","inventories": invs}
 
 @app.get("/inventories/{inv_id}")
@@ -2228,6 +2293,16 @@ def read_inventory(request: Request, inv_id: str):
     db = get_db()
     inv = db.inventories.find_one({"id": inv_id, "owner": user}, {"_id":0})
     if not inv: raise HTTPException(404, "Not found")
+    containers = _ensure_self_container(inv.get("containers") or [])
+    recomputed_containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
+    needs_update = (inv.get("enc_total") != inv_total) or ((inv.get("containers") or []) != recomputed_containers)
+    if needs_update:
+        db.inventories.update_one({"id": inv_id}, {"$set": {"containers": recomputed_containers, "enc_total": inv_total}})
+        inv["enc_total"] = inv_total
+        inv["containers"] = recomputed_containers
+    else:
+        inv["containers"] = recomputed_containers
+        inv["enc_total"] = inv_total
     return {"status":"success","inventory": inv}
 
 @app.post("/inventories/{inv_id}/containers")
@@ -2235,11 +2310,40 @@ def add_container(request: Request, inv_id: str, payload: dict = Body(...)):
     user, role = require_auth(request)
     db = get_db()
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
-    if not inv: raise HTTPException(404, "Not found")
-    c = _new_container(payload.get("name"))
-    db.inventories.update_one({"id": inv_id}, {"$push": {"containers": c}})
-    inv = db.inventories.find_one({"id": inv_id}, {"_id":0})
-    return {"status":"success","container": c, "inventory": inv}
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+    containers = _ensure_self_container(inv.get("containers") or [])
+    cont = _new_container(payload.get("name"))
+    containers.append(cont)
+    containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
+    db.inventories.update_one({"id": inv_id}, {"$set": {"containers": containers, "enc_total": inv_total}})
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2}
+
+
+@app.patch("/inventories/{inv_id}/containers/{cid}")
+def patch_container(request: Request, inv_id: str, cid: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    containers = _ensure_self_container(inv.get("containers") or [])
+    found = next((c for c in containers if c.get("id") == cid), None)
+    if not found:
+        raise HTTPException(404, "Container not found")
+
+    if "name" in payload and not found.get("built_in"):
+        found["name"] = (payload.get("name") or "Container").strip()
+    if "include" in payload:
+        include_val = bool(payload.get("include"))
+        found["include"] = True if found.get("id") == SELF_CONTAINER_ID else include_val
+
+    containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
+    db.inventories.update_one({"id": inv_id}, {"$set": {"containers": containers, "enc_total": inv_total}})
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2}
 
 @app.post("/inventories/{inv_id}/money/transaction")
 def add_transaction(request: Request, inv_id: str, payload: dict = Body(...)):
@@ -2303,9 +2407,10 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     ref_id = (payload.get("ref_id") or "").strip()
     qty = max(1, int(payload.get("quantity") or 1))
     quality = (payload.get("quality") or "Adequate").strip()  # kept for future-proof; ignored for objects
-    container_id = (payload.get("container_id") or (inv["containers"][0]["id"] if inv.get("containers") else None))
+    container_id = (payload.get("container_id") or None)
     upgrades_req = payload.get("upgrades") or []
     currency = (payload.get("currency") or "Jelly").strip()
+    is_equipped = bool(payload.get("equipped", True))
 
     src = _fetch_catalog_item(kind, ref_id)
     if not src:
@@ -2331,29 +2436,12 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     cur = inv.get("currencies", {})
     cur[currency] = int(cur.get(currency, 0)) - total
 
-    # NEW: encumbrance roll-up into container (and maybe inventory)
-    delta_enc = enc * qty
-    containers = inv.get("containers", [])[:]
-    includes = True
-    if containers:
-        found = False
-        for c in containers:
-            if c.get("id") == container_id:
-                c["enc_total"] = float(c.get("enc_total", 0.0)) + float(delta_enc)
-                c["include"] = bool(c.get("include", True))
-                includes = c["include"]
-                found = True
-                break
-        if not found:
-            # fallback to first container
-            containers[0]["enc_total"] = float(containers[0].get("enc_total", 0.0)) + float(delta_enc)
-            containers[0]["include"] = bool(containers[0].get("include", True))
-            includes = containers[0]["include"]
-            container_id = containers[0]["id"]
-
-    inv_enc_total = float(inv.get("enc_total", 0.0))
-    if includes:
-        inv_enc_total += float(delta_enc)
+    containers = _ensure_self_container(inv.get("containers") or [])
+    valid_container_ids = {c.get("id") for c in containers}
+    if container_id not in valid_container_ids:
+        container_id = _default_stow_container(containers)
+    stowed_container_id = container_id or _default_stow_container(containers)
+    container_id = SELF_CONTAINER_ID if is_equipped else (container_id or SELF_CONTAINER_ID)
 
     # store item + transaction
     item = {
@@ -2369,8 +2457,9 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "paid_unit": unit_price,
         "upgrades": upgrades,
         "container_id": container_id,
+        "stowed_container_id": stowed_container_id,
         "modifiers": src.get("modifiers") or [],
-        "equipped": bool(payload.get("equipped", True)),
+        "equipped": is_equipped,
     }
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
@@ -2380,9 +2469,12 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "source": "purchase"
     }
 
+    items = inv.get("items") or []
+    items = items + [item]
+    containers, inv_enc_total = _recompute_encumbrance(items, containers)
     db.inventories.update_one({"id": inv_id}, {
-        "$set": {"currencies": cur, "containers": containers, "enc_total": inv_enc_total},
-        "$push": {"transactions": tx, "items": item}
+        "$set": {"currencies": cur, "containers": containers, "enc_total": inv_enc_total, "items": items},
+        "$push": {"transactions": tx}
     })
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
     return {"status": "success", "inventory": inv2, "transaction": tx}
@@ -2449,22 +2541,6 @@ def catalog_objects(request: Request, q: str = "", limit: int = 25):
     rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1}).limit(int(limit)))
     return {"status": "success", "objects": rows}
 
-@app.post("/inventories/{inv_id}/containers")
-def add_container(request: Request, inv_id: str, payload: dict = Body(...)):
-    user, role = require_auth(request)
-    db = get_db()
-    inv = db.inventories.find_one({"id": inv_id, "owner": user})
-    if not inv: 
-        raise HTTPException(404, "Inventory not found")
-    name = (payload.get("name") or "Container").strip()
-    cont = _new_container(name)
-    containers = (inv.get("containers") or []) + [cont]
-    # recompute inventory enc_total = sum enc_total of containers where include==True
-    new_enc_total = sum(float(c.get("enc_total", 0.0)) for c in containers if bool(c.get("include", True)))
-    db.inventories.update_one({"id": inv_id}, {"$set": {"containers": containers, "enc_total": new_enc_total}})
-    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
-    return {"status": "success", "inventory": inv2}
-
 @app.post("/inventories/{inv_id}/deposit")
 def deposit_funds(request: Request, inv_id: str, payload: dict = Body(...)):
     user, role = require_auth(request)
@@ -2504,22 +2580,51 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
 
     alt_name = payload.get("alt_name", None)
     equipped = payload.get("equipped", None)
-    if alt_name is None and equipped is None:
+    target_container = payload.get("container_id", None)
+    if alt_name is None and equipped is None and target_container is None:
         raise HTTPException(400, "Nothing to update")
 
-    set_fields = {}
-    if alt_name is not None:
-        set_fields["items.$.alt_name"] = (alt_name or "").strip()
-    if equipped is not None:
-        set_fields["items.$.equipped"] = bool(equipped)
-
-    # positional update on array item
-    res = db.inventories.update_one(
-        {"id": inv_id, "owner": user, "items.item_id": item_id},
-        {"$set": set_fields}
-    )
-    if res.matched_count == 0:
+    containers = _ensure_self_container(inv.get("containers") or [])
+    items = inv.get("items") or []
+    idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
+    if idx < 0:
         raise HTTPException(404, "Item not found")
+
+    it = dict(items[idx])
+    if alt_name is not None:
+        it["alt_name"] = (alt_name or "").strip()
+
+    valid_ids = {c.get("id") for c in containers}
+    move_target = None
+    if target_container is not None:
+        move_target = target_container if target_container in valid_ids else _default_stow_container(containers)
+
+    if equipped is not None:
+        is_eq = bool(equipped)
+        it["equipped"] = is_eq
+        if is_eq:
+            if it.get("container_id") != SELF_CONTAINER_ID:
+                it["stowed_container_id"] = it.get("stowed_container_id") or it.get("container_id") or move_target or _default_stow_container(containers)
+            it["container_id"] = SELF_CONTAINER_ID
+        else:
+            dest = move_target or it.get("stowed_container_id") or _default_stow_container(containers)
+            it["container_id"] = dest or _default_stow_container(containers)
+            if it["container_id"] != SELF_CONTAINER_ID:
+                it["stowed_container_id"] = it["container_id"]
+    elif move_target is not None:
+        # only move / update stow without toggling equip
+        if it.get("equipped"):
+            it["stowed_container_id"] = move_target or _default_stow_container(containers)
+        else:
+            it["container_id"] = move_target or _default_stow_container(containers)
+            it["stowed_container_id"] = it["container_id"]
+
+    items[idx] = it
+    containers, inv_total = _recompute_encumbrance(items, containers)
+    db.inventories.update_one(
+        {"id": inv_id, "owner": user},
+        {"$set": {"items": items, "containers": containers, "enc_total": inv_total}}
+    )
 
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
     return {"status": "success", "inventory": inv2}
