@@ -2892,6 +2892,7 @@ async def create_character(request: Request):
         "name": name,
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "sublimations": body.get("sublimations") or [],
     }
     if inv_id:
         doc["inventory_id"] = inv_id
@@ -2947,6 +2948,11 @@ async def update_character(cid: str, request: Request):
             if not inv:
                 return JSONResponse({"status": "error", "message": "Inventory not found or not owned by you"}, status_code=400)
         updates["inventory_id"] = inv_id
+
+    if "sublimations" in body:
+        subs = body.get("sublimations") or []
+        if isinstance(subs, list):
+            updates["sublimations"] = subs
 
     get_col("characters").update_one({"id": cid}, {"$set": updates})
     after = get_col("characters").find_one({"id": cid}, {"_id":0})

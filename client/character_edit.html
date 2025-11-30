@@ -132,6 +132,49 @@
           </details>
         </div>
 
+        <!-- Sublimations -->
+        <div class="panel" style="margin-bottom:12px;">
+          <details open class="panel">
+            <summary class="hdr">
+              <strong>Sublimations</strong>
+              <span class="pill" id="sub-slot-pill"></span>
+              <span class="muted" id="sub-warning"></span>
+            </summary>
+            <div class="panel-body">
+              <div class="row" style="gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                <label class="muted">Type</label>
+                <select id="sub-type">
+                  <option value="">-- choose --</option>
+                  <option value="lethality">Lethality</option>
+                  <option value="blessing">Blessing</option>
+                  <option value="excellence">Excellence</option>
+                  <option value="defense">Defense</option>
+                  <option value="speed">Speed</option>
+                  <option value="devastation">Devastation</option>
+                  <option value="clarity">Clarity</option>
+                  <option value="endurance">Endurance</option>
+                </select>
+                <label class="muted">Tier</label>
+                <select id="sub-tier">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+                <label class="muted" id="sub-skill-label" style="display:none;">Skill (Excellence)</label>
+                <select id="sub-skill" style="display:none; min-width:180px;"></select>
+                <label class="muted" id="sub-nature-label" style="display:none;">Nature (Blessing)</label>
+                <select id="sub-nature" style="display:none; min-width:120px;">
+                  <option value="">-- choose --</option>
+                </select>
+                <button id="sub-add-btn">Add</button>
+              </div>
+              <div id="sub-list" class="abi-list"></div>
+              <div class="muted" id="sub-hidden"></div>
+            </div>
+          </details>
+        </div>
+
         <div class="stats-grid" id="stats-grid"><!-- injected --></div>
 
         <!-- (optional Defense summary panel kept minimal) -->
@@ -250,6 +293,17 @@ const CHARACS = [
 ];
 
 const NATURES = ['Fire','Lightning','Water','Earth','Wind','Sun','Moon','Ki'];
+const SUB_TIER_SLOTS = {1:1, 2:3, 3:5, 4:7};
+const SUB_TYPES = [
+  { key:'lethality', label:'Lethality' },
+  { key:'blessing', label:'Blessing' },
+  { key:'excellence', label:'Excellence' },
+  { key:'defense', label:'Defense' },
+  { key:'speed', label:'Speed' },
+  { key:'devastation', label:'Devastation' },
+  { key:'clarity', label:'Clarity' },
+  { key:'endurance', label:'Endurance' },
+];
 const TARGET_GROUPS = [
   { label:'Characteristics', options:[
     { value:'char.reflex', label:'Reflex (modifier)' },
@@ -324,6 +378,8 @@ let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
 let INVENTORIES = [];
 let LINKED_INV = null;
 let SELECTED_INV_ID = '';
+let SUBLIMATIONS = [];
+let SUB_HIDDEN = {};
 
 /* Passive bonus aggregations (recomputed whenever ASSIGNED changes) */
 let PASSIVE = {
@@ -367,6 +423,38 @@ const invStatusEl = document.getElementById('inv-status');
 const invSummaryEl = document.getElementById('inv-summary');
 const invEmbedWrap = document.getElementById('inv-embed-wrap');
 const invEmbed = document.getElementById('inv-embed');
+/* Sublimations refs */
+const subTypeEl = document.getElementById('sub-type');
+const subTierEl = document.getElementById('sub-tier');
+const subSkillEl = document.getElementById('sub-skill');
+const subSkillLabel = document.getElementById('sub-skill-label');
+const subNatureEl = document.getElementById('sub-nature');
+const subNatureLabel = document.getElementById('sub-nature-label');
+const subAddBtn = document.getElementById('sub-add-btn');
+const subListEl = document.getElementById('sub-list');
+const subSlotPill = document.getElementById('sub-slot-pill');
+const subWarningEl = document.getElementById('sub-warning');
+const subHiddenEl = document.getElementById('sub-hidden');
+
+// Sublimations form wiring
+(() => {
+  const skillOpts = buildSkillOptions();
+  subSkillEl.innerHTML = '';
+  skillOpts.forEach(opt=>{
+    const o = document.createElement('option');
+    o.value = opt.value; o.textContent = opt.label;
+    subSkillEl.appendChild(o);
+  });
+  subNatureEl.innerHTML = '<option value=\"\">-- choose --</option>';
+  NATURES.forEach(n=>{
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    subNatureEl.appendChild(o);
+  });
+  subTypeEl.addEventListener('change', updateSubSpecialFields);
+  subAddBtn.addEventListener('click', addSublimationFromForm);
+  updateSubSpecialFields();
+})();
 
 // Listen for inventory iframe updates to refresh mods live
 window.addEventListener('message', (event)=>{
@@ -428,6 +516,169 @@ function makeDefaultStats(){
   return stats;
 }
 
+/* ---------- Sublimations helpers ---------- */
+function normalizeSublimations(arr){
+  const out = [];
+  (arr || []).forEach(s=>{
+    if (!s || !s.type) return;
+    const tier = Math.min(4, Math.max(1, Number(s.tier)||1));
+    out.push({
+      id: s.id || `sub_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      type: String(s.type||'').toLowerCase(),
+      tier,
+      skill: s.skill || '',
+      nature: s.nature || ''
+    });
+  });
+  return out;
+}
+function slotsForLevel(lvl){
+  const base = 2; // unlocked immediately, +2 every 10 levels
+  return base + (Math.floor(Math.max(1, lvl-1) / 10) * 2);
+}
+function slotsUsed(subs){
+  return (subs||[]).reduce((acc,s)=> acc + (SUB_TIER_SLOTS[s.tier] || 0), 0);
+}
+function buildSkillOptions(){
+  const opts = [];
+  for (const c of CHARACS){
+    for (const s of c.skills){
+      opts.push({ value:`${c.key}|${s}`, label:`${s} (${c.name})` });
+    }
+  }
+  return opts;
+}
+
+function updateSubSpecialFields(){
+  const t = (subTypeEl.value || '').toLowerCase();
+  const isEx = t === 'excellence';
+  const isBless = t === 'blessing';
+  subSkillEl.style.display = subSkillLabel.style.display = isEx ? '' : 'none';
+  subNatureEl.style.display = subNatureLabel.style.display = isBless ? '' : 'none';
+}
+
+function renderSublimations(){
+  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const cap = slotsForLevel(lvl);
+  const used = slotsUsed(SUBLIMATIONS);
+  subSlotPill.textContent = `Slots: ${used} / ${cap}`;
+  subWarningEl.textContent = used > cap ? 'Over capacity' : '';
+
+  subListEl.innerHTML = '';
+  if (!SUBLIMATIONS.length){
+    subListEl.innerHTML = '<div class="muted">No sublimations set.</div>';
+  }else{
+    const skillOpts = buildSkillOptions();
+    SUBLIMATIONS.forEach(sub=>{
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.alignItems = 'center';
+      row.style.gap = '6px';
+
+      const label = document.createElement('div');
+      label.style.minWidth = '120px';
+      label.innerHTML = `<b>${sub.type}</b>`;
+      row.appendChild(label);
+
+      const tierSel = document.createElement('select');
+      [1,2,3,4].forEach(n=>{
+        const o = document.createElement('option');
+        o.value = n; o.textContent = `Tier ${n}`;
+        if (n === Number(sub.tier)) o.selected = true;
+        tierSel.appendChild(o);
+      });
+      tierSel.addEventListener('change', ()=>{
+        sub.tier = Math.min(4, Math.max(1, Number(tierSel.value)||1));
+        onSublimationChanged();
+      });
+      row.appendChild(tierSel);
+
+      if (sub.type === 'excellence'){
+        const skSel = document.createElement('select');
+        skillOpts.forEach(opt=>{
+          const o = document.createElement('option');
+          o.value = opt.value; o.textContent = opt.label;
+          if (opt.value === sub.skill) o.selected = true;
+          skSel.appendChild(o);
+        });
+        skSel.addEventListener('change', ()=>{
+          sub.skill = skSel.value;
+          onSublimationChanged();
+        });
+        row.appendChild(skSel);
+      }else if (sub.type === 'blessing'){
+        const natSel = document.createElement('select');
+        natSel.innerHTML = '<option value=\"\">-- nature --</option>';
+        NATURES.forEach(n=>{
+          const o = document.createElement('option');
+          o.value = n; o.textContent = n;
+          if ((sub.nature||'') === n) o.selected = true;
+          natSel.appendChild(o);
+        });
+        natSel.addEventListener('change', ()=>{
+          sub.nature = natSel.value;
+          onSublimationChanged();
+        });
+        row.appendChild(natSel);
+      }
+
+      const rem = document.createElement('button');
+      rem.className = 'btn btn-secondary small';
+      rem.textContent = 'Remove';
+      rem.addEventListener('click', ()=>{
+        SUBLIMATIONS = SUBLIMATIONS.filter(s=>s.id !== sub.id);
+        onSublimationChanged();
+      });
+      row.appendChild(rem);
+
+      subListEl.appendChild(row);
+    });
+  }
+
+  const { hidden } = getSublimationEffects();
+  const parts = [];
+  if (hidden.weaponNeutral) parts.push(`+${hidden.weaponNeutral} neutral weapon dmg (not animarmas)`);
+  if (hidden.magicBonus) parts.push(`+${hidden.magicBonus} ${hidden.magicNature || 'magic'} dmg to space actions`);
+  if (hidden.conditionDC) parts.push(`+${hidden.conditionDC} Condition DC`);
+  subHiddenEl.textContent = parts.length ? `Hidden effects: ${parts.join(' | ')}` : '';
+}
+
+function onSublimationChanged(){
+  renderSublimations();
+  recomputePassiveAgg();
+  renderStatistics();
+  updateDerived();
+  queueSave();
+}
+
+function addSublimationFromForm(){
+  const type = (subTypeEl.value || '').toLowerCase();
+  const tier = Math.min(4, Math.max(1, Number(subTierEl.value)||1));
+  const skill = subSkillEl.value || '';
+  const nature = subNatureEl.value || '';
+  if (!type){ subWarningEl.textContent = 'Pick a type'; return; }
+  if (type === 'excellence' && !skill){ subWarningEl.textContent = 'Choose a skill for Excellence'; return; }
+  if (type === 'blessing' && !nature){ subWarningEl.textContent = 'Choose a nature for Blessing'; return; }
+  if (type !== 'excellence' && SUBLIMATIONS.some(s=>s.type===type)){
+    subWarningEl.textContent = 'This sublimation type is already slotted';
+    return;
+  }
+  if (type === 'excellence' && SUBLIMATIONS.some(s=>s.type==='excellence' && s.skill === skill)){
+    subWarningEl.textContent = 'That skill already has an Excellence';
+    return;
+  }
+  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const cap = slotsForLevel(lvl);
+  const newUsed = slotsUsed(SUBLIMATIONS) + (SUB_TIER_SLOTS[tier] || 0);
+  if (newUsed > cap){
+    subWarningEl.textContent = 'Not enough slots';
+    return;
+  }
+  subWarningEl.textContent = '';
+  SUBLIMATIONS = SUBLIMATIONS.concat([{ id:`sub_${Date.now()}_${Math.random().toString(16).slice(2)}`, type, tier, skill, nature }]);
+  onSublimationChanged();
+}
+
 /* ---------- PASSIVE AGGREGATION (char & skills) ---------- */
 function resetPassiveAgg(){
   PASSIVE = { char:{}, skill:{} };
@@ -478,6 +729,32 @@ function recomputePassiveAgg(){
     const mode = (m.mode||'add').toLowerCase();
     const val = Number(m.value||0);
     const origin = m.origin || 'Inventory';
+    if (!t) continue;
+    const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
+    if (cm){
+      const key = cm[1].toLowerCase();
+      const agg = ensureAgg(PASSIVE.char, key);
+      (agg[mode]||agg.add).push({v:val, origin});
+      agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      continue;
+    }
+    const sm = t.match(/^skills\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)\.(.+)$/i);
+    if (sm){
+      const ckey = sm[1].toLowerCase();
+      const skName = sm[2];
+      const k = `${ckey}|${skName}`;
+      const agg = ensureAgg(PASSIVE.skill, k);
+      (agg[mode]||agg.add).push({v:val, origin});
+      agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      continue;
+    }
+  }
+  const { mods: subMods } = getSublimationEffects();
+  for (const m of subMods){
+    const t = (m.target||'').trim();
+    const mode = (m.mode||'add').toLowerCase();
+    const val = Number(m.value||0);
+    const origin = m.origin || 'Sublimation';
     if (!t) continue;
     const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
     if (cm){
@@ -563,6 +840,54 @@ function getEquippedInventoryModifiers(){
     }
   }
   return mods;
+}
+
+function getSublimationEffects(){
+  const mods = [];
+  const hidden = { weaponNeutral:0, magicBonus:0, magicNature:'', conditionDC:0 };
+  for (const s of SUBLIMATIONS || []){
+    const t = (s.type||'').toLowerCase();
+    const tier = Math.min(4, Math.max(1, Number(s.tier)||1));
+    const origin = `Sublimation - ${t.charAt(0).toUpperCase()+t.slice(1)}`;
+    if (t === 'lethality'){
+      hidden.weaponNeutral += 2 * tier;
+      continue;
+    }
+    if (t === 'blessing'){
+      hidden.magicBonus += 2 * tier;
+      hidden.magicNature = s.nature || hidden.magicNature || '';
+      continue;
+    }
+    if (t === 'excellence'){
+      if (!s.skill) continue;
+      const [ckey, sk] = s.skill.split('|');
+      if (!ckey || !sk) continue;
+      mods.push({ target:`skills.${ckey}.${sk}`, mode:'add', value:tier, origin:`${origin} (${sk})` });
+      continue;
+    }
+    if (t === 'defense'){
+      mods.push({ target:'derived.hp', mode:'add', value:12 * tier, origin });
+      continue;
+    }
+    if (t === 'speed'){
+      mods.push({ target:'derived.mo', mode:'add', value: tier, origin });
+      continue;
+    }
+    if (t === 'devastation'){
+      hidden.conditionDC += tier;
+      continue;
+    }
+    if (t === 'clarity'){
+      mods.push({ target:'derived.en', mode:'add', value: 2 * tier, origin });
+      continue;
+    }
+    if (t === 'endurance'){
+      mods.push({ target:'derived.fo', mode:'add', value: 2 * tier, origin });
+      continue;
+    }
+  }
+  SUB_HIDDEN = hidden;
+  return { mods, hidden };
 }
 
 async function loadInventoriesList(){
@@ -789,6 +1114,15 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
       origin:m.origin
     });
   }
+  const { mods: subMods } = getSublimationEffects();
+  for (const m of subMods){
+    allMods.push({
+      target:(m.target||'').toLowerCase(),
+      mode:(m.mode||'add').toLowerCase(),
+      val:Number(m.value||0),
+      origin:m.origin
+    });
+  }
 
   const map = {
     'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo',
@@ -878,6 +1212,7 @@ async function loadCharacter(){
   if (!CHAR.stats.intensities) CHAR.stats.intensities = makeDefaultStats().intensities;
   if (!('level' in CHAR)) CHAR.level = 1;
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
+  SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
   SELECTED_INV_ID = CHAR.inventory_id || '';
 
   // Name
@@ -887,7 +1222,9 @@ async function loadCharacter(){
 
   // Level
   levelEl.value = Math.max(1, Number(CHAR.level)||1);
-  levelEl.addEventListener('input', ()=>{ CHAR.level = Math.max(1, Math.floor(Number(levelEl.value)||1)); updateDerived(); queueSave(); });
+  levelEl.addEventListener('input', ()=>{ CHAR.level = Math.max(1, Math.floor(Number(levelEl.value)||1)); renderSublimations(); updateDerived(); queueSave(); });
+
+  renderSublimations();
 
   // Render stats/skills
   renderStatistics();
@@ -911,7 +1248,7 @@ function queueSave(){
 
 async function saveNow(){
   try{
-    const payload = { name: nameEl.value || '', level: CHAR.level || 1, stats: CHAR.stats, abilities: CHAR.abilities || [], inventory_id: SELECTED_INV_ID || '' };
+    const payload = { name: nameEl.value || '', level: CHAR.level || 1, stats: CHAR.stats, abilities: CHAR.abilities || [], inventory_id: SELECTED_INV_ID || '', sublimations: SUBLIMATIONS };
     const res = await api('/characters/' + encodeURIComponent(CID), {
       method:'PUT', headers:{ 'content-type':'application/json' }, body: JSON.stringify(payload)
     });
