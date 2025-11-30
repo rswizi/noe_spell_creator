@@ -551,7 +551,7 @@ function openItemModal(it){
     </div>
     <div class="row">
       <span class="pill">${equipped ? "Equipped" : "Unequipped"}</span>
-      ${Array.isArray(it.modifiers) && it.modifiers.length ? `<span class="muted">Modifiers: ${it.modifiers.map(m=>`<span class="pill">${escapeHtml(m.mode||'add')} ${escapeHtml(m.value||0)} → ${escapeHtml(m.target||'')}</span>`).join(\" \")}</span>` : \"\"}
+      ${Array.isArray(it.modifiers) && it.modifiers.length ? `<span class="muted">Modifiers: ${it.modifiers.map(m=>`<span class="pill">${escapeHtml(m.mode||"add") } ${escapeHtml(m.value||0)} -> ${escapeHtml(m.target||"")}</span>`).join(" ")} </span>` : ""}
     </div>
     ${Array.isArray(it.upgrades) && it.upgrades.length
       ? `<div class="row">Upgrades: ${it.upgrades.map(u=>`<span class="pill">${escapeHtml(u.name||u)}</span>`).join(" ")}</div>`
@@ -695,3 +695,4 @@ function escapeAttr(s){ return escapeHtml(s).replaceAll('"',"&quot;"); }
 </script>
 </body>
 </html>
+

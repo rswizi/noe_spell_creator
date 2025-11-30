@@ -9,6 +9,7 @@
     .row{display:flex;gap:8px;align-items:center}
     .grid{display:grid;gap:8px;grid-template-columns:1fr 90px 70px 90px 110px 90px auto;align-items:center}
     .muted{opacity:.8}.pill{display:inline-block;padding:2px 8px;border:1px solid #444;border-radius:999px}
+    .mod-row{display:grid;grid-template-columns:1fr 0.9fr 0.6fr 1fr auto;gap:6px;align-items:center}
   </style>
 </head>
 <body>
@@ -55,10 +56,12 @@
     <div class="row" style="margin-top:6px;">
       <label style="flex:1">Description<br/><textarea id="m-desc" rows="3" style="width:100%"></textarea></label>
     </div>
-    <div class="row" style="margin-top:6px;">
-      <label style="flex:1">Modifiers (JSON array)<br/>
-        <textarea id="m-mods" rows="3" style="width:100%;" placeholder='[{"target":"char.body","mode":"add","value":1}]'></textarea>
-      </label>
+    <div class="row" style="margin-top:6px;flex-direction:column;align-items:stretch;gap:8px;">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>Modifiers</strong>
+        <button id="mod-add" class="btn small" type="button">+ Modifier</button>
+      </div>
+      <div id="mod-list"></div>
     </div>
     <div class="row" style="gap:12px;align-items:center;margin-top:6px;">
       <label>Base Price <input id="m-price" type="number" style="width:120px"/></label>
@@ -85,6 +88,67 @@ const API_BASE = "";
 const token = localStorage.getItem("auth_token") || "";
 const authHeaders = () => token ? { "Authorization":"Bearer "+token } : {};
 let CACHE=[], EDIT_ID=null;
+const modListEl = document.getElementById("mod-list");
+const MOD_TARGETS = [
+  "char.reflex","char.dexterity","char.body","char.wisdom","char.presence","char.magic","char.willpower","char.tech",
+  "derived.hp","derived.en","derived.fo","derived.mo","derived.spcap","derived.enc","derived.et","derived.tx",
+  "__custom__"
+];
+
+function addModRow(container, initial={}){
+  const row = document.createElement("div");
+  row.className = "mod-row";
+  const sel = document.createElement("select");
+  MOD_TARGETS.forEach(t=>{
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t === "__custom__" ? "Custom..." : t;
+    if (t === (initial.target||"")) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  const custom = document.createElement("input");
+  custom.placeholder = "Custom target";
+  custom.value = (!MOD_TARGETS.includes(initial.target) ? (initial.target||"") : "");
+  custom.style.display = (sel.value === "__custom__") ? "" : "none";
+  sel.addEventListener("change", ()=>{
+    custom.style.display = sel.value === "__custom__" ? "" : "none";
+    if (sel.value !== "__custom__") custom.value = "";
+  });
+  const mode = document.createElement("select");
+  ["add","mul","set"].forEach(m=>{
+    const opt = document.createElement("option");
+    opt.value = m; opt.textContent = m;
+    if ((initial.mode||"add") === m) opt.selected = true;
+    mode.appendChild(opt);
+  });
+  const val = document.createElement("input"); val.type="number"; val.step="0.1"; val.value = initial.value ?? 0;
+  const note = document.createElement("input"); note.placeholder="Note"; note.value = initial.note || "";
+  const rm = document.createElement("button"); rm.className="btn btn-secondary small"; rm.type="button"; rm.textContent="Remove"; rm.onclick=()=>row.remove();
+  row.appendChild(sel); row.appendChild(custom); row.appendChild(mode); row.appendChild(val); row.appendChild(note); row.appendChild(rm);
+  container.appendChild(row);
+}
+function setModifiers(container, mods){
+  container.innerHTML = "";
+  if (mods && mods.length){
+    mods.forEach(m=> addModRow(container, m));
+  } else {
+    addModRow(container, {});
+  }
+}
+function collectModifiers(container){
+  const mods = [];
+  container.querySelectorAll(".mod-row").forEach(row=>{
+    const sel = row.querySelector("select");
+    const custom = row.querySelector("input[placeholder='Custom target']");
+    const target = sel.value === "__custom__" ? (custom.value||"").trim() : sel.value;
+    if (!target) return;
+    const mode = row.querySelectorAll("select")[1]?.value || "add";
+    const val = parseFloat(row.querySelector("input[type='number']").value||"0");
+    const note = row.querySelector("input[placeholder='Note']").value || "";
+    mods.push({ target, mode, value: val, note });
+  });
+  return mods;
+}
 
 const QDIFF = {
   "Mediocre":-100, "Adequate":0, "Good":167, "Very Good":1390, "Excellent":5280,
@@ -143,7 +207,7 @@ function openEdit(id){
   document.getElementById("m-enc").value    = w.enc ?? 0;
   document.getElementById("m-effects").value = (w.effects||[]).join(", ");
   document.getElementById("m-desc").value   = w.description||"";
-  document.getElementById("m-mods").value   = JSON.stringify(w.modifiers || [], null, 2);
+  setModifiers(modListEl, w.modifiers || []);
   document.getElementById("m-price").value  = w.price ?? 0;
   syncQuality();
   document.getElementById("modal").classList.remove("hidden");
@@ -165,6 +229,7 @@ document.addEventListener("keydown", (e) => {
     closeEdit();
   }
 });
+document.getElementById("mod-add").addEventListener("click", ()=> addModRow(modListEl, {}));
 
 document.getElementById("save").addEventListener("click", async ()=>{
   if(!EDIT_ID) return;
@@ -178,14 +243,8 @@ document.getElementById("save").addEventListener("click", async ()=>{
     effects: document.getElementById("m-effects").value.split(",").map(s=>s.trim()).filter(Boolean),
     description: document.getElementById("m-desc").value.trim(),
     price:  Number(document.getElementById("m-price").value||0),
+    modifiers: collectModifiers(modListEl),
   };
-  try{
-    body.modifiers = JSON.parse(document.getElementById("m-mods").value || "[]");
-    if (!Array.isArray(body.modifiers)) body.modifiers = [];
-  }catch(e){
-    alert("Invalid modifiers JSON");
-    return;
-  }
   const r=await fetch(`/weapons/${EDIT_ID}`,{method:"PUT",headers:{ "Content-Type":"application/json", ...authHeaders() },body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));
   if(j.status!=="success"){ alert(j.message||"Update failed."); return; }
