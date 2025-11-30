@@ -187,13 +187,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
     enc:   Number(document.getElementById("m-enc").value || 0),
     description: document.getElementById("m-desc").value.trim(),
   };
-  try{
-    body.modifiers = JSON.parse(document.getElementById("m-mods").value || "[]");
-    if (!Array.isArray(body.modifiers)) body.modifiers = [];
-  }catch(e){
-    alert("Invalid modifiers JSON");
-    return;
-  }
+  body.modifiers = collectModifiers(modListEl);
   const r = await fetch(`${API_BASE}/objects/${EDIT_ID}`, {
     method:"PUT", headers:{ "Content-Type":"application/json", ...authHeaders() },
     body: JSON.stringify(body)
@@ -217,6 +211,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
   load();
   document.getElementById("refresh").addEventListener("click", load);
   document.getElementById("q").addEventListener("input", render);
+  document.getElementById("mod-add").addEventListener("click", ()=> addModRow(modListEl, {}));
 });
 </script>
 </body>
