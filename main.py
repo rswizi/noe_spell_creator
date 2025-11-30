@@ -19,6 +19,7 @@ from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect, recompute_all_spells
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER
+EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 from server.src.modules.allowed_pages import ALLOWED_PAGES
 
 # ---------- Lifespan (startup/shutdown) ----------
@@ -2064,6 +2065,9 @@ def _equipment_from_body(b: dict) -> dict:
     cat = (b.get("category") or "").strip().lower()
     if cat not in ("special","slot","armor"):
         raise HTTPException(status_code=400, detail="category must be special | slot | armor")
+    slot = (b.get("slot") or "").strip().lower()
+    if cat in ("slot","armor") and slot and slot not in EQUIPMENT_SLOTS:
+        raise HTTPException(status_code=400, detail="slot must be one of head/arms/legs/accessory/chest")
 
     if cat == "special":
         name, key = _eq_norm_name(b.get("name"))
@@ -2085,7 +2089,7 @@ def _equipment_from_body(b: dict) -> dict:
         return doc
 
     if cat == "slot":
-        slot = (b.get("slot") or "head").strip().lower()
+        slot = slot or "head"
         style = (b.get("style") or "").strip() or "Unnamed"
         name = f"{slot}:{style}"
         doc = {
@@ -2104,6 +2108,7 @@ def _equipment_from_body(b: dict) -> dict:
     tname, key = _eq_norm_name(b.get("type"), "Armor")
     doc = {
         "category":"armor",
+        "slot": slot or "chest",
         "type": tname,
         "name": f"armor:{tname}", "name_key": norm_key(f"armor:{tname}"),
         "enc": float(b.get("enc") or 0),
@@ -2181,6 +2186,77 @@ def bulk_create_equipment(request: Request, payload: dict = Body(...)):
         created.append({k:v for k,v in doc.items() if k!="_id"})
 
     return {"status":"success","created": created, "skipped": skipped}
+
+# ---------- Upgrades Catalog ----------
+def _upgrade_from_body(body: dict) -> dict:
+    kind = (body.get("kind") or "").strip().lower()
+    if kind not in ("weapon","equipment"):
+        raise HTTPException(status_code=400, detail="kind must be weapon|equipment")
+    slot = (body.get("slot") or "").strip().lower()
+    if kind == "equipment" and slot and slot not in EQUIPMENT_SLOTS:
+        raise HTTPException(status_code=400, detail="slot must be one of head/arms/legs/accessory/chest")
+    name, key = _eq_norm_name(body.get("name"), "Upgrade")
+    unique = bool(body.get("unique", False))
+    price = int(body.get("price") or 0)
+    modifiers = _modifiers_from_body(body)
+    return {
+        "kind": kind,
+        "slot": slot,
+        "name": name,
+        "name_key": key,
+        "unique": unique,
+        "price": price,
+        "modifiers": modifiers,
+        "created_at": datetime.datetime.utcnow().isoformat()+"Z",
+    }
+
+@app.get("/upgrades")
+def list_upgrades(request: Request, kind: str = "", slot: str = ""):
+    require_auth(request)
+    col = get_col("upgrades")
+    filt = {}
+    if kind.strip():
+        filt["kind"] = kind.strip().lower()
+    if slot.strip():
+        filt["slot"] = slot.strip().lower()
+    rows = list(col.find(filt, {"_id":0}))
+    rows.sort(key=lambda r: r.get("name","").lower())
+    return {"status":"success","upgrades": rows}
+
+@app.post("/upgrades")
+def create_upgrade(request: Request, body: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("upgrades")
+    doc = _upgrade_from_body(body)
+    if col.find_one({"name_key": doc["name_key"], "kind": doc["kind"], "slot": doc.get("slot","")}):
+        raise HTTPException(status_code=409, detail="Duplicate upgrade")
+    doc["id"] = next_id_str("upgrade", padding=4)
+    col.insert_one(dict(doc))
+    return {"status":"success","upgrade": {k:v for k,v in doc.items() if k!="_id"}}
+
+@app.put("/upgrades/{uid}")
+def update_upgrade(uid: str, request: Request, body: dict = Body(...)):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("upgrades")
+    before = col.find_one({"id": uid})
+    if not before:
+        raise HTTPException(status_code=404, detail="Not found")
+    doc = _upgrade_from_body(body)
+    if col.find_one({"id": {"$ne": uid}, "name_key": doc["name_key"], "kind": doc["kind"], "slot": doc.get("slot","")}):
+        raise HTTPException(status_code=409, detail="Duplicate upgrade")
+    doc["updated_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    col.update_one({"id": uid}, {"$set": doc})
+    after = col.find_one({"id": uid}, {"_id":0})
+    return {"status":"success","upgrade": after}
+
+@app.delete("/upgrades/{uid}")
+def delete_upgrade(uid: str, request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    col = get_col("upgrades")
+    res = col.delete_one({"id": uid})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"status":"success","deleted": uid}
 
 # ---------- Inventories ----------
 from fastapi import Body
@@ -2420,6 +2496,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     enc = float(src.get("enc") or 0.0)
     subcat = src.get("category") if kind == "equipment" else None
     name = src.get("name") or (subcat == "armor" and f"Armor - {src.get('type')}") or src.get("style") or "Item"
+    eq_slot = src.get("slot") if kind == "equipment" else None
 
     unit_price = base_price
     if kind in ("weapon", "equipment"):
@@ -2448,6 +2525,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "item_id": next_id_str("invitem", padding=5),
         "kind": kind,
         "subcategory": subcat,
+        "equipment_slot": eq_slot,
         "ref_id": ref_id,
         "name": name,
         "quantity": qty,
@@ -2711,21 +2789,28 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
     if it.get("kind") not in ("weapon", "equipment"):
         raise HTTPException(400, "Only weapons/equipment can install upgrades")
 
-    upg_key = (payload.get("upgrade") or "").strip()
-    if not upg_key:
-        raise HTTPException(400, "Missing upgrade key/name")
+    upg_id = (payload.get("upgrade_id") or payload.get("upgrade") or "").strip()
+    if not upg_id:
+        raise HTTPException(400, "Missing upgrade id")
+
+    upg_doc = get_col("upgrades").find_one({"id": upg_id})
+    if not upg_doc:
+        raise HTTPException(404, "Upgrade not found")
 
     kind = it.get("kind")
-    subcat = it.get("subcategory")
-    quality = it.get("quality") or "Adequate"
+    if upg_doc.get("kind") != kind:
+        raise HTTPException(400, "Upgrade kind mismatch")
+    if kind == "equipment":
+        slot = (it.get("equipment_slot") or "").lower()
+        if upg_doc.get("slot") and upg_doc.get("slot") != slot:
+            raise HTTPException(400, "Upgrade not allowed for this equipment slot")
+
     existing = it.get("upgrades") or []
+    if upg_doc.get("unique"):
+        if any(x.get("id") == upg_id for x in existing):
+            raise HTTPException(400, "Upgrade already installed (unique)")
 
-    # validate & price the upgrade (expects fee PER UNIT)
-    try:
-        upgrades, fee_per_unit, steps = _validate_upgrades(kind, subcat, quality, existing=existing, add=[upg_key])
-    except Exception as e:
-        raise HTTPException(400, f"Upgrade invalid: {e}")
-
+    fee_per_unit, _steps = _upgrade_fee_for_range(len(existing), 1)
     qty = int(it.get("quantity") or 1)
     delta_total = int(fee_per_unit) * qty
     currency = _pick_currency(inv, (payload.get("currency") or None))
@@ -2733,14 +2818,23 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
     curmap = inv.get("currencies", {})
     curmap[currency] = int(curmap.get(currency, 0)) - delta_total
 
+    new_upgrades = existing + [{
+        "id": upg_doc.get("id"),
+        "name": upg_doc.get("name"),
+        "unique": bool(upg_doc.get("unique")),
+        "slot": upg_doc.get("slot"),
+        "kind": upg_doc.get("kind"),
+        "modifiers": upg_doc.get("modifiers") or [],
+    }]
+    quality = it.get("quality") or "Adequate"
     new_paid_unit = int(it.get("paid_unit") or _qprice(int(it.get("base_price") or 0), quality)) + int(fee_per_unit)
-    new_variant = _compose_variant(quality, upgrades)
+    new_variant = _compose_variant(quality, new_upgrades)
 
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
         "amount": -delta_total,
-        "note": f'Install upgrade "{upg_key}" on {it.get("name","Item")}',
+        "note": f'Install upgrade "{upg_doc.get("name","Upgrade")}" on {it.get("name","Item")}',
         "source": "install_upgrade",
         "item_id": item_id
     }
@@ -2750,7 +2844,7 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
         {
             "$set": {
                 "currencies": curmap,
-                "items.$.upgrades": upgrades,
+                "items.$.upgrades": new_upgrades,
                 "items.$.paid_unit": new_paid_unit,
                 "items.$.variant": new_variant
             },
@@ -2773,7 +2867,7 @@ def catalog_equipment(request: Request, q: str = "", limit: int = 50):
     require_auth(request)
     col = get_col("equipment")
     filt = {"name": {"$regex": re.escape(q.strip()), "$options": "i"}} if q.strip() else {}
-    rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1}).limit(int(limit)))
+    rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1, "slot":1}).limit(int(limit)))
     return {"status": "success", "equipment": rows}
 
 @app.get("/catalog/tools")

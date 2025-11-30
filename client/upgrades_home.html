@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Manage Upgrades</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .card { border:1px solid #222; border-radius:12px; padding:12px; background:#0b0b0b; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    input, select { width:100%; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Upgrades (Moderator)</h1>
+    <div class="card">
+      <div class="row">
+        <label class="muted">Kind</label>
+        <select id="kind">
+          <option value="weapon">Weapon</option>
+          <option value="equipment">Equipment</option>
+        </select>
+        <label class="muted">Slot (equipment)</label>
+        <select id="slot">
+          <option value="">Any</option>
+          <option>head</option>
+          <option>arms</option>
+          <option>legs</option>
+          <option>accessory</option>
+          <option>chest</option>
+        </select>
+        <label class="muted">Name</label>
+        <input id="name" placeholder="Name">
+        <label class="muted">Price (Jelly)</label>
+        <input id="price" type="number" value="0">
+        <label class="row" style="gap:6px;">
+          <input type="checkbox" id="unique"> <span class="muted">Unique</span>
+        </label>
+        <label class="muted">Modifiers (target:mode:value, comma separated)</label>
+        <input id="modifiers" placeholder="e.g. derived.hp:add:12, skills.body.Athletics:add:1">
+        <button id="create" class="btn">Create / Update</button>
+        <span id="status" class="muted"></span>
+        <input id="editing" type="hidden" value="">
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="row" style="justify-content:space-between;">
+        <h3>Existing</h3>
+        <div class="row">
+          <label class="muted">Filter kind</label>
+          <select id="filter-kind"><option value="">Any</option><option value="weapon">Weapon</option><option value="equipment">Equipment</option></select>
+          <label class="muted">Slot</label>
+          <select id="filter-slot"><option value="">Any</option><option>head</option><option>arms</option><option>legs</option><option>accessory</option><option>chest</option></select>
+          <button class="btn small" id="refresh">Refresh</button>
+        </div>
+      </div>
+      <div id="list" class="grid"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="inventory_manage.html">← Back</a>
+    </div>
+  </div>
+
+<script>
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+const $ = s => document.querySelector(s);
+
+function parseModifiers(str){
+  const parts = (str || "").split(",");
+  const mods = [];
+  for (const p of parts){
+    const bits = p.trim().split(":");
+    if (bits.length < 3) continue;
+    const [t,mode,val] = bits;
+    mods.push({ target:t.trim(), mode:(mode||"add").trim(), value:Number(val)||0 });
+  }
+  return mods;
+}
+function modsToString(mods){
+  return (mods||[]).map(m=>`${m.target}:${m.mode||"add"}:${m.value||0}`).join(", ");
+}
+
+async function loadList(){
+  const kind = $("#filter-kind").value || "";
+  const slot = $("#filter-slot").value || "";
+  const qs = [];
+  if (kind) qs.push("kind="+encodeURIComponent(kind));
+  if (slot) qs.push("slot="+encodeURIComponent(slot));
+  const r = await fetch(`/upgrades${qs.length ? "?"+qs.join("&") : ""}`, { headers: authHeaders() });
+  const j = await r.json();
+  const box = $("#list"); box.innerHTML = "";
+  if (j.status !== "success"){ box.textContent = j.message || "Error"; return; }
+  (j.upgrades||[]).forEach(u=>{
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div><b>${u.name}</b> (${u.kind}${u.slot ? " · "+u.slot : ""}) ${u.unique ? "· Unique" : ""}</div>
+      <div class="muted">Price: ${u.price||0} | Mods: ${modsToString(u.modifiers)}</div>
+      <div class="row" style="margin-top:6px; gap:6px;">
+        <button class="btn small edit">Edit</button>
+        <button class="btn btn-secondary small del">Delete</button>
+      </div>
+    `;
+    card.querySelector(".edit").addEventListener("click", ()=>{
+      $("#editing").value = u.id;
+      $("#kind").value = u.kind;
+      $("#slot").value = u.slot || "";
+      $("#name").value = u.name;
+      $("#price").value = u.price || 0;
+      $("#unique").checked = !!u.unique;
+      $("#modifiers").value = modsToString(u.modifiers);
+      $("#status").textContent = `Editing ${u.id}`;
+    });
+    card.querySelector(".del").addEventListener("click", async ()=>{
+      if (!confirm(`Delete upgrade ${u.name}?`)) return;
+      const r2 = await fetch(`/upgrades/${encodeURIComponent(u.id)}`, { method:"DELETE", headers: authHeaders() });
+      const j2 = await r2.json();
+      if (j2.status !== "success"){ alert(j2.message || "Delete failed"); return; }
+      loadList();
+    });
+    box.appendChild(card);
+  });
+}
+
+async function saveUpgrade(){
+  const body = {
+    kind: $("#kind").value,
+    slot: $("#slot").value,
+    name: $("#name").value,
+    price: Number($("#price").value||0),
+    unique: $("#unique").checked,
+    modifiers: parseModifiers($("#modifiers").value),
+  };
+  const editing = $("#editing").value;
+  const path = editing ? `/upgrades/${encodeURIComponent(editing)}` : "/upgrades";
+  const method = editing ? "PUT" : "POST";
+  const r = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body)
+  });
+  const j = await r.json();
+  if (j.status !== "success"){ $("#status").textContent = j.message || "Save failed"; return; }
+  $("#status").textContent = "Saved.";
+  $("#editing").value = "";
+  loadList();
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  $("#create").addEventListener("click", saveUpgrade);
+  $("#refresh").addEventListener("click", loadList);
+  loadList();
+});
+</script>
+</body>
+</html>

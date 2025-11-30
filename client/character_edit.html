@@ -830,7 +830,8 @@ function getEquippedInventoryModifiers(){
   const mods = [];
   for (const it of items){
     if (it.equipped === false) continue;
-    for (const m of (it.modifiers || [])){
+    const allMods = [...(it.modifiers || []), ...((it.upgrades||[]).flatMap(u=>u.modifiers||[]) || [])];
+    for (const m of allMods){
       const target = (m.target || m.key || '').trim();
       if (!target) continue;
       const mode = (m.mode || 'add').toLowerCase();

@@ -687,22 +687,25 @@ function openItemModal(it){
     // Install upgrade controls
     const ulab = document.createElement("label");
     ulab.className = "muted"; ulab.textContent = "Install upgrade";
-    const uinput = document.createElement("input");
-    uinput.id = "upgrade-key";
-    uinput.placeholder = "Upgrade code / name";
+    const uselect = document.createElement("select");
+    uselect.id = "upgrade-select";
+    uselect.style.minWidth = "220px";
     const ubtn = document.createElement("button");
     ubtn.className = "btn small";
     ubtn.textContent = "Install";
     ubtn.addEventListener("click", async ()=>{
-      const key = (uinput.value || "").trim();
-      if (!key){ alert("Enter upgrade code/name."); return; }
-      if (!confirm(`Install upgrade "${key}" on ${it.name}? This will create a transaction.`)) return;
-      await installUpgrade(it.item_id, key);
+      const upid = uselect.value || "";
+      if (!upid){ alert("Select an upgrade."); return; }
+      if (!confirm(`Install upgrade on ${it.name}? This will create a transaction.`)) return;
+      await installUpgrade(it.item_id, upid);
     });
 
     wrap.appendChild(qlab); wrap.appendChild(qsel); wrap.appendChild(qbtn);
-    wrap.appendChild(ulab); wrap.appendChild(uinput); wrap.appendChild(ubtn);
+    wrap.appendChild(ulab); wrap.appendChild(uselect); wrap.appendChild(ubtn);
     actions.appendChild(wrap);
+
+    // Populate upgrade select
+    loadUpgradeOptions(ulab, uselect, it);
   }
 
   // save alt name handler
@@ -747,12 +750,52 @@ async function installUpgrade(item_id, upgrade){
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/install_upgrade`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ upgrade })
+    body: JSON.stringify({ upgrade_id: upgrade })
   });
   const j = await r.json();
   if (j.status !== "success"){ alert(j.message || "Install failed"); return; }
   closeItemModal();
   applyInventory(j.inventory);
+}
+
+async function fetchUpgrades(kind, slot){
+  const qs = [];
+  if (kind) qs.push(`kind=${encodeURIComponent(kind)}`);
+  if (slot) qs.push(`slot=${encodeURIComponent(slot)}`);
+  const url = `/upgrades${qs.length ? '?'+qs.join('&') : ''}`;
+  const r = await fetch(url, { headers: { ...authHeaders() } });
+  const j = await r.json();
+  if (j.status !== "success") throw new Error(j.message || "Load upgrades failed");
+  return j.upgrades || [];
+}
+
+async function loadUpgradeOptions(labelEl, selectEl, it){
+  if (!labelEl || !selectEl) return;
+  labelEl.textContent = "Install upgrade (loading...)";
+  selectEl.innerHTML = "";
+  try{
+    const ups = await fetchUpgrades(it.kind, it.equipment_slot || "");
+    if (!ups.length){
+      labelEl.textContent = "Install upgrade (none available)";
+      const o = document.createElement("option");
+      o.textContent = "-- none --";
+      selectEl.appendChild(o);
+      return;
+    }
+    labelEl.textContent = "Install upgrade";
+    selectEl.innerHTML = '<option value=\"\">-- select upgrade --</option>';
+    ups.forEach(u=>{
+      const o = document.createElement("option");
+      o.value = u.id;
+      o.textContent = `${u.name}${u.slot ? ` (${u.slot})` : ""}`;
+      selectEl.appendChild(o);
+    });
+  }catch(e){
+    labelEl.textContent = "Install upgrade (error)";
+    const o = document.createElement("option");
+    o.textContent = "Error loading upgrades";
+    selectEl.appendChild(o);
+  }
 }
 
 /* ------- utils ------- */
