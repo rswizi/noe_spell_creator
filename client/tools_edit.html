@@ -189,7 +189,8 @@ function openEdit(id){
   document.getElementById("m-enc").value  = t.enc ?? 0;
   document.getElementById("m-method").value = t.method || "crafting";
   document.getElementById("m-desc").value = t.description||"";
-    setModifiers(modListEl, t.modifiers || []);`n  document.getElementById("m-title").textContent = `Edit Tool — ${t.name} [${t.id}]`;
+  setModifiers(modListEl, t.modifiers || []);
+  document.getElementById("m-title").textContent = Edit Tool ??"  [];
   syncDerived();
   document.getElementById("modal").classList.remove("hidden");
   document.getElementById("modal").setAttribute("aria-hidden","false");
@@ -242,5 +243,6 @@ document.addEventListener("DOMContentLoaded", ()=>{ load(); document.getElementB
 </script>
 </body>
 </html>
+
 
 

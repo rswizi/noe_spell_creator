@@ -1,5 +1,6 @@
 from db_mongo import norm_key
 
+
 def _modifiers_from_body(b: dict) -> list[dict]:
     mods_in = (b or {}).get("modifiers") or []
     if not isinstance(mods_in, list):
