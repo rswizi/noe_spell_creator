@@ -2769,6 +2769,17 @@ async def create_character(request: Request):
         body = {}
     owner = body.get("owner") if (role == "admin" and body.get("owner")) else username
     name = (body.get("name") or "New Character").strip()
+
+    inv_id = ""
+    try:
+        inv_id = (body.get("inventory_id") or "").strip()
+    except Exception:
+        inv_id = ""
+    if inv_id:
+        inv = get_col("inventories").find_one({"id": inv_id, "owner": owner}, {"_id": 1})
+        if not inv:
+            return JSONResponse({"status": "error", "message": "Inventory not found or not owned by you"}, status_code=400)
+
     cid = next_id_str("characters", padding=4)
     doc = {
         "id": cid,
@@ -2777,6 +2788,8 @@ async def create_character(request: Request):
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
     }
+    if inv_id:
+        doc["inventory_id"] = inv_id
     get_col("characters").insert_one(dict(doc))
     return {"status": "success", "id": cid, "character": {k: v for k, v in doc.items() if k != "_id"}}
 
@@ -2821,6 +2834,14 @@ async def update_character(cid: str, request: Request):
             elif isinstance(item, dict) and item.get("id"):
                 cleaned.append(str(item["id"]).strip())
         updates["abilities"] = cleaned
+
+    if "inventory_id" in body:
+        inv_id = str(body.get("inventory_id") or "").strip()
+        if inv_id:
+            inv = get_col("inventories").find_one({"id": inv_id, "owner": before.get("owner")}, {"_id": 1})
+            if not inv:
+                return JSONResponse({"status": "error", "message": "Inventory not found or not owned by you"}, status_code=400)
+        updates["inventory_id"] = inv_id
 
     get_col("characters").update_one({"id": cid}, {"$set": updates})
     after = get_col("characters").find_one({"id": cid}, {"_id":0})
