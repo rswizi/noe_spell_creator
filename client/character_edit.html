@@ -161,18 +161,8 @@
               </div>
 
               <div id="inv-summary" class="muted" style="margin-bottom:8px;"></div>
-
-              <div class="panel" style="border-color:#222; background:#0f0f0f;">
-                <div class="hdr" style="padding:10px 12px; gap:6px;">
-                  <strong>Inventory Modifiers</strong>
-                  <span class="muted">(only equipped apply)</span>
-                  <span class="grow"></span>
-                  <button id="inv-save-mods" class="btn" type="button">Save mods</button>
-                </div>
-                <div class="panel-body">
-                  <div id="inv-mod-list" class="mod-list" style="display:block; list-style:none; padding:0;"></div>
-                  <button id="inv-add-mod" class="btn" type="button">+ Add modifier</button>
-                </div>
+              <div id="inv-embed-wrap" style="display:none; margin-top:10px;">
+                <iframe id="inv-embed" title="Inventory manager" style="width:100%; height:760px; border:1px solid #222; border-radius:12px;"></iframe>
               </div>
             </div>
           </details>
@@ -375,9 +365,8 @@ const invLoadBtn = document.getElementById('inv-load-btn');
 const invOpenBtn = document.getElementById('inv-open-btn');
 const invStatusEl = document.getElementById('inv-status');
 const invSummaryEl = document.getElementById('inv-summary');
-const invModListEl = document.getElementById('inv-mod-list');
-const invAddModBtn = document.getElementById('inv-add-mod');
-const invSaveModsBtn = document.getElementById('inv-save-mods');
+const invEmbedWrap = document.getElementById('inv-embed-wrap');
+const invEmbed = document.getElementById('inv-embed');
 
 /* tabs switching */
 document.querySelectorAll('.tab').forEach(tab=>{
@@ -541,125 +530,20 @@ document.addEventListener('click', (e)=>{
 
 function getEquippedInventoryModifiers(){
   if (!LINKED_INV) return [];
-  const name = LINKED_INV.name || 'Inventory';
-  return (LINKED_INV.modifiers || [])
-    .filter(m=> m.equipped !== false)
-    .map(m=>{
-      const note = m.note ? ` (${m.note})` : '';
-      return { target: (m.target||m.key||'').trim(), mode: (m.mode||'add').toLowerCase(), value: Number(m.value||0), origin:`[Inv] ${name}${note}` };
-    });
-}
-
-/* ---------- Inventory helpers ---------- */
-function buildTargetSelect(initial){
-  const sel = document.createElement('select');
-  sel.className = 'mod-target';
-  TARGET_GROUPS.forEach(g=>{
-    const og = document.createElement('optgroup');
-    og.label = g.label;
-    g.options.forEach(o=>{
-      const opt = document.createElement('option');
-      opt.value = o.value;
-      opt.textContent = o.label;
-      if (o.value === initial) opt.selected = true;
-      og.appendChild(opt);
-    });
-    sel.appendChild(og);
-  });
-  return sel;
-}
-
-function addInventoryModRow(initial={}){
-  const row = document.createElement('div');
-  row.className = 'row';
-  row.style.flexWrap = 'wrap';
-  row.style.gap = '6px';
-
-  const targetSel = buildTargetSelect(initial.target || '');
-  const custom = document.createElement('input');
-  custom.placeholder = 'Custom path';
-  custom.style.minWidth = '200px';
-  custom.value = (initial.target && initial.target.startsWith('derived.')===false && !TARGET_GROUPS.some(g=>g.options.find(o=>o.value===initial.target))) ? initial.target : '';
-  custom.style.display = (targetSel.value === '__custom__') ? '' : 'none';
-  targetSel.addEventListener('change', ()=>{
-    custom.style.display = (targetSel.value === '__custom__') ? '' : 'none';
-    if (targetSel.value !== '__custom__') custom.value = '';
-  });
-
-  const mode = document.createElement('select');
-  ['add','mul','set'].forEach(m=>{
-    const opt = document.createElement('option');
-    opt.value = m; opt.textContent = m;
-    if ((initial.mode||'add') === m) opt.selected = true;
-    mode.appendChild(opt);
-  });
-
-  const val = document.createElement('input');
-  val.type = 'number';
-  val.step = '0.1';
-  val.style.width = '90px';
-  val.value = initial.value ?? 0;
-
-  const note = document.createElement('input');
-  note.placeholder = 'Note (optional)';
-  note.value = initial.note || '';
-  note.style.flex = '1';
-
-  const equip = document.createElement('label');
-  equip.className = 'row';
-  equip.style.gap = '4px';
-  equip.style.alignItems = 'center';
-  const cb = document.createElement('input');
-  cb.type = 'checkbox';
-  cb.checked = initial.equipped !== false;
-  equip.appendChild(cb);
-  equip.appendChild(document.createTextNode('Equipped'));
-  equip.style.minWidth = '90px';
-
-  const rm = document.createElement('button');
-  rm.type = 'button';
-  rm.className = 'btn';
-  rm.textContent = 'Remove';
-  rm.addEventListener('click', ()=> row.remove());
-
-  row.appendChild(targetSel);
-  row.appendChild(custom);
-  row.appendChild(mode);
-  row.appendChild(val);
-  row.appendChild(note);
-  row.appendChild(equip);
-  row.appendChild(rm);
-
-  row.dataset.type = 'inv-mod-row';
-  invModListEl.appendChild(row);
-}
-
-function collectInventoryModifiers(){
+  const items = LINKED_INV.items || [];
   const mods = [];
-  invModListEl.querySelectorAll('[data-type="inv-mod-row"]').forEach(row=>{
-    const targetSel = row.querySelector('.mod-target');
-    const custom = row.querySelector('input[placeholder="Custom path"]');
-    const mode = row.querySelector('select:nth-of-type(2)') || row.querySelector('select.mod-mode');
-    const val = row.querySelector('input[type="number"]');
-    const note = row.querySelector('input[placeholder="Note (optional)"]');
-    const equipped = row.querySelector('input[type="checkbox"]');
-    const targetVal = targetSel.value === '__custom__' ? (custom.value||'').trim() : targetSel.value;
-    if (!targetVal) return;
-    mods.push({
-      target: targetVal,
-      mode: mode.value,
-      value: parseFloat(val.value||'0'),
-      note: note.value || '',
-      equipped: equipped.checked
-    });
-  });
+  for (const it of items){
+    if (it.equipped === false) continue;
+    for (const m of (it.modifiers || [])){
+      const target = (m.target || m.key || '').trim();
+      if (!target) continue;
+      const mode = (m.mode || 'add').toLowerCase();
+      const value = Number(m.value || 0);
+      const note = m.note ? ` (${m.note})` : '';
+      mods.push({ target, mode, value, origin: `[Item] ${it.name || 'Item'}${note}` });
+    }
+  }
   return mods;
-}
-
-function renderInventoryModifiers(){
-  invModListEl.innerHTML = '';
-  const mods = LINKED_INV?.modifiers || [];
-  mods.forEach(m=> addInventoryModRow(m));
 }
 
 async function loadInventoriesList(){
@@ -685,7 +569,7 @@ function renderInventorySummary(){
   if (!LINKED_INV){
     invSummaryEl.textContent = 'No inventory linked.';
     invOpenBtn.style.display = 'none';
-    invModListEl.innerHTML = '';
+    if (invEmbedWrap) invEmbedWrap.style.display = 'none';
     return;
   }
   const enc = Number(LINKED_INV.enc_total || 0);
@@ -694,7 +578,10 @@ function renderInventorySummary(){
   invSummaryEl.textContent = `${LINKED_INV.name || 'Inventory'} — Encumbrance: ${enc.toFixed(1)} | ${curText}`;
   invOpenBtn.style.display = '';
   invOpenBtn.href = `inventory_view.html?inv=${encodeURIComponent(LINKED_INV.id || '')}`;
-  renderInventoryModifiers();
+  if (invEmbedWrap && invEmbed){
+    invEmbedWrap.style.display = '';
+    invEmbed.src = `inventory_view.html?inv=${encodeURIComponent(LINKED_INV.id || '')}&embed=1`;
+  }
   updateDerived();
 }
 
@@ -718,31 +605,6 @@ async function loadInventoryById(id){
     }
   }catch(e){
     invStatusEl.textContent = 'Load failed: ' + e.message;
-  }
-}
-
-async function saveInventoryModifiers(){
-  if (!LINKED_INV || !LINKED_INV.id){ invStatusEl.textContent = 'No inventory selected.'; return; }
-  const mods = collectInventoryModifiers();
-  invStatusEl.textContent = 'Saving modifiers...';
-  try{
-    const res = await api('/inventories/' + encodeURIComponent(LINKED_INV.id), {
-      method:'PUT',
-      headers:{ 'content-type':'application/json' },
-      body: JSON.stringify({ modifiers: mods })
-    });
-    if (res.inventory){
-      LINKED_INV = res.inventory;
-    }else{
-      LINKED_INV.modifiers = mods;
-    }
-    renderInventoryModifiers();
-    invStatusEl.textContent = 'Modifiers saved.';
-    recomputePassiveAgg();
-    renderStatistics();
-    updateDerived();
-  }catch(e){
-    invStatusEl.textContent = 'Save failed: ' + e.message;
   }
 }
 
@@ -1060,8 +922,6 @@ abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilit
 
 invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
 invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));
-invAddModBtn.addEventListener('click', ()=> addInventoryModRow());
-invSaveModsBtn.addEventListener('click', saveInventoryModifiers);
 
 function renderSearchResults(arr){
   abiResultsEl.innerHTML = '';
@@ -1156,3 +1016,4 @@ checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.';
 
 </body>
 </html>
+

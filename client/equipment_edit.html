@@ -89,6 +89,12 @@
       <div class="row muted" style="margin-top:6px;"><span class="pill">Base price (Adequate): 2528</span></div>
     </div>
 
+    <div class="row" style="margin-top:8px;">
+      <label style="flex:1">Modifiers (JSON array)<br/>
+        <textarea id="m-mods" rows="3" style="width:100%;" placeholder='[{"target":"char.body","mode":"add","value":1}]'></textarea>
+      </label>
+    </div>
+
     <div class="row" style="margin-top:10px;justify-content:flex-end;">
       <button id="save" class="btn">Save</button>
     </div>
@@ -139,7 +145,7 @@ function render(){
 }
 
 async function load(){
-  const r = await fetch(`${API_BASE}/equipment`);
+  const r = await fetch(`${API_BASE}/equipment`, { headers: authHeaders() });
   const j = await r.json().catch(()=>({}));
   CACHE = j.equipment || [];
   render();
@@ -177,6 +183,7 @@ function openEdit(id){
     $("#ar-effect").value     = e.effect||"";
   }
 
+  $("#m-mods").value = JSON.stringify(e.modifiers || [], null, 2);
   const MODAL=document.getElementById("modal");
   MODAL.classList.remove("hidden"); MODAL.setAttribute("aria-hidden","false");
   document.getElementById("close").focus();
@@ -226,6 +233,13 @@ document.getElementById("save").addEventListener("click", async ()=>{
       effect: $("#ar-effect").value.trim(),
       price: 2528,
     };
+  }
+  try{
+    body.modifiers = JSON.parse(document.getElementById("m-mods").value || "[]");
+    if (!Array.isArray(body.modifiers)) body.modifiers = [];
+  }catch(e){
+    alert("Invalid modifiers JSON");
+    return;
   }
   const r = await fetch(`/equipment/${EDIT.id}`, { method:"PUT", headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify(body) });
   const j = await r.json().catch(()=>({})); if (j.status!=="success") return alert(j.message||"Update failed");

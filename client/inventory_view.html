@@ -25,8 +25,6 @@
     .modal.hidden{ display:none; }
     .modal-card { width:min(760px, 96vw); background:#0b0b0b; border:1px solid #222; border-radius:14px; padding:16px; }
     .modal-close { float:right; font-size:22px; border:none; background:transparent; color:#ccc; cursor:pointer; }
-    .mod-row{display:grid;grid-template-columns:1.3fr 0.8fr 0.7fr 0.7fr 1fr auto;gap:6px;align-items:center;margin-top:6px}
-    .mod-row input,.mod-row select{width:100%}
     @media (min-width: 1100px){
       .container-wide { max-width: 1100px; margin: 0 auto; }
       .searchbar { grid-template-columns: 2fr 1fr; align-items:end; }
@@ -51,16 +49,6 @@
         <input id="fund-amt" type="number" step="1" placeholder="Amount" style="width:140px;">
         <input id="fund-note" placeholder="Note (optional)" style="flex:1; min-width:200px;">
         <button id="fund-add" class="btn small">+ Add</button>
-      </div>
-    </div>
-
-    <div class="home-card">
-      <h3>Modifiers (equip to apply)</h3>
-      <div id="mod-wrap"></div>
-      <div class="row" style="margin-top:8px;">
-        <button id="mod-add" class="btn small" type="button">+ Modifier</button>
-        <button id="mod-save" class="btn small" type="button">Save modifiers</button>
-        <span id="mod-status" class="muted"></span>
       </div>
     </div>
 
@@ -169,98 +157,6 @@ let FILTERED = [];
 
 const KIND_PLURAL = { object: "objects", weapon: "weapons", equipment: "equipment", tool: "tools" };
 const QUALITIES = ["Adequate","Good","Very Good","Excellent","Legendary","Mythical","Epic","Divine","Unreal"];
-const modWrap = document.getElementById("mod-wrap");
-const modAddBtn = document.getElementById("mod-add");
-const modSaveBtn = document.getElementById("mod-save");
-const modStatus = document.getElementById("mod-status");
-
-const TARGET_GROUPS = [
-  {label:"Characteristics", options:["char.reflex","char.dexterity","char.body","char.wisdom","char.presence","char.magic","char.willpower","char.tech"]},
-  {label:"Skills", options:[
-    "skills.reflex.Technicity","skills.reflex.Dodge","skills.reflex.Counter","skills.reflex.Reactivity",
-    "skills.dexterity.Accuracy","skills.dexterity.Evasion","skills.dexterity.Stealth","skills.dexterity.Acrobatics",
-    "skills.body.Brutality","skills.body.Blocking","skills.body.Resistance","skills.body.Athletics",
-    "skills.wisdom.Survival","skills.wisdom.Education","skills.wisdom.Perception","skills.wisdom.Psychology","skills.wisdom.Investigation",
-    "skills.presence.Taming","skills.presence.Charm","skills.presence.Charisma","skills.presence.Deception","skills.presence.Persuasion",
-    "skills.magic.Aura","skills.magic.Incantation","skills.magic.Enchantment","skills.magic.Restoration","skills.magic.Potential",
-    "skills.willpower.Intimidation","skills.willpower.Spirit","skills.willpower.Instinct","skills.willpower.Absorption",
-    "skills.tech.Crafting","skills.tech.Sleight of hand","skills.tech.Alchemy","skills.tech.Medicine","skills.tech.Engineering"
-  ]},
-  {label:"Derived", options:["derived.hp","derived.en","derived.fo","derived.mo","derived.spcap","derived.enc","derived.et","derived.tx"]},
-  {label:"Custom", options:["__custom__"]},
-];
-
-function addModRow(initial={}){
-  const row = document.createElement("div");
-  row.className = "mod-row";
-
-  const target = document.createElement("select");
-  TARGET_GROUPS.forEach(g=>{
-    const og = document.createElement("optgroup"); og.label = g.label;
-    g.options.forEach(v=>{
-      const opt = document.createElement("option"); opt.value = v; opt.textContent = v==="__custom__" ? "Custom path..." : v;
-      if (v === initial.target) opt.selected = true;
-      og.appendChild(opt);
-    });
-    target.appendChild(og);
-  });
-  const custom = document.createElement("input");
-  custom.placeholder = "Custom path";
-  custom.value = (!TARGET_GROUPS.some(g=>g.options.includes(initial.target)) && initial.target) ? initial.target : "";
-  custom.style.display = target.value === "__custom__" ? "" : "none";
-  target.addEventListener("change", ()=>{
-    custom.style.display = target.value === "__custom__" ? "" : "none";
-    if (target.value !== "__custom__") custom.value = "";
-  });
-
-  const mode = document.createElement("select");
-  ["add","mul","set"].forEach(m=>{
-    const opt = document.createElement("option"); opt.value = m; opt.textContent = m;
-    if ((initial.mode||"add")===m) opt.selected = true;
-    mode.appendChild(opt);
-  });
-
-  const val = document.createElement("input"); val.type="number"; val.step="0.1"; val.value = initial.value ?? 0;
-  const note = document.createElement("input"); note.placeholder = "Note"; note.value = initial.note || "";
-
-  const equip = document.createElement("label"); equip.className="row"; equip.style.gap="4px"; equip.style.alignItems="center";
-  const cb = document.createElement("input"); cb.type="checkbox"; cb.checked = initial.equipped !== false;
-  equip.appendChild(cb); equip.appendChild(document.createTextNode("Equipped"));
-
-  const rm = document.createElement("button"); rm.className="btn btn-secondary small"; rm.type="button"; rm.textContent="Remove"; rm.onclick = ()=> row.remove();
-
-  row.appendChild(target);
-  row.appendChild(custom);
-  row.appendChild(mode);
-  row.appendChild(val);
-  row.appendChild(note);
-  row.appendChild(equip);
-  row.appendChild(rm);
-  modWrap.appendChild(row);
-}
-
-function renderMods(){
-  modWrap.innerHTML = "";
-  (INV?.modifiers || []).forEach(m=> addModRow(m));
-}
-
-function collectMods(){
-  const mods = [];
-  modWrap.querySelectorAll(".mod-row").forEach(row=>{
-    const targetSel = row.querySelector("select");
-    const custom = row.querySelector('input[placeholder="Custom path"]');
-    const target = targetSel.value === "__custom__" ? (custom.value||"").trim() : targetSel.value;
-    if (!target) return;
-    mods.push({
-      target,
-      mode: row.querySelectorAll("select")[1]?.value || "add",
-      value: parseFloat(row.querySelector('input[type="number"]').value || "0"),
-      note: row.querySelector('input[placeholder="Note"]').value || "",
-      equipped: row.querySelector('input[type="checkbox"]').checked
-    });
-  });
-  return mods;
-}
 
 document.addEventListener("DOMContentLoaded", () => {
   loadInventory();
@@ -272,8 +168,6 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#item-modal").addEventListener("click", (e)=>{ if (e.target === $("#item-modal")) closeItemModal(); });
   $("#cat-select").addEventListener("change", applyCategoryFilter);
   $("#fund-add").addEventListener("click", addFunds);
-  modAddBtn.addEventListener("click", ()=> addModRow());
-  modSaveBtn.addEventListener("click", saveModifiers);
 });
 
 async function loadInventory(){
@@ -283,7 +177,6 @@ async function loadInventory(){
   INV = j.inventory;
   renderInventory();
   populateGlobals();
-  renderMods();
 }
 
 function renderInventory(){
@@ -352,13 +245,31 @@ function renderInventory(){
         row.className = "item-row";
         const displayName = it.alt_name ? `${escapeHtml(it.alt_name)} <span class="muted">(${escapeHtml(it.name||"Item")})</span>` : escapeHtml(it.name||"Item");
         const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
-        row.innerHTML = `
-          <div class="grow">
-            <div><b>${displayName}</b></div>
-            <div class="muted">x${it.quantity||1} • enc: ${totalEnc.toFixed(1)}</div>
-          </div>
-          <button class="btn small view" data-id="${it.item_id}">Details</button>
+        const equipped = it.equipped !== false;
+
+        const info = document.createElement("div");
+        info.className = "grow";
+        info.innerHTML = `
+          <div><b>${displayName}</b></div>
+          <div class="muted">x${it.quantity||1} • enc: ${totalEnc.toFixed(1)}</div>
+          <div class="muted">${equipped ? '<span class="pill">Equipped</span>' : '<span class="pill" style="background:#331515;border-color:#662222">Unequipped</span>'}</div>
         `;
+
+        const toggle = document.createElement("button");
+        toggle.className = "btn small";
+        toggle.textContent = equipped ? "Unequip" : "Equip";
+        toggle.addEventListener("click", async ()=>{
+          await toggleEquip(it.item_id, !equipped);
+        });
+
+        const details = document.createElement("button");
+        details.className = "btn small view";
+        details.dataset.id = it.item_id;
+        details.textContent = "Details";
+
+        row.appendChild(info);
+        row.appendChild(toggle);
+        row.appendChild(details);
         list.appendChild(row);
       }
     }
@@ -473,27 +384,6 @@ async function addFunds(){
   INV = j.inventory;
   renderInventory();
   populateGlobals();
-}
-
-/* ------------- Modifiers ------------- */
-async function saveModifiers(){
-  if (!INV || !INV.id){ modStatus.textContent = "No inventory loaded."; return; }
-  const mods = collectMods();
-  modStatus.textContent = "Saving...";
-  try{
-    const r = await fetch(`/inventories/${encodeURIComponent(INV.id)}`, {
-      method:"PUT",
-      headers:{ "Content-Type":"application/json", ...authHeaders() },
-      body: JSON.stringify({ modifiers: mods })
-    });
-    const j = await r.json();
-    if (j.status !== "success") throw new Error(j.message || "Save failed");
-    INV = j.inventory || INV;
-    renderMods();
-    modStatus.textContent = "Saved.";
-  }catch(e){
-    modStatus.textContent = e.message || "Save failed";
-  }
 }
 
 /* ------------- Catalog search & filter ------------- */
@@ -623,8 +513,21 @@ async function buyItem(kind, ref_id, quantity, container_id, currency){
   populateGlobals();
 }
 
+async function toggleEquip(item_id, equipped){
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ equipped })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Update failed"); return; }
+  INV = j.inventory;
+  renderInventory();
+}
+
 /* ------- Item Details Modal (incl. upgrades/quality/alt name) ------- */
 function openItemModal(it){
+  const equipped = it.equipped !== false;
   $("#item-title").textContent = it.alt_name ? `${it.alt_name} (${it.name || "Item"})` : (it.name || "Item");
   const totalEnc  = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
   const totalPaid = (Number(it.paid_unit||0) * Number(it.quantity||1)) || 0;
@@ -646,6 +549,10 @@ function openItemModal(it){
       <span class="pill">Paid (unit): <b>${Number(it.paid_unit||0)}</b></span>
       <span class="pill">Paid (total): <b>${totalPaid}</b></span>
     </div>
+    <div class="row">
+      <span class="pill">${equipped ? "Equipped" : "Unequipped"}</span>
+      ${Array.isArray(it.modifiers) && it.modifiers.length ? `<span class="muted">Modifiers: ${it.modifiers.map(m=>`<span class="pill">${escapeHtml(m.mode||'add')} ${escapeHtml(m.value||0)} → ${escapeHtml(m.target||'')}</span>`).join(\" \")}</span>` : \"\"}
+    </div>
     ${Array.isArray(it.upgrades) && it.upgrades.length
       ? `<div class="row">Upgrades: ${it.upgrades.map(u=>`<span class="pill">${escapeHtml(u.name||u)}</span>`).join(" ")}</div>`
       : ""
@@ -663,6 +570,20 @@ function openItemModal(it){
 
   const actions = $("#item-actions");
   actions.innerHTML = "";
+
+  const equipRow = document.createElement("div");
+  equipRow.className = "row";
+  equipRow.style.marginTop = "8px";
+  const equipBtn = document.createElement("button");
+  equipBtn.className = "btn small";
+  equipBtn.textContent = equipped ? "Unequip" : "Equip";
+  equipBtn.addEventListener("click", async ()=>{
+    await toggleEquip(it.item_id, !equipped);
+    closeItemModal();
+  });
+  equipRow.appendChild(document.createTextNode(equipped ? "Item is equipped" : "Item is not equipped"));
+  equipRow.appendChild(equipBtn);
+  actions.appendChild(equipRow);
 
   // Only for weapons/equipment: show Upgrade Quality + Install Upgrade
   if (it.kind === "weapon" || it.kind === "equipment"){

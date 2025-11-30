@@ -39,7 +39,11 @@
       <label>Enc.</label><input id="m-enc" type="number" />
       <label>Description</label><textarea id="m-desc" rows="4"></textarea>
     </div>
-    <div class="row" style="margin-top:10px;justify-content:flex-end;">
+        <div class="row" style="margin-top:8px;">
+      <label style="flex:1">Modifiers (JSON array)<br/>
+        <textarea id="m-mods" rows="3" style="width:100%;" placeholder='[{"target":"char.body","mode":"add","value":1}]'></textarea>
+      </label>
+    </div><div class="row" style="margin-top:10px;justify-content:flex-end;">
       <button id="save" class="btn">Save</button>
     </div>
   </div>
@@ -75,7 +79,7 @@ function render(){
 }
 
 async function load(){
-  const r = await fetch(`${API_BASE}/objects`);
+  const r = await fetch(`${API_BASE}/objects`, { headers: authHeaders() });
   const j = await r.json().catch(()=>({}));
   CACHE = j.objects || [];
   render();
@@ -91,6 +95,7 @@ function openEdit(id){
   document.getElementById("m-price").value = o.price ?? 0;
   document.getElementById("m-enc").value   = o.enc ?? 0;
   document.getElementById("m-desc").value  = o.description || "";
+  document.getElementById("m-mods").value  = JSON.stringify(o.modifiers || [], null, 2);
   document.getElementById("modal").classList.remove("hidden");
   document.getElementById("modal").setAttribute("aria-hidden","false");
 }
@@ -120,6 +125,13 @@ document.getElementById("save").addEventListener("click", async ()=>{
     enc:   Number(document.getElementById("m-enc").value || 0),
     description: document.getElementById("m-desc").value.trim(),
   };
+  try{
+    body.modifiers = JSON.parse(document.getElementById("m-mods").value || "[]");
+    if (!Array.isArray(body.modifiers)) body.modifiers = [];
+  }catch(e){
+    alert("Invalid modifiers JSON");
+    return;
+  }
   const r = await fetch(`${API_BASE}/objects/${EDIT_ID}`, {
     method:"PUT", headers:{ "Content-Type":"application/json", ...authHeaders() },
     body: JSON.stringify(body)
@@ -147,3 +159,6 @@ document.addEventListener("DOMContentLoaded", ()=>{
 </script>
 </body>
 </html>
+
+
+

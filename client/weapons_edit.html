@@ -55,6 +55,11 @@
     <div class="row" style="margin-top:6px;">
       <label style="flex:1">Description<br/><textarea id="m-desc" rows="3" style="width:100%"></textarea></label>
     </div>
+    <div class="row" style="margin-top:6px;">
+      <label style="flex:1">Modifiers (JSON array)<br/>
+        <textarea id="m-mods" rows="3" style="width:100%;" placeholder='[{"target":"char.body","mode":"add","value":1}]'></textarea>
+      </label>
+    </div>
     <div class="row" style="gap:12px;align-items:center;margin-top:6px;">
       <label>Base Price <input id="m-price" type="number" style="width:120px"/></label>
       <label>Quality
@@ -112,7 +117,7 @@ function render(){
   document.getElementById("info").textContent = `${list.length}/${CACHE.length}`;
 }
 async function load(){
-  const r = await fetch(`${API_BASE}/weapons`);
+  const r = await fetch(`${API_BASE}/weapons`, { headers: authHeaders() });
   const j = await r.json().catch(()=>({}));
   CACHE = j.weapons || [];
   render();
@@ -138,6 +143,7 @@ function openEdit(id){
   document.getElementById("m-enc").value    = w.enc ?? 0;
   document.getElementById("m-effects").value = (w.effects||[]).join(", ");
   document.getElementById("m-desc").value   = w.description||"";
+  document.getElementById("m-mods").value   = JSON.stringify(w.modifiers || [], null, 2);
   document.getElementById("m-price").value  = w.price ?? 0;
   syncQuality();
   document.getElementById("modal").classList.remove("hidden");
@@ -173,6 +179,13 @@ document.getElementById("save").addEventListener("click", async ()=>{
     description: document.getElementById("m-desc").value.trim(),
     price:  Number(document.getElementById("m-price").value||0),
   };
+  try{
+    body.modifiers = JSON.parse(document.getElementById("m-mods").value || "[]");
+    if (!Array.isArray(body.modifiers)) body.modifiers = [];
+  }catch(e){
+    alert("Invalid modifiers JSON");
+    return;
+  }
   const r=await fetch(`/weapons/${EDIT_ID}`,{method:"PUT",headers:{ "Content-Type":"application/json", ...authHeaders() },body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));
   if(j.status!=="success"){ alert(j.message||"Update failed."); return; }

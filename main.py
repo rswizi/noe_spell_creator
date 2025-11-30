@@ -1765,6 +1765,7 @@ def _tool_from_body(b: dict) -> dict:
         "enc": enc,
         "method": method,
         "description": desc,
+        "modifiers": _modifiers_from_body(b),
     }
     out.update(_derive_for(method, tier))
     return out
@@ -1902,6 +1903,29 @@ def _as_list(x):
     if isinstance(x, str):  return [s for s in (v.strip() for v in x.split(",")) if s]
     return []
 
+def _modifiers_from_body(b: dict) -> list[dict]:
+    """Normalize an optional modifiers list from payload."""
+    mods_in = (b or {}).get("modifiers") or []
+    if not isinstance(mods_in, list):
+        return []
+    mods: list[dict] = []
+    for m in mods_in:
+        if not isinstance(m, dict):
+            continue
+        target = (m.get("target") or m.get("key") or "").strip()
+        if not target:
+            continue
+        mode = (m.get("mode") or "add").lower()
+        if mode not in ("add", "mul", "set"):
+            mode = "add"
+        try:
+            value = float(m.get("value") or 0)
+        except Exception:
+            value = 0.0
+        note = (m.get("note") or "").strip()
+        mods.append({"target": target, "mode": mode, "value": value, "note": note})
+    return mods
+
 def _weapon_from_body(b: dict) -> dict:
     name  = (b.get("name") or "").strip() or "Unnamed"
     skill = (b.get("skill") or "Technicity").strip().title()
@@ -1926,6 +1950,7 @@ def _weapon_from_body(b: dict) -> dict:
         "enc": enc,
         "is_animarma": bool(b.get("is_animarma") or False),
         "nature": (b.get("nature") or "").strip(),  # optional, can be edited later
+        "modifiers": _modifiers_from_body(b),
     }
     return doc
 
@@ -2055,6 +2080,7 @@ def _equipment_from_body(b: dict) -> dict:
             "effects": effects,
             "price": int(b.get("price") or 0),
             "enc": float(b.get("enc") or 0),
+            "modifiers": _modifiers_from_body(b),
         }
         return doc
 
@@ -2070,6 +2096,7 @@ def _equipment_from_body(b: dict) -> dict:
             "description": (b.get("description") or "").strip(),
             "price": int(b.get("price") or 0),
             "enc": float(b.get("enc") or 0),
+            "modifiers": _modifiers_from_body(b),
         }
         return doc
 
@@ -2085,6 +2112,7 @@ def _equipment_from_body(b: dict) -> dict:
         "effect": (b.get("effect") or "").strip(),
         "mo_penalty": int(b.get("mo_penalty") or 0),
         "price": int(b.get("price") or 2528),
+        "modifiers": _modifiers_from_body(b),
     }
     return doc
 
@@ -2268,7 +2296,8 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     user, role = require_auth(request)
     db = get_db()
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
-    if not inv: raise HTTPException(404, "Not found")
+    if not inv:
+        raise HTTPException(404, "Not found")
 
     kind = (payload.get("kind") or "").strip().lower()
     ref_id = (payload.get("ref_id") or "").strip()
@@ -2279,12 +2308,13 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     currency = (payload.get("currency") or "Jelly").strip()
 
     src = _fetch_catalog_item(kind, ref_id)
-    if not src: raise HTTPException(404, "Catalog item not found")
+    if not src:
+        raise HTTPException(404, "Catalog item not found")
 
     base_price = int(src.get("price") or 0)
     enc = float(src.get("enc") or 0.0)
     subcat = src.get("category") if kind == "equipment" else None
-    name = src.get("name") or (subcat == "armor" and f"Armor — {src.get('type')}") or src.get("style") or "Item"
+    name = src.get("name") or (subcat == "armor" and f"Armor - {src.get('type')}") or src.get("style") or "Item"
 
     unit_price = base_price
     if kind in ("weapon", "equipment"):
@@ -2339,10 +2369,16 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "paid_unit": unit_price,
         "upgrades": upgrades,
         "container_id": container_id,
+        "modifiers": src.get("modifiers") or [],
+        "equipped": bool(payload.get("equipped", True)),
     }
-    tx = {"ts": datetime.datetime.utcnow().isoformat() + "Z",
-          "currency": currency, "amount": -total,
-          "note": f"Purchase {name} x{qty}", "source": "purchase"}
+    tx = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "currency": currency,
+        "amount": -total,
+        "note": f"Purchase {name} x{qty}",
+        "source": "purchase"
+    }
 
     db.inventories.update_one({"id": inv_id}, {
         "$set": {"currencies": cur, "containers": containers, "enc_total": inv_enc_total},
@@ -2467,13 +2503,20 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
         raise HTTPException(404, "Inventory not found")
 
     alt_name = payload.get("alt_name", None)
-    if alt_name is None:
+    equipped = payload.get("equipped", None)
+    if alt_name is None and equipped is None:
         raise HTTPException(400, "Nothing to update")
+
+    set_fields = {}
+    if alt_name is not None:
+        set_fields["items.$.alt_name"] = (alt_name or "").strip()
+    if equipped is not None:
+        set_fields["items.$.equipped"] = bool(equipped)
 
     # positional update on array item
     res = db.inventories.update_one(
         {"id": inv_id, "owner": user, "items.item_id": item_id},
-        {"$set": {"items.$.alt_name": (alt_name or "").strip()}}
+        {"$set": set_fields}
     )
     if res.matched_count == 0:
         raise HTTPException(404, "Item not found")
@@ -3174,3 +3217,4 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
     existing.update(updated)
     existing.pop("_id", None)
     return {"status":"success","ability": existing}
+
