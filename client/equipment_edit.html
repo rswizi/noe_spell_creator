@@ -35,6 +35,15 @@
       <button id="refresh" class="btn small">Refresh</button>
       <span id="info" class="muted" style="margin-left:auto;"></span>
     </div>
+    <div class="row" style="margin-top:8px; gap:8px;">
+      <label class="muted">New equipment</label>
+      <select id="create-cat">
+        <option value="special">Special</option>
+        <option value="slot">Slot</option>
+        <option value="armor">Armor</option>
+      </select>
+      <button id="create" class="btn small">+ Create</button>
+    </div>
   </div>
 
   <div class="home-card" id="list">Loading…</div>
@@ -68,7 +77,7 @@
     <div id="form-slot" style="display:none">
       <div class="row" style="gap:12px;flex-wrap:wrap;">
         <label><span>Slot</span>
-          <select id="sl-slot"><option>head</option><option>arm</option><option>leg</option><option>accessory</option></select>
+          <select id="sl-slot"><option>head</option><option>arms</option><option>legs</option><option>accessory</option><option>chest</option></select>
         </label>
         <label><span>Style</span><input id="sl-style" style="min-width:200px"></label>
         <label><span>Price</span><input id="sl-price" type="number" style="width:120px"></label>
@@ -219,40 +228,54 @@ async function load(){
 
 function openEdit(id){
   const e = CACHE.find(x=>x.id===id); if(!e) return;
-  EDIT = e;
+  EDIT = { ...e };
   document.getElementById("m-title").textContent = `Edit — ${e.id}`;
+  fillFormFromEdit();
+  const MODAL=document.getElementById("modal");
+  MODAL.classList.remove("hidden"); MODAL.setAttribute("aria-hidden","false");
+  document.getElementById("close").focus();
+}
+
+function openCreate(cat){
+  EDIT = { id:null, category: cat };
+  document.getElementById("m-title").textContent = `Create ${cat}`;
+  fillFormFromEdit(true);
+  const MODAL=document.getElementById("modal");
+  MODAL.classList.remove("hidden"); MODAL.setAttribute("aria-hidden","false");
+  document.getElementById("close").focus();
+}
+
+function fillFormFromEdit(isNew=false){
+  const e = EDIT || {};
   document.getElementById("form-special").style.display = e.category==="special" ? "block":"none";
   document.getElementById("form-slot").style.display    = e.category==="slot"    ? "block":"none";
   document.getElementById("form-armor").style.display   = e.category==="armor"   ? "block":"none";
 
   if (e.category==="special"){
-    $("#sp-name").value = e.name||"";
-    $("#sp-price").value = e.price ?? 0;
-    $("#sp-enc").value   = e.enc ?? 0;
-    $("#sp-dmg").value   = e.damage||"";
-    $("#sp-range").value = e.range||"";
-    $("#sp-hands").value = e.hands ?? 1;
-    $("#sp-effects").value = (e.effects||[]).join(", ");
-    $("#sp-desc").value  = e.description||"";
+    $("#sp-name").value = isNew ? "" : (e.name||"");
+    $("#sp-price").value = isNew ? 0 : (e.price ?? 0);
+    $("#sp-enc").value   = isNew ? 0 : (e.enc ?? 0);
+    $("#sp-dmg").value   = isNew ? "" : (e.damage||"");
+    $("#sp-range").value = isNew ? "" : (e.range||"");
+    $("#sp-hands").value = isNew ? 1 : (e.hands ?? 1);
+    $("#sp-effects").value = isNew ? "" : ((e.effects||[]).join(", "));
+    $("#sp-desc").value  = isNew ? "" : (e.description||"");
   } else if (e.category==="slot"){
     $("#sl-slot").value  = e.slot||"head";
-    $("#sl-style").value = e.style||"";
-    $("#sl-price").value = e.price ?? 0;
-    $("#sl-enc").value   = e.enc ?? 0;
-    $("#sl-desc").value  = e.description||"";
-  } else {
-    $("#ar-type").value = e.type||"";
-    $("#ar-enc").value  = e.enc ?? 0;
-    $("#ar-hp").value   = e.hp_bonus ?? 0;
-    $("#ar-mo").value   = e.mo_penalty ?? 0;
-    $("#ar-receptacle").value = e.receptacle||"";
-    $("#ar-effect").value     = e.effect||"";
+    $("#sl-style").value = isNew ? "" : (e.style||"");
+    $("#sl-price").value = isNew ? 0 : (e.price ?? 0);
+    $("#sl-enc").value   = isNew ? 0 : (e.enc ?? 0);
+    $("#sl-desc").value  = isNew ? "" : (e.description||"");
+  } else if (e.category==="armor"){
+    $("#ar-type").value = isNew ? "" : (e.type||"");
+    $("#ar-enc").value  = isNew ? 0 : (e.enc ?? 0);
+    $("#ar-hp").value   = isNew ? 0 : (e.hp_bonus ?? 0);
+    $("#ar-mo").value   = isNew ? 0 : (e.mo_penalty ?? 0);
+    $("#ar-receptacle").value = isNew ? "" : (e.receptacle||"");
+    $("#ar-effect").value     = isNew ? "" : (e.effect||"");
   }
 
-  setModifiers(modListEl, e.modifiers || []);
-  const MODAL=document.getElementById("modal");
-  MODAL.classList.remove("hidden"); MODAL.setAttribute("aria-hidden","false");
-  document.getElementById("close").focus();
+  setModifiers(modListEl, isNew ? [] : (e.modifiers || []));
 }
 function closeEdit(){
   const MODAL=document.getElementById("modal");
@@ -301,8 +324,11 @@ document.getElementById("save").addEventListener("click", async ()=>{
     };
   }
   body.modifiers = collectModifiers(modListEl);
-  const r = await fetch(`/equipment/${EDIT.id}`, { method:"PUT", headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify(body) });
-  const j = await r.json().catch(()=>({})); if (j.status!=="success") return alert(j.message||"Update failed");
+  const isNew = !EDIT.id;
+  const path = isNew ? "/equipment" : `/equipment/${EDIT.id}`;
+  const method = isNew ? "POST" : "PUT";
+  const r = await fetch(path, { method, headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify(body) });
+  const j = await r.json().catch(()=>({})); if (j.status!=="success") return alert(j.message||"Save failed");
   await load(); closeEdit();
 });
 
@@ -319,6 +345,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
   document.getElementById("q").addEventListener("input", render);
   document.getElementById("f-cat").addEventListener("change", render);
   document.getElementById("mod-add").addEventListener("click", ()=> addModRow(modListEl, {}));
+  document.getElementById("create").addEventListener("click", ()=>{
+    const cat = document.getElementById("create-cat").value || "slot";
+    openCreate(cat);
+  });
 });
 </script>
 </body>

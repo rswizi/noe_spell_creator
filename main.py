@@ -2197,7 +2197,6 @@ def _upgrade_from_body(body: dict) -> dict:
         raise HTTPException(status_code=400, detail="slot must be one of head/arms/legs/accessory/chest")
     name, key = _eq_norm_name(body.get("name"), "Upgrade")
     unique = bool(body.get("unique", False))
-    price = int(body.get("price") or 0)
     modifiers = _modifiers_from_body(body)
     return {
         "kind": kind,
@@ -2205,7 +2204,7 @@ def _upgrade_from_body(body: dict) -> dict:
         "name": name,
         "name_key": key,
         "unique": unique,
-        "price": price,
+        "description": (body.get("description") or "").strip(),
         "modifiers": modifiers,
         "created_at": datetime.datetime.utcnow().isoformat()+"Z",
     }
