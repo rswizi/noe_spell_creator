@@ -774,7 +774,8 @@ async function loadUpgradeOptions(labelEl, selectEl, it){
   labelEl.textContent = "Install upgrade (loading...)";
   selectEl.innerHTML = "";
   try{
-    const ups = await fetchUpgrades(it.kind, it.equipment_slot || "");
+    const slot = it.equipment_slot || it.slot || "";
+    const ups = await fetchUpgrades(it.kind, slot);
     if (!ups.length){
       labelEl.textContent = "Install upgrade (none available)";
       const o = document.createElement("option");

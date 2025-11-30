@@ -2068,6 +2068,8 @@ def _equipment_from_body(b: dict) -> dict:
     slot = (b.get("slot") or "").strip().lower()
     if cat in ("slot","armor") and slot and slot not in EQUIPMENT_SLOTS:
         raise HTTPException(status_code=400, detail="slot must be one of head/arms/legs/accessory/chest")
+    if slot in ("arm","leg"):
+        slot = slot + "s"
 
     if cat == "special":
         name, key = _eq_norm_name(b.get("name"))
@@ -2800,8 +2802,8 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
     if upg_doc.get("kind") != kind:
         raise HTTPException(400, "Upgrade kind mismatch")
     if kind == "equipment":
-        slot = (it.get("equipment_slot") or "").lower()
-        if upg_doc.get("slot") and upg_doc.get("slot") != slot:
+        slot = (it.get("equipment_slot") or it.get("slot") or "").lower()
+        if upg_doc.get("slot") and slot and upg_doc.get("slot") != slot:
             raise HTTPException(400, "Upgrade not allowed for this equipment slot")
 
     existing = it.get("upgrades") or []
@@ -2825,6 +2827,8 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
         "kind": upg_doc.get("kind"),
         "modifiers": upg_doc.get("modifiers") or [],
     }]
+    if kind == "equipment" and not it.get("equipment_slot") and upg_doc.get("slot"):
+        it["equipment_slot"] = upg_doc.get("slot")
     quality = it.get("quality") or "Adequate"
     new_paid_unit = int(it.get("paid_unit") or _qprice(int(it.get("base_price") or 0), quality)) + int(fee_per_unit)
     new_variant = _compose_variant(quality, new_upgrades)
@@ -2845,7 +2849,8 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
                 "currencies": curmap,
                 "items.$.upgrades": new_upgrades,
                 "items.$.paid_unit": new_paid_unit,
-                "items.$.variant": new_variant
+                "items.$.variant": new_variant,
+                **({"items.$.equipment_slot": it.get("equipment_slot")} if kind=="equipment" and it.get("equipment_slot") else {})
             },
             "$push": {"transactions": tx}
         }

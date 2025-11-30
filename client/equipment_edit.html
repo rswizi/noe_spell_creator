@@ -89,7 +89,10 @@
     <!-- ARMOR -->
     <div id="form-armor" style="display:none">
       <div class="row" style="gap:12px;flex-wrap:wrap;">
-        <label><span>Type</span><input id="ar-type" style="min-width:240px"></label>
+        <label><span>Slot</span>
+          <select id="ar-slot"><option>chest</option><option>head</option><option>arms</option><option>legs</option><option>accessory</option></select>
+        </label>
+        <label><span>Type</span><input id="ar-type" style="min-width:200px"></label>
         <label><span>Enc.</span><input id="ar-enc" type="number" step="0.1" style="width:100px"></label>
         <label><span>HP Bonus</span><input id="ar-hp" type="number" style="width:120px"></label>
         <label><span>MO Penalty</span><input id="ar-mo" type="number" style="width:100px"></label>
@@ -267,6 +270,7 @@ function fillFormFromEdit(isNew=false){
     $("#sl-enc").value   = isNew ? 0 : (e.enc ?? 0);
     $("#sl-desc").value  = isNew ? "" : (e.description||"");
   } else if (e.category==="armor"){
+    $("#ar-slot").value = e.slot || "chest";
     $("#ar-type").value = isNew ? "" : (e.type||"");
     $("#ar-enc").value  = isNew ? 0 : (e.enc ?? 0);
     $("#ar-hp").value   = isNew ? 0 : (e.hp_bonus ?? 0);
@@ -314,6 +318,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
   } else {
     body = {
       category:"armor",
+      slot: $("#ar-slot").value,
       type: $("#ar-type").value.trim()||"Armor",
       enc:  Number($("#ar-enc").value||0),
       hp_bonus: Number($("#ar-hp").value||0),
