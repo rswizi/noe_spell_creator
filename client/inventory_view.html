@@ -627,7 +627,7 @@ function openItemModal(it){
       ${Array.isArray(it.modifiers) && it.modifiers.length ? `<span class="muted">Modifiers: ${it.modifiers.map(m=>`<span class="pill">${escapeHtml(m.mode||"add") } ${escapeHtml(m.value||0)} -> ${escapeHtml(m.target||"")}</span>`).join(" ")} </span>` : ""}
     </div>
     ${Array.isArray(it.upgrades) && it.upgrades.length
-      ? `<div class="row">Upgrades: ${it.upgrades.map(u=>`<span class="pill">${escapeHtml(u.name||u)}</span>`).join(" ")}</div>`
+      ? `<div class="row">Upgrades: ${it.upgrades.map(u=>`<span class="pill">${escapeHtml(u.name||u)}${u.target?` → ${escapeHtml(u.target)}`:""}</span>`).join(" ")}</div>`
       : ""
     }
 
@@ -747,10 +747,28 @@ async function upgradeQuality(item_id, to){
 }
 
 async function installUpgrade(item_id, upgrade){
+  const meta = (window.UPGRADE_META || {})[upgrade] || null;
+  let target = "";
+  if (meta && Array.isArray(meta.targets) && meta.targets.length){
+    const counts = {};
+    const current = (INV?.items || []).find(i=>i.item_id===item_id);
+    const existing = current?.upgrades || [];
+    existing.forEach(u=>{ if(u.target){ counts[u.target]=(counts[u.target]||0)+1; } });
+    const options = meta.targets.map(t=>`${t} (${counts[t]||0}/2)`).join(", ");
+    const choice = prompt(`Select target for ${meta.name || "upgrade"} [${options}]`, meta.targets[0]);
+    if (!choice) return;
+    if (!meta.targets.includes(choice)){
+      alert("Invalid target."); return;
+    }
+    if ((counts[choice]||0) >= 2){
+      alert("Target already has two upgrades."); return;
+    }
+    target = choice;
+  }
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/install_upgrade`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ upgrade_id: upgrade })
+    body: JSON.stringify({ upgrade_id: upgrade, target })
   });
   const j = await r.json();
   if (j.status !== "success"){ alert(j.message || "Install failed"); return; }
@@ -766,7 +784,10 @@ async function fetchUpgrades(kind, slot){
   const r = await fetch(url, { headers: { ...authHeaders() } });
   const j = await r.json();
   if (j.status !== "success") throw new Error(j.message || "Load upgrades failed");
-  return j.upgrades || [];
+  const ups = j.upgrades || [];
+  window.UPGRADE_META = window.UPGRADE_META || {};
+  ups.forEach(u=>{ window.UPGRADE_META[u.id] = u; });
+  return ups;
 }
 
 async function loadUpgradeOptions(labelEl, selectEl, it){
@@ -788,7 +809,9 @@ async function loadUpgradeOptions(labelEl, selectEl, it){
     ups.forEach(u=>{
       const o = document.createElement("option");
       o.value = u.id;
-      o.textContent = `${u.name}${u.slot ? ` (${u.slot})` : ""}`;
+      const ttxt = (u.targets && u.targets.length) ? ` · target: ${u.targets.join("/")}` : "";
+      const excl = u.exclusive_group ? ` · excl:${u.exclusive_group}` : "";
+      o.textContent = `${u.name}${u.slot ? ` (${u.slot})` : ""}${ttxt}${excl}`;
       selectEl.appendChild(o);
     });
   }catch(e){

@@ -32,6 +32,10 @@
           <option>accessory</option>
           <option>chest</option>
         </select>
+        <label class="muted">Exclusive group (optional)</label>
+        <input id="exclusive" placeholder="exclusive key (only one per group)">
+        <label class="muted">Targets (comma, optional)</label>
+        <input id="targets" placeholder="ex: Technicity, Accuracy">
         <label class="muted">Name</label>
         <input id="name" placeholder="Name">
         <label class="muted">Description</label>
@@ -165,6 +169,7 @@ async function loadList(){
     card.innerHTML = `
       <div><b>${u.name}</b> (${u.kind}${u.slot ? " · "+u.slot : ""}) ${u.unique ? "· Unique" : ""}</div>
       <div class="muted">${u.description || ""}</div>
+      <div class="muted">Exclusive: ${u.exclusive_group || "—"} · Targets: ${(u.targets||[]).join(", ") || "—"}</div>
       <div class="muted">Mods: ${modsToString(u.modifiers)}</div>
       <div class="row" style="margin-top:6px; gap:6px;">
         <button class="btn small edit">Edit</button>
@@ -178,6 +183,8 @@ async function loadList(){
       $("#name").value = u.name;
       $("#unique").checked = !!u.unique;
       $("#desc").value = u.description || "";
+      $("#exclusive").value = u.exclusive_group || "";
+      $("#targets").value = (u.targets||[]).join(", ");
       setModifiers(document.getElementById("mod-list"), u.modifiers || []);
       $("#status").textContent = `Editing ${u.id}`;
     });
@@ -199,6 +206,8 @@ async function saveUpgrade(){
     name: $("#name").value,
     description: $("#desc").value,
     unique: $("#unique").checked,
+    exclusive_group: $("#exclusive").value,
+    targets: ($("#targets").value || "").split(",").map(s=>s.trim()).filter(Boolean),
     modifiers: collectModifiers(document.getElementById("mod-list")),
   };
   const editing = $("#editing").value;

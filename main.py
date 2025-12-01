@@ -1592,6 +1592,25 @@ async def update_spell_list(list_id: str, request: Request):
     new_doc = col.find_one({"id": list_id}, {"_id":0})
     return {"status":"success","list": new_doc}
 
+@app.post("/spell_lists/{list_id}/duplicate")
+def duplicate_spell_list(list_id: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col("spell_lists")
+    doc = col.find_one({"id": list_id})
+    if not _can_access_list(doc, username, role):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    base_name = (doc.get("name") or "Spell List").strip() or "Spell List"
+    new_id = next_id_str("spell_lists", padding=4)
+    now = datetime.datetime.utcnow().isoformat() + "Z"
+    dup = {k: v for k, v in doc.items() if k != "_id"}
+    dup["id"] = new_id
+    dup["name"] = f"{base_name} (copy)"
+    dup["owner"] = username
+    dup["created_at"] = now
+    dup["updated_at"] = now
+    col.insert_one(dict(dup))
+    return {"status":"success","list": {k:v for k,v in dup.items() if k!="_id"}}
+
 @app.get("/spell_lists/{list_id}/spells")
 def spell_list_spells(list_id: str, request: Request):
     username, role = require_auth(request, roles=["user","moderator","admin"])
@@ -1938,6 +1957,7 @@ def _weapon_from_body(b: dict) -> dict:
     enc   = float(b.get("enc") or 0)
     fx    = _as_list(b.get("effects"))
 
+    ups = _as_list(b.get("upgrades"))
     doc = {
         "name": name,
         "name_key": norm_key(name),
@@ -1952,6 +1972,7 @@ def _weapon_from_body(b: dict) -> dict:
         "is_animarma": bool(b.get("is_animarma") or False),
         "nature": (b.get("nature") or "").strip(),  # optional, can be edited later
         "modifiers": _modifiers_from_body(b),
+        "upgrades": ups,
     }
     return doc
 
@@ -2122,6 +2143,7 @@ def _equipment_from_body(b: dict) -> dict:
         "mo_penalty": int(b.get("mo_penalty") or 0),
         "price": int(b.get("price") or 2528),
         "modifiers": _modifiers_from_body(b),
+        "upgrades": _as_list(b.get("upgrades")),
     }
     return doc
 
@@ -2202,6 +2224,12 @@ def _upgrade_from_body(body: dict) -> dict:
     name, key = _eq_norm_name(body.get("name"), "Upgrade")
     unique = bool(body.get("unique", False))
     modifiers = _modifiers_from_body(body)
+    targets = body.get("targets")
+    if isinstance(targets, str):
+        targets = [t.strip() for t in targets.split(",") if t.strip()]
+    if targets and not isinstance(targets, list):
+        targets = []
+    exclusive_group = (body.get("exclusive_group") or body.get("exclusive") or "").strip().lower()
     return {
         "kind": kind,
         "slot": slot,
@@ -2210,6 +2238,8 @@ def _upgrade_from_body(body: dict) -> dict:
         "unique": unique,
         "description": (body.get("description") or "").strip(),
         "modifiers": modifiers,
+        "targets": targets or [],
+        "exclusive_group": exclusive_group,
         "created_at": datetime.datetime.utcnow().isoformat()+"Z",
     }
 
@@ -2474,6 +2504,95 @@ def _validate_upgrades(kind: str, subcat: str | None, quality: str, existing: li
     fee, steps = _upgrade_fee_for_range(len(exist), len(new)-len(exist))
     return (new, fee, steps)
 
+def _normalize_upgrade_target_list(val):
+    if isinstance(val, str):
+        return [t.strip().lower() for t in val.split(",") if t.strip()]
+    if isinstance(val, list):
+        return [str(t).strip().lower() for t in val if str(t).strip()]
+    return []
+
+def _normalize_upgrade_payload(add_list):
+    out = []
+    for a in add_list or []:
+        if isinstance(a, str):
+            out.append({"id": a})
+        elif isinstance(a, dict):
+            entry = {"id": str(a.get("id") or a.get("upgrade_id") or a.get("upgrade") or "").strip()}
+            if "target" in a:
+                entry["target"] = str(a.get("target") or "").strip()
+            out.append(entry)
+    return [x for x in out if x.get("id")]
+
+def _fetch_upgrade_docs(ids: list[str]) -> list[dict]:
+    if not ids:
+        return []
+    docs = list(get_col("upgrades").find({"id": {"$in": ids}}, {"_id": 0}))
+    by_id = {d["id"]: d for d in docs}
+    return [by_id[i] for i in ids if i in by_id]
+
+def _prepare_new_upgrades(existing: list[dict], add_payload: list, kind: str, slot: str | None, quality: str) -> tuple[list[dict], int, list[dict]]:
+    existing = existing or []
+    add_list = _normalize_upgrade_payload(add_payload)
+    if not add_list:
+        return [], 0, []
+    slot = (slot or "").strip().lower()
+    docs = _fetch_upgrade_docs([x["id"] for x in add_list])
+    by_id = {d["id"]: d for d in docs}
+    new_docs = []
+    total_fee = 0
+    for payload in add_list:
+        doc = by_id.get(payload["id"])
+        if not doc:
+            raise HTTPException(404, f"Upgrade not found: {payload['id']}")
+        if doc.get("kind") != kind:
+            raise HTTPException(400, "Upgrade kind mismatch")
+        if kind == "equipment":
+            slot_req = (doc.get("slot") or "").strip().lower()
+            if slot_req and slot and slot_req != slot:
+                raise HTTPException(400, "Upgrade not allowed for this equipment slot")
+
+        # exclusivity / unique
+        if doc.get("unique"):
+            if any(x.get("id") == doc["id"] for x in existing+new_docs):
+                raise HTTPException(400, "Upgrade already installed (unique)")
+        excl = (doc.get("exclusive_group") or "").strip().lower()
+        if excl and any((u.get("exclusive_group") or "").strip().lower() == excl for u in existing+new_docs):
+            raise HTTPException(400, f"Exclusive upgrade conflict: {excl}")
+
+        # target selection and limit (max 2 per target)
+        targets = _normalize_upgrade_target_list(doc.get("targets"))
+        chosen_target = (payload.get("target") or "").strip().lower()
+        if targets:
+            if not chosen_target:
+                raise HTTPException(400, f"Upgrade {doc.get('name','Upgrade')} requires a target selection")
+            if chosen_target not in targets:
+                raise HTTPException(400, f"Invalid target for upgrade {doc.get('name','Upgrade')}")
+            cnt = sum(1 for u in existing+new_docs if (u.get("target") or "").strip().lower() == chosen_target)
+            if cnt >= 2:
+                raise HTTPException(400, f"Target {chosen_target} already has two upgrades applied")
+        else:
+            chosen_target = ""
+
+        ndoc = {
+            "id": doc.get("id"),
+            "name": doc.get("name"),
+            "unique": bool(doc.get("unique")),
+            "slot": doc.get("slot"),
+            "kind": doc.get("kind"),
+            "exclusive_group": doc.get("exclusive_group") or "",
+            "targets": targets,
+            "target": chosen_target,
+            "modifiers": doc.get("modifiers") or [],
+        }
+        new_docs.append(ndoc)
+
+    slots_limit = _slots_for_quality(quality)
+    if slots_limit and (len(existing) + len(new_docs)) > slots_limit:
+        raise HTTPException(400, "Upgrade slots exceeded for current quality")
+    fee, steps = _upgrade_fee_for_range(len(existing), len(new_docs))
+    total_fee += fee
+    return new_docs, total_fee, steps
+
 @app.post("/inventories/{inv_id}/purchase")
 def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     user, role = require_auth(request)
@@ -2502,13 +2621,19 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     eq_slot = src.get("slot") if kind == "equipment" else None
 
     unit_price = base_price
+    base_upgrades: list[dict] = []
+    add_upgrades: list[dict] = []
+    fee = 0
     if kind in ("weapon", "equipment"):
-        # quality/upgrades supported if you need them later
         unit_price = _qprice(base_price, quality)
-        upgrades, fee, steps = _validate_upgrades(kind, subcat, quality, existing=[], add=upgrades_req)
+        # base (pre-installed) upgrades from catalog
+        try:
+            base_upgrades, _fee0, _steps0 = _prepare_new_upgrades([], src.get("upgrades") or [], kind, eq_slot, quality)
+        except HTTPException as e:
+            # user visible error
+            raise
+        add_upgrades, fee, steps = _prepare_new_upgrades(base_upgrades, upgrades_req, kind, eq_slot, quality)
         unit_price += fee
-    else:
-        upgrades = []
 
     total = unit_price * qty
 
@@ -2536,7 +2661,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "enc": enc,
         "base_price": base_price,
         "paid_unit": unit_price,
-        "upgrades": upgrades,
+        "upgrades": base_upgrades + add_upgrades,
         "container_id": container_id,
         "stowed_container_id": stowed_container_id,
         "modifiers": src.get("modifiers") or [],
@@ -2592,12 +2717,15 @@ def improve_item(request: Request, inv_id: str, item_id: str, payload: dict = Bo
       note_parts.append(f"quality → {new_q}")
 
     # upgrades
-    add_list = [{"key": k} for k in add_keys]
-    new_upgrades, fee, steps = _validate_upgrades(kind, subcat, it.get("quality") or "Adequate", it.get("upgrades") or [], add_list)
-    if len(new_upgrades) > len(it.get("upgrades") or []):
-        it["upgrades"] = new_upgrades
+    existing_upgs = it.get("upgrades") or []
+    try:
+        add_upgrades, fee, steps = _prepare_new_upgrades(existing_upgs, add_keys, kind, it.get("equipment_slot") or it.get("slot") or None, it.get("quality") or "Adequate")
+    except HTTPException:
+        raise
+    if len(add_upgrades) > 0:
+        it["upgrades"] = existing_upgs + add_upgrades
         total_cost += fee
-        note_parts.append(f"+{len(new_upgrades)-(len(it.get('upgrades') or []))} upgrade(s)")
+        note_parts.append(f"+{len(add_upgrades)} upgrade(s)")
 
     # persist + money
     if total_cost > 0:
@@ -2809,11 +2937,11 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
             raise HTTPException(400, "Upgrade not allowed for this equipment slot")
 
     existing = it.get("upgrades") or []
-    if upg_doc.get("unique"):
-        if any(x.get("id") == upg_id for x in existing):
-            raise HTTPException(400, "Upgrade already installed (unique)")
+    add_payload = [{"id": upg_id, "target": (payload.get("target") or "").strip()}]
+    add_upgrades, fee_per_unit, steps = _prepare_new_upgrades(existing, add_payload, kind, slot, it.get("quality") or "Adequate")
+    if not add_upgrades:
+        raise HTTPException(400, "Upgrade could not be applied")
 
-    fee_per_unit, _steps = _upgrade_fee_for_range(len(existing), 1)
     qty = int(it.get("quantity") or 1)
     delta_total = int(fee_per_unit) * qty
     currency = _pick_currency(inv, (payload.get("currency") or None))
@@ -2821,14 +2949,7 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
     curmap = inv.get("currencies", {})
     curmap[currency] = int(curmap.get(currency, 0)) - delta_total
 
-    new_upgrades = existing + [{
-        "id": upg_doc.get("id"),
-        "name": upg_doc.get("name"),
-        "unique": bool(upg_doc.get("unique")),
-        "slot": upg_doc.get("slot"),
-        "kind": upg_doc.get("kind"),
-        "modifiers": upg_doc.get("modifiers") or [],
-    }]
+    new_upgrades = existing + add_upgrades
     if kind == "equipment" and not it.get("equipment_slot") and upg_doc.get("slot"):
         it["equipment_slot"] = upg_doc.get("slot")
     quality = it.get("quality") or "Adequate"

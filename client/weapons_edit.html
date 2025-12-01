@@ -56,6 +56,9 @@
     <div class="row" style="margin-top:6px;">
       <label style="flex:1">Description<br/><textarea id="m-desc" rows="3" style="width:100%"></textarea></label>
     </div>
+    <div class="row" style="margin-top:6px;">
+      <label style="flex:1">Preinstalled upgrades (ids, comma)<br/><input id="m-upgrades" style="width:100%"></label>
+    </div>
     <div class="row" style="margin-top:6px;flex-direction:column;align-items:stretch;gap:8px;">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <strong>Modifiers</strong>
@@ -215,6 +218,7 @@ function openEdit(id){
   document.getElementById("m-enc").value    = w.enc ?? 0;
   document.getElementById("m-effects").value = (w.effects||[]).join(", ");
   document.getElementById("m-desc").value   = w.description||"";
+  document.getElementById("m-upgrades").value = (w.upgrades||[]).join(", ");
   setModifiers(modListEl, w.modifiers || []);
   document.getElementById("m-price").value  = w.price ?? 0;
   syncQuality();
@@ -251,6 +255,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
     effects: document.getElementById("m-effects").value.split(",").map(s=>s.trim()).filter(Boolean),
     description: document.getElementById("m-desc").value.trim(),
     price:  Number(document.getElementById("m-price").value||0),
+    upgrades: document.getElementById("m-upgrades").value.split(",").map(s=>s.trim()).filter(Boolean),
     modifiers: collectModifiers(modListEl),
   };
   const r=await fetch(`/weapons/${EDIT_ID}`,{method:"PUT",headers:{ "Content-Type":"application/json", ...authHeaders() },body:JSON.stringify(body)});

@@ -81,6 +81,7 @@
       </div>
       <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Effects</span><input id="sp-effects" style="width:100%"></label></div>
       <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Description</span><textarea id="sp-desc" rows="3" style="width:100%"></textarea></label></div>
+      <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Preinstalled upgrades (ids, comma)</span><input id="sp-upgrades" style="width:100%"></label></div>
     </div>
 
     <!-- SLOT -->
@@ -94,6 +95,7 @@
         <label><span>Enc.</span><input id="sl-enc" type="number" step="0.1" style="width:100px"></label>
       </div>
       <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Description</span><textarea id="sl-desc" rows="3" style="width:100%"></textarea></label></div>
+      <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Preinstalled upgrades (ids, comma)</span><input id="sl-upgrades" style="width:100%"></label></div>
     </div>
 
     <!-- ARMOR -->
@@ -109,6 +111,7 @@
       </div>
       <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Receptacle</span><input id="ar-receptacle" style="width:100%"></label></div>
       <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Effect</span><input id="ar-effect" style="width:100%"></label></div>
+      <div class="row" style="margin-top:6px;"><label style="flex:1"><span>Preinstalled upgrades (ids, comma)</span><input id="ar-upgrades" style="width:100%"></label></div>
       <div class="row muted" style="margin-top:6px;"><span class="pill">Base price (Adequate): 2528</span></div>
     </div>
 
@@ -274,12 +277,14 @@ function fillFormFromEdit(isNew=false){
     $("#sp-hands").value = isNew ? 1 : (e.hands ?? 1);
     $("#sp-effects").value = isNew ? "" : ((e.effects||[]).join(", "));
     $("#sp-desc").value  = isNew ? "" : (e.description||"");
+    $("#sp-upgrades").value = (e.upgrades||[]).join(", ");
   } else if (e.category==="slot"){
     $("#sl-slot").value  = e.slot||"head";
     $("#sl-style").value = isNew ? "" : (e.style||"");
     $("#sl-price").value = isNew ? 0 : (e.price ?? 0);
     $("#sl-enc").value   = isNew ? 0 : (e.enc ?? 0);
     $("#sl-desc").value  = isNew ? "" : (e.description||"");
+    $("#sl-upgrades").value = (e.upgrades||[]).join(", ");
   } else if (e.category==="armor"){
     $("#ar-slot").value = e.slot || "chest";
     $("#ar-type").value = isNew ? "" : (e.type||"");
@@ -288,6 +293,7 @@ function fillFormFromEdit(isNew=false){
     $("#ar-mo").value   = isNew ? 0 : (e.mo_penalty ?? 0);
     $("#ar-receptacle").value = isNew ? "" : (e.receptacle||"");
     $("#ar-effect").value     = isNew ? "" : (e.effect||"");
+    $("#ar-upgrades").value = (e.upgrades||[]).join(", ");
   }
 
   setModifiers(modListEl, isNew ? [] : (e.modifiers || []));
@@ -317,6 +323,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
       hands:  Number($("#sp-hands").value||1),
       effects: $("#sp-effects").value.split(",").map(s=>s.trim()).filter(Boolean),
       description: $("#sp-desc").value.trim(),
+      upgrades: $("#sp-upgrades").value.split(",").map(s=>s.trim()).filter(Boolean),
     };
   } else if (EDIT.category==="slot"){
     body = {
@@ -326,6 +333,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
       price: Number($("#sl-price").value||0),
       enc:   Number($("#sl-enc").value||0),
       description: $("#sl-desc").value.trim(),
+      upgrades: $("#sl-upgrades").value.split(",").map(s=>s.trim()).filter(Boolean),
     };
   } else {
     body = {
@@ -338,6 +346,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
       receptacle: $("#ar-receptacle").value.trim(),
       effect: $("#ar-effect").value.trim(),
       price: 2528,
+      upgrades: $("#ar-upgrades").value.split(",").map(s=>s.trim()).filter(Boolean),
     };
   }
   body.modifiers = collectModifiers(modListEl);

@@ -72,6 +72,7 @@
     /* Embed adjustments */
     body.embed .topbar{ display:none; }
     body.embed #sl .wrap{ margin-top:8px; }
+    body.embed .hide-when-embedded{ display:none !important; }
   </style>
 </head>
 <body>
@@ -102,7 +103,7 @@
     </div>
 
     <!-- Initial Values -->
-    <div class="home-card">
+    <div class="home-card hide-when-embedded">
       <div class="row">
         <h2 style="margin:0;">Initial Values</h2>
         <span class="spacer"></span>
@@ -127,7 +128,7 @@
     </div>
 
     <!-- Schools table (unchanged core logic) -->
-    <div class="home-card">
+    <div class="home-card hide-when-embedded">
       <div class="row" style="margin-bottom:8px;">
         <h2 style="margin:0;">School Categories</h2>
         <span class="spacer"></span>
@@ -155,7 +156,7 @@
         <button class="btn" id="recalc">Recalculate</button>
       </div>
 
-      <div class="home-card">
+      <div class="home-card hide-when-embedded">
         <table class="table" id="schools-table">
           <thead>
             <tr>
@@ -476,9 +477,23 @@ let token = "";
 let listId = "";
 const searchParams = new URLSearchParams(location.search);
 const isEmbed = searchParams.get("embed") === "1";
+const embedScope = searchParams.get("scope") || "";
 if (isEmbed){
   document.body.classList.add("embed");
 }
+window.addEventListener("message", (event)=>{
+  if (event.origin !== location.origin) return;
+  const data = event.data || {};
+  if (data.type === "spelllist-iv" && data.iv){
+    IV_OVERRIDE = normalizeIV(data.iv);
+    if (!spellList) return;
+    renderIVChips(currentIV());
+    computed = computeAll();
+    if (!skipFull){
+      renderSchools();
+    }
+  }
+});
 
 const modal    = document.getElementById("login-modal");
 const backdrop = document.getElementById("login-backdrop");
@@ -685,6 +700,9 @@ function normalizeIV(iv){
   for (const k in (iv.skills||{}))  s[lc(k)] = +(iv.skills[k]||0);
   return { mag: +(iv.mag||0), natures:n, skills:s };
 }
+function currentIV(){
+  return normalizeIV(IV_OVERRIDE || spellList?.initial_values || {});
+}
 function bestMSForSchool(iv, school, opts={}){
   const mag = +((iv.mag ?? 0) || 0);
   const skillKey = lc(school.linked_skill || "");
@@ -747,6 +765,8 @@ function eligibleForSpell(spell){
 let variantsCache = [];
 let bonusesCache = [];
 let spellMetaCache = {};  // { [spellId]: { status: "known"|"learnt", alt_name: "", flavor: "" } }
+let IV_OVERRIDE = null;
+let skipFull = false;
 
 async function fetchListMeta(){
   const r = await fetch(`${API_BASE}/spell_lists/${encodeURIComponent(listId)}/meta`,
@@ -992,7 +1012,7 @@ function msBonusForLinkedRules(school, variantUsedNatures) {
   }
 
   if (!spellList || !schools.length) return [];
-  const iv = normalizeIV(spellList.initial_values || {});
+  const iv = currentIV();
   const out = [];
 
   // base (non-upgrade) schools
@@ -1125,11 +1145,11 @@ function updateCounts(){
 async function loadMySpells(){
   document.getElementById("my-spells-card").style.display = "block";
   const tbody = document.getElementById("my-spells-body");
-  tbody.innerHTML = `<tr><td colspan="7" class="empty">Loading…</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="6" class="empty">Loading...</td></tr>`;
   mySpells = await fetchListSpells();
 
   if (!mySpells.length){
-    tbody.innerHTML = `<tr><td colspan="7" class="empty">No spells yet. Click “Add Spells”.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">No spells yet. Click “Add Spells”.</td></tr>`;
     updateCounts();
     return;
   }
@@ -1144,7 +1164,8 @@ async function loadMySpells(){
     const displayAlt = m.altName || "";
 
     // Row cells
-    const nameHTML = `<div class="k">${sp.name}</div><div class="muted">id: ${sp.id}</div>`;
+    const displayName = displayAlt || sp.name || "—";
+    const nameHTML = `<div class="k">${displayName}</div><div class="muted">id: ${sp.id}</div>`;
     const statusHTML = `
       <select class="sl-status" data-status="${sp.id}">
         <option value="learnt" ${m.status==="learnt"?"selected":""}>Learnt</option>
@@ -1154,7 +1175,6 @@ async function loadMySpells(){
 
     tr.innerHTML = `
       <td>${nameHTML}</td>
-      <td>${displayAlt ? `<span class="k">${displayAlt}</span>` : `<span class="muted">—</span>`}</td>
       <td>${schTxt||"—"}</td>
       <td>${sp.category || "—"}</td>
       <td>${statusHTML}</td>
@@ -1668,6 +1688,16 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   token = localStorage.getItem("auth_token") || "";
   listId = qs("id");
   PINNED = loadPins();
+  skipFull = isEmbed && embedScope.toLowerCase() === "myspells";
+  if (isEmbed && embedScope.toLowerCase() === "myspells"){
+    document.querySelectorAll(".home-card").forEach(card=>{
+      if (!card.querySelector("#my-spells-body")){
+        card.style.display = "none";
+      }
+    });
+    const contentGrid = document.getElementById("content");
+    if (contentGrid) contentGrid.style.display = "none";
+  }
 
   // topbar auth chip minimal
   const me = await apiMe();
@@ -1700,14 +1730,18 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   schools = await fetchSchools();
   refreshUpgradeSets();
   computed = computeAll();
-  buildMinCatSelect();
-  document.getElementById("content").style.display = "grid";  
-  renderSchools();
+  if (!skipFull){
+    buildMinCatSelect();
+    document.getElementById("content").style.display = "grid";  
+    renderSchools();
+  }
 
   await fetchListMeta();
 
   computed = computeAll();
-  renderSchools();
+  if (!skipFull){
+    renderSchools();
+  }
 
   await loadMySpells();
 
@@ -1786,7 +1820,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   const ivBackdrop = document.getElementById("iv-backdrop");
   document.getElementById("edit-iv").addEventListener("click", ()=>{
     // prefill current IV
-    const iv = spellList.initial_values || {};
+    const iv = currentIV();
     document.getElementById("iv-mag-input").value = iv.mag ?? 0;
     const n = iv.natures || {}, s = iv.skills || {};
     (["fire","water","wind","earth","sun","moon","lightning","ki"]).forEach(k => document.getElementById(`iv-${k}`).value = n[k] ?? 0);
@@ -1804,8 +1838,12 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     };
     await updateSpellList(listId, { initial_values: iv });
     spellList = await fetchSpellList(listId);
-    renderIVChips(normalizeIV(iv));
-    computed = computeAll(); renderSchools();
+    IV_OVERRIDE = null;
+    renderIVChips(currentIV());
+    computed = computeAll();
+    if (!skipFull){
+      renderSchools();
+    }
     closeModal(ivModal, ivBackdrop);
   });
 
@@ -1841,7 +1879,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   });
 
   // Render IV chips initially
-  renderIVChips(normalizeIV(spellList.initial_values || {}));
+  renderIVChips(currentIV());
 });
 
 /* =========================

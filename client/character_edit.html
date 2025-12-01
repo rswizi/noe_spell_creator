@@ -224,6 +224,7 @@
               <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
                 <select id="sl-select" class="grow"></select>
                 <button id="sl-load-btn">Load</button>
+                <button id="sl-dup-btn">Duplicate & Link</button>
                 <a class="btn" id="sl-open-btn" target="_blank" rel="noopener" style="display:none;">Open list</a>
                 <a class="btn" id="sl-manager-btn" href="spell_list_home.html" target="_blank" rel="noopener">Full manager</a>
                 <span id="sl-status" class="muted"></span>
@@ -451,11 +452,13 @@ const invEmbed = document.getElementById('inv-embed');
 /* Spell list refs */
 const slSelectEl = document.getElementById('sl-select');
 const slLoadBtn = document.getElementById('sl-load-btn');
+const slDupBtn = document.getElementById('sl-dup-btn');
 const slOpenBtn = document.getElementById('sl-open-btn');
 const slStatusEl = document.getElementById('sl-status');
 const slSummaryEl = document.getElementById('sl-summary');
 const slEmbedWrap = document.getElementById('sl-embed-wrap');
 const slEmbed = document.getElementById('sl-embed');
+if (slEmbed) slEmbed.addEventListener('load', ()=> pushSpellListIVToEmbed());
 /* Sublimations refs */
 const subTypeEl = document.getElementById('sub-type');
 const subTierEl = document.getElementById('sub-tier');
@@ -1023,9 +1026,50 @@ function renderSpellListSummary(){
   slOpenBtn.href = `spell_list_view.html?id=${encodeURIComponent(LINKED_SPELL_LIST.id || '')}`;
   if (slEmbedWrap && slEmbed){
     slEmbedWrap.style.display = '';
-    const targetSrc = new URL(`spell_list_view.html?id=${encodeURIComponent(LINKED_SPELL_LIST.id || '')}&embed=1`, location.href).toString();
+    const targetSrc = new URL(`spell_list_view.html?id=${encodeURIComponent(LINKED_SPELL_LIST.id || '')}&embed=1&scope=myspells`, location.href).toString();
     if (slEmbed.src !== targetSrc) slEmbed.src = targetSrc;
   }
+}
+
+function deriveSpellListInitialValuesFromChar(){
+  if (!CHAR || !CHAR.stats) return null;
+  const iv = {
+    mag: totalFromInvest(CHAR.stats.magic?.invest || 0),
+    natures: {fire:0,water:0,wind:0,earth:0,sun:0,moon:0,lightning:0,ki:0},
+    skills: {aura:0,incantation:0,enchantement:0,potential:0,restoration:0,stealth:0,investigation:0,charm:0,intimidation:0,absorption:0,spirit:0},
+  };
+  const ints = CHAR.stats.intensities || {};
+  for (const k of Object.keys(iv.natures)){
+    const rec = ints[k] || {};
+    const val = typeof rec === 'object' ? rec.invest : rec;
+    iv.natures[k] = Math.max(0, Math.floor(Number(val)||0));
+  }
+  const skillMap = {
+    aura:['magic','Aura'],
+    incantation:['magic','Incantation'],
+    enchantement:['magic','Enchantment'],
+    potential:['magic','Potential'],
+    restoration:['magic','Restoration'],
+    stealth:['dexterity','Stealth'],
+    investigation:['wisdom','Investigation'],
+    charm:['presence','Charm'],
+    intimidation:['willpower','Intimidation'],
+    absorption:['willpower','Absorption'],
+    spirit:['willpower','Spirit'],
+  };
+  for (const [key,[ck,sk]] of Object.entries(skillMap)){
+    iv.skills[key] = skillTotalAdjustedFor(ck, sk).total;
+  }
+  return iv;
+}
+
+function pushSpellListIVToEmbed(){
+  if (!SELECTED_SPELL_LIST_ID || !slEmbed || !slEmbed.contentWindow) return;
+  const iv = deriveSpellListInitialValuesFromChar();
+  if (!iv) return;
+  try{
+    slEmbed.contentWindow.postMessage({ type:'spelllist-iv', iv }, location.origin);
+  }catch{}
 }
 
 async function loadSpellListById(id){
@@ -1046,6 +1090,7 @@ async function loadSpellListById(id){
       SELECTED_SPELL_LIST_ID = LINKED_SPELL_LIST.id || id;
       if (CHAR) CHAR.spell_list_id = SELECTED_SPELL_LIST_ID;
       renderSpellListSummary();
+      pushSpellListIVToEmbed();
       slStatusEl.textContent = 'Spell list loaded';
       queueSave();
     }else{
@@ -1053,6 +1098,29 @@ async function loadSpellListById(id){
     }
   }catch(e){
     slStatusEl.textContent = 'Load failed: ' + e.message;
+  }
+}
+
+async function duplicateAndLinkSpellList(){
+  if (!SELECTED_SPELL_LIST_ID){
+    slStatusEl.textContent = 'Select a spell list first.';
+    return;
+  }
+  slStatusEl.textContent = 'Duplicating...';
+  try{
+    const res = await api('/spell_lists/' + encodeURIComponent(SELECTED_SPELL_LIST_ID) + '/duplicate', { method:'POST' });
+    if (res.list){
+      LINKED_SPELL_LIST = res.list;
+      SELECTED_SPELL_LIST_ID = res.list.id;
+      if (CHAR) CHAR.spell_list_id = SELECTED_SPELL_LIST_ID;
+      renderSpellListSummary();
+      await loadSpellListsList();
+      pushSpellListIVToEmbed();
+      slStatusEl.textContent = 'Duplicated and linked as ' + SELECTED_SPELL_LIST_ID;
+      queueSave();
+    }
+  }catch(e){
+    slStatusEl.textContent = 'Duplicate failed: ' + e.message;
   }
 }
 
@@ -1303,6 +1371,7 @@ function updateDerived(){
   encEl.textContent = `${Number(final.current_enc || 0).toFixed(1)} / ${final.enc}`;
   etEl.textContent = final.et;
   txEl.textContent = final.tx;
+  pushSpellListIVToEmbed();
 }
 
 /* LOAD & SAVE */
@@ -1396,6 +1465,7 @@ invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
 invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));
 slLoadBtn.addEventListener('click', ()=> loadSpellListById(slSelectEl.value));
 slSelectEl.addEventListener('change', ()=> loadSpellListById(slSelectEl.value));
+slDupBtn.addEventListener('click', duplicateAndLinkSpellList);
 
 function renderSearchResults(arr){
   abiResultsEl.innerHTML = '';
