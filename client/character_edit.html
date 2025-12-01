@@ -217,6 +217,28 @@
         <div class="panel">
           <details open class="panel">
             <summary class="hdr">
+              <strong>Spell List</strong>
+              <span class="muted">(link + manage inline)</span>
+            </summary>
+            <div class="panel-body">
+              <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                <select id="sl-select" class="grow"></select>
+                <button id="sl-load-btn">Load</button>
+                <a class="btn" id="sl-open-btn" target="_blank" rel="noopener" style="display:none;">Open list</a>
+                <a class="btn" id="sl-manager-btn" href="spell_list_home.html" target="_blank" rel="noopener">Full manager</a>
+                <span id="sl-status" class="muted"></span>
+              </div>
+              <div id="sl-summary" class="muted" style="margin-bottom:8px;"></div>
+              <div id="sl-embed-wrap" style="display:none; margin-top:10px;">
+                <iframe id="sl-embed" title="Spell list" style="width:100%; height:760px; border:1px solid #222; border-radius:12px;"></iframe>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="panel">
+          <details open class="panel">
+            <summary class="hdr">
               <strong>Abilities on this Character</strong>
               <span class="muted">(Archetype / Passive / Active)</span>
               <span class="grow"></span>
@@ -378,6 +400,9 @@ let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
 let INVENTORIES = [];
 let LINKED_INV = null;
 let SELECTED_INV_ID = '';
+let SPELL_LISTS = [];
+let LINKED_SPELL_LIST = null;
+let SELECTED_SPELL_LIST_ID = '';
 let SUBLIMATIONS = [];
 let SUB_HIDDEN = {};
 
@@ -423,6 +448,14 @@ const invStatusEl = document.getElementById('inv-status');
 const invSummaryEl = document.getElementById('inv-summary');
 const invEmbedWrap = document.getElementById('inv-embed-wrap');
 const invEmbed = document.getElementById('inv-embed');
+/* Spell list refs */
+const slSelectEl = document.getElementById('sl-select');
+const slLoadBtn = document.getElementById('sl-load-btn');
+const slOpenBtn = document.getElementById('sl-open-btn');
+const slStatusEl = document.getElementById('sl-status');
+const slSummaryEl = document.getElementById('sl-summary');
+const slEmbedWrap = document.getElementById('sl-embed-wrap');
+const slEmbed = document.getElementById('sl-embed');
 /* Sublimations refs */
 const subTypeEl = document.getElementById('sub-type');
 const subTierEl = document.getElementById('sub-tier');
@@ -955,6 +988,74 @@ async function loadInventoryById(id){
   }
 }
 
+async function loadSpellListsList(){
+  slStatusEl.textContent = 'Loading spell lists...';
+  try{
+    const res = await api('/spell_lists/mine');
+    SPELL_LISTS = res.lists || [];
+    slSelectEl.innerHTML = '<option value="">-- Select spell list --</option>';
+    SPELL_LISTS.forEach(lst=>{
+      const opt = document.createElement('option');
+      opt.value = lst.id;
+      opt.textContent = lst.name || lst.id;
+      if (lst.id === SELECTED_SPELL_LIST_ID) opt.selected = true;
+      slSelectEl.appendChild(opt);
+    });
+    slStatusEl.textContent = '';
+  }catch(e){
+    slStatusEl.textContent = 'Load failed: ' + e.message;
+  }
+}
+
+function renderSpellListSummary(){
+  if (!LINKED_SPELL_LIST){
+    slSummaryEl.textContent = 'No spell list linked.';
+    slOpenBtn.style.display = 'none';
+    if (slEmbedWrap) slEmbedWrap.style.display = 'none';
+    if (slEmbed) slEmbed.src = '';
+    return;
+  }
+  const spellCount = Array.isArray(LINKED_SPELL_LIST.spells) ? LINKED_SPELL_LIST.spells.length : (LINKED_SPELL_LIST.count || 0);
+  const iv = LINKED_SPELL_LIST.initial_values || {};
+  const mag = Number(iv.mag ?? 0);
+  slSummaryEl.textContent = `${LINKED_SPELL_LIST.name || 'Spell List'} - Spells: ${spellCount} | MAG: ${mag}`;
+  slOpenBtn.style.display = '';
+  slOpenBtn.href = `spell_list_view.html?id=${encodeURIComponent(LINKED_SPELL_LIST.id || '')}`;
+  if (slEmbedWrap && slEmbed){
+    slEmbedWrap.style.display = '';
+    const targetSrc = new URL(`spell_list_view.html?id=${encodeURIComponent(LINKED_SPELL_LIST.id || '')}&embed=1`, location.href).toString();
+    if (slEmbed.src !== targetSrc) slEmbed.src = targetSrc;
+  }
+}
+
+async function loadSpellListById(id){
+  if (!id){
+    LINKED_SPELL_LIST = null;
+    SELECTED_SPELL_LIST_ID = '';
+    if (CHAR) CHAR.spell_list_id = '';
+    slStatusEl.textContent = '';
+    renderSpellListSummary();
+    queueSave();
+    return;
+  }
+  slStatusEl.textContent = 'Loading spell list...';
+  try{
+    const res = await api('/spell_lists/' + encodeURIComponent(id));
+    if (res.list){
+      LINKED_SPELL_LIST = res.list;
+      SELECTED_SPELL_LIST_ID = LINKED_SPELL_LIST.id || id;
+      if (CHAR) CHAR.spell_list_id = SELECTED_SPELL_LIST_ID;
+      renderSpellListSummary();
+      slStatusEl.textContent = 'Spell list loaded';
+      queueSave();
+    }else{
+      throw new Error('Not found');
+    }
+  }catch(e){
+    slStatusEl.textContent = 'Load failed: ' + e.message;
+  }
+}
+
 function charBaseMod(key){
   const invest = CHAR.stats?.[key]?.invest ?? 0;
   return modFromTotal(totalFromInvest(invest));
@@ -1214,7 +1315,10 @@ async function loadCharacter(){
   if (!('level' in CHAR)) CHAR.level = 1;
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
+  SELECTED_SPELL_LIST_ID = CHAR.spell_list_id || '';
   SELECTED_INV_ID = CHAR.inventory_id || '';
+  LINKED_SPELL_LIST = null;
+  renderSpellListSummary();
 
   // Name
   titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
@@ -1237,6 +1341,8 @@ async function loadCharacter(){
   // refresh visuals that depend on passive agg
   renderStatistics();
   updateDerived();
+  await loadSpellListsList();
+  if (SELECTED_SPELL_LIST_ID) loadSpellListById(SELECTED_SPELL_LIST_ID);
   await loadInventoriesList();
   if (SELECTED_INV_ID) loadInventoryById(SELECTED_INV_ID);
 }
@@ -1249,7 +1355,15 @@ function queueSave(){
 
 async function saveNow(){
   try{
-    const payload = { name: nameEl.value || '', level: CHAR.level || 1, stats: CHAR.stats, abilities: CHAR.abilities || [], inventory_id: SELECTED_INV_ID || '', sublimations: SUBLIMATIONS };
+    const payload = {
+      name: nameEl.value || '',
+      level: CHAR.level || 1,
+      stats: CHAR.stats,
+      abilities: CHAR.abilities || [],
+      inventory_id: SELECTED_INV_ID || '',
+      spell_list_id: SELECTED_SPELL_LIST_ID || '',
+      sublimations: SUBLIMATIONS
+    };
     const res = await api('/characters/' + encodeURIComponent(CID), {
       method:'PUT', headers:{ 'content-type':'application/json' }, body: JSON.stringify(payload)
     });
@@ -1280,6 +1394,8 @@ abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilit
 
 invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
 invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));
+slLoadBtn.addEventListener('click', ()=> loadSpellListById(slSelectEl.value));
+slSelectEl.addEventListener('change', ()=> loadSpellListById(slSelectEl.value));
 
 function renderSearchResults(arr){
   abiResultsEl.innerHTML = '';

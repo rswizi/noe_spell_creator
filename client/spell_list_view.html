@@ -69,6 +69,9 @@
     /* Rich text editor area (export/meta flavour) */
     .rt-toolbar { display:flex; gap:8px; margin-bottom:6px; }
     .rt-area { min-height:140px; padding:12px; background:#101010; border:1px solid #c02d2d; border-radius:8px; }
+    /* Embed adjustments */
+    body.embed .topbar{ display:none; }
+    body.embed #sl .wrap{ margin-top:8px; }
   </style>
 </head>
 <body>
@@ -471,6 +474,11 @@
 const API_BASE = ""; // set if your backend is mounted at a prefix
 let token = "";
 let listId = "";
+const searchParams = new URLSearchParams(location.search);
+const isEmbed = searchParams.get("embed") === "1";
+if (isEmbed){
+  document.body.classList.add("embed");
+}
 
 const modal    = document.getElementById("login-modal");
 const backdrop = document.getElementById("login-backdrop");

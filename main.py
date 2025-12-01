@@ -2066,10 +2066,10 @@ def _equipment_from_body(b: dict) -> dict:
     if cat not in ("special","slot","armor"):
         raise HTTPException(status_code=400, detail="category must be special | slot | armor")
     slot = (b.get("slot") or "").strip().lower()
-    if cat in ("slot","armor") and slot and slot not in EQUIPMENT_SLOTS:
-        raise HTTPException(status_code=400, detail="slot must be one of head/arms/legs/accessory/chest")
     if slot in ("arm","leg"):
         slot = slot + "s"
+    if slot and slot not in EQUIPMENT_SLOTS:
+        raise HTTPException(status_code=400, detail="slot must be one of head/arms/legs/accessory/chest")
 
     if cat == "special":
         name, key = _eq_norm_name(b.get("name"))
@@ -2084,6 +2084,7 @@ def _equipment_from_body(b: dict) -> dict:
             "range": str(b.get("range") or "").strip(),
             "hands": int(b.get("hands") or 1),
             "effects": effects,
+            "slot": slot or "",
             "price": int(b.get("price") or 0),
             "enc": float(b.get("enc") or 0),
             "modifiers": _modifiers_from_body(b),
@@ -2107,10 +2108,11 @@ def _equipment_from_body(b: dict) -> dict:
         return doc
 
     # armor
+    slot = slot or "chest"
     tname, key = _eq_norm_name(b.get("type"), "Armor")
     doc = {
         "category":"armor",
-        "slot": slot or "chest",
+        "slot": slot,
         "type": tname,
         "name": f"armor:{tname}", "name_key": norm_key(f"armor:{tname}"),
         "enc": float(b.get("enc") or 0),
@@ -2983,6 +2985,16 @@ async def create_character(request: Request):
         if not inv:
             return JSONResponse({"status": "error", "message": "Inventory not found or not owned by you"}, status_code=400)
 
+    spell_list_id = ""
+    try:
+        spell_list_id = (body.get("spell_list_id") or "").strip()
+    except Exception:
+        spell_list_id = ""
+    if spell_list_id:
+        sl = get_col("spell_lists").find_one({"id": spell_list_id, "owner": owner}, {"_id": 1})
+        if not sl:
+            return JSONResponse({"status": "error", "message": "Spell list not found or not owned by you"}, status_code=400)
+
     cid = next_id_str("characters", padding=4)
     doc = {
         "id": cid,
@@ -2994,6 +3006,8 @@ async def create_character(request: Request):
     }
     if inv_id:
         doc["inventory_id"] = inv_id
+    if spell_list_id:
+        doc["spell_list_id"] = spell_list_id
     get_col("characters").insert_one(dict(doc))
     return {"status": "success", "id": cid, "character": {k: v for k, v in doc.items() if k != "_id"}}
 
@@ -3046,6 +3060,14 @@ async def update_character(cid: str, request: Request):
             if not inv:
                 return JSONResponse({"status": "error", "message": "Inventory not found or not owned by you"}, status_code=400)
         updates["inventory_id"] = inv_id
+
+    if "spell_list_id" in body:
+        sl_id = str(body.get("spell_list_id") or "").strip()
+        if sl_id:
+            sl = get_col("spell_lists").find_one({"id": sl_id, "owner": before.get("owner")}, {"_id": 1})
+            if not sl:
+                return JSONResponse({"status": "error", "message": "Spell list not found or not owned by you"}, status_code=400)
+        updates["spell_list_id"] = sl_id
 
     if "sublimations" in body:
         subs = body.get("sublimations") or []
