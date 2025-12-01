@@ -62,6 +62,10 @@
     .mod-list { margin:6px 0 4px 16px; padding:0; list-style:disc; display:none; opacity:0.9; }
     .mod-list li { margin:0 0 3px 0; font-size:0.9rem; }
     .mod-toggle { cursor:pointer; }
+    /* Personal tab */
+    .personal-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom:10px; }
+    .kv-field { display:grid; gap:4px; }
+    .kv-field input, .kv-field textarea { width:100%; }
   </style>
 </head>
 <body>
@@ -291,7 +295,58 @@
 
       <!-- COMBAT / PERSONAL placeholders -->
       <div id="tab-com" class="tabpane" style="display:none;"><p class="muted">Combat -- coming next.</p></div>
-      <div id="tab-per" class="tabpane" style="display:none;"><p class="muted">Bio -- coming next.</p></div>
+      <div id="tab-per" class="tabpane" style="display:none;">
+        <div class="panel">
+          <details open class="panel">
+            <summary class="hdr"><strong>Personal</strong><span class="muted">(freeform character info)</span></summary>
+            <div class="panel-body">
+              <div class="personal-grid">
+                <label class="kv-field">
+                  <span class="k">Nicknames</span>
+                  <input id="p-nicknames" placeholder="Aliases or epithets">
+                </label>
+                <label class="kv-field">
+                  <span class="k">Height</span>
+                  <input id="p-height" placeholder="e.g. 1.80 m">
+                </label>
+                <label class="kv-field">
+                  <span class="k">Weight</span>
+                  <input id="p-weight" placeholder="e.g. 75 kg">
+                </label>
+                <label class="kv-field">
+                  <span class="k">Elo</span>
+                  <input id="p-elo" placeholder="Rating / score">
+                </label>
+                <label class="kv-field">
+                  <span class="k">Rank</span>
+                  <input id="p-rank" placeholder="Rank or title">
+                </label>
+              </div>
+
+              <div class="personal-grid">
+                <label class="kv-field">
+                  <span class="k">Friends</span>
+                  <textarea id="p-friends" rows="2" placeholder="Allies, contacts"></textarea>
+                </label>
+                <label class="kv-field">
+                  <span class="k">Enemies</span>
+                  <textarea id="p-enemies" rows="2" placeholder="Rivals, threats"></textarea>
+                </label>
+              </div>
+
+              <label class="kv-field">
+                <span class="k">Notes</span>
+                <textarea id="p-notes" rows="3" placeholder="Any additional notes"></textarea>
+              </label>
+
+              <label class="kv-field">
+                <span class="k">Backstory</span>
+                <textarea id="p-backstory" rows="5" placeholder="Describe the character's history"></textarea>
+              </label>
+            </div>
+          </details>
+        </div>
+      </div>
     </div>
 
   </div></div>
@@ -406,6 +461,7 @@ let LINKED_SPELL_LIST = null;
 let SELECTED_SPELL_LIST_ID = '';
 let SUBLIMATIONS = [];
 let SUB_HIDDEN = {};
+let PERSONAL = {};
 
 /* Passive bonus aggregations (recomputed whenever ASSIGNED changes) */
 let PASSIVE = {
@@ -471,6 +527,16 @@ const subListEl = document.getElementById('sub-list');
 const subSlotPill = document.getElementById('sub-slot-pill');
 const subWarningEl = document.getElementById('sub-warning');
 const subHiddenEl = document.getElementById('sub-hidden');
+/* Personal refs */
+const pNickEl = document.getElementById('p-nicknames');
+const pHeightEl = document.getElementById('p-height');
+const pWeightEl = document.getElementById('p-weight');
+const pEloEl = document.getElementById('p-elo');
+const pRankEl = document.getElementById('p-rank');
+const pFriendsEl = document.getElementById('p-friends');
+const pEnemiesEl = document.getElementById('p-enemies');
+const pNotesEl = document.getElementById('p-notes');
+const pBackstoryEl = document.getElementById('p-backstory');
 
 // Sublimations form wiring
 (() => {
@@ -549,6 +615,17 @@ function makeDefaultStats(){
   const ints = {};
   for (const n of NATURES){ ints[n] = {knows:false, invest:0}; }
   stats.intensities = ints;
+  stats.personal = {
+    nicknames: "",
+    height: "",
+    weight: "",
+    elo: "",
+    rank: "",
+    friends: "",
+    enemies: "",
+    notes: "",
+    backstory: "",
+  };
   return stats;
 }
 
@@ -1388,6 +1465,8 @@ async function loadCharacter(){
   SELECTED_INV_ID = CHAR.inventory_id || '';
   LINKED_SPELL_LIST = null;
   renderSpellListSummary();
+  PERSONAL = CHAR.stats?.personal || {};
+  fillPersonal();
 
   // Name
   titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
@@ -1414,6 +1493,7 @@ async function loadCharacter(){
   if (SELECTED_SPELL_LIST_ID) loadSpellListById(SELECTED_SPELL_LIST_ID);
   await loadInventoriesList();
   if (SELECTED_INV_ID) loadInventoryById(SELECTED_INV_ID);
+  wirePersonal();
 }
 
 function queueSave(){
@@ -1561,3 +1641,33 @@ checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.';
 </body>
 </html>
 
+function fillPersonal(){
+  const p = CHAR.stats.personal || {};
+  pNickEl.value = p.nicknames || '';
+  pHeightEl.value = p.height || '';
+  pWeightEl.value = p.weight || '';
+  pEloEl.value = p.elo || '';
+  pRankEl.value = p.rank || '';
+  pFriendsEl.value = p.friends || '';
+  pEnemiesEl.value = p.enemies || '';
+  pNotesEl.value = p.notes || '';
+  pBackstoryEl.value = p.backstory || '';
+}
+
+function wirePersonal(){
+  const bind = (el, key) => {
+    el.addEventListener('input', ()=>{
+      CHAR.stats.personal[key] = el.value;
+      queueSave();
+    });
+  };
+  bind(pNickEl, 'nicknames');
+  bind(pHeightEl, 'height');
+  bind(pWeightEl, 'weight');
+  bind(pEloEl, 'elo');
+  bind(pRankEl, 'rank');
+  bind(pFriendsEl, 'friends');
+  bind(pEnemiesEl, 'enemies');
+  bind(pNotesEl, 'notes');
+  bind(pBackstoryEl, 'backstory');
+}

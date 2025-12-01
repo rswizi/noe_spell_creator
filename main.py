@@ -2515,7 +2515,14 @@ def _normalize_upgrade_payload(add_list):
     out = []
     for a in add_list or []:
         if isinstance(a, str):
-            out.append({"id": a})
+            text = a.strip()
+            target = ""
+            for sep in ("|","@",":"):
+                if sep in text:
+                    text, target = text.split(sep,1)
+                    target = target.strip()
+                    break
+            out.append({"id": text, "target": target})
         elif isinstance(a, dict):
             entry = {"id": str(a.get("id") or a.get("upgrade_id") or a.get("upgrade") or "").strip()}
             if "target" in a:
