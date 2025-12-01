@@ -1634,13 +1634,6 @@ function renderAbilitiesTab(){
   renderAbilitiesBucket(listActiveEl,    active);
 }
 
-/* boot */
-checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
-</script>
-
-</body>
-</html>
-
 function fillPersonal(){
   const p = CHAR.stats.personal || {};
   pNickEl.value = p.nicknames || '';
@@ -1671,3 +1664,10 @@ function wirePersonal(){
   bind(pNotesEl, 'notes');
   bind(pBackstoryEl, 'backstory');
 }
+
+/* boot */
+checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
+</script>
+
+</body>
+</html>
