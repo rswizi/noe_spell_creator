@@ -48,12 +48,14 @@
     .tab.active { background: linear-gradient(135deg, rgba(197,53,53,0.25), rgba(20,20,29,0.9)); border-color: var(--accent); font-weight:700; box-shadow: 0 8px 16px rgba(0,0,0,0.3); }
     .tabpanes { border:1px solid var(--border); border-radius:0 18px 18px 18px; background: #11111a; padding:16px; box-shadow: 0 10px 30px rgba(0,0,0,0.28); }
 
-    .stats-grid { display:grid; gap:14px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); align-items:start; }
-    .panel { border:1px solid var(--border); border-radius:16px; overflow:hidden; background: var(--panel); box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+    .stats-grid { display:grid; gap:14px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); align-items:stretch; }
+    .panel { border:1px solid var(--border); border-radius:16px; overflow:hidden; background: var(--panel); box-shadow: 0 8px 24px rgba(0,0,0,0.25); height:100%; display:flex; flex-direction:column; }
     details.panel > summary { list-style:none; cursor:pointer; padding:14px 16px; display:flex; align-items:center; gap:10px; }
     details.panel > summary::-webkit-details-marker { display:none; }
     .pill { font-size:.85rem; opacity:.9; border:1px solid #2f2f3f; border-radius:999px; padding:3px 10px; }
     .panel-body { padding:0 16px 16px; display:grid; gap:10px; }
+    .panel.skill-4 .panel-body { min-height: 260px; }
+    .panel.skill-5 .panel-body { min-height: 320px; }
 
     .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .row > .grow { flex:1 1 auto; }
@@ -1642,6 +1644,15 @@ async function uploadAvatar(){
 }
 avatarUploadBtn?.addEventListener('click', uploadAvatar);
 
+function normalizeIV(iv){
+  const defN = {fire:0,water:0,wind:0,earth:0,sun:0,moon:0,lightning:0,ki:0};
+  const defS = {aura:0,incantation:0,enchantement:0,potential:0,restoration:0,stealth:0,investigation:0,charm:0,intimidation:0,absorption:0,spirit:0};
+  const n = Object.assign({}, defN), s = Object.assign({}, defS);
+  for (const k in (iv?.natures||{})) n[k.toLowerCase()] = +(iv.natures[k]||0);
+  for (const k in (iv?.skills||{}))  s[k.toLowerCase()] = +(iv.skills[k]||0);
+  return { mag: +(iv?.mag||0), natures:n, skills:s };
+}
+
 function currentIV(){
   return normalizeIV(deriveSpellListInitialValuesFromChar());
 }
@@ -1965,6 +1976,7 @@ function renderStatistics(){
     const modInfo = charAdjMod(c.key);
 
     const details = document.createElement('details'); details.className='panel'; details.open = true;
+    details.classList.add(c.skills.length >= 5 ? 'skill-5' : 'skill-4');
     const sum = document.createElement('summary'); sum.className='hdr';
     sum.innerHTML = `
       <strong>${c.name}</strong>
