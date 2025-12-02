@@ -87,7 +87,13 @@
     .mod-list { margin:6px 0 4px 16px; padding:0; list-style:disc; display:none; opacity:0.9; }
     .mod-list li { margin:0 0 3px 0; font-size:0.9rem; }
     .mod-toggle { cursor:pointer; }
-    /* Avatar */
+    .stat-counter { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+    .stat-counter .pill { border-color:#2f2f2f; }
+    .current-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:8px; margin-top:8px; }
+    .current-row label { display:flex; align-items:center; gap:6px; }
+    .current-row input { width:100%; }
+    .override-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+  /* Avatar */
   .avatar-card { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
   .avatar-frame { width:124px; height:124px; border:1px solid #333; border-radius:14px; overflow:hidden; background:#08080e; display:grid; place-items:center; }
   .avatar-frame img { width:100%; height:100%; object-fit:cover; }
@@ -179,6 +185,25 @@
                 <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge mod-toggle" id="tx-val" data-target="mods-derived-tx" title="">--</div>
                 <ul class="mod-list" id="mods-derived-tx" style="display:none"></ul></div>
               </div>
+              <div class="override-row">
+                <label class="row" style="gap:6px;">
+                  <input type="checkbox" id="override-derived"> <span class="muted">Override max values (DM)</span>
+                </label>
+                <div class="pill" id="point-hint"></div>
+              </div>
+              <div class="current-row" id="override-inputs">
+                <label class="muted">Max HP <input id="ov-hp" type="number" min="0"></label>
+                <label class="muted">Max EN <input id="ov-en" type="number" min="0"></label>
+                <label class="muted">Max FO <input id="ov-fo" type="number" min="0"></label>
+                <label class="muted">Max MO <input id="ov-mo" type="number" min="0"></label>
+                <label class="muted">Max SP cap <input id="ov-spcap" type="number" min="0"></label>
+              </div>
+              <div class="current-row">
+                <label class="muted">Current HP <input id="cur-hp" type="number" min="0"></label>
+                <label class="muted">Current EN <input id="cur-en" type="number" min="0"></label>
+                <label class="muted">Current FO <input id="cur-fo" type="number" min="0"></label>
+                <label class="muted">Current SP <input id="cur-sp" type="number" min="0"></label>
+              </div>
             </div>
           </details>
         </div>
@@ -224,6 +249,12 @@
               <div class="muted" id="sub-hidden"></div>
             </div>
           </details>
+        </div>
+
+        <div class="stat-counter">
+          <span class="pill" id="skill-counter">Skills: -- / --</span>
+          <span class="pill" id="stat-counter">Characteristics: -- / --</span>
+          <span class="pill" id="skill-cap">Max per skill: --</span>
         </div>
 
         <div class="stats-grid" id="stats-grid"><!-- injected --></div>
@@ -569,10 +600,10 @@ const CHARACS = [
   { key:'reflex',    code:'REF', name:'Reflex',    skills:['Technicity','Dodge','Counter','Reactivity'] },
   { key:'dexterity', code:'DEX', name:'Dexterity', skills:['Accuracy','Evasion','Stealth','Acrobatics'] },
   { key:'body',      code:'BOD', name:'Body',      skills:['Brutality','Blocking','Resistance','Athletics'] },
+  { key:'willpower', code:'WIL', name:'Willpower', skills:['Intimidation','Spirit','Instinct','Absorption'] },
   { key:'wisdom',    code:'WIS', name:'Wisdom',    skills:['Survival','Education','Perception','Psychology','Investigation'] },
   { key:'presence',  code:'PRE', name:'Presence',  skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
   { key:'magic',     code:'MAG', name:'Magic',     skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
-  { key:'willpower', code:'WIL', name:'Willpower', skills:['Intimidation','Spirit','Instinct','Absorption'] },
   { key:'tech',      code:'TECH',name:'Tech',      skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
 ];
 
@@ -683,6 +714,9 @@ let SCHOOLS = [];
 let SUBLIMATIONS = [];
 let SUB_HIDDEN = {};
 let PERSONAL = {};
+let CURRENT = { hp:null, en:null, fo:null, sp:null };
+let OVERRIDE_ENABLED = false;
+let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, spcap:null };
 let ARCHETYPES = [];
 let COMPUTED_ARC_ABILITIES = [];
 
@@ -710,6 +744,19 @@ const spcapEl = document.getElementById('spcap-val');
 const encEl = document.getElementById('enc-val');
 const etEl = document.getElementById('et-val');
 const txEl = document.getElementById('tx-val');
+const skillCounterEl = document.getElementById('skill-counter');
+const statCounterEl = document.getElementById('stat-counter');
+const skillCapEl = document.getElementById('skill-cap');
+const overrideToggle = document.getElementById('override-derived');
+const ovHpEl = document.getElementById('ov-hp');
+const ovEnEl = document.getElementById('ov-en');
+const ovFoEl = document.getElementById('ov-fo');
+const ovMoEl = document.getElementById('ov-mo');
+const ovSpEl = document.getElementById('ov-spcap');
+const curHpEl = document.getElementById('cur-hp');
+const curEnEl = document.getElementById('cur-en');
+const curFoEl = document.getElementById('cur-fo');
+const curSpEl = document.getElementById('cur-sp');
 
 /* Abilities tab refs */
 const abiSearchEl = document.getElementById('abi-search');
@@ -803,6 +850,7 @@ const subListEl = document.getElementById('sub-list');
 const subSlotPill = document.getElementById('sub-slot-pill');
 const subWarningEl = document.getElementById('sub-warning');
 const subHiddenEl = document.getElementById('sub-hidden');
+const overrideInputsWrap = document.getElementById('override-inputs');
 /* Personal refs */
 const pNickEl = document.getElementById('p-nicknames');
 const pHeightEl = document.getElementById('p-height');
@@ -833,6 +881,35 @@ const pBackstoryEl = document.getElementById('p-backstory');
   subAddBtn.addEventListener('click', addSublimationFromForm);
   updateSubSpecialFields();
 })();
+
+// Overrides & current handlers
+overrideToggle?.addEventListener('change', ()=>{
+  OVERRIDE_ENABLED = !!overrideToggle.checked;
+  updateDerived(); queueSave();
+});
+[ovHpEl, ovEnEl, ovFoEl, ovMoEl, ovSpEl].forEach(el=>{
+  el?.addEventListener('input', ()=>{
+    OVERRIDE_VALUES = {
+      hp: Number(ovHpEl?.value||0),
+      en: Number(ovEnEl?.value||0),
+      fo: Number(ovFoEl?.value||0),
+      mo: Number(ovMoEl?.value||0),
+      spcap: Number(ovSpEl?.value||0),
+    };
+    updateDerived(); queueSave();
+  });
+});
+[curHpEl, curEnEl, curFoEl, curSpEl].forEach(el=>{
+  el?.addEventListener('input', ()=>{
+    CURRENT = {
+      hp: Number(curHpEl?.value||0),
+      en: Number(curEnEl?.value||0),
+      fo: Number(curFoEl?.value||0),
+      sp: Number(curSpEl?.value||0),
+    };
+    updateDerived(); queueSave();
+  });
+});
 
 /* tabs switching */
 document.querySelectorAll('.tab').forEach(tab=>{
@@ -884,6 +961,50 @@ function makeDefaultStats(){
     backstory: "",
   };
   return stats;
+}
+
+function skillMaxForLevel(lvl){
+  if (lvl <= 1) return 4;
+  if (lvl <= 11) return 5;
+  if (lvl <= 21) return 6;
+  if (lvl <= 31) return 7;
+  if (lvl <= 41) return 8;
+  if (lvl <= 51) return 9;
+  return 10;
+}
+function skillPointPool(lvl){
+  return Math.max(0, (Math.max(1, lvl) - 1) * 2);
+}
+function statPointPool(lvl){
+  return Math.floor((Math.max(1, lvl) - 1) / 9) * 3;
+}
+function totalSkillInvest(){
+  let t = 0;
+  for (const c of CHARACS){
+    const rec = (CHAR.stats && CHAR.stats[c.key]) || {};
+    for (const s of (c.skills||[])){
+      t += Number(rec.skills?.[s] || 0);
+    }
+  }
+  return t;
+}
+function totalStatInvest(){
+  let t = 0;
+  for (const c of CHARACS){
+    t += Number(CHAR.stats?.[c.key]?.invest || 0);
+  }
+  return t;
+}
+function updatePointCounters(){
+  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const poolSkill = skillPointPool(lvl);
+  const poolStat = statPointPool(lvl);
+  const usedSkill = totalSkillInvest();
+  const usedStat = totalStatInvest();
+  const capSkill = skillMaxForLevel(lvl);
+  if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkill} / ${poolSkill}`;
+  if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStat} / ${poolStat} (max per stat: ${poolStat || 0})`;
+  if (skillCapEl) skillCapEl.textContent = `Max per skill: ${capSkill}`;
 }
 
 /* ---------- Sublimations helpers ---------- */
@@ -2130,7 +2251,14 @@ function renderStatistics(){
   for (const c of CHARACS){
     const input = document.getElementById(`${c.key}-invest`);
     input.addEventListener('input', ()=>{
-      const val = Math.max(0, Math.floor(Number(input.value)||0));
+      const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+      const pool = statPointPool(lvl);
+      const currentVal = Number(CHAR.stats[c.key].invest || 0);
+      const totalOther = totalStatInvest() - currentVal;
+      const desired = Math.max(0, Math.floor(Number(input.value)||0));
+      const allowed = Math.max(0, pool - totalOther);
+      const val = Math.min(desired, allowed);
+      if (val !== desired) input.value = val;
       CHAR.stats[c.key].invest = val;
 
       // update characteristic header
@@ -2149,6 +2277,7 @@ function renderStatistics(){
         el.title = adj.notes.join('\\n');
         setNotesList(`mods-${skillId(c.key, s, 'total')}`, adj.notes);
       }
+      updatePointCounters();
       updateDerived();
       queueSave();
     });
@@ -2156,18 +2285,28 @@ function renderStatistics(){
     for (const s of c.skills){
       const si = document.getElementById(skillId(c.key, s, 'invest'));
       si.addEventListener('input', ()=>{
-        const val = Math.max(0, Math.floor(Number(si.value)||0));
+        const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+        const cap = skillMaxForLevel(lvl);
+        const pool = skillPointPool(lvl);
+        const currentVal = Number(CHAR.stats[c.key].skills?.[s] || 0);
+        const totalOther = totalSkillInvest() - currentVal;
+        const desired = Math.max(0, Math.floor(Number(si.value)||0));
+        const allowed = Math.max(0, pool - totalOther);
+        const val = Math.min(desired, cap, allowed);
+        if (val !== desired) si.value = val;
         CHAR.stats[c.key].skills[s] = val;
         const adj = skillAdjTotal(c.key, s);
         const el = document.getElementById(skillId(c.key, s, 'total'));
         el.textContent = (adj.total>=0? '+'+adj.total : adj.total);
         el.title = adj.notes.join('\\n');
         setNotesList(`mods-${skillId(c.key, s, 'total')}`, adj.notes);
+        updatePointCounters();
         updateDerived();
         queueSave();
       });
     }
   }
+  updatePointCounters();
 }
 /* simple defense placeholder */
 function renderDefenseSummary(){
@@ -2178,6 +2317,7 @@ function renderDefenseSummary(){
 /* --------- PASSIVE on DERIVED (existing behavior) ---------- */
 function applyPassiveModifiersToDerived(base, currentEnc = 0){
   const out = { ...base };
+  out.current_enc = Number(currentEnc || 0);
   const notes = {
     hp: [`Base = ${base.hp}`],
     en: [`Base = ${base.en}`],
@@ -2282,7 +2422,7 @@ function updateDerived(){
 
   // Base
   const base = {};
-  base.hp = 40 + lvl + 12*msBOD + 6*msWIL;
+  base.hp = 39 + lvl + 12*msBOD + 6*msWIL;
   base.en = 5 + Math.floor(lvl/5) + msWIL + 2*msMAG;
   base.fo = 2 + Math.floor(lvl/5) + msWIL + (2*msPRE) + msWIS;
   base.mo = 4 + msDEX + msREF;
@@ -2298,16 +2438,48 @@ function updateDerived(){
 
   // Apply passive modifiers to derived
   const final = applyPassiveModifiersToDerived(base, invEnc);
+  // Overrides
+  const maxVals = { ...final };
+  if (OVERRIDE_ENABLED){
+    maxVals.hp = Number(OVERRIDE_VALUES.hp ?? final.hp);
+    maxVals.en = Number(OVERRIDE_VALUES.en ?? final.en);
+    maxVals.fo = Number(OVERRIDE_VALUES.fo ?? final.fo);
+    maxVals.mo = Number(OVERRIDE_VALUES.mo ?? final.mo);
+    maxVals.spcap = Number(OVERRIDE_VALUES.spcap ?? final.spcap);
+  }
+  const cur = {
+    hp: Math.max(0, Math.min(Number(CURRENT.hp ?? maxVals.hp), maxVals.hp)),
+    en: Math.max(0, Math.min(Number(CURRENT.en ?? maxVals.en), maxVals.en)),
+    fo: Math.max(0, Math.min(Number(CURRENT.fo ?? maxVals.fo), maxVals.fo)),
+    sp: Math.max(0, Math.min(Number(CURRENT.sp ?? maxVals.spcap), maxVals.spcap)),
+  };
+  if (CURRENT.hp == null) cur.hp = maxVals.hp;
+  if (CURRENT.en == null) cur.en = maxVals.en;
+  if (CURRENT.fo == null) cur.fo = maxVals.fo;
+  if (CURRENT.sp == null) cur.sp = maxVals.spcap;
+  CURRENT = cur;
+  if (curHpEl) curHpEl.value = cur.hp;
+  if (curEnEl) curEnEl.value = cur.en;
+  if (curFoEl) curFoEl.value = cur.fo;
+  if (curSpEl) curSpEl.value = cur.sp;
+  if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
+  [ [ovHpEl, maxVals.hp], [ovEnEl, maxVals.en], [ovFoEl, maxVals.fo], [ovMoEl, maxVals.mo], [ovSpEl, maxVals.spcap] ].forEach(([el,val])=>{
+    if (!el) return;
+    el.disabled = !OVERRIDE_ENABLED;
+    if (OVERRIDE_ENABLED && (el.value==="" || Number.isNaN(Number(el.value)))) el.value = val;
+    if (!OVERRIDE_ENABLED) el.value = '';
+  });
 
   // Display
-  hpEl.textContent = final.hp;
-  enEl.textContent = final.en;
-  foEl.textContent = final.fo;
-  moEl.textContent = final.mo;
-  spcapEl.textContent = final.spcap;
-  encEl.textContent = `${Number(final.current_enc || 0).toFixed(1)} / ${final.enc}`;
-  etEl.textContent = final.et;
-  txEl.textContent = final.tx;
+  hpEl.textContent = `${cur.hp} / ${maxVals.hp}`;
+  enEl.textContent = `${cur.en} / ${maxVals.en}`;
+  foEl.textContent = `${cur.fo} / ${maxVals.fo}`;
+  moEl.textContent = maxVals.mo;
+  spcapEl.textContent = `${cur.sp} / ${maxVals.spcap}`;
+  encEl.textContent = `${Number(final.current_enc || 0).toFixed(1)} / ${maxVals.enc ?? final.enc}`;
+  etEl.textContent = maxVals.et ?? final.et;
+  txEl.textContent = maxVals.tx ?? final.tx;
+  updatePointCounters();
 }
 
 /* LOAD & SAVE */
@@ -2324,6 +2496,10 @@ async function loadCharacter(){
   SELECTED_SPELL_LIST_ID = CHAR.spell_list_id || '';
   SELECTED_INV_ID = CHAR.inventory_id || '';
    COMPUTED_ARC_ABILITIES = CHAR.computed_archetype_abilities || [];
+  CURRENT = Object.assign({hp:null,en:null,fo:null,sp:null}, CHAR.current || {});
+  OVERRIDE_ENABLED = !!CHAR.override_stats?.enabled;
+  OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,spcap:null}, CHAR.override_stats?.values || {});
+  if (overrideToggle) overrideToggle.checked = OVERRIDE_ENABLED;
   if (!CHAR.archetype_rank) CHAR.archetype_rank = _archetypeRankForLevel(CHAR.level);
   LINKED_SPELL_LIST = null;
   renderSpellListSummary();
@@ -2338,12 +2514,13 @@ async function loadCharacter(){
 
   // Level
   levelEl.value = Math.max(1, Number(CHAR.level)||1);
-  levelEl.addEventListener('input', ()=>{ CHAR.level = Math.max(1, Math.floor(Number(levelEl.value)||1)); renderSublimations(); updateDerived(); queueSave(); });
+  levelEl.addEventListener('input', ()=>{ CHAR.level = Math.max(1, Math.floor(Number(levelEl.value)||1)); renderSublimations(); updatePointCounters(); updateDerived(); queueSave(); });
 
   renderSublimations();
 
   // Render stats/skills
   renderStatistics();
+  updatePointCounters();
 
   // Resolve abilities → recalc passive agg → render abilities → derived
   await resolveAssignedAbilities();
@@ -2377,7 +2554,9 @@ async function saveNow(){
       inventory_id: SELECTED_INV_ID || '',
       spell_list_id: SELECTED_SPELL_LIST_ID || '',
       archetype_id: CHAR.archetype_id || '',
-      sublimations: SUBLIMATIONS
+      sublimations: SUBLIMATIONS,
+      current: CURRENT,
+      override_stats: { enabled: OVERRIDE_ENABLED, values: OVERRIDE_VALUES }
     };
     const res = await api('/characters/' + encodeURIComponent(CID), {
       method:'PUT', headers:{ 'content-type':'application/json' }, body: JSON.stringify(payload)
