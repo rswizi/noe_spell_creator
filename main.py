@@ -1678,6 +1678,53 @@ def delete_spell_list(list_id: str, request: Request):
     col.delete_one({"id": list_id})
     return {"status": "success", "deleted": list_id}
 
+@app.get("/archetypes")
+def list_archetypes(request: Request):
+    require_auth(request)
+    docs = list(get_col("archetypes").find({}, {"_id":0}))
+    docs.sort(key=lambda d: d.get("name",""))
+    return {"status":"success","archetypes": docs}
+
+@app.post("/archetypes")
+async def create_archetype(request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    body = await request.json()
+    doc = _validate_archetype_doc(body or {})
+    doc["id"] = next_id_str("archetypes", padding=4)
+    doc["created_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    doc["updated_at"] = doc["created_at"]
+    get_col("archetypes").insert_one(dict(doc))
+    return {"status":"success","archetype": {k:v for k,v in doc.items() if k!="_id"}}
+
+@app.get("/archetypes/{aid}")
+def get_archetype(aid: str, request: Request):
+    require_auth(request)
+    doc = get_col("archetypes").find_one({"id": aid}, {"_id":0})
+    if not doc:
+        raise HTTPException(404, "Archetype not found")
+    return {"status":"success","archetype": doc}
+
+@app.put("/archetypes/{aid}")
+async def update_archetype(aid: str, request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    body = await request.json()
+    doc = get_col("archetypes").find_one({"id": aid})
+    if not doc:
+        raise HTTPException(404, "Archetype not found")
+    new_doc = _validate_archetype_doc(body or {}, is_update=True)
+    new_doc["updated_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    get_col("archetypes").update_one({"id": aid}, {"$set": new_doc})
+    out = get_col("archetypes").find_one({"id": aid}, {"_id":0})
+    return {"status":"success","archetype": out}
+
+@app.delete("/archetypes/{aid}")
+def delete_archetype(aid: str, request: Request):
+    require_auth(request, roles=["admin"])
+    res = get_col("archetypes").delete_one({"id": aid})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Archetype not found")
+    return {"status":"success","deleted": aid}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
 
@@ -2086,6 +2133,127 @@ def _eq_norm_name(name: str, fallback: str = "Unnamed") -> tuple[str, str]:
 
 def _fs():
     return gridfs.GridFS(get_db())
+
+# ---------- Archetypes ----------
+def _archetype_rank_for_level(lvl: int) -> int:
+    # Provided table (level: rank)
+    # 1->4, 10->5, 20->6, 30->7, 40->8, 50->9, 60->10, 70->11, 80->12
+    thresholds = [(80,12),(70,11),(60,10),(50,9),(40,8),(30,7),(20,6),(10,5),(1,4)]
+    lvl = max(1, int(lvl or 1))
+    for lv, rk in thresholds:
+        if lvl >= lv:
+            return rk
+    return 1
+
+def _total_from_invest(v: int) -> int:
+    try:
+        return int(v or 0) + 4
+    except Exception:
+        return 0
+
+def _validate_archetype_doc(doc: dict, is_update=False):
+    required = ["name","ranks"]
+    if not is_update:
+        for k in required:
+            if k not in doc: raise HTTPException(400, f"Missing field {k}")
+    doc["name"] = (doc.get("name") or "Archetype").strip()
+    doc["hybrid"] = bool(doc.get("hybrid") or False)
+    doc["sources"] = [str(s).strip() for s in (doc.get("sources") or []) if str(s).strip()] if doc.get("hybrid") else []
+    doc["prereq_text"] = (doc.get("prereq_text") or "").strip()
+    rules = doc.get("prereq_rules") or {}
+    # structured prereqs
+    allowed_keys = {"mag_highest","wis_half_mag","char_min"}
+    doc["prereq_rules"] = {k:v for k,v in rules.items() if k in allowed_keys}
+    if "char_min" in doc["prereq_rules"]:
+        cm = doc["prereq_rules"]["char_min"] or {}
+        if not isinstance(cm, dict): cm = {}
+        clean = {}
+        for k,v in cm.items():
+            try: clean[str(k)] = int(v)
+            except Exception: continue
+        doc["prereq_rules"]["char_min"] = clean
+
+    ranks = doc.get("ranks") or []
+    if not isinstance(ranks, list):
+        raise HTTPException(400, "ranks must be a list")
+    seen_rank = set()
+    cleaned = []
+    for r in ranks:
+        if not isinstance(r, dict): continue
+        try: rk = int(r.get("rank"))
+        except Exception: continue
+        if rk <=0: continue
+        if rk in seen_rank: raise HTTPException(400, f"Duplicate rank {rk}")
+        seen_rank.add(rk)
+        ab_id = str(r.get("ability_id") or "").strip()
+        if not ab_id: raise HTTPException(400, f"Rank {rk} missing ability_id")
+        version = int(r.get("version") or 1)
+        original_rank = int(r.get("original_rank") or rk)
+        replaces = str(r.get("replaces_id") or "").strip()
+        if version > 1 and not replaces:
+            raise HTTPException(400, f"Rank {rk} version {version} must specify replaces_id")
+        if rk < original_rank:
+            raise HTTPException(400, f"Rank {rk} cannot be earlier than original_rank {original_rank}")
+        cleaned.append({
+            "rank": rk,
+            "ability_id": ab_id,
+            "version": version,
+            "original_rank": original_rank,
+            "replaces_id": replaces,
+            "note": (r.get("note") or "").strip(),
+        })
+    cleaned.sort(key=lambda x: x["rank"])
+    doc["ranks"] = cleaned
+    return doc
+
+def _compute_archetype_unlocked(archetype: dict, lvl: int) -> list[str]:
+    eff_rank = _archetype_rank_for_level(lvl)
+    ranks = archetype.get("ranks") or []
+    unlocked = []
+    for r in ranks:
+        if r.get("rank", 0) <= eff_rank:
+            unlocked.append(r)
+    # apply replacements: keep highest version per chain
+    keep_ids = []
+    replaced = set()
+    by_ab = {r["ability_id"]: r for r in unlocked}
+    for r in unlocked:
+        if r.get("replaces_id") and r["replaces_id"] in by_ab:
+            replaced.add(r["replaces_id"])
+    for r in unlocked:
+        if r["ability_id"] in replaced:
+            continue
+        keep_ids.append(r["ability_id"])
+    return keep_ids
+
+def _check_archetype_prereqs(archetype: dict, stats: dict) -> bool:
+    rules = archetype.get("prereq_rules") or {}
+    if not stats: return False
+    # characteristics on stats keys
+    char_keys = ["reflex","dexterity","body","wisdom","presence","magic","willpower","tech"]
+    def mod_for(k):
+        try:
+            return _total_from_invest(stats.get(k,{}).get("invest",0))
+        except Exception:
+            return 0
+    if rules.get("mag_highest"):
+        mag = mod_for("magic")
+        others = [mod_for(k) for k in char_keys if k!="magic"]
+        if not all(mag >= o for o in others):
+            return False
+    if rules.get("wis_half_mag"):
+        wis = mod_for("wisdom")
+        mag = mod_for("magic")
+        if wis < (mag/2):
+            return False
+    char_min = rules.get("char_min") or {}
+    for k,v in char_min.items():
+        try:
+            if mod_for(k) < int(v):
+                return False
+        except Exception:
+            continue
+    return True
 
 def _equipment_from_body(b: dict) -> dict:
     cat = (b.get("category") or "").strip().lower()
@@ -3090,6 +3258,9 @@ def list_my_characters(request: Request):
     username, role = require_auth(request, roles=["user","moderator","admin"])
     q = {"owner": username}
     chars = list(get_col("characters").find(q, {"_id": 0}))
+    for ch in chars:
+        lvl = int(ch.get("level") or ch.get("stats",{}).get("level") or 1)
+        ch["archetype_rank"] = _archetype_rank_for_level(lvl)
     return {"status": "success", "characters": chars}
 
 @app.get("/admin/characters")
@@ -3137,6 +3308,7 @@ async def create_character(request: Request):
         "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
         "sublimations": body.get("sublimations") or [],
         "avatar_id": "",
+        "archetype_id": (body.get("archetype_id") or "").strip(),
     }
     if inv_id:
         doc["inventory_id"] = inv_id
@@ -3153,6 +3325,13 @@ def get_character(cid: str, request: Request):
         raise HTTPException(404, "Character not found")
     if not _can_view(doc, username, role):
         raise HTTPException(403, "Forbidden")
+    lvl = int(doc.get("level") or doc.get("stats",{}).get("level") or 1)
+    arc_id = doc.get("archetype_id") or ""
+    arc = get_col("archetypes").find_one({"id": arc_id}, {"_id":0}) if arc_id else None
+    eff_rank = _archetype_rank_for_level(lvl)
+    doc["archetype_rank"] = eff_rank
+    if arc:
+        doc["computed_archetype_abilities"] = _compute_archetype_unlocked(arc, lvl)
     return {"status":"success","character":doc}
 
 @app.put("/characters/{cid}")
@@ -3203,6 +3382,16 @@ async def update_character(cid: str, request: Request):
                 return JSONResponse({"status": "error", "message": "Spell list not found or not owned by you"}, status_code=400)
         updates["spell_list_id"] = sl_id
 
+    if "archetype_id" in body:
+        arc_id = str(body.get("archetype_id") or "").strip()
+        if arc_id:
+            arc = get_col("archetypes").find_one({"id": arc_id}, {"_id":1})
+            if not arc:
+                return JSONResponse({"status":"error","message":"Archetype not found"}, status_code=400)
+            if not _check_archetype_prereqs(arc, updates.get("stats") or before.get("stats") or {}):
+                return JSONResponse({"status":"error","message":"Archetype prerequisites not met"}, status_code=400)
+        updates["archetype_id"] = arc_id
+
     if "sublimations" in body:
         subs = body.get("sublimations") or []
         if isinstance(subs, list):
@@ -3210,8 +3399,25 @@ async def update_character(cid: str, request: Request):
     if "avatar_id" in body:
         updates["avatar_id"] = str(body.get("avatar_id") or "").strip()
 
+    # Archetype prereq validation (after merging updates)
+    final_stats = updates.get("stats", before.get("stats") or {})
+    final_arc_id = updates.get("archetype_id", before.get("archetype_id",""))
+    if final_arc_id:
+        arc = get_col("archetypes").find_one({"id": final_arc_id}, {"_id":0})
+        if not arc:
+            return JSONResponse({"status":"error","message":"Archetype not found"}, status_code=400)
+        if not _check_archetype_prereqs(arc, final_stats):
+            return JSONResponse({"status":"error","message":"Archetype prerequisites not met"}, status_code=400)
+
     get_col("characters").update_one({"id": cid}, {"$set": updates})
     after = get_col("characters").find_one({"id": cid}, {"_id":0})
+    if after:
+        lvl = int(after.get("level") or after.get("stats",{}).get("level") or 1)
+        arc_id_final = after.get("archetype_id") or ""
+        arc_final = get_col("archetypes").find_one({"id": arc_id_final}, {"_id":0}) if arc_id_final else None
+        after["archetype_rank"] = _archetype_rank_for_level(lvl)
+        if arc_final:
+            after["computed_archetype_abilities"] = _compute_archetype_unlocked(arc_final, lvl)
     return {"status":"success","character":after}
 
 @app.post("/characters/{cid}/avatar")

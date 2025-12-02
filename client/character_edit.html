@@ -88,11 +88,19 @@
     .mod-list li { margin:0 0 3px 0; font-size:0.9rem; }
     .mod-toggle { cursor:pointer; }
     /* Avatar */
-    .avatar-card { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
-    .avatar-frame { width:124px; height:124px; border:1px solid #333; border-radius:14px; overflow:hidden; background:#08080e; display:grid; place-items:center; }
-    .avatar-frame img { width:100%; height:100%; object-fit:cover; }
-    .avatar-tools { display:grid; gap:6px; min-width:280px; }
-    .avatar-crop { border:1px solid #333; border-radius:14px; background:#0b0b12; }
+  .avatar-card { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .avatar-frame { width:124px; height:124px; border:1px solid #333; border-radius:14px; overflow:hidden; background:#08080e; display:grid; place-items:center; }
+  .avatar-frame img { width:100%; height:100%; object-fit:cover; }
+  .avatar-tools { display:grid; gap:6px; min-width:280px; }
+  .avatar-crop { border:1px solid #333; border-radius:14px; background:#0b0b12; }
+    .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:3000; display:none; }
+    .modal{ position:fixed; inset:0; display:none; z-index:3001; align-items:center; justify-content:center; padding:16px; }
+    .modal.open, .modal-backdrop.open{ display:flex; }
+    .modal-card{
+      width:100%; max-width:520px; background:#11111a; border:1px solid #2a2a3a;
+      border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.6);
+      max-height:90vh; overflow:auto;
+    }
     /* Personal tab */
     .personal-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom:10px; }
     .kv-field { display:grid; gap:4px; }
@@ -117,22 +125,17 @@
           <span class="muted">(autosaves)</span>
           <span class="muted status" id="status">Loaded.</span>
         </summary>
-        <div class="panel-body">
-          <div class="avatar-card">
-            <div class="avatar-frame"><img id="avatar-preview" alt="Avatar preview"></div>
-            <div class="avatar-tools">
-              <input id="name" placeholder="Enter a name..." class="grow" />
-              <input type="file" id="avatar-file" accept="image/png,image/jpeg">
-              <label class="muted">Zoom <input id="avatar-zoom" type="range" min="1" max="3" step="0.05" value="1"></label>
-              <label class="muted">Offset X <input id="avatar-offset-x" type="range" min="-120" max="120" step="2" value="0"></label>
-              <label class="muted">Offset Y <input id="avatar-offset-y" type="range" min="-120" max="120" step="2" value="0"></label>
-              <button id="avatar-upload" class="btn small">Upload Avatar</button>
-              <div id="avatar-status" class="muted"></div>
+          <div class="panel-body">
+            <div class="avatar-card">
+              <div class="avatar-frame"><img id="avatar-preview" alt="Avatar preview"></div>
+              <div class="avatar-tools">
+                <input id="name" placeholder="Enter a name..." class="grow" />
+                <button id="avatar-open" class="btn small">Set avatar</button>
+                <div id="avatar-status" class="muted"></div>
+              </div>
             </div>
           </div>
-          <canvas id="avatar-canvas" width="256" height="256" class="avatar-crop" style="display:none;"></canvas>
-        </div>
-      </details>
+        </details>
     </div>
 
     <!-- Tabs -->
@@ -333,6 +336,24 @@
 
       <!-- ABILITIES TAB -->
       <div id="tab-abi" class="tabpane" style="display:none;">
+        <div class="panel">
+          <details open class="panel">
+            <summary class="hdr">
+              <strong>Archetype</strong>
+              <span class="muted">(auto unlock by level)</span>
+            </summary>
+            <div class="panel-body">
+              <div class="row" style="gap:8px; flex-wrap:wrap;">
+                <select id="arc-select" class="grow"></select>
+                <button id="arc-apply" class="btn">Apply</button>
+                <span id="arc-status" class="muted"></span>
+              </div>
+              <div id="arc-summary" class="muted"></div>
+              <div class="abi-list" id="arc-abilities"></div>
+            </div>
+          </details>
+        </div>
+
         <div class="panel">
           <details open class="panel">
             <summary class="hdr">
@@ -567,6 +588,15 @@ const SUB_TYPES = [
   { key:'clarity', label:'Clarity' },
   { key:'endurance', label:'Endurance' },
 ];
+
+function _archetypeRankForLevel(lvl){
+  const thresholds = [[80,12],[70,11],[60,10],[50,9],[40,8],[30,7],[20,6],[10,5],[1,4]];
+  const v = Math.max(1, Number(lvl)||1);
+  for (const [lv,r] of thresholds){
+    if (v >= lv) return r;
+  }
+  return 1;
+}
 const TARGET_GROUPS = [
   { label:'Characteristics', options:[
     { value:'char.reflex', label:'Reflex (modifier)' },
@@ -646,6 +676,7 @@ let INV_FILTERED = [];
 let SPELL_LISTS = [];
 let LINKED_SPELL_LIST = null;
 let SELECTED_SPELL_LIST_ID = '';
+let ARCHETYPES = [];
 let SPELLLIST_SPELLS = [];
 let SPELLLIST_META = {};
 let PINNED = new Set();
@@ -653,6 +684,8 @@ let SCHOOLS = [];
 let SUBLIMATIONS = [];
 let SUB_HIDDEN = {};
 let PERSONAL = {};
+let ARCHETYPES = [];
+let COMPUTED_ARC_ABILITIES = [];
 
 /* Passive bonus aggregations (recomputed whenever ASSIGNED changes) */
 let PASSIVE = {
@@ -689,6 +722,11 @@ const listArchetypeEl = document.getElementById('abi-list-archetype');
 const listPassiveEl   = document.getElementById('abi-list-passive');
 const listActiveEl    = document.getElementById('abi-list-active');
 const listSpellEl     = document.getElementById('abi-list-spells');
+const arcSelectEl     = document.getElementById('arc-select');
+const arcApplyBtn     = document.getElementById('arc-apply');
+const arcStatusEl     = document.getElementById('arc-status');
+const arcSummaryEl    = document.getElementById('arc-summary');
+const arcAbilitiesEl  = document.getElementById('arc-abilities');
 /* Inventory tab refs */
 const invSelectEl = document.getElementById('inv-select');
 const invLoadBtn = document.getElementById('inv-load-btn');
@@ -722,11 +760,16 @@ const invItemBody = document.getElementById('inv-item-body');
 const invItemActions = document.getElementById('inv-item-actions');
 /* Spell list refs */
 const avatarPreview = document.getElementById('avatar-preview');
+const avatarOpenBtn = document.getElementById('avatar-open');
 const avatarFileEl = document.getElementById('avatar-file');
 const avatarZoomEl = document.getElementById('avatar-zoom');
 const avatarOffsetXEl = document.getElementById('avatar-offset-x');
 const avatarOffsetYEl = document.getElementById('avatar-offset-y');
 const avatarUploadBtn = document.getElementById('avatar-upload');
+const avatarModal = document.getElementById('avatar-modal');
+const avatarBackdrop = document.getElementById('avatar-backdrop');
+const avatarClose = document.getElementById('avatar-close');
+const avatarCancel = document.getElementById('avatar-cancel');
 const avatarStatusEl = document.getElementById('avatar-status');
 const avatarCanvas = document.getElementById('avatar-canvas');
 let AVATAR_IMG = null;
@@ -1643,6 +1686,19 @@ async function uploadAvatar(){
   });
 }
 avatarUploadBtn?.addEventListener('click', uploadAvatar);
+avatarOpenBtn?.addEventListener('click', ()=>{
+  avatarModal.classList.add('open');
+  avatarBackdrop.classList.add('open');
+});
+avatarClose?.addEventListener('click', ()=>{
+  avatarModal.classList.remove('open');
+  avatarBackdrop.classList.remove('open');
+});
+avatarCancel?.addEventListener('click', ()=>{
+  avatarModal.classList.remove('open');
+  avatarBackdrop.classList.remove('open');
+});
+avatarBackdrop?.addEventListener('click', (e)=>{ if (e.target===avatarBackdrop){ avatarModal.classList.remove('open'); avatarBackdrop.classList.remove('open'); }});
 
 function normalizeIV(iv){
   const defN = {fire:0,water:0,wind:0,earth:0,sun:0,moon:0,lightning:0,ki:0};
@@ -1896,6 +1952,63 @@ async function reloadSpellListData(){
   renderPinnedSchools();
   renderSpellRows();
   renderAbilitySpellsBucket();
+}
+
+async function loadArchetypesList(){
+  try{
+    const res = await api('/archetypes');
+    ARCHETYPES = res.archetypes || [];
+    arcSelectEl.innerHTML = '<option value=\"\">-- Select archetype --</option>';
+    ARCHETYPES.forEach(a=>{
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.name || a.id;
+      if (CHAR?.archetype_id === a.id) opt.selected = true;
+      arcSelectEl.appendChild(opt);
+    });
+  }catch(e){
+    arcStatusEl.textContent = 'Load archetypes failed: '+e.message;
+  }
+}
+
+async function fetchAbilitiesByIds(ids){
+  if (!ids || !ids.length) return [];
+  const qs = '?ids=' + encodeURIComponent(ids.join(','));
+  const res = await api('/abilities/bulk'+qs);
+  return res.abilities || [];
+}
+
+async function renderArchetypePanel(){
+  if (!CHAR?.archetype_id){
+    arcSummaryEl.textContent = 'No archetype linked.';
+    arcAbilitiesEl.innerHTML = '<div class="muted">Select an archetype.</div>';
+    return;
+  }
+  const arc = ARCHETYPES.find(a=>a.id===CHAR.archetype_id);
+  const rank = CHAR.archetype_rank || _archetype_rank_for_level(Number(CHAR.level||1));
+  arcSummaryEl.textContent = `${arc?.name || CHAR.archetype_id} · Rank: ${rank}`;
+  COMPUTED_ARC_ABILITIES = (CHAR.computed_archetype_abilities || []).slice();
+  if (!COMPUTED_ARC_ABILITIES.length){
+    arcAbilitiesEl.innerHTML = '<div class="muted">No unlocked abilities yet.</div>';
+    return;
+  }
+  const docs = await fetchAbilitiesByIds(COMPUTED_ARC_ABILITIES);
+  const byId = {};
+  docs.forEach(d=>{ if(d?.id) byId[d.id]=d; });
+  arcAbilitiesEl.innerHTML = '';
+  COMPUTED_ARC_ABILITIES.forEach(id=>{
+    const a = byId[id] || { name:id, description:'' };
+    const div = document.createElement('div');
+    div.className = 'abi-item';
+    div.innerHTML = `
+      <div class="grow">
+        <div><strong>${a.name || id}</strong></div>
+        <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
+      </div>
+      <span class="tag">Archetype</span>
+    `;
+    arcAbilitiesEl.appendChild(div);
+  });
 }
 
 async function loadSpellListById(id){
@@ -2208,8 +2321,11 @@ async function loadCharacter(){
   if (!('level' in CHAR)) CHAR.level = 1;
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
+  if (!CHAR.archetype_id) CHAR.archetype_id = '';
   SELECTED_SPELL_LIST_ID = CHAR.spell_list_id || '';
   SELECTED_INV_ID = CHAR.inventory_id || '';
+   COMPUTED_ARC_ABILITIES = CHAR.computed_archetype_abilities || [];
+  if (!CHAR.archetype_rank) CHAR.archetype_rank = _archetypeRankForLevel(CHAR.level);
   LINKED_SPELL_LIST = null;
   renderSpellListSummary();
   PERSONAL = CHAR.stats?.personal || {};
@@ -2237,6 +2353,8 @@ async function loadCharacter(){
   // refresh visuals that depend on passive agg
   renderStatistics();
   updateDerived();
+  await loadArchetypesList();
+  renderArchetypePanel();
   await loadSpellListsList();
   if (SELECTED_SPELL_LIST_ID) await loadSpellListById(SELECTED_SPELL_LIST_ID);
   await loadInventoriesList();
@@ -2259,6 +2377,7 @@ async function saveNow(){
       abilities: CHAR.abilities || [],
       inventory_id: SELECTED_INV_ID || '',
       spell_list_id: SELECTED_SPELL_LIST_ID || '',
+      archetype_id: CHAR.archetype_id || '',
       sublimations: SUBLIMATIONS
     };
     const res = await api('/characters/' + encodeURIComponent(CID), {
@@ -2303,6 +2422,26 @@ invCatEl.addEventListener('change', ()=>{
 invKindEl.addEventListener('change', invClearSearch);
 document.getElementById('inv-item-close').addEventListener('click', closeInvItemModal);
 invItemBackdrop.addEventListener('click', (e)=>{ if (e.target===invItemBackdrop) closeInvItemModal(); });
+
+arcApplyBtn.addEventListener('click', async ()=>{
+  const arcId = arcSelectEl.value || '';
+  try{
+    arcStatusEl.textContent = 'Saving archetype...';
+    const res = await api('/characters/' + encodeURIComponent(CID), {
+      method:'PUT',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify({ archetype_id: arcId, stats: CHAR.stats })
+    });
+    CHAR.archetype_id = arcId;
+    CHAR.archetype_rank = _archetypeRankForLevel(CHAR.level);
+    CHAR.computed_archetype_abilities = res.character?.computed_archetype_abilities || [];
+    COMPUTED_ARC_ABILITIES = CHAR.computed_archetype_abilities;
+    renderArchetypePanel();
+    arcStatusEl.textContent = 'Archetype saved.';
+  }catch(e){
+    arcStatusEl.textContent = 'Save failed: ' + e.message;
+  }
+});
 
 slLoadBtn.addEventListener('click', ()=> loadSpellListById(slSelectEl.value));
 slSelectEl.addEventListener('change', ()=> loadSpellListById(slSelectEl.value));
@@ -2439,3 +2578,25 @@ checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.';
 
 </body>
 </html>
+
+<!-- Avatar modal -->
+<div id="avatar-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="avatar-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="avatar-title">
+  <div class="modal-card">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="avatar-title">Set Avatar</div>
+      <button class="modal-close" id="avatar-close" aria-label="Close">✕</button>
+    </header>
+    <div class="row" style="gap:10px; flex-wrap:wrap;">
+      <input type="file" id="avatar-file" accept="image/png,image/jpeg">
+      <label class="muted">Zoom <input id="avatar-zoom" type="range" min="1" max="3" step="0.05" value="1"></label>
+      <label class="muted">Offset X <input id="avatar-offset-x" type="range" min="-120" max="120" step="2" value="0"></label>
+      <label class="muted">Offset Y <input id="avatar-offset-y" type="range" min="-120" max="120" step="2" value="0"></label>
+    </div>
+    <canvas id="avatar-canvas" width="256" height="256" class="avatar-crop" style="margin-top:10px;"></canvas>
+    <div class="row" style="margin-top:12px; gap:10px;">
+      <button class="btn" id="avatar-upload">Upload</button>
+      <button class="btn btn-secondary" id="avatar-cancel">Cancel</button>
+    </div>
+  </div>
+</div>

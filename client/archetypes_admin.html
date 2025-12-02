@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Archetypes Admin</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    body{background:#0b0b0f;color:#f3f3f5;font-family:Segoe UI, sans-serif;padding:20px;}
+    .card{border:1px solid #2a2a3a;border-radius:12px;padding:14px;background:#12121a;margin-bottom:14px;}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+    input,select,textarea{padding:8px 10px;border:1px solid #2a2a3a;border-radius:10px;background:#181821;color:#f3f3f5;}
+    button{padding:8px 12px;border:1px solid #c53535;border-radius:10px;background:#c53535;color:#fff;cursor:pointer;}
+    table{width:100%;border-collapse:collapse;}
+    th,td{border-bottom:1px solid #222;padding:8px;text-align:left;}
+  </style>
+</head>
+<body>
+  <h1>Archetypes (Moderator)</h1>
+  <div class="card">
+    <div class="row">
+      <input id="arc-name" placeholder="Name" style="flex:1;">
+      <label class="row" style="gap:4px;"><input type="checkbox" id="arc-hybrid"> Hybrid</label>
+      <input id="arc-prereq-text" placeholder="Prereq text" style="flex:1;">
+      <input id="arc-sources" placeholder="Source archetype ids (comma)" style="flex:1;">
+      <button id="arc-save">Save / Update</button>
+      <input type="hidden" id="arc-editing" value="">
+    </div>
+    <div class="row">
+      <label>Prereq: MAG highest <input type="checkbox" id="arc-mag-high"></label>
+      <label>Prereq: WIS ≥ MAG/2 <input type="checkbox" id="arc-wis-half"></label>
+      <label>Char min</label>
+      <select id="arc-char-key">
+        <option value="">--</option>
+        <option value="reflex">Reflex</option><option value="dexterity">Dexterity</option><option value="body">Body</option>
+        <option value="wisdom">Wisdom</option><option value="presence">Presence</option><option value="magic">Magic</option>
+        <option value="willpower">Willpower</option><option value="tech">Tech</option>
+      </select>
+      <input id="arc-char-val" type="number" style="width:80px;" placeholder="Min">
+    </div>
+    <div class="card" style="margin-top:10px;">
+      <h3>Ranks</h3>
+      <div id="rank-list"></div>
+      <button id="rank-add">+ Add Rank</button>
+    </div>
+    <div id="arc-status" class="muted"></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;">
+      <h3>Existing</h3>
+      <button id="arc-refresh">Refresh</button>
+    </div>
+    <div id="arc-list"></div>
+  </div>
+
+<script>
+const token = localStorage.getItem('auth_token') || "";
+const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+const $ = s=>document.querySelector(s);
+
+function rankRow(r={}){
+  const div = document.createElement('div');
+  div.className = 'row';
+  div.style.marginBottom = '6px';
+  div.innerHTML = `
+    <input class="rk-rank" type="number" placeholder="Rank" value="${r.rank||''}" style="width:70px;">
+    <input class="rk-abil" placeholder="Ability id" value="${r.ability_id||''}" style="min-width:180px;">
+    <input class="rk-ver" type="number" placeholder="Version" value="${r.version||1}" style="width:80px;">
+    <input class="rk-orig" type="number" placeholder="Original rank" value="${r.original_rank||''}" style="width:120px;">
+    <input class="rk-repl" placeholder="Replaces ability id" value="${r.replaces_id||''}" style="min-width:180px;">
+    <input class="rk-note" placeholder="Note" value="${r.note||''}" style="min-width:140px;">
+    <button class="rk-del">Remove</button>
+  `;
+  div.querySelector('.rk-del').addEventListener('click', ()=>div.remove());
+  return div;
+}
+
+function collectDoc(){
+  const charMin = {};
+  const ck = $("#arc-char-key").value;
+  const cv = $("#arc-char-val").value;
+  if (ck && cv) charMin[ck] = Number(cv);
+  const ranks=[];
+  document.querySelectorAll('#rank-list .row').forEach(row=>{
+    ranks.push({
+      rank: Number(row.querySelector('.rk-rank').value||0),
+      ability_id: row.querySelector('.rk-abil').value.trim(),
+      version: Number(row.querySelector('.rk-ver').value||1),
+      original_rank: Number(row.querySelector('.rk-orig').value||0),
+      replaces_id: row.querySelector('.rk-repl').value.trim(),
+      note: row.querySelector('.rk-note').value.trim(),
+    });
+  });
+  return {
+    name: $("#arc-name").value.trim(),
+    hybrid: $("#arc-hybrid").checked,
+    sources: ($("#arc-sources").value||"").split(",").map(s=>s.trim()).filter(Boolean),
+    prereq_text: $("#arc-prereq-text").value.trim(),
+    prereq_rules:{
+      mag_highest: $("#arc-mag-high").checked,
+      wis_half_mag: $("#arc-wis-half").checked,
+      char_min: charMin
+    },
+    ranks
+  };
+}
+
+async function saveArchetype(){
+  const body = collectDoc();
+  const editing = $("#arc-editing").value;
+  const path = editing ? `/archetypes/${encodeURIComponent(editing)}` : "/archetypes";
+  const method = editing ? "PUT" : "POST";
+  $("#arc-status").textContent = "Saving...";
+  const r = await fetch(path, { method, headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify(body)});
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ $("#arc-status").textContent = j.message || "Save failed"; return; }
+  $("#arc-status").textContent = "Saved.";
+  $("#arc-editing").value = editing || j.archetype?.id || "";
+  loadList();
+}
+
+async function loadList(){
+  const box = $("#arc-list"); box.innerHTML = "Loading...";
+  const r = await fetch("/archetypes", { headers: authHeaders() });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ box.textContent = j.message || "Load failed"; return; }
+  box.innerHTML = "";
+  (j.archetypes||[]).forEach(a=>{
+    const div = document.createElement('div'); div.className='card';
+    div.innerHTML = `
+      <div class="row" style="justify-content:space-between;">
+        <div><b>${a.name}</b> ${a.hybrid?'<span class="muted">(hybrid)</span>':''}</div>
+        <div class="row">
+          <button class="edit">Edit</button>
+          <button class="del">Delete</button>
+        </div>
+      </div>
+      <div class="muted">${a.prereq_text || ''}</div>
+      <div class="muted">Ranks: ${(a.ranks||[]).length}</div>
+    `;
+    div.querySelector('.edit').addEventListener('click', ()=>{
+      $("#arc-editing").value = a.id;
+      $("#arc-name").value = a.name || "";
+      $("#arc-hybrid").checked = !!a.hybrid;
+      $("#arc-sources").value = (a.sources||[]).join(", ");
+      $("#arc-prereq-text").value = a.prereq_text || "";
+      $("#arc-mag-high").checked = !!a.prereq_rules?.mag_highest;
+      $("#arc-wis-half").checked = !!a.prereq_rules?.wis_half_mag;
+      $("#arc-char-key").value = Object.keys(a.prereq_rules?.char_min||{})[0] || "";
+      $("#arc-char-val").value = Object.values(a.prereq_rules?.char_min||{})[0] || "";
+      const rl = $("#rank-list"); rl.innerHTML = "";
+      (a.ranks||[]).forEach(r=> rl.appendChild(rankRow(r)));
+    });
+    div.querySelector('.del').addEventListener('click', async ()=>{
+      if (!confirm(`Delete archetype ${a.name}?`)) return;
+      const r2 = await fetch(`/archetypes/${encodeURIComponent(a.id)}`, { method:"DELETE", headers: authHeaders() });
+      const j2 = await r2.json().catch(()=>({}));
+      if (j2.status !== "success"){ alert(j2.message || "Delete failed"); return; }
+      loadList();
+    });
+    box.appendChild(div);
+  });
+}
+
+document.getElementById("arc-save").addEventListener("click", saveArchetype);
+document.getElementById("arc-refresh").addEventListener("click", loadList);
+document.getElementById("rank-add").addEventListener("click", ()=> document.getElementById("rank-list").appendChild(rankRow({})));
+document.getElementById("rank-list").appendChild(rankRow({}));
+loadList();
+</script>
+</body>
+</html>

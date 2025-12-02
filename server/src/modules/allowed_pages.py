@@ -44,4 +44,5 @@ ALLOWED_PAGES = {"home",
 "character_edit",
 "abilities_home",
 "abilities_list",
-"abilities_create"}
+"abilities_create",
+"archetypes_admin"}
