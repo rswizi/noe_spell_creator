@@ -2162,7 +2162,7 @@ def _validate_archetype_doc(doc: dict, is_update=False):
     doc["prereq_text"] = (doc.get("prereq_text") or "").strip()
     rules = doc.get("prereq_rules") or {}
     # structured prereqs
-    allowed_keys = {"mag_highest","wis_half_mag","char_min"}
+    allowed_keys = {"mag_highest","wis_half_mag","char_min","char_order"}
     doc["prereq_rules"] = {k:v for k,v in rules.items() if k in allowed_keys}
     if "char_min" in doc["prereq_rules"]:
         cm = doc["prereq_rules"]["char_min"] or {}
@@ -2172,6 +2172,28 @@ def _validate_archetype_doc(doc: dict, is_update=False):
             try: clean[str(k)] = int(v)
             except Exception: continue
         doc["prereq_rules"]["char_min"] = clean
+    # normalized characteristic ranking rules (highest / second / third)
+    if "char_order" in doc["prereq_rules"]:
+        co = doc["prereq_rules"]["char_order"] or []
+        if not isinstance(co, list): co = []
+        cleaned_co = []
+        for entry in co:
+            if not isinstance(entry, dict): continue
+            key = str(entry.get("key") or "").strip()
+            try:
+                pos = int(entry.get("position") or 0)
+            except Exception:
+                continue
+            if not key or pos not in (1,2,3):
+                continue
+            cleaned_co.append({"key": key, "position": pos})
+        doc["prereq_rules"]["char_order"] = cleaned_co
+    else:
+        # migrate legacy mag_highest into char_order for consistency
+        co = []
+        if rules.get("mag_highest"):
+            co.append({"key":"magic","position":1})
+        doc["prereq_rules"]["char_order"] = co
 
     ranks = doc.get("ranks") or []
     if not isinstance(ranks, list):
@@ -2246,6 +2268,27 @@ def _check_archetype_prereqs(archetype: dict, stats: dict) -> bool:
         mag = mod_for("magic")
         if wis < (mag/2):
             return False
+    # ranking rules (highest / second / third)
+    order_rules = rules.get("char_order") or []
+    if order_rules:
+        # compute ranked list (stable sort by value desc then key)
+        vals = [(k, mod_for(k)) for k in char_keys]
+        vals.sort(key=lambda kv: (-kv[1], kv[0]))
+        rank_pos = {k:i+1 for i,(k,_) in enumerate(vals)}  # 1-based
+        for r in order_rules:
+            key = r.get("key")
+            pos = int(r.get("position") or 0)
+            if key not in rank_pos or pos not in (1,2,3):
+                continue
+            # allow ties: character must not be strictly below required tier
+            my_val = mod_for(key)
+            higher_count = sum(1 for k,v in vals if v > my_val)
+            if pos == 1 and higher_count != 0:
+                return False
+            if pos == 2 and (higher_count < 1 or higher_count > 1):
+                return False
+            if pos == 3 and (higher_count < 2 or higher_count > 2):
+                return False
     char_min = rules.get("char_min") or {}
     for k,v in char_min.items():
         try:
