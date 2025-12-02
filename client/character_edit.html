@@ -6,62 +6,91 @@
   <title>NoE -- Edit Character (with Abilities)</title>
 
   <style>
-    :root { color-scheme: dark; }
+    :root {
+      color-scheme: dark;
+      --bg: #0b0b0f;
+      --bg-2: #0f0f15;
+      --panel: #121219;
+      --border: #252533;
+      --accent: #c53535;
+      --accent-2: #f04a4a;
+      --text: #f3f3f5;
+    }
     html,body { height: 100%; }
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    .page { min-height: 100vh; display: grid; place-items: start center; background: #0b0b0b; }
-    .wrap { width: 100%; max-width: 980px; padding: 28px 16px; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at 20% 20%, rgba(197,53,53,0.18), transparent 40%),
+                  radial-gradient(circle at 80% 0%, rgba(240,74,74,0.14), transparent 45%),
+                  var(--bg);
+    }
+    .page { min-height: 100vh; display: grid; place-items: start center; }
+    .wrap { width: 100%; max-width: 1100px; padding: 28px 16px 60px; }
 
     .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
-    .topbar h1 { font-size: 20px; margin: 0; }
-    a.btn, button, input, select, textarea { padding:8px 12px; border-radius:10px; border:1px solid #333; background:#121212; color:#f0f0f0; text-decoration:none; }
-    a.btn:hover, button:hover { background:#171717; }
-    .muted { opacity:.8; font-size:.9rem; }
+    .topbar h1 { font-size: 22px; margin: 0; }
+    a.btn, button, input, select, textarea {
+      padding:10px 12px; border-radius:12px; border:1px solid var(--border);
+      background: #181821; color: var(--text); text-decoration:none;
+      transition: background .15s ease, border .15s ease, transform .1s ease;
+    }
+    a.btn:hover, button:hover { background:#1f1f2a; border-color:#2f2f42; }
+    button:active { transform: translateY(1px); }
+    input, select, textarea { width:100%; }
+    textarea { resize: vertical; }
+    .muted { opacity:.78; font-size:.9rem; }
     .grow { flex: 1 1 auto; }
     .right { margin-left:auto; }
 
-    .tabs { display:flex; gap:8px; border-bottom:1px solid #222; margin:16px 0 12px; }
-    .tab { padding:10px 14px; border:1px solid #222; border-bottom:none; border-radius:12px 12px 0 0; background:#111; cursor:pointer; }
-    .tab.active { background:#191919; font-weight:600; }
-    .tabpanes { border:1px solid #222; border-radius:0 14px 14px 14px; background:#141414; padding:16px; }
+    .tabs { display:flex; gap:8px; border-bottom:1px solid var(--border); margin:16px 0 12px; flex-wrap:wrap; }
+    .tab { padding:10px 14px; border:1px solid var(--border); border-bottom:none; border-radius:14px 14px 0 0; background:#14141d; cursor:pointer; }
+    .tab.active { background: linear-gradient(135deg, rgba(197,53,53,0.25), rgba(20,20,29,0.9)); border-color: var(--accent); font-weight:700; box-shadow: 0 8px 16px rgba(0,0,0,0.3); }
+    .tabpanes { border:1px solid var(--border); border-radius:0 18px 18px 18px; background: #11111a; padding:16px; box-shadow: 0 10px 30px rgba(0,0,0,0.28); }
 
-    .stats-grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); align-items:start; }
-    .panel { border:1px solid #2a2a2a; border-radius:14px; overflow:hidden; background:#101010; }
-    details.panel > summary { list-style:none; cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; }
+    .stats-grid { display:grid; gap:14px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); align-items:start; }
+    .panel { border:1px solid var(--border); border-radius:16px; overflow:hidden; background: var(--panel); box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+    details.panel > summary { list-style:none; cursor:pointer; padding:14px 16px; display:flex; align-items:center; gap:10px; }
     details.panel > summary::-webkit-details-marker { display:none; }
-    .pill { font-size:.85rem; opacity:.85; border:1px solid #2f2f2f; border-radius:999px; padding:2px 8px; }
-    .panel-body { padding:0 14px 14px; }
+    .pill { font-size:.85rem; opacity:.9; border:1px solid #2f2f3f; border-radius:999px; padding:3px 10px; }
+    .panel-body { padding:0 16px 16px; display:grid; gap:10px; }
 
-    .row { display:flex; align-items:center; gap:8px; }
+    .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .row > .grow { flex:1 1 auto; }
-    .k { opacity:.85; font-size:.9rem; }
-    .num { width:90px; }
+    .k { opacity:.88; font-size:.9rem; }
+    .num { width:100px; }
     .total { font-weight:600; }
     .hdr { display:flex; align-items:center; gap:10px; }
     .skills { display:grid; gap:8px; margin-top:10px; }
     .skill-line { display:grid; grid-template-columns: auto 1fr auto; gap:8px; align-items:center; }
-    .skill-total { min-width:48px; text-align:right; font-variant-numeric: tabular-nums; }
+    .skill-total { min-width:64px; text-align:right; font-variant-numeric: tabular-nums; }
     .charac-badge { font-variant-numeric: tabular-nums; }
-    .badge { border:1px solid #2f2f2f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; }
+    .badge { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; background:#181821; }
 
-    .derived-grid { display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); }
+    .derived-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); }
     .kv { display:grid; grid-template-columns: auto 1fr; gap:6px 8px; align-items:center; }
     .kv .val { justify-self:end; font-variant-numeric: tabular-nums; }
 
     /* Abilities tab */
     .abi-grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
     .abi-bucket h3 { margin:6px 0 8px; font-size:1rem; }
-    .abi-list { display:grid; gap:6px; }
-    .abi-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #2b2b2b; border-radius:10px; background:#0f0f0f; }
-    .abi-item .tag { border:1px solid #3b3b3b; border-radius:999px; padding:2px 6px; font-size:.75rem; opacity:.85; }
-    .abi-item button { padding:4px 8px; font-size:.85rem; }
-    .abi-add { display:flex; gap:8px; align-items:center; }
+    .abi-list { display:grid; gap:8px; }
+    .abi-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #2b2b3b; border-radius:12px; background:linear-gradient(145deg, #14141d, #0f0f16); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
+    .abi-item .tag { border:1px solid #3b3b4b; border-radius:999px; padding:3px 8px; font-size:.75rem; opacity:.9; }
+    .abi-item button { padding:6px 10px; font-size:.85rem; }
+    .abi-add { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .abi-add input, .abi-add select { flex:1 1 auto; }
     .abi-hint { opacity:.75; font-size:.85rem; margin-top:6px; }
     /* Modifiers breakdown */
     .mod-list { margin:6px 0 4px 16px; padding:0; list-style:disc; display:none; opacity:0.9; }
     .mod-list li { margin:0 0 3px 0; font-size:0.9rem; }
     .mod-toggle { cursor:pointer; }
+    /* Avatar */
+    .avatar-card { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+    .avatar-frame { width:124px; height:124px; border:1px solid #333; border-radius:14px; overflow:hidden; background:#08080e; display:grid; place-items:center; }
+    .avatar-frame img { width:100%; height:100%; object-fit:cover; }
+    .avatar-tools { display:grid; gap:6px; min-width:280px; }
+    .avatar-crop { border:1px solid #333; border-radius:14px; background:#0b0b12; }
     /* Personal tab */
     .personal-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom:10px; }
     .kv-field { display:grid; gap:4px; }
@@ -87,7 +116,19 @@
           <span class="muted status" id="status">Loaded.</span>
         </summary>
         <div class="panel-body">
-          <input id="name" placeholder="Enter a name..." class="grow" />
+          <div class="avatar-card">
+            <div class="avatar-frame"><img id="avatar-preview" alt="Avatar preview"></div>
+            <div class="avatar-tools">
+              <input id="name" placeholder="Enter a name..." class="grow" />
+              <input type="file" id="avatar-file" accept="image/png,image/jpeg">
+              <label class="muted">Zoom <input id="avatar-zoom" type="range" min="1" max="3" step="0.05" value="1"></label>
+              <label class="muted">Offset X <input id="avatar-offset-x" type="range" min="-120" max="120" step="2" value="0"></label>
+              <label class="muted">Offset Y <input id="avatar-offset-y" type="range" min="-120" max="120" step="2" value="0"></label>
+              <button id="avatar-upload" class="btn small">Upload Avatar</button>
+              <div id="avatar-status" class="muted"></div>
+            </div>
+          </div>
+          <canvas id="avatar-canvas" width="256" height="256" class="avatar-crop" style="display:none;"></canvas>
         </div>
       </details>
     </div>
@@ -96,6 +137,7 @@
     <div class="tabs" role="tablist">
       <div class="tab active" data-tab="tab-stat">Statistic</div>
       <div class="tab" data-tab="tab-inv">Inventory</div>
+      <div class="tab" data-tab="tab-spell">Spell List</div>
       <div class="tab" data-tab="tab-abi">Abilities</div>
       <div class="tab" data-tab="tab-com">Combat</div>
       <div class="tab" data-tab="tab-per">Personal</div>
@@ -196,51 +238,99 @@
           <details open class="panel">
             <summary class="hdr">
               <strong>Inventory</strong>
-              <span class="muted">(link + manage inline)</span>
+              <span class="muted">(linked & fully managed here)</span>
             </summary>
             <div class="panel-body">
               <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
                 <select id="inv-select" class="grow"></select>
                 <button id="inv-load-btn">Load</button>
-                <a class="btn" id="inv-open-btn" target="_blank" rel="noopener">Open manager</a>
                 <a class="btn" href="inventory_create.html" target="_blank" rel="noopener">Create inventory</a>
                 <span id="inv-status" class="muted"></span>
               </div>
 
-              <div id="inv-summary" class="muted" style="margin-bottom:8px;"></div>
-              <div id="inv-embed-wrap" style="display:none; margin-top:10px;">
-                <iframe id="inv-embed" title="Inventory manager" style="width:100%; height:760px; border:1px solid #222; border-radius:12px;"></iframe>
+              <div id="inv-manager" style="display:none;">
+                <div class="home-card">
+                  <h3 id="inv-title">Inventory</h3>
+                  <div class="row" style="flex-wrap:wrap; gap:10px;">
+                    <div id="inv-money"></div>
+                    <div class="row muted" style="gap:6px;">Total Encumbrance: <strong id="inv-enc-total">0</strong></div>
+                  </div>
+                  <div class="row" style="margin-top:8px; gap:8px; flex-wrap:wrap;">
+                    <label class="muted">Add Funds</label>
+                    <select id="inv-fund-cur" style="min-width:120px;"></select>
+                    <input id="inv-fund-amt" type="number" step="1" placeholder="Amount" style="width:140px;">
+                    <input id="inv-fund-note" placeholder="Note (optional)" style="flex:1; min-width:200px;">
+                    <button id="inv-fund-add" class="btn small">+ Add</button>
+                  </div>
+                </div>
+
+                <div class="home-card">
+                  <h3>Containers & Items</h3>
+                  <div id="inv-containers"></div>
+                  <div class="row" style="margin-top:8px; gap:8px; flex-wrap:wrap;">
+                    <input id="inv-new-cont-name" placeholder="New container name">
+                    <button id="inv-add-cont" class="btn small">+ Add Container</button>
+                  </div>
+                </div>
+
+                <div class="home-card">
+                  <h3>Recent Transactions</h3>
+                  <div id="inv-tx" class="list"></div>
+                </div>
+
+                <div class="home-card">
+                  <h3>Add from Catalog</h3>
+                  <div class="row" style="gap:10px; flex-wrap:wrap;">
+                    <input id="inv-q" placeholder="Search name…" style="flex:1">
+                    <select id="inv-kind">
+                      <option value="object">Objects</option>
+                      <option value="weapon">Weapons</option>
+                      <option value="equipment">Equipment</option>
+                      <option value="tool">Tools</option>
+                    </select>
+                    <select id="inv-cat-select">
+                      <option value="__all">All</option>
+                    </select>
+                    <select id="inv-limit">
+                      <option>25</option>
+                      <option selected>50</option>
+                      <option>100</option>
+                    </select>
+                    <button id="inv-search" class="btn small">Search</button>
+                    <button id="inv-clear" class="btn btn-secondary small">Clear</button>
+                  </div>
+                  <div class="row" style="gap:10px; margin-top:6px; flex-wrap:wrap;">
+                    <label class="muted">Container</label>
+                    <select id="inv-global-cont"></select>
+                    <label class="muted">Currency</label>
+                    <select id="inv-global-cur"></select>
+                    <label class="muted">Equipped?</label>
+                    <select id="inv-equpped-flag">
+                      <option value="1">Yes</option>
+                      <option value="0">No</option>
+                    </select>
+                  </div>
+                  <div id="inv-results" class="list" style="margin-top:8px;"></div>
+                </div>
               </div>
             </div>
           </details>
+        </div>
+
+        <!-- Item modal -->
+        <div id="inv-item-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+        <div id="inv-item-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-item-title">
+          <div class="modal-card">
+            <button class="modal-close" id="inv-item-close" aria-label="Close">&times;</button>
+            <h2 id="inv-item-title">Item</h2>
+            <div id="inv-item-body" class="list" style="margin-top:10px;"></div>
+            <div id="inv-item-actions" style="margin-top:12px;"></div>
+          </div>
         </div>
       </div>
 
       <!-- ABILITIES TAB -->
       <div id="tab-abi" class="tabpane" style="display:none;">
-        <div class="panel">
-          <details open class="panel">
-            <summary class="hdr">
-              <strong>Spell List</strong>
-              <span class="muted">(link + manage inline)</span>
-            </summary>
-            <div class="panel-body">
-              <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
-                <select id="sl-select" class="grow"></select>
-                <button id="sl-load-btn">Load</button>
-                <button id="sl-dup-btn">Duplicate & Link</button>
-                <a class="btn" id="sl-open-btn" target="_blank" rel="noopener" style="display:none;">Open list</a>
-                <a class="btn" id="sl-manager-btn" href="spell_list_home.html" target="_blank" rel="noopener">Full manager</a>
-                <span id="sl-status" class="muted"></span>
-              </div>
-              <div id="sl-summary" class="muted" style="margin-bottom:8px;"></div>
-              <div id="sl-embed-wrap" style="display:none; margin-top:10px;">
-                <iframe id="sl-embed" title="Spell list" style="width:100%; height:760px; border:1px solid #222; border-radius:12px;"></iframe>
-              </div>
-            </div>
-          </details>
-        </div>
-
         <div class="panel">
           <details open class="panel">
             <summary class="hdr">
@@ -287,9 +377,102 @@
                   <h3>Active (non-Archetype)</h3>
                   <div id="abi-list-active" class="abi-list"></div>
                 </div>
+                <div class="abi-bucket">
+                  <h3>Spells (from linked list)</h3>
+                  <div id="abi-list-spells" class="abi-list"></div>
+                </div>
               </div>
             </div>
           </details>
+        </div>
+      </div>
+
+      <!-- SPELL LIST TAB -->
+      <div id="tab-spell" class="tabpane" style="display:none;">
+        <div class="panel">
+          <details open class="panel">
+            <summary class="hdr">
+              <strong>Spell List</strong>
+              <span class="muted">(linked & managed here)</span>
+            </summary>
+            <div class="panel-body">
+              <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                <select id="sl-select" class="grow"></select>
+                <button id="sl-load-btn">Load</button>
+                <button id="sl-dup-btn">Duplicate & Link</button>
+                <a class="btn" href="spell_list_home.html" target="_blank" rel="noopener">Open manager</a>
+                <span id="sl-status" class="muted"></span>
+              </div>
+              <div id="sl-summary" class="muted" style="margin-bottom:8px;"></div>
+
+              <div class="panel" style="margin-bottom:12px;">
+                <details open class="panel">
+                  <summary class="hdr">
+                    <strong>Pinned Schools</strong>
+                    <span class="muted">(toggle to pin/unpin)</span>
+                  </summary>
+                  <div class="panel-body">
+                    <div id="sl-schools" class="abi-list"></div>
+                  </div>
+                </details>
+              </div>
+
+              <div class="panel">
+                <details open class="panel">
+                  <summary class="hdr">
+                    <strong>My Spells</strong>
+                    <span class="muted">(from linked list)</span>
+                    <span class="grow"></span>
+                    <button class="btn small" id="sl-open-add">Add spells</button>
+                  </summary>
+                  <div class="panel-body">
+                    <div class="table-wrap">
+                      <table class="table">
+                        <thead>
+                          <tr>
+                            <th style="width:30%;">Name</th>
+                            <th>Schools</th>
+                            <th style="width:10%;">Category</th>
+                            <th style="width:12%;">Status</th>
+                            <th style="width:18%;">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody id="sl-spells-body">
+                          <tr><td colspan="5" class="empty">Load a spell list.</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div id="sl-add-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+        <div id="sl-add-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sl-add-title">
+          <div class="modal-card" style="max-width:960px;">
+            <header class="row" style="justify-content:space-between; align-items:center;">
+              <div class="modal-title" id="sl-add-title">Add Spells</div>
+              <button class="modal-close" id="sl-add-close" aria-label="Close">✕</button>
+            </header>
+            <div class="row" style="gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+              <input id="sl-search-q" placeholder="Search spells..." style="flex:1; min-width:240px;">
+              <button class="btn" id="sl-search-btn">Search</button>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Name</th><th>Schools</th><th>Category</th><th>Add</th></tr></thead>
+                <tbody id="sl-search-body">
+                  <tr><td colspan="4" class="empty">Use search to list spells.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="row" style="margin-top:10px; gap:8px;">
+              <button class="btn btn-secondary" id="sl-add-cancel">Close</button>
+            </div>
+            <div id="sl-add-status" class="muted" style="margin-top:6px;"></div>
+          </div>
         </div>
       </div>
 
@@ -456,9 +639,15 @@ let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
 let INVENTORIES = [];
 let LINKED_INV = null;
 let SELECTED_INV_ID = '';
+let INV_LAST_RESULTS = [];
+let INV_FILTERED = [];
 let SPELL_LISTS = [];
 let LINKED_SPELL_LIST = null;
 let SELECTED_SPELL_LIST_ID = '';
+let SPELLLIST_SPELLS = [];
+let SPELLLIST_META = {};
+let PINNED = new Set();
+let SCHOOLS = [];
 let SUBLIMATIONS = [];
 let SUB_HIDDEN = {};
 let PERSONAL = {};
@@ -497,24 +686,67 @@ const abiResultsEl = document.getElementById('abi-results');
 const listArchetypeEl = document.getElementById('abi-list-archetype');
 const listPassiveEl   = document.getElementById('abi-list-passive');
 const listActiveEl    = document.getElementById('abi-list-active');
+const listSpellEl     = document.getElementById('abi-list-spells');
 /* Inventory tab refs */
 const invSelectEl = document.getElementById('inv-select');
 const invLoadBtn = document.getElementById('inv-load-btn');
-const invOpenBtn = document.getElementById('inv-open-btn');
 const invStatusEl = document.getElementById('inv-status');
-const invSummaryEl = document.getElementById('inv-summary');
-const invEmbedWrap = document.getElementById('inv-embed-wrap');
-const invEmbed = document.getElementById('inv-embed');
+const invManagerEl = document.getElementById('inv-manager');
+const invTitleEl = document.getElementById('inv-title');
+const invMoneyEl = document.getElementById('inv-money');
+const invEncTotalEl = document.getElementById('inv-enc-total');
+const invFundCurEl = document.getElementById('inv-fund-cur');
+const invFundAmtEl = document.getElementById('inv-fund-amt');
+const invFundNoteEl = document.getElementById('inv-fund-note');
+const invFundAddBtn = document.getElementById('inv-fund-add');
+const invContainersEl = document.getElementById('inv-containers');
+const invNewContNameEl = document.getElementById('inv-new-cont-name');
+const invAddContBtn = document.getElementById('inv-add-cont');
+const invTxEl = document.getElementById('inv-tx');
+const invQEl = document.getElementById('inv-q');
+const invKindEl = document.getElementById('inv-kind');
+const invCatEl = document.getElementById('inv-cat-select');
+const invLimitEl = document.getElementById('inv-limit');
+const invSearchBtn = document.getElementById('inv-search');
+const invClearBtn = document.getElementById('inv-clear');
+const invGlobalContEl = document.getElementById('inv-global-cont');
+const invGlobalCurEl = document.getElementById('inv-global-cur');
+const invEquippedFlagEl = document.getElementById('inv-equpped-flag');
+const invResultsEl = document.getElementById('inv-results');
+const invItemModal = document.getElementById('inv-item-modal');
+const invItemBackdrop = document.getElementById('inv-item-backdrop');
+const invItemTitle = document.getElementById('inv-item-title');
+const invItemBody = document.getElementById('inv-item-body');
+const invItemActions = document.getElementById('inv-item-actions');
 /* Spell list refs */
+const avatarPreview = document.getElementById('avatar-preview');
+const avatarFileEl = document.getElementById('avatar-file');
+const avatarZoomEl = document.getElementById('avatar-zoom');
+const avatarOffsetXEl = document.getElementById('avatar-offset-x');
+const avatarOffsetYEl = document.getElementById('avatar-offset-y');
+const avatarUploadBtn = document.getElementById('avatar-upload');
+const avatarStatusEl = document.getElementById('avatar-status');
+const avatarCanvas = document.getElementById('avatar-canvas');
+let AVATAR_IMG = null;
+if (avatarPreview){
+  avatarPreview.onerror = ()=>{ avatarPreview.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII='; };
+}
 const slSelectEl = document.getElementById('sl-select');
 const slLoadBtn = document.getElementById('sl-load-btn');
 const slDupBtn = document.getElementById('sl-dup-btn');
-const slOpenBtn = document.getElementById('sl-open-btn');
 const slStatusEl = document.getElementById('sl-status');
 const slSummaryEl = document.getElementById('sl-summary');
-const slEmbedWrap = document.getElementById('sl-embed-wrap');
-const slEmbed = document.getElementById('sl-embed');
-if (slEmbed) slEmbed.addEventListener('load', ()=> pushSpellListIVToEmbed());
+const slSchoolsEl = document.getElementById('sl-schools');
+const slSpellsBody = document.getElementById('sl-spells-body');
+const slOpenAddBtn = document.getElementById('sl-open-add');
+const slAddModal = document.getElementById('sl-add-modal');
+const slAddBackdrop = document.getElementById('sl-add-backdrop');
+const slAddClose = document.getElementById('sl-add-close');
+const slAddCancel = document.getElementById('sl-add-cancel');
+const slSearchQ = document.getElementById('sl-search-q');
+const slSearchBtn = document.getElementById('sl-search-btn');
+const slSearchBody = document.getElementById('sl-search-body');
+const slAddStatus = document.getElementById('sl-add-status');
 /* Sublimations refs */
 const subTypeEl = document.getElementById('sub-type');
 const subTierEl = document.getElementById('sub-tier');
@@ -557,25 +789,6 @@ const pBackstoryEl = document.getElementById('p-backstory');
   subAddBtn.addEventListener('click', addSublimationFromForm);
   updateSubSpecialFields();
 })();
-
-// Listen for inventory iframe updates to refresh mods live
-window.addEventListener('message', (event)=>{
-  if (event.origin !== location.origin) return;
-  const data = event.data || {};
-  if (data.type === 'inventory-updated' && data.inventory){
-    const inv = data.inventory;
-    const match = LINKED_INV && (LINKED_INV.id === inv.id || SELECTED_INV_ID === inv.id);
-    if (match){
-      LINKED_INV = inv;
-      SELECTED_INV_ID = inv.id || SELECTED_INV_ID;
-      if (CHAR) CHAR.inventory_id = SELECTED_INV_ID;
-      renderInventorySummary();
-      recomputePassiveAgg();
-      renderStatistics();
-      updateDerived();
-    }
-  }
-});
 
 /* tabs switching */
 document.querySelectorAll('.tab').forEach(tab=>{
@@ -1023,30 +1236,82 @@ async function loadInventoriesList(){
   }
 }
 
-function renderInventorySummary(){
+function renderInventoryUI(){
   if (!LINKED_INV){
-    invSummaryEl.textContent = 'No inventory linked.';
-    invOpenBtn.style.display = 'none';
-    if (invEmbedWrap) invEmbedWrap.style.display = 'none';
+    invManagerEl.style.display = 'none';
     return;
   }
-  const enc = Number(LINKED_INV.enc_total || 0);
+  invManagerEl.style.display = '';
+  invTitleEl.textContent = LINKED_INV.name || 'Inventory';
+  // Money + currency selects
   const cur = LINKED_INV.currencies || {};
-  const curText = Object.keys(cur).length ? Object.entries(cur).map(([k,v])=>`${k}: ${v}`).join(' | ') : 'no currencies';
-  invSummaryEl.textContent = `${LINKED_INV.name || 'Inventory'} - Current encumbrance: ${enc.toFixed(1)} | ${curText}`;
-  invOpenBtn.style.display = '';
-  invOpenBtn.href = `inventory_view.html?inv=${encodeURIComponent(LINKED_INV.id || '')}`;
-  if (invEmbedWrap && invEmbed){
-    invEmbedWrap.style.display = '';
-    const targetSrc = new URL(`inventory_view.html?inv=${encodeURIComponent(LINKED_INV.id || '')}&embed=1`, location.href).toString();
-    const currentSrc = invEmbed.src;
-    if (currentSrc !== targetSrc) invEmbed.src = targetSrc;
+  invMoneyEl.innerHTML = Object.keys(cur).length
+    ? Object.entries(cur).map(([k,v])=>`<span class="pill">${k}: ${v}</span>`).join(' ')
+    : '<span class="muted">No funds</span>';
+  invFundCurEl.innerHTML = '';
+  invGlobalCurEl.innerHTML = '';
+  Object.keys(cur).concat(["Jelly"]).filter((v,i,arr)=>arr.indexOf(v)===i).forEach(k=>{
+    const o1=document.createElement('option'); o1.value=k; o1.textContent=k; invFundCurEl.appendChild(o1);
+    const o2=document.createElement('option'); o2.value=k; o2.textContent=k; invGlobalCurEl.appendChild(o2);
+  });
+  invEncTotalEl.textContent = Number(LINKED_INV.enc_total||0).toFixed(1);
+
+  // Containers & items
+  const containers = LINKED_INV.containers || [];
+  const items = LINKED_INV.items || [];
+  invContainersEl.innerHTML = '';
+  if (!containers.length){
+    invContainersEl.innerHTML = '<div class="muted">No containers yet.</div>';
+  }else{
+    containers.forEach(c=>{
+      const div = document.createElement('div');
+      div.className = 'container-card';
+      div.innerHTML = `
+        <div class="container-head">
+          <strong>${c.name || 'Container'}</strong>
+          <span class="muted">Enc: ${Number(c.enc_total||0).toFixed(1)} ${c.include===false? '(excluded)':''}</span>
+        </div>
+        <div class="items"></div>
+      `;
+      const list = div.querySelector('.items');
+      const its = items.filter(it=> (it.container_id||'') === c.id);
+      if (!its.length){
+        list.innerHTML = '<div class="muted">No items.</div>';
+      }else{
+        its.forEach(it=>{
+          const row = document.createElement('div');
+          row.className = 'item-row';
+          row.innerHTML = `
+            <div class="grow">
+              <div><strong>${invEscapeHtml(it.alt_name || it.name || 'Item')}</strong> <span class="muted">x${it.quantity||1}</span></div>
+              <div class="muted">${it.kind||''}${it.variant?` · ${invEscapeHtml(it.variant)}`:''}</div>
+            </div>
+            <div class="pill">${Number(it.enc||0).toFixed(1)} enc</div>
+            <button class="btn small toggle">${it.equipped!==false?'Unequip':'Equip'}</button>
+            <button class="btn small open">Open</button>
+          `;
+          row.querySelector('.toggle').addEventListener('click', ()=> toggleEquipInline(it));
+          row.querySelector('.open').addEventListener('click', ()=> openInvItemModal(it));
+          list.appendChild(row);
+        });
+      }
+      invContainersEl.appendChild(div);
+    });
   }
-  updateDerived();
+
+  // Global container select for purchases/moves
+  invGlobalContEl.innerHTML = '';
+  containers.forEach(c=>{
+    const o=document.createElement('option'); o.value=c.id; o.textContent=c.name||c.id; invGlobalContEl.appendChild(o);
+  });
+
+  // Transactions
+  const txs = (LINKED_INV.transactions || []).slice(-12).reverse();
+  invTxEl.innerHTML = txs.length ? txs.map(t=>`<div class="row"><span class="pill">${t.currency||''} ${t.amount||0}</span><span class="muted">${escapeHtml(t.note||'')}</span><span class="muted">${t.ts||''}</span></div>`).join('') : '<div class="muted">No transactions.</div>';
 }
 
 async function loadInventoryById(id){
-  if (!id){ LINKED_INV=null; SELECTED_INV_ID=''; CHAR.inventory_id=''; renderInventorySummary(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave(); return; }
+  if (!id){ LINKED_INV=null; SELECTED_INV_ID=''; CHAR.inventory_id=''; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave(); return; }
   invStatusEl.textContent = 'Loading inventory...';
   try{
     const res = await api('/inventories/' + encodeURIComponent(id));
@@ -1054,7 +1319,7 @@ async function loadInventoryById(id){
       LINKED_INV = res.inventory;
       SELECTED_INV_ID = LINKED_INV.id || id;
       CHAR.inventory_id = SELECTED_INV_ID;
-      renderInventorySummary();
+      renderInventoryUI();
       recomputePassiveAgg();
       renderStatistics();
       updateDerived();
@@ -1068,44 +1333,211 @@ async function loadInventoryById(id){
   }
 }
 
-async function loadSpellListsList(){
-  slStatusEl.textContent = 'Loading spell lists...';
-  try{
-    const res = await api('/spell_lists/mine');
-    SPELL_LISTS = res.lists || [];
-    slSelectEl.innerHTML = '<option value="">-- Select spell list --</option>';
-    SPELL_LISTS.forEach(lst=>{
-      const opt = document.createElement('option');
-      opt.value = lst.id;
-      opt.textContent = lst.name || lst.id;
-      if (lst.id === SELECTED_SPELL_LIST_ID) opt.selected = true;
-      slSelectEl.appendChild(opt);
-    });
-    slStatusEl.textContent = '';
-  }catch(e){
-    slStatusEl.textContent = 'Load failed: ' + e.message;
-  }
+function invEscapeHtml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
 
-function renderSpellListSummary(){
-  if (!LINKED_SPELL_LIST){
-    slSummaryEl.textContent = 'No spell list linked.';
-    slOpenBtn.style.display = 'none';
-    if (slEmbedWrap) slEmbedWrap.style.display = 'none';
-    if (slEmbed) slEmbed.src = '';
+async function invAddContainer(){
+  const name = (invNewContNameEl.value || "Container").trim();
+  if (!SELECTED_INV_ID) return;
+  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/containers`, {
+    method: "POST",
+    headers: { "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify({ name })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Create failed"); return; }
+  invNewContNameEl.value = "";
+  LINKED_INV = j.inventory;
+  renderInventoryUI();
+  recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+}
+
+async function invAddFunds(){
+  const currency = invFundCurEl.value || "Jelly";
+  const amount = parseInt(invFundAmtEl.value || "0", 10);
+  const note = (invFundNoteEl.value || "Top up").trim();
+  if (!amount || amount <= 0){ alert("Enter a positive amount."); return; }
+  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/deposit`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify({ currency, amount, note })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Deposit failed"); return; }
+  invFundAmtEl.value = ""; invFundNoteEl.value = "";
+  LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+}
+
+function invGetRowCategory(r){
+  if (r.kind === "weapon" || r.__kind === "weapon") return "weapon";
+  if (r.kind === "equipment" || r.__kind === "equipment") return r.category ? `equipment:${r.category}` : "equipment";
+  if (r.kind === "tool" || r.__kind === "tool") return "tool";
+  return "object";
+}
+
+async function invFetchCatalog(kind, q, limit){
+  const url = kind === "weapon" ? "/catalog/weapons"
+            : kind === "equipment" ? "/catalog/equipment"
+            : kind === "tool" ? "/catalog/tools"
+            : "/catalog/objects";
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (limit) params.set("limit", limit);
+  const r = await fetch(`${url}?${params.toString()}`, { headers: authHeaders() });
+  const j = await r.json();
+  const key = Object.keys(j).find(k=>Array.isArray(j[k]));
+  const rows = key ? j[key] : [];
+  return rows.map(x=>({ ...x, __kind: kind }));
+}
+
+function invBuildCategoryOptions(rows){
+  const cats = ["__all", ...new Set(rows.map(invGetRowCategory))];
+  invCatEl.innerHTML = '';
+  cats.forEach(c=>{
+    const o=document.createElement('option'); o.value=c; o.textContent = c==="__all" ? "All" : c; invCatEl.appendChild(o);
+  });
+}
+
+function invRenderResults(){
+  const list = invResultsEl;
+  list.innerHTML = '';
+  if (!INV_FILTERED.length){
+    list.innerHTML = '<div class="muted">No results.</div>';
     return;
   }
-  const spellCount = Array.isArray(LINKED_SPELL_LIST.spells) ? LINKED_SPELL_LIST.spells.length : (LINKED_SPELL_LIST.count || 0);
-  const iv = LINKED_SPELL_LIST.initial_values || {};
-  const mag = Number(iv.mag ?? 0);
-  slSummaryEl.textContent = `${LINKED_SPELL_LIST.name || 'Spell List'} - Spells: ${spellCount} | MAG: ${mag}`;
-  slOpenBtn.style.display = '';
-  slOpenBtn.href = `spell_list_view.html?id=${encodeURIComponent(LINKED_SPELL_LIST.id || '')}`;
-  if (slEmbedWrap && slEmbed){
-    slEmbedWrap.style.display = '';
-    const targetSrc = new URL(`spell_list_view.html?id=${encodeURIComponent(LINKED_SPELL_LIST.id || '')}&embed=1&scope=myspells`, location.href).toString();
-    if (slEmbed.src !== targetSrc) slEmbed.src = targetSrc;
-  }
+  const container = invGlobalContEl.value;
+  const currency  = invGlobalCurEl.value || "Jelly";
+  INV_FILTERED.forEach(r=>{
+    const line = document.createElement("div");
+    line.className = "row";
+    line.style.borderBottom = "1px solid #222";
+    line.style.padding = "6px 0";
+    const cat = invGetRowCategory(r);
+    const price = (r.price != null) ? `Price: ${r.price}` : "";
+    const enc = (r.enc != null) ? `Enc: ${Number(r.enc||0).toFixed(1)}` : "";
+    line.innerHTML = `
+      <div style="flex:1;min-width:260px;">
+        <div><b>${invEscapeHtml(r.name || r.title || "Item")}</b></div>
+        <div class="muted">${invEscapeHtml(cat)} ${price ? " • "+price : ""} ${enc ? " • "+enc : ""}</div>
+      </div>
+      <input type="number" min="1" value="1" style="width:90px" class="qty">
+      <button class="btn small buy">Add</button>
+    `;
+    line.querySelector(".buy").addEventListener("click", async ()=>{
+      const qty = Math.max(1, parseInt(line.querySelector(".qty").value||"1", 10));
+      await invBuyItem(r.__kind || "object", r.id, qty, container, currency);
+    });
+    list.appendChild(line);
+  });
+}
+
+async function invDoSearch(){
+  const q = (invQEl.value || "").trim();
+  const kind = invKindEl.value;
+  const limit = parseInt(invLimitEl.value || "50", 10);
+  INV_LAST_RESULTS = await invFetchCatalog(kind, q, limit);
+  INV_FILTERED = INV_LAST_RESULTS.slice();
+  invBuildCategoryOptions(INV_LAST_RESULTS);
+  invRenderResults();
+}
+
+function invClearSearch(){
+  invQEl.value = "";
+  INV_LAST_RESULTS = [];
+  INV_FILTERED = [];
+  invBuildCategoryOptions([]);
+  invRenderResults();
+}
+
+async function invBuyItem(kind, ref_id, quantity, container_id, currency){
+  const payload = { kind, ref_id, quantity, container_id, currency, equipped: invEquippedFlagEl.value === "1" };
+  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/purchase`, {
+    method: "POST",
+    headers: { "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify(payload)
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success") { alert(j.message || "Purchase failed"); return; }
+  LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+}
+
+async function toggleEquipInline(it){
+  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}`, {
+    method:"PATCH",
+    headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify({ equipped: it.equipped === false })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Update failed"); return; }
+  LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+}
+
+function openInvItemModal(it){
+  invItemTitle.textContent = it.alt_name ? `${it.alt_name} (${it.name || 'Item'})` : (it.name || 'Item');
+  const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
+  const totalPaid = (Number(it.paid_unit||0) * Number(it.quantity||1)) || 0;
+  invItemBody.innerHTML = `
+    <div class="row">
+      <span class="pill">Kind: <b>${invEscapeHtml(it.kind||'')}</b></span>
+      ${it.quality ? `<span class="pill">Quality: <b>${invEscapeHtml(it.quality)}</b></span>` : ''}
+      ${it.variant ? `<span class="pill">Variant: <b>${invEscapeHtml(it.variant)}</b></span>` : ''}
+    </div>
+    <div class="row">
+      <span class="pill">Qty: <b>${it.quantity||1}</b></span>
+      <span class="pill">Enc (unit): <b>${Number(it.enc||0).toFixed(1)}</b></span>
+      <span class="pill">Enc (total): <b>${totalEnc.toFixed(1)}</b></span>
+    </div>
+    <div class="row">
+      <span class="pill">Base price: <b>${Number(it.base_price||0)}</b></span>
+      <span class="pill">Paid (unit): <b>${Number(it.paid_unit||0)}</b></span>
+      <span class="pill">Paid (total): <b>${totalPaid}</b></span>
+    </div>
+    <div class="row">
+      <span class="pill">${it.equipped===false?'Unequipped':'Equipped'}</span>
+      ${Array.isArray(it.modifiers) && it.modifiers.length ? `<span class="muted">Mods: ${it.modifiers.map(m=>`<span class="pill">${invEscapeHtml(m.mode||'add')} ${invEscapeHtml(m.value||0)} -> ${invEscapeHtml(m.target||'')}</span>`).join(' ')}</span>` : ''}
+    </div>
+  `;
+  invItemActions.innerHTML = '';
+  const altWrap = document.createElement('div');
+  altWrap.className = 'row';
+  altWrap.style.marginTop = '8px';
+  altWrap.innerHTML = `
+    <label class="muted">Alt name</label>
+    <input id="inv-alt-name" value="${invEscapeHtml(it.alt_name||'')}" style="flex:1; min-width:200px;">
+    <button class="btn small" id="inv-save-alt">Save</button>
+  `;
+  altWrap.querySelector('#inv-save-alt').addEventListener('click', async ()=>{
+    const alt = document.getElementById('inv-alt-name').value || '';
+    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}`, {
+      method:"PATCH",
+      headers:{ "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify({ alt_name: alt })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success"){ alert(j.message || "Save failed"); return; }
+    LINKED_INV = j.inventory; renderInventoryUI(); closeInvItemModal();
+  });
+  invItemActions.appendChild(altWrap);
+
+  const equipBtn = document.createElement('button');
+  equipBtn.className = 'btn small';
+  equipBtn.textContent = it.equipped===false ? 'Equip' : 'Unequip';
+  equipBtn.addEventListener('click', async ()=>{
+    await toggleEquipInline(it);
+    closeInvItemModal();
+  });
+  invItemActions.appendChild(equipBtn);
+
+  invItemModal.classList.remove('hidden');
+  invItemBackdrop.classList.add('open');
+}
+
+function closeInvItemModal(){
+  invItemModal.classList.add('hidden');
+  invItemBackdrop.classList.remove('open');
 }
 
 function deriveSpellListInitialValuesFromChar(){
@@ -1140,13 +1572,319 @@ function deriveSpellListInitialValuesFromChar(){
   return iv;
 }
 
-function pushSpellListIVToEmbed(){
-  if (!SELECTED_SPELL_LIST_ID || !slEmbed || !slEmbed.contentWindow) return;
-  const iv = deriveSpellListInitialValuesFromChar();
-  if (!iv) return;
+function drawAvatarCanvas(){
+  if (!AVATAR_IMG) return;
+  const ctx = avatarCanvas.getContext('2d');
+  const zoom = parseFloat(avatarZoomEl.value || "1");
+  const ox = parseFloat(avatarOffsetXEl.value || "0");
+  const oy = parseFloat(avatarOffsetYEl.value || "0");
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0,0,avatarCanvas.width, avatarCanvas.height);
+  const w = AVATAR_IMG.width * zoom;
+  const h = AVATAR_IMG.height * zoom;
+  const x = (avatarCanvas.width - w)/2 + ox;
+  const y = (avatarCanvas.height - h)/2 + oy;
+  ctx.drawImage(AVATAR_IMG, x, y, w, h);
+  avatarPreview.src = avatarCanvas.toDataURL('image/png');
+}
+
+avatarZoomEl?.addEventListener('input', drawAvatarCanvas);
+avatarOffsetXEl?.addEventListener('input', drawAvatarCanvas);
+avatarOffsetYEl?.addEventListener('input', drawAvatarCanvas);
+
+avatarFileEl?.addEventListener('change', ()=>{
+  const f = avatarFileEl.files?.[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      AVATAR_IMG = img;
+      avatarZoomEl.value = "1";
+      avatarOffsetXEl.value = "0";
+      avatarOffsetYEl.value = "0";
+      drawAvatarCanvas();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(f);
+});
+
+async function uploadAvatar(){
+  if (!AVATAR_IMG){
+    avatarStatusEl.textContent = 'Pick an image first.';
+    return;
+  }
+  avatarStatusEl.textContent = 'Uploading...';
+  await new Promise(res=> requestAnimationFrame(res));
+  drawAvatarCanvas();
+  await new Promise((resolve, reject)=>{
+    avatarCanvas.toBlob(async (blob)=>{
+      if (!blob){ reject(new Error("Cannot encode image")); return; }
+      try{
+        const fd = new FormData();
+        fd.append('file', blob, 'avatar.png');
+        const r = await fetch(`/characters/${encodeURIComponent(CID)}/avatar`, {
+          method:'POST',
+          headers: authHeaders(),
+          body: fd
+        });
+        const j = await r.json().catch(()=>({}));
+        if (j.status !== "success"){ throw new Error(j.message || "Upload failed"); }
+        avatarStatusEl.textContent = 'Uploaded.';
+        avatarPreview.src = `/characters/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
+      }catch(e){
+        avatarStatusEl.textContent = e.message;
+      }
+      resolve();
+    }, 'image/png');
+  });
+}
+avatarUploadBtn?.addEventListener('click', uploadAvatar);
+
+function currentIV(){
+  return normalizeIV(deriveSpellListInitialValuesFromChar());
+}
+
+async function fetchSchools(){
+  if (SCHOOLS.length) return SCHOOLS;
+  const res = await api('/schools');
+  SCHOOLS = res.schools || [];
+  return SCHOOLS;
+}
+
+function renderSpellListSummary(){
+  if (!LINKED_SPELL_LIST){
+    slSummaryEl.textContent = 'No spell list linked.';
+    return;
+  }
+  const count = Array.isArray(LINKED_SPELL_LIST.spells) ? LINKED_SPELL_LIST.spells.length : (LINKED_SPELL_LIST.count || 0);
+  const iv = currentIV();
+  slSummaryEl.textContent = `${LINKED_SPELL_LIST.name || 'Spell List'} · Spells: ${count} · MAG: ${iv.mag}`;
+}
+
+function renderPinnedSchools(){
+  if (!slSchoolsEl) return;
+  slSchoolsEl.innerHTML = '';
+  if (!SCHOOLS.length){ slSchoolsEl.innerHTML = '<div class="muted">No schools.</div>'; return; }
+  SCHOOLS.forEach(s=>{
+    const pinned = PINNED.has(String(s.id||s.name));
+    const div = document.createElement('div');
+    div.className = 'abi-item';
+    div.innerHTML = `
+      <div class="grow">
+        <div><strong>${s.name || s.id}</strong></div>
+        <div class="muted">${s.type || ''}</div>
+      </div>
+      <button class="btn small">${pinned ? 'Unpin' : 'Pin'}</button>
+    `;
+    div.querySelector('button').addEventListener('click', async ()=>{
+      if (pinned) PINNED.delete(String(s.id||s.name)); else PINNED.add(String(s.id||s.name));
+      renderPinnedSchools();
+      try{ await saveSpellListMeta({ pinned_schools: Array.from(PINNED) }); }catch{}
+    });
+    slSchoolsEl.appendChild(div);
+  });
+}
+
+function renderSpellRows(){
+  if (!slSpellsBody) return;
+  const metaMap = SPELLLIST_META.spell_meta || {};
+  if (!SPELLLIST_SPELLS.length){
+    slSpellsBody.innerHTML = '<tr><td colspan="5" class="empty">No spells. Add some.</td></tr>';
+    return;
+  }
+  slSpellsBody.innerHTML = '';
+  SPELLLIST_SPELLS.forEach(sp=>{
+    const meta = metaMap[sp.id] || {};
+    const alt = meta.alt_name || '';
+    const status = meta.status || 'known';
+    const nameDisplay = alt || sp.name || 'Spell';
+    const tr = document.createElement('tr');
+    const schools = (sp.schools||[]).map(s=>s.name||s.id).join(', ');
+    tr.innerHTML = `
+      <td><div class="k">${nameDisplay}</div><div class="muted">id: ${sp.id}</div></td>
+      <td>${schools || '—'}</td>
+      <td>${sp.category || '—'}</td>
+      <td>
+        <select class="sl-status" data-id="${sp.id}">
+          <option value="known" ${status==="known"?"selected":""}>Known</option>
+          <option value="learnt" ${status==="learnt"?"selected":""}>Learnt</option>
+        </select>
+      </td>
+      <td><button class="btn small" data-remove="${sp.id}">Remove</button></td>
+    `;
+    slSpellsBody.appendChild(tr);
+  });
+  slSpellsBody.querySelectorAll('.sl-status').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const id = sel.getAttribute('data-id');
+      SPELLLIST_META.spell_meta = SPELLLIST_META.spell_meta || {};
+      const cur = SPELLLIST_META.spell_meta[id] || {};
+      SPELLLIST_META.spell_meta[id] = { ...cur, status: sel.value };
+      saveSpellListMeta({ spell_meta: SPELLLIST_META.spell_meta }).catch(()=>{});
+      renderAbilitySpellsBucket();
+    });
+  });
+  slSpellsBody.querySelectorAll('button[data-remove]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.getAttribute('data-remove');
+      if (!confirm(`Remove spell ${id}?`)) return;
+      await removeSpellFromList(id);
+    });
+  });
+}
+
+function renderAbilitySpellsBucket(){
+  const el = document.getElementById('abi-list-spells');
+  if (!el) return;
+  el.innerHTML = '';
+  if (!SPELLLIST_SPELLS.length){ el.innerHTML = '<div class="muted">No linked spells.</div>'; return; }
+  const metaMap = SPELLLIST_META.spell_meta || {};
+  SPELLLIST_SPELLS.forEach(sp=>{
+    const meta = metaMap[sp.id] || {};
+    const alt = meta.alt_name || '';
+    const nameDisplay = alt || sp.name || 'Spell';
+    const desc = sp.description || '';
+    const costParts = [];
+    if (sp.mp_cost != null) costParts.push(`MP: ${sp.mp_cost}`);
+    if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
+    const cost = costParts.join(' · ');
+    const range = sp.range != null ? `Range: ${sp.range}` : '';
+    const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
+    const div = document.createElement('div');
+    div.className = 'abi-item';
+    div.innerHTML = `
+      <div class="grow">
+        <div><strong>${nameDisplay}</strong> <span class="muted">${meta.status || 'known'}</span></div>
+        <div class="muted" style="font-size:.85rem">${desc}</div>
+        <div class="muted" style="font-size:.8rem">${cost} ${range?` • ${range}`:''} ${aoe?` • ${aoe}`:''}</div>
+      </div>
+      <span class="tag">${sp.category || ''}</span>
+    `;
+    el.appendChild(div);
+  });
+}
+
+function openSpellAddModal(){
+  slAddModal.classList.remove('hidden');
+  slAddBackdrop.classList.add('open');
+}
+function closeSpellAddModal(){
+  slAddModal.classList.add('hidden');
+  slAddBackdrop.classList.remove('open');
+  slAddStatus.textContent = '';
+}
+
+async function loadSpellListsList(){
+  slStatusEl.textContent = 'Loading spell lists...';
   try{
-    slEmbed.contentWindow.postMessage({ type:'spelllist-iv', iv }, location.origin);
-  }catch{}
+    const res = await api('/spell_lists/mine');
+    SPELL_LISTS = res.lists || [];
+    slSelectEl.innerHTML = '<option value="">-- Select spell list --</option>';
+    SPELL_LISTS.forEach(lst=>{
+      const opt = document.createElement('option');
+      opt.value = lst.id;
+      opt.textContent = lst.name || lst.id;
+      if (lst.id === SELECTED_SPELL_LIST_ID) opt.selected = true;
+      slSelectEl.appendChild(opt);
+    });
+    slStatusEl.textContent = '';
+  }catch(e){
+    slStatusEl.textContent = 'Load failed: ' + e.message;
+  }
+}
+
+async function loadSpellListMeta(id){
+  const res = await api(`/spell_lists/${encodeURIComponent(id)}/meta`);
+  SPELLLIST_META = res.meta || {};
+  PINNED = new Set((SPELLLIST_META.pinned_schools || []).map(String));
+}
+
+async function saveSpellListMeta(patch){
+  if (!SELECTED_SPELL_LIST_ID) return;
+  const res = await fetch(`/spell_lists/${encodeURIComponent(SELECTED_SPELL_LIST_ID)}/meta`, {
+    method:"PUT",
+    headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify(patch)
+  });
+  const j = await res.json();
+  if (j.status !== "success") throw new Error(j.message || "Save failed");
+  SPELLLIST_META = { ...SPELLLIST_META, ...(patch || {}) };
+}
+
+async function fetchSpellListSpells(id){
+  const res = await api(`/spell_lists/${encodeURIComponent(id)}/spells`);
+  return res.spells || [];
+}
+
+async function removeSpellFromList(id){
+  const r = await fetch(`/spell_lists/${encodeURIComponent(SELECTED_SPELL_LIST_ID)}/spells/${encodeURIComponent(id)}`, {
+    method:"DELETE",
+    headers: authHeaders()
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Remove failed"); return; }
+  await reloadSpellListData();
+}
+
+async function addSpellsToList(ids){
+  const r = await fetch(`/spell_lists/${encodeURIComponent(SELECTED_SPELL_LIST_ID)}/spells`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify({ ids })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ slAddStatus.textContent = j.message || "Add failed"; return; }
+  slAddStatus.textContent = `Added ${j.added?.length || ids.length} spell(s).`;
+  await reloadSpellListData();
+}
+
+async function searchSpells(q){
+  const qs = q ? `?name=${encodeURIComponent(q)}` : '';
+  const res = await api('/spells'+qs);
+  return res.spells || [];
+}
+
+async function renderSpellSearch(){
+  const q = slSearchQ.value.trim();
+  slAddStatus.textContent = '';
+  slSearchBody.innerHTML = '<tr><td colspan="4" class="empty">Searching...</td></tr>';
+  try{
+    const rows = await searchSpells(q);
+    if (!rows.length){
+      slSearchBody.innerHTML = '<tr><td colspan="4" class="empty">No results.</td></tr>';
+      return;
+    }
+    slSearchBody.innerHTML = '';
+    rows.forEach(sp=>{
+      const tr = document.createElement('tr');
+      const schools = (sp.schools||[]).map(s=>s.name||s.id).join(', ');
+      tr.innerHTML = `
+        <td>${sp.name || 'Spell'}</td>
+        <td>${schools || '—'}</td>
+        <td>${sp.category || '—'}</td>
+        <td><button class="btn small" data-add="${sp.id}">Add</button></td>
+      `;
+      tr.querySelector('button').addEventListener('click', ()=> addSpellsToList([sp.id]));
+      slSearchBody.appendChild(tr);
+    });
+  }catch(e){
+    slSearchBody.innerHTML = `<tr><td colspan="4" class="empty">Error: ${e.message}</td></tr>`;
+  }
+}
+
+async function reloadSpellListData(){
+  if (!SELECTED_SPELL_LIST_ID){
+    SPELLLIST_SPELLS=[]; SPELLLIST_META={}; PINNED=new Set(); renderSpellRows(); renderPinnedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); return;
+  }
+  await loadSpellListMeta(SELECTED_SPELL_LIST_ID);
+  SPELLLIST_SPELLS = await fetchSpellListSpells(SELECTED_SPELL_LIST_ID);
+  renderSpellListSummary();
+  await fetchSchools();
+  renderPinnedSchools();
+  renderSpellRows();
+  renderAbilitySpellsBucket();
 }
 
 async function loadSpellListById(id){
@@ -1155,7 +1893,7 @@ async function loadSpellListById(id){
     SELECTED_SPELL_LIST_ID = '';
     if (CHAR) CHAR.spell_list_id = '';
     slStatusEl.textContent = '';
-    renderSpellListSummary();
+    await reloadSpellListData();
     queueSave();
     return;
   }
@@ -1166,9 +1904,8 @@ async function loadSpellListById(id){
       LINKED_SPELL_LIST = res.list;
       SELECTED_SPELL_LIST_ID = LINKED_SPELL_LIST.id || id;
       if (CHAR) CHAR.spell_list_id = SELECTED_SPELL_LIST_ID;
-      renderSpellListSummary();
-      pushSpellListIVToEmbed();
       slStatusEl.textContent = 'Spell list loaded';
+      await reloadSpellListData();
       queueSave();
     }else{
       throw new Error('Not found');
@@ -1190,9 +1927,8 @@ async function duplicateAndLinkSpellList(){
       LINKED_SPELL_LIST = res.list;
       SELECTED_SPELL_LIST_ID = res.list.id;
       if (CHAR) CHAR.spell_list_id = SELECTED_SPELL_LIST_ID;
-      renderSpellListSummary();
       await loadSpellListsList();
-      pushSpellListIVToEmbed();
+      await reloadSpellListData();
       slStatusEl.textContent = 'Duplicated and linked as ' + SELECTED_SPELL_LIST_ID;
       queueSave();
     }
@@ -1448,7 +2184,6 @@ function updateDerived(){
   encEl.textContent = `${Number(final.current_enc || 0).toFixed(1)} / ${final.enc}`;
   etEl.textContent = final.et;
   txEl.textContent = final.tx;
-  pushSpellListIVToEmbed();
 }
 
 /* LOAD & SAVE */
@@ -1472,6 +2207,7 @@ async function loadCharacter(){
   titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
   nameEl.value = CHAR.name || '';
   nameEl.addEventListener('input', ()=> queueSave());
+  avatarPreview.src = `/characters/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
 
   // Level
   levelEl.value = Math.max(1, Number(CHAR.level)||1);
@@ -1490,7 +2226,7 @@ async function loadCharacter(){
   renderStatistics();
   updateDerived();
   await loadSpellListsList();
-  if (SELECTED_SPELL_LIST_ID) loadSpellListById(SELECTED_SPELL_LIST_ID);
+  if (SELECTED_SPELL_LIST_ID) await loadSpellListById(SELECTED_SPELL_LIST_ID);
   await loadInventoriesList();
   if (SELECTED_INV_ID) loadInventoryById(SELECTED_INV_ID);
   wirePersonal();
@@ -1543,9 +2279,28 @@ abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilit
 
 invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
 invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));
+invAddContBtn.addEventListener('click', invAddContainer);
+invFundAddBtn.addEventListener('click', invAddFunds);
+invSearchBtn.addEventListener('click', invDoSearch);
+invClearBtn.addEventListener('click', invClearSearch);
+invCatEl.addEventListener('change', ()=>{
+  const val = invCatEl.value;
+  INV_FILTERED = val && val !== "__all" ? INV_LAST_RESULTS.filter(r=>invGetRowCategory(r)===val) : INV_LAST_RESULTS.slice();
+  invRenderResults();
+});
+invKindEl.addEventListener('change', invClearSearch);
+document.getElementById('inv-item-close').addEventListener('click', closeInvItemModal);
+invItemBackdrop.addEventListener('click', (e)=>{ if (e.target===invItemBackdrop) closeInvItemModal(); });
+
 slLoadBtn.addEventListener('click', ()=> loadSpellListById(slSelectEl.value));
 slSelectEl.addEventListener('change', ()=> loadSpellListById(slSelectEl.value));
 slDupBtn.addEventListener('click', duplicateAndLinkSpellList);
+slOpenAddBtn.addEventListener('click', openSpellAddModal);
+slAddClose.addEventListener('click', closeSpellAddModal);
+slAddCancel.addEventListener('click', closeSpellAddModal);
+slAddBackdrop.addEventListener('click', (e)=>{ if (e.target===slAddBackdrop) closeSpellAddModal(); });
+slSearchBtn.addEventListener('click', renderSpellSearch);
+slSearchQ.addEventListener('keydown', (e)=>{ if (e.key==='Enter') renderSpellSearch(); });
 
 function renderSearchResults(arr){
   abiResultsEl.innerHTML = '';
@@ -1632,6 +2387,7 @@ function renderAbilitiesTab(){
   renderAbilitiesBucket(listArchetypeEl, archetype);
   renderAbilitiesBucket(listPassiveEl,   passive);
   renderAbilitiesBucket(listActiveEl,    active);
+  renderAbilitySpellsBucket();
 }
 
 function fillPersonal(){

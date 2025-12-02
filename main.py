@@ -4,9 +4,9 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, Request, HTTPException, Query, Body, Depends
+from fastapi import FastAPI, Request, HTTPException, Query, Body, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import DuplicateKeyError
 from typing import Any
@@ -1743,6 +1743,8 @@ def bulk_create_objects(request: Request, payload: dict = Body(...)):
 
 # ---------- Tools (inventory) ----------
 from fastapi import Body
+import gridfs
+from bson import ObjectId
 
 _TIER_TABLE = {
     "1": {"price": 50, "dc": 6, "time": "1 hour"},
@@ -2081,6 +2083,9 @@ from fastapi import Body
 def _eq_norm_name(name: str, fallback: str = "Unnamed") -> tuple[str, str]:
     nm = (name or "").strip() or fallback
     return nm, norm_key(nm)
+
+def _fs():
+    return gridfs.GridFS(get_db())
 
 def _equipment_from_body(b: dict) -> dict:
     cat = (b.get("category") or "").strip().lower()
@@ -3131,6 +3136,7 @@ async def create_character(request: Request):
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
         "sublimations": body.get("sublimations") or [],
+        "avatar_id": "",
     }
     if inv_id:
         doc["inventory_id"] = inv_id
@@ -3201,10 +3207,54 @@ async def update_character(cid: str, request: Request):
         subs = body.get("sublimations") or []
         if isinstance(subs, list):
             updates["sublimations"] = subs
+    if "avatar_id" in body:
+        updates["avatar_id"] = str(body.get("avatar_id") or "").strip()
 
     get_col("characters").update_one({"id": cid}, {"$set": updates})
     after = get_col("characters").find_one({"id": cid}, {"_id":0})
     return {"status":"success","character":after}
+
+@app.post("/characters/{cid}/avatar")
+async def upload_avatar(cid: str, request: Request, file: UploadFile = File(...)):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    ch = get_col("characters").find_one({"id": cid})
+    if not ch:
+        raise HTTPException(status_code=404, detail="Character not found")
+    if role != "admin" and ch.get("owner") != username:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not file:
+        raise HTTPException(status_code=400, detail="Missing file")
+    content_type = file.content_type or ""
+    if content_type not in ("image/png","image/jpeg","image/jpg"):
+        raise HTTPException(status_code=400, detail="Only PNG/JPEG allowed")
+    data = await file.read()
+    if len(data) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Max file size is 2MB")
+    fs = _fs()
+    # delete previous
+    prev_id = ch.get("avatar_id")
+    if prev_id:
+        try: fs.delete(ObjectId(prev_id))
+        except Exception: pass
+    new_id = fs.put(data, filename=file.filename, content_type=content_type, owner=username, character_id=cid)
+    get_col("characters").update_one({"id": cid}, {"$set": {"avatar_id": str(new_id), "updated_at": datetime.datetime.utcnow().isoformat()+"Z"}})
+    return {"status":"success","avatar_id": str(new_id)}
+
+@app.get("/characters/{cid}/avatar")
+def get_avatar(cid: str):
+    ch = get_col("characters").find_one({"id": cid}, {"_id":0})
+    if not ch:
+        raise HTTPException(status_code=404, detail="Character not found")
+    av_id = ch.get("avatar_id")
+    if not av_id:
+        raise HTTPException(status_code=404, detail="No avatar")
+    fs = _fs()
+    try:
+        fh = fs.get(ObjectId(av_id))
+    except Exception:
+        raise HTTPException(status_code=404, detail="Not found")
+    data = fh.read()
+    return Response(content=data, media_type=fh.content_type or "image/png")
 
 @app.delete("/characters/{cid}")
 def delete_character(cid: str, request: Request):
