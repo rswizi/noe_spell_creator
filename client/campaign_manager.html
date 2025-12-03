@@ -105,6 +105,7 @@ async function checkMe(){
 }
 
 let CAMPAIGNS = [];
+let MY_CHARACTERS = [];
 
 function fallbackAvatar(ev){
   ev.target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';
@@ -133,7 +134,59 @@ function render(){
           <a class="btn small" href="campaign_view.html?cid=${encodeURIComponent(c.id)}" target="_blank">Open</a>
         </div>
       </div>
+      ${c.is_owner ? `
+      <div class="section" style="margin-top:8px;">
+        <div class="row" style="gap:8px; align-items:flex-end;">
+          <div class="labelled">
+            <span class="muted">Add / Assign character</span>
+            <select class="char-id">
+              ${(MY_CHARACTERS||[]).map(ch=>`<option value="${ch.id}">${ch.name||ch.id}</option>`).join('')}
+            </select>
+          </div>
+          <div class="labelled">
+            <span class="muted">Assign to (member)</span>
+            <select class="assign-to">
+              <option value="">Unassigned</option>
+              <option value="${c.owner}">${c.owner} (GM)</option>
+              ${(c.members||[]).map(m=>`<option value="${m}">${m}</option>`).join('')}
+            </select>
+          </div>
+          <div class="labelled">
+            <span class="muted">Folder</span>
+            <input class="folder" placeholder="e.g. Party/Tank">
+          </div>
+          <label class="row muted" style="gap:6px;">
+            <input type="checkbox" class="editable"> GM can edit
+          </label>
+          <button class="btn small assign-btn">Add & Assign</button>
+        </div>
+      </div>
+      ` : ""}
     `;
+
+    if (c.is_owner){
+      const assignBtn = card.querySelector(".assign-btn");
+      assignBtn.addEventListener("click", async ()=>{
+        const charId = (card.querySelector(".char-id").value || "").trim();
+        if (!charId){ alert("Character required"); return; }
+        const assigned_to = (card.querySelector(".assign-to").value || "").trim();
+        const folder = (card.querySelector(".folder").value || "").trim();
+        const editable = !!card.querySelector(".editable").checked;
+        try{
+          statusEl.textContent = "Assigning...";
+          await api(`/campaigns/${encodeURIComponent(c.id)}/assign_character`, {
+            method:"POST",
+            headers:{ "content-type":"application/json" },
+            body: JSON.stringify({ character_id: charId, assigned_to, folder, editable_by_gm: editable })
+          });
+          statusEl.textContent = "Assigned.";
+        }catch(e){
+          statusEl.textContent = "Assign failed: "+e.message;
+          alert(e.message);
+        }
+      });
+    }
+
     listEl.appendChild(card);
   });
 }
@@ -142,6 +195,15 @@ async function loadCampaigns(){
   const res = await api("/campaigns");
   CAMPAIGNS = res.campaigns || [];
   render();
+}
+
+async function loadMyCharacters(){
+  try{
+    const res = await api("/characters");
+    MY_CHARACTERS = res.characters || [];
+  }catch(e){
+    MY_CHARACTERS = [];
+  }
 }
 
 document.getElementById("camp-create").addEventListener("click", async ()=>{
@@ -160,10 +222,11 @@ document.getElementById("camp-create").addEventListener("click", async ()=>{
 
 document.getElementById("camp-join").addEventListener("click", async ()=>{
   const code = (document.getElementById("camp-code").value || "").trim();
+  const charId = prompt("Join with which character? (optional)") || "";
   if (!code){ alert("Enter code"); return; }
   try{
     statusEl.textContent = "Joining...";
-    await api("/campaigns/join", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ code }) });
+    await api("/campaigns/join", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ code, character_id: charId }) });
     document.getElementById("camp-code").value = "";
     await loadCampaigns();
     statusEl.textContent = "Joined.";
@@ -173,7 +236,7 @@ document.getElementById("camp-join").addEventListener("click", async ()=>{
   }
 });
 
-checkMe().then(loadCampaigns).catch(()=>{ statusEl.textContent = "Login required."; });
+checkMe().then(loadMyCharacters).then(loadCampaigns).catch(()=>{ statusEl.textContent = "Login required."; });
 </script>
 </body>
 </html>

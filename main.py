@@ -118,6 +118,8 @@ async def join_campaign(req: Request):
     user = require_auth(req)
     body = await req.json()
     code = (body.get("code") or "").strip().upper()
+    char_id = (body.get("character_id") or "").strip()
+    folder = (body.get("folder") or "").strip()
     if not code:
         raise HTTPException(400, "Code required")
     doc = CAMPAIGN_COL.find_one({"join_code": code})
@@ -126,6 +128,12 @@ async def join_campaign(req: Request):
     if user != doc.get("owner") and user not in (doc.get("members") or []):
         CAMPAIGN_COL.update_one({"id": doc["id"]}, {"$addToSet": {"members": user}})
         doc["members"] = (doc.get("members") or []) + [user]
+    # Optional: join with a character
+    if char_id:
+        chars = [c for c in (doc.get("characters") or []) if c.get("character_id") != char_id]
+        chars.append({"character_id": char_id, "assigned_to": user, "folder": folder, "editable_by_gm": False, "edit_requests":[]})
+        CAMPAIGN_COL.update_one({"id": doc["id"]}, {"$set": {"characters": chars}})
+        doc["characters"] = chars
     return {"status":"success", "campaign": _campaign_view(doc, user)}
 
 @app.get("/campaigns/{cid}")
