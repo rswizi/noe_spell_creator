@@ -8,8 +8,8 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0b0b0f;
-      --bg-2: #0f0f15;
+      --bg: #14090c;
+      --bg-2: #0c0b12;
       --panel: #121219;
       --border: #252533;
       --accent: #c53535;
@@ -21,7 +21,10 @@
       margin: 0;
       font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
       color: var(--text);
-      background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+      background: linear-gradient(180deg, #1a0c0f 0%, #0b0b10 100%);
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      background-size: 100% 100%;
     }
     .page { min-height: 100vh; display: grid; place-items: start center; }
     .wrap { width: 100%; max-width: 1100px; padding: 28px 16px 60px; }
@@ -97,6 +100,15 @@
   .avatar-frame img { width:100%; height:100%; object-fit:cover; }
   .avatar-tools { display:grid; gap:6px; min-width:280px; }
   .avatar-crop { border:1px solid #333; border-radius:14px; background:#0b0b12; }
+  /* Inventory UI */
+  .home-card { border:1px solid var(--border); border-radius:14px; padding:12px; background: #14141d; margin-bottom:12px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.02); }
+  .container-card { border:1px solid #2a2a38; border-radius:12px; padding:12px; margin-bottom:10px; background: linear-gradient(135deg, #12121a, #0f0f17); box-shadow: inset 0 1px 0 rgba(255,255,255,0.02); }
+  .container-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+  .items { display:grid; gap:8px; }
+  .item-row { display:grid; grid-template-columns: 1fr auto auto auto; gap:8px; align-items:center; padding:8px 10px; border:1px solid #292938; border-radius:10px; background:#161623; }
+  .item-row .pill { white-space:nowrap; }
+  .inv-summary { display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); align-items:center; }
+  .inv-actions { display:flex; gap:8px; flex-wrap:wrap; }
     .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:3000; display:none; }
     .modal{ position:fixed; inset:0; display:none; z-index:3001; align-items:center; justify-content:center; padding:16px; }
     .modal.open, .modal-backdrop.open{ display:flex; }
@@ -107,7 +119,7 @@
     }
     /* Personal tab */
     .personal-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom:10px; }
-    .kv-field { display:grid; gap:4px; }
+    .kv-field { display:grid; gap:4px; min-width:0; }
     .kv-field input, .kv-field textarea { width:100%; }
   </style>
 </head>
@@ -245,12 +257,13 @@
               <div id="inv-manager" style="display:none;">
                 <div class="home-card">
                   <h3 id="inv-title">Inventory</h3>
-                  <div class="row" style="flex-wrap:wrap; gap:10px;">
+                  <div class="inv-summary">
                     <div id="inv-money"></div>
                     <div class="row muted" style="gap:6px;">Total Encumbrance: <strong id="inv-enc-total">0</strong></div>
                   </div>
-                  <div class="row" style="margin-top:8px; gap:8px; flex-wrap:wrap;">
+                  <div class="inv-actions" style="margin-top:8px;">
                     <button id="inv-fund-open" class="btn small">Add / Remove funds</button>
+                    <button id="inv-catalog-open" class="btn small">Add from catalog</button>
                   </div>
                 </div>
 
@@ -266,13 +279,6 @@
                 <div class="home-card">
                   <h3>Recent Transactions</h3>
                   <div id="inv-tx" class="list"></div>
-                </div>
-
-                <div class="home-card">
-                  <h3>Add from Catalog</h3>
-                  <div class="row" style="gap:10px; flex-wrap:wrap;">
-                    <button id="inv-catalog-open" class="btn small">Open catalog</button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -317,32 +323,10 @@
               <strong>Abilities on this Character</strong>
               <span class="muted">(Archetype / Passive / Active)</span>
               <span class="grow"></span>
-              <span class="muted">Autosaves</span>
+              <button class="btn small" id="abi-open-add">Add ability</button>
             </summary>
             <div class="panel-body">
-              <!-- Add / search row -->
-              <div class="abi-add" style="margin-bottom:10px;">
-                <input id="abi-search" placeholder="Search ability by name…" />
-                <select id="abi-filter-type">
-                  <option value="">Any type</option>
-                  <option value="active">Active</option>
-                  <option value="passive">Passive</option>
-                  <option value="mixed">Mixed</option>
-                </select>
-                <select id="abi-filter-source">
-                  <option value="">Any source</option>
-                  <option value="Specie">Specie</option>
-                  <option value="Talent">Talent</option>
-                  <option value="Archetype">Archetype</option>
-                  <option value="Expertise">Expertise</option>
-                  <option value="Awakening">Awakening</option>
-                  <option value="Apotheosis">Apotheosis</option>
-                  <option value="Other">Other</option>
-                </select>
-                <button id="abi-search-btn">Find</button>
-              </div>
-              <div id="abi-results" class="abi-list" style="margin-bottom:12px;"></div>
-              <div class="abi-hint">Tip: click a result to add it; click the 🗑 on an assigned ability to remove it.</div>
+              <div class="abi-hint">Tip: click the result in the modal to add it; click the 🗑 on an assigned ability to remove it.</div>
 
               <div class="abi-grid" style="margin-top:16px;">
                 <div class="abi-bucket">
@@ -386,16 +370,21 @@
               <div id="sl-summary" class="muted" style="margin-bottom:8px;"></div>
 
               <div class="panel" style="margin-bottom:12px;">
-                <details open class="panel">
-                  <summary class="hdr">
-                    <strong>Pinned Schools</strong>
-                    <span class="muted">(toggle to pin/unpin)</span>
-                  </summary>
-                  <div class="panel-body">
-                    <div id="sl-schools" class="abi-list"></div>
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Pinned Schools</strong>
+                  <span class="muted">(toggle to pin/unpin)</span>
+                </summary>
+                <div class="panel-body">
+                  <div class="row" style="justify-content:flex-end; margin-bottom:6px; gap:8px; flex-wrap:wrap;">
+                    <label class="row muted" style="gap:6px; align-items:center;">
+                      <input type="checkbox" id="sl-show-pinned"> Show pinned only
+                    </label>
                   </div>
-                </details>
-              </div>
+                  <div id="sl-schools" class="abi-list"></div>
+                </div>
+              </details>
+            </div>
 
               <div class="panel">
                 <details open class="panel">
@@ -519,22 +508,22 @@
               <div class="personal-grid">
                 <label class="kv-field">
                   <span class="k">Friends</span>
-                  <textarea id="p-friends" rows="2" placeholder="Allies, contacts"></textarea>
+                  <textarea id="p-friends" rows="3" placeholder="Allies, contacts"></textarea>
                 </label>
                 <label class="kv-field">
                   <span class="k">Enemies</span>
-                  <textarea id="p-enemies" rows="2" placeholder="Rivals, threats"></textarea>
+                  <textarea id="p-enemies" rows="3" placeholder="Rivals, threats"></textarea>
                 </label>
               </div>
 
               <label class="kv-field">
                 <span class="k">Notes</span>
-                <textarea id="p-notes" rows="3" placeholder="Any additional notes"></textarea>
+                <textarea id="p-notes" rows="4" placeholder="Any additional notes"></textarea>
               </label>
 
               <label class="kv-field">
                 <span class="k">Backstory</span>
-                <textarea id="p-backstory" rows="5" placeholder="Describe the character's history"></textarea>
+                <textarea id="p-backstory" rows="6" placeholder="Describe the character's history"></textarea>
               </label>
             </div>
           </details>
@@ -669,6 +658,41 @@
     <div class="row" style="margin-top:12px; gap:8px;">
       <button class="btn" id="sub-add-btn">Add</button>
       <button class="btn btn-secondary" id="sub-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Abilities modal -->
+<div id="abi-add-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="abi-add-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="abi-add-title">
+  <div class="modal-card" style="max-width:960px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="abi-add-title">Add Ability</div>
+      <button class="modal-close" id="abi-add-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="abi-add" style="margin:10px 0;">
+      <input id="abi-search" placeholder="Search ability by name…" />
+      <select id="abi-filter-type">
+        <option value="">Any type</option>
+        <option value="active">Active</option>
+        <option value="passive">Passive</option>
+        <option value="mixed">Mixed</option>
+      </select>
+      <select id="abi-filter-source">
+        <option value="">Any source</option>
+        <option value="Specie">Specie</option>
+        <option value="Talent">Talent</option>
+        <option value="Archetype">Archetype</option>
+        <option value="Expertise">Expertise</option>
+        <option value="Awakening">Awakening</option>
+        <option value="Apotheosis">Apotheosis</option>
+        <option value="Other">Other</option>
+      </select>
+      <button id="abi-search-btn">Find</button>
+    </div>
+    <div id="abi-results" class="abi-list" style="margin-bottom:12px;"></div>
+    <div class="row" style="gap:8px; justify-content:flex-end;">
+      <button class="btn btn-secondary" id="abi-add-cancel">Close</button>
     </div>
   </div>
 </div>
@@ -844,6 +868,11 @@ const curFoEl = document.getElementById('cur-fo');
 const curSpEl = document.getElementById('cur-sp');
 
 /* Abilities tab refs */
+const abiOpenAddBtn = document.getElementById('abi-open-add');
+const abiAddModal = document.getElementById('abi-add-modal');
+const abiAddBackdrop = document.getElementById('abi-add-backdrop');
+const abiAddClose = document.getElementById('abi-add-close');
+const abiAddCancel = document.getElementById('abi-add-cancel');
 const abiSearchEl = document.getElementById('abi-search');
 const abiFilterTypeEl = document.getElementById('abi-filter-type');
 const abiFilterSrcEl  = document.getElementById('abi-filter-source');
@@ -931,6 +960,7 @@ const slAddModal = document.getElementById('sl-add-modal');
 const slAddBackdrop = document.getElementById('sl-add-backdrop');
 const slAddClose = document.getElementById('sl-add-close');
 const slAddCancel = document.getElementById('sl-add-cancel');
+const slShowPinnedOnly = document.getElementById('sl-show-pinned');
 const slSearchQ = document.getElementById('sl-search-q');
 const slSearchBtn = document.getElementById('sl-search-btn');
 const slSearchBody = document.getElementById('sl-search-body');
@@ -1974,21 +2004,36 @@ async function renderPinnedSchools(){
   }
   slSchoolsEl.innerHTML = '';
   if (!SCHOOLS.length){ slSchoolsEl.innerHTML = '<div class="muted">No schools.</div>'; return; }
-  SCHOOLS.forEach(s=>{
-    const lvl = s.ms_level != null ? `MS: ${s.ms_level}` : '';
-    const pinned = PINNED.has(String(s.id||s.name));
+  const onlyPinned = !!slShowPinnedOnly?.checked;
+  const metaSchools = SPELLLIST_META.school_meta || {};
+  const schools = SCHOOLS.slice().sort((a,b)=>{
+    const pa = PINNED.has(String(a.id||a.name));
+    const pb = PINNED.has(String(b.id||b.name));
+    return Number(pb) - Number(pa);
+  });
+  const filtered = schools.filter(s=> !onlyPinned || PINNED.has(String(s.id||s.name)));
+  if (!filtered.length){ slSchoolsEl.innerHTML = '<div class="muted">No pinned schools yet.</div>'; return; }
+  filtered.forEach(s=>{
+    const key = String(s.id||s.name);
+    const meta = metaSchools[key] || {};
+    const lvlVal = meta.level ?? s.level;
+    const msVal = meta.ms ?? s.ms_level ?? s.ms;
+    const lvlTxt = lvlVal != null ? `Level: ${lvlVal}` : '';
+    const msTxt = msVal != null ? `MS: ${msVal}` : '';
+    const statTxt = [lvlTxt, msTxt].filter(Boolean).join(' \u00b7 ') || '—';
+    const pinned = PINNED.has(key);
     const div = document.createElement('div');
     div.className = 'abi-item';
     div.innerHTML = `
       <div class="grow">
         <div><strong>${s.name || s.id}</strong></div>
-        <div class="muted">${s.type || ''} ${lvl}</div>
+        <div class="muted">${s.type || ''} ${statTxt}</div>
       </div>
       <span class="tag">${pinned ? 'Pinned' : 'Unpinned'}</span>
       <button class="btn small">${pinned ? 'Unpin' : 'Pin'}</button>
     `;
     div.querySelector('button').addEventListener('click', async ()=>{
-      if (pinned) PINNED.delete(String(s.id||s.name)); else PINNED.add(String(s.id||s.name));
+      if (pinned) PINNED.delete(key); else PINNED.add(key);
       renderPinnedSchools();
       try{ await saveSpellListMeta({ pinned_schools: Array.from(PINNED) }); }catch{}
     });
@@ -2697,6 +2742,19 @@ async function saveNow(){
 }
 
 /* ------- Abilities: search/add/remove/render ------- */
+function openAbilityAddModal(){
+  if (!abiAddModal || !abiAddBackdrop) return;
+  abiAddModal.classList.remove('hidden');
+  abiAddModal.classList.add('open');
+  abiAddBackdrop.classList.add('open');
+  abiSearchEl?.focus();
+}
+function closeAbilityAddModal(){
+  if (!abiAddModal || !abiAddBackdrop) return;
+  abiAddModal.classList.add('hidden');
+  abiAddModal.classList.remove('open');
+  abiAddBackdrop.classList.remove('open');
+}
 async function searchAbilities(){
   try{
     const params = [];
@@ -2713,6 +2771,10 @@ async function searchAbilities(){
 }
 abiSearchBtn.addEventListener('click', searchAbilities);
 abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
+abiOpenAddBtn?.addEventListener('click', openAbilityAddModal);
+abiAddClose?.addEventListener('click', closeAbilityAddModal);
+abiAddCancel?.addEventListener('click', closeAbilityAddModal);
+abiAddBackdrop?.addEventListener('click', (e)=>{ if (e.target===abiAddBackdrop) closeAbilityAddModal(); });
 
 invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
 invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));
@@ -2763,6 +2825,7 @@ slOpenAddBtn.addEventListener('click', openSpellAddModal);
 slAddClose.addEventListener('click', closeSpellAddModal);
 slAddCancel.addEventListener('click', closeSpellAddModal);
 slAddBackdrop.addEventListener('click', (e)=>{ if (e.target===slAddBackdrop) closeSpellAddModal(); });
+slShowPinnedOnly?.addEventListener('change', renderPinnedSchools);
 slSearchBtn.addEventListener('click', renderSpellSearch);
 slSearchQ.addEventListener('keydown', (e)=>{ if (e.key==='Enter') renderSpellSearch(); });
 
