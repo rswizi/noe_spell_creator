@@ -56,6 +56,10 @@
 
     <div class="section">
       <div class="muted">Drag characters between folders to move them</div>
+      <div class="row" style="margin:8px 0; gap:8px;">
+        <input id="add-folder-input" placeholder="New folder path (e.g. Party/Tank)" style="flex:1; min-width:240px;">
+        <button id="add-folder-btn">Add folder</button>
+      </div>
       <div id="folders" class="grid" style="margin-top:10px;"></div>
     </div>
   </div></div>
@@ -71,6 +75,8 @@ const userSelect = document.getElementById("user-select");
 const folderInput = document.getElementById("folder-input");
 const editableGmEl = document.getElementById("editable-gm");
 const foldersEl = document.getElementById("folders");
+const addFolderInput = document.getElementById("add-folder-input");
+const addFolderBtn = document.getElementById("add-folder-btn");
 
 let CAMPAIGN = null;
 let MY_CHARS = [];
@@ -122,6 +128,16 @@ function buildSelects(){
 
 function folderTreeFromChars(chars){
   const tree = {};
+  // include empty folders
+  (CAMPAIGN?.folders || []).forEach(f=>{
+    const path = (f||"").split("/").filter(Boolean);
+    let node = tree;
+    path.forEach(p=>{
+      node[p] = node[p] || {};
+      node = node[p];
+    });
+    node.__items = node.__items || [];
+  });
   chars.forEach(c=>{
     const path = (c.folder || "").split("/").filter(Boolean);
     let node = tree;
@@ -228,6 +244,24 @@ async function requestEdit(charId){
 }
 
 document.getElementById("assign-btn").addEventListener("click", assignChar);
+addFolderBtn.addEventListener("click", async ()=>{
+  const f = (addFolderInput.value || "").trim();
+  if (!f){ alert("Enter folder path"); return; }
+  statusEl.textContent = "Adding folder...";
+  try{
+    await api(`/campaigns/${encodeURIComponent(CID)}/folders`, {
+      method:"PATCH",
+      headers:{ "content-type":"application/json" },
+      body: JSON.stringify({ folder: f })
+    });
+    addFolderInput.value = "";
+    await loadCampaign();
+    statusEl.textContent = "Folder added.";
+  }catch(e){
+    statusEl.textContent = e.message;
+    alert(e.message);
+  }
+});
 
 loadMe()
   .then(loadCharacters)

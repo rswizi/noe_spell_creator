@@ -199,6 +199,23 @@ async def request_edit_rights(cid: str, req: Request):
     CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": updated}})
     doc["characters"] = updated
     return {"status":"success", "campaign": _campaign_view(doc, user)}
+
+@app.patch("/campaigns/{cid}/folders")
+async def update_campaign_folders(cid: str, req: Request):
+    user = require_auth(req)
+    doc = _require_campaign_access(cid, user)
+    if doc.get("owner") != user:
+        raise HTTPException(403, "Only GM can edit folders")
+    body = await req.json()
+    folder = (body.get("folder") or "").strip()
+    if not folder:
+        raise HTTPException(400, "folder required")
+    folders = set(doc.get("folders") or [])
+    folders.add(folder)
+    folders_list = sorted(folders)
+    CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"folders": folders_list}})
+    doc["folders"] = folders_list
+    return {"status":"success","campaign": _campaign_view(doc, user)}
 # ---------- Auth ----------
 @app.post("/auth/login")
 async def auth_login(request: Request):

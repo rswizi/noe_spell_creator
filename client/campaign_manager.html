@@ -105,7 +105,6 @@ async function checkMe(){
 }
 
 let CAMPAIGNS = [];
-let MY_CHARACTERS = [];
 
 function fallbackAvatar(ev){
   ev.target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';
@@ -123,117 +122,23 @@ function render(){
     card.className = "card";
     const members = (c.members || []).join(", ");
     card.innerHTML = `
-      <div class="row" style="justify-content:space-between;">
+      <div class="row" style="justify-content:space-between; gap:8px;">
         <div>
           <strong>${c.name}</strong>
           <div class="muted">Owner: ${c.owner}</div>
+          <div class="muted">Members: ${members || "None"}</div>
         </div>
-        ${c.is_owner ? `<span class="pill">Join code: ${c.join_code}</span>` : ""}
-        <a class="btn small" href="campaign_view.html?cid=${encodeURIComponent(c.id)}" target="_blank">Open</a>
-      </div>
-      <div class="muted">Members: ${members || "None"}</div>
-      <div class="section">
-        <div class="row" style="gap:8px; align-items:flex-end;">
-          <div class="labelled">
-            <span class="muted">Character</span>
-            <select class="char-id">
-              ${(window.MY_CHARACTERS||[]).map(ch=>`<option value="${ch.id}">${ch.name||ch.id}</option>`).join('')}
-            </select>
-          </div>
-          <div class="labelled">
-            <span class="muted">Assign to (user)</span>
-            <select class="assign-to">
-              <option value="">Unassigned</option>
-              <option value="${c.owner}">${c.owner} (GM)</option>
-              ${(c.members||[]).map(m=>`<option value="${m}">${m}</option>`).join('')}
-            </select>
-          </div>
-          <div class="labelled">
-            <span class="muted">Folder (path)</span>
-            <input class="folder" placeholder="e.g. Party/Tank">
-          </div>
-          <label class="row muted" style="gap:6px;">
-            <input type="checkbox" class="editable"> GM can edit
-          </label>
-          <button class="btn small assign-btn"${c.is_owner ? "" : " disabled title='GM only'"}>Assign</button>
+        <div class="row" style="gap:8px; align-items:center;">
+          ${c.is_owner ? `<span class="pill">Join code: ${c.join_code}</span>` : ""}
+          <a class="btn small" href="campaign_view.html?cid=${encodeURIComponent(c.id)}" target="_blank">Open</a>
         </div>
       </div>
-      <div class="muted">Characters</div>
-      <div class="list chars"></div>
     `;
-    const charsEl = card.querySelector(".chars");
-    const chars = (c.characters || []).slice().sort((a,b)=> (a.folder||'').localeCompare(b.folder||''));
-    if (!chars.length){
-      charsEl.innerHTML = `<div class="muted">No characters yet.</div>`;
-    }else{
-      chars.forEach(ch=>{
-        const row = document.createElement("div");
-        row.className = "char-row";
-        const assigned = ch.assigned_to || "Unassigned";
-        const folder = ch.folder || "(root)";
-        const editable = ch.editable_by_gm ? "Editable by GM" : "View only";
-        const requests = (ch.edit_requests || []).join(", ");
-        row.innerHTML = `
-          <div class="avatar"><img src="/characters/${encodeURIComponent(ch.character_id)}/avatar" alt="avatar" onerror="this.onerror=null; this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';"></div>
-          <div class="grow">
-            <div><strong>${ch.character_id}</strong></div>
-            <div class="muted">Folder: ${folder} • Assigned: ${assigned} • ${editable}</div>
-            ${requests ? `<div class="muted">Edit requests: ${requests}</div>` : ""}
-          </div>
-          ${c.is_owner ? "" : `<button class="btn small req-edit">Request edit</button>`}
-        `;
-        if (!c.is_owner){
-          row.querySelector(".req-edit").addEventListener("click", async ()=>{
-            try{
-              statusEl.textContent = "Requesting edit...";
-              await api(`/campaigns/${encodeURIComponent(c.id)}/request_edit`, {
-                method:"POST",
-                headers:{ "content-type":"application/json" },
-                body: JSON.stringify({ character_id: ch.character_id })
-              });
-              await loadCampaigns();
-              statusEl.textContent = "Request sent.";
-            }catch(e){
-              statusEl.textContent = "Request failed: "+e.message;
-              alert(e.message);
-            }
-          });
-        }
-        charsEl.appendChild(row);
-      });
-    }
-    const assignBtn = card.querySelector(".assign-btn");
-    if (assignBtn){
-      assignBtn.addEventListener("click", async ()=>{
-        const charId = (card.querySelector(".char-id").value || "").trim();
-        if (!charId){ alert("Character id required"); return; }
-        const assigned_to = (card.querySelector(".assign-to").value || "").trim();
-        const folder = (card.querySelector(".folder").value || "").trim();
-        const editable = !!card.querySelector(".editable").checked;
-        try{
-          statusEl.textContent = "Assigning...";
-          await api(`/campaigns/${encodeURIComponent(c.id)}/assign_character`, {
-            method:"POST",
-            headers:{ "content-type":"application/json" },
-            body: JSON.stringify({ character_id: charId, assigned_to, folder, editable_by_gm: editable })
-          });
-          await loadCampaigns();
-          statusEl.textContent = "Assigned.";
-        }catch(e){
-          statusEl.textContent = "Assign failed: "+e.message;
-          alert(e.message);
-        }
-      });
-    }
     listEl.appendChild(card);
   });
 }
 
 async function loadCampaigns(){
-  try{
-    const chars = await api('/characters');
-    MY_CHARACTERS = chars.characters || [];
-  }catch{}
   const res = await api("/campaigns");
   CAMPAIGNS = res.campaigns || [];
   render();
