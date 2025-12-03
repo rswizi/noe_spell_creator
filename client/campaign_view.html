@@ -84,6 +84,7 @@ let IS_OWNER = false;
 
 function authHeaders(){
   const tok = localStorage.getItem("auth_token") || "";
+  if (tok){ document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
   return tok ? { "Authorization":"Bearer "+tok, "X-Auth-Token":tok } : {};
 }
 async function api(path,opt={}){

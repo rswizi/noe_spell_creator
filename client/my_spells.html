@@ -92,7 +92,7 @@
     const q = buildQuery();
     const url = `${API_BASE}/spells?${q}`;
     try {
-      const res = await fetch(url, { headers: authHeaders() });
+      const res = await fetch(url, { headers: authHeaders(), credentials:'include' });
       const data = await res.json();
       renderList(data.spells || []);
     } catch {
