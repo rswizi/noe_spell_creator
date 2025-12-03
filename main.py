@@ -78,10 +78,12 @@ def serve_page(page: str):
     raise HTTPException(404, "Page not found")
 
 # ---------- Campaigns ----------
-def _require_campaign_access(cid: str, user: str):
+def _require_campaign_access(cid: str, user: str, role: str | None = None):
     doc = CAMPAIGN_COL.find_one({"id": cid})
     if not doc:
         raise HTTPException(404, "Campaign not found")
+    if (role or "").lower() == "admin":
+        return doc
     if user != doc.get("owner") and user not in (doc.get("members") or []):
         raise HTTPException(403, "Access denied")
     return doc
