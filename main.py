@@ -150,6 +150,23 @@ async def get_campaign(cid: str, req: Request):
     doc = _require_campaign_access(cid, user, role)
     return {"status":"success", "campaign": _campaign_view(doc, user, role)}
 
+@app.patch("/campaigns/{cid}")
+async def update_campaign(cid: str, req: Request):
+    user, role = require_auth(req)
+    doc = _require_campaign_access(cid, user, role)
+    if doc.get("owner") != user and (role or "").lower() != "admin":
+        raise HTTPException(403, "Only GM/admin can edit campaign")
+    body = await req.json()
+    updates = {}
+    if "description" in body:
+        updates["description"] = (body.get("description") or "").strip()
+    if "name" in body:
+        updates["name"] = (body.get("name") or "").strip()
+    if updates:
+        CAMPAIGN_COL.update_one({"id": cid}, {"$set": updates})
+        doc.update(updates)
+    return {"status":"success", "campaign": _campaign_view(doc, user, role)}
+
 @app.post("/campaigns/{cid}/assign_character")
 async def assign_campaign_character(cid: str, req: Request):
     user, role = require_auth(req)
@@ -173,8 +190,8 @@ async def assign_campaign_character(cid: str, req: Request):
 async def update_campaign_character(cid: str, char_id: str, req: Request):
     user, role = require_auth(req)
     doc = _require_campaign_access(cid, user, role)
-    if doc.get("owner") != user:
-        raise HTTPException(403, "Only GM can update")
+    if doc.get("owner") != user and (role or "").lower() != "admin":
+        raise HTTPException(403, "Only GM/admin can update")
     body = await req.json()
     updated = []
     found = False

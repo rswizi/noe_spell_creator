@@ -447,23 +447,10 @@
         <div class="panel">
           <details open class="panel">
             <summary class="hdr">
-              <strong>Current & Overrides</strong>
-              <span class="muted">(DM tools)</span>
+              <strong>Current values</strong>
+              <span class="muted">(HP/EN/FO/SP)</span>
             </summary>
             <div class="panel-body">
-              <div class="override-row" style="justify-content:space-between;">
-                <label class="row" style="gap:6px;">
-                  <input type="checkbox" id="override-derived" disabled> <span class="muted">Override max values</span>
-                </label>
-                <span class="pill" style="border-color:#444;" title="Allows setting custom maxima for DM usage.">DM override</span>
-              </div>
-              <div class="current-row" id="override-inputs">
-                <label class="muted">Max HP <input id="ov-hp" type="number" min="0"></label>
-                <label class="muted">Max EN <input id="ov-en" type="number" min="0"></label>
-                <label class="muted">Max FO <input id="ov-fo" type="number" min="0"></label>
-                <label class="muted">Max MO <input id="ov-mo" type="number" min="0"></label>
-                <label class="muted">Max SP cap <input id="ov-spcap" type="number" min="0"></label>
-              </div>
               <div class="current-row">
                 <label class="muted">Current HP <input id="cur-hp" type="number" min="0"></label>
                 <label class="muted">Current EN <input id="cur-en" type="number" min="0"></label>
@@ -988,7 +975,6 @@ const subModal = document.getElementById('sub-modal');
 const subBackdrop = document.getElementById('sub-backdrop');
 const subClose = document.getElementById('sub-close');
 const subCancel = document.getElementById('sub-cancel');
-const overrideInputsWrap = document.getElementById('override-inputs');
 /* Personal refs */
 const pNickEl = document.getElementById('p-nicknames');
 const pHeightEl = document.getElementById('p-height');
@@ -1036,22 +1022,6 @@ subCancel?.addEventListener('click', closeSubModal);
 subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) closeSubModal(); });
 
 // Overrides & current handlers
-overrideToggle?.addEventListener('change', ()=>{
-  OVERRIDE_ENABLED = !!overrideToggle.checked;
-  updateDerived(); queueSave();
-});
-[ovHpEl, ovEnEl, ovFoEl, ovMoEl, ovSpEl].forEach(el=>{
-  el?.addEventListener('input', ()=>{
-    OVERRIDE_VALUES = {
-      hp: Number(ovHpEl?.value||0),
-      en: Number(ovEnEl?.value||0),
-      fo: Number(ovFoEl?.value||0),
-      mo: Number(ovMoEl?.value||0),
-      spcap: Number(ovSpEl?.value||0),
-    };
-    updateDerived(); queueSave();
-  });
-});
 [curHpEl, curEnEl, curFoEl, curSpEl].forEach(el=>{
   el?.addEventListener('input', ()=>{
     CURRENT = {
@@ -2300,6 +2270,10 @@ function renderAbilitySpellsBucket(){
     const alt = meta.alt_name || '';
     const nameDisplay = alt || sp.name || 'Spell';
     const desc = sp.description || '';
+    const flavor = sp.flavor || sp.flavour || '';
+    const effectsDesc = Array.isArray(sp.effects_detail)
+      ? sp.effects_detail.map(e=>e.description || '').filter(Boolean).join(' | ')
+      : '';
     const costParts = [];
     if (sp.mp_cost != null) costParts.push(`MP: ${sp.mp_cost}`);
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
@@ -2312,6 +2286,8 @@ function renderAbilitySpellsBucket(){
       <div class="grow">
         <div><strong>${nameDisplay}</strong> <span class="muted">${meta.status || 'known'}</span></div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
+        ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
+        ${effectsDesc ? `<div class="muted" style="font-size:.8rem">Effects: ${effectsDesc}</div>` : ''}
         <div class="muted" style="font-size:.8rem">${cost} ${range?` • ${range}`:''} ${aoe?` • ${aoe}`:''}</div>
       </div>
       <span class="tag">${sp.category || ''}</span>
@@ -2653,6 +2629,7 @@ function renderStatistics(){
   intPanel.appendChild(intSummary);
   const intBody = document.createElement('div'); intBody.className = 'panel-body';
   const intGrid = document.createElement('div'); intGrid.className = 'skills';
+  intGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(220px, 1fr))';
   intGrid.id = 'intensities-grid';
   INTENSITIES.forEach(n=>{
     const invested = Number((CHAR.stats.intensities||{})[n] || 0);

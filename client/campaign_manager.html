@@ -51,20 +51,24 @@
     </div>
 
     <div class="section" style="margin-bottom:16px;">
-      <div class="row" style="gap:12px;">
-        <div class="labelled">
+      <div class="row" style="gap:12px; flex-wrap:wrap;">
+        <div class="labelled" style="min-width:280px;">
           <span class="muted">Create</span>
           <div class="row">
             <input id="camp-name" placeholder="Campaign name">
             <button id="camp-create">Create</button>
           </div>
+          <textarea id="camp-desc" rows="2" placeholder="Description (optional)" style="width:100%; margin-top:6px;"></textarea>
+          <div class="muted" style="font-size:.85rem;">You can set an avatar after creating.</div>
         </div>
-        <div class="labelled">
+        <div class="labelled" style="min-width:320px;">
           <span class="muted">Join by code</span>
           <div class="row">
             <input id="camp-code" placeholder="ABC123" style="width:140px;">
+            <select id="join-char" style="min-width:180px;"></select>
             <button id="camp-join">Join</button>
           </div>
+          <div class="muted" style="font-size:.85rem;">Pick one of your characters or create a new one when joining.</div>
         </div>
       </div>
     </div>
@@ -78,6 +82,8 @@ const loginChip = document.getElementById("login-chip");
 const statusEl = document.getElementById("status");
 const listEl = document.getElementById("camp-list");
 const emptyEl = document.getElementById("empty");
+const joinCharSelect = document.getElementById("join-char");
+const createDescEl = document.getElementById("camp-desc");
 
 function authHeaders(){
   const tok = localStorage.getItem("auth_token") || "";
@@ -111,6 +117,14 @@ function fallbackAvatar(ev){
   ev.target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';
 }
 
+async function uploadAvatar(cid, file){
+  const headers = authHeaders();
+  const fd = new FormData();
+  fd.append("file", file);
+  const resp = await fetch(`/campaigns/${encodeURIComponent(cid)}/avatar`, { method:"POST", body: fd, credentials:"include", headers });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+}
+
 function render(){
   listEl.innerHTML = "";
   if (!CAMPAIGNS.length){
@@ -122,18 +136,37 @@ function render(){
     const card = document.createElement("div");
     card.className = "card";
     const members = (c.members || []).join(", ");
+    const avatarUrl = c.avatar_url ? `${c.avatar_url}?ts=${Date.now()}` : `/campaigns/${encodeURIComponent(c.id)}/avatar?ts=${Date.now()}`;
     card.innerHTML = `
       <div class="row" style="justify-content:space-between; gap:8px;">
-        <div>
-          <strong>${c.name}</strong>
-          <div class="muted">Owner: ${c.owner}</div>
-          <div class="muted">Members: ${members || "None"}</div>
+        <div class="row" style="gap:10px;">
+          <div class="avatar"><img src="${avatarUrl}" onerror="fallbackAvatar(event)"></div>
+          <div>
+            <strong>${c.name}</strong>
+            <div class="muted">Owner: ${c.owner}</div>
+            <div class="muted">Members: ${members || "None"}</div>
+          </div>
         </div>
         <div class="row" style="gap:8px; align-items:center;">
           <span class="pill">${c.is_owner ? "Join code:" : "Code:"} ${c.join_code || "—"}</span>
           <a class="btn small" href="campaign_view.html?cid=${encodeURIComponent(c.id)}">Open</a>
         </div>
       </div>
+      <div class="muted">${c.description || "No description."}</div>
+      ${c.is_owner ? `
+      <div class="row" style="gap:8px; align-items:flex-end;">
+        <div class="labelled" style="flex:1;">
+          <span class="muted">Edit description</span>
+          <textarea class="desc" rows="2" style="width:100%;">${c.description || ""}</textarea>
+        </div>
+        <div class="labelled">
+          <span class="muted">Avatar</span>
+          <input type="file" class="avatar-file" accept="image/png,image/jpeg">
+        </div>
+        <button class="btn small save-desc">Save</button>
+        <button class="btn small upload-avatar">Upload avatar</button>
+      </div>
+      ` : ""}
       ${c.is_owner ? `
       <div class="section" style="margin-top:8px;">
         <div class="row" style="gap:8px; align-items:flex-end;">
@@ -165,6 +198,39 @@ function render(){
     `;
 
     if (c.is_owner){
+      const saveDescBtn = card.querySelector(".save-desc");
+      const descEl = card.querySelector(".desc");
+      saveDescBtn?.addEventListener("click", async ()=>{
+        try{
+          statusEl.textContent = "Saving description...";
+          await api(`/campaigns/${encodeURIComponent(c.id)}`, {
+            method:"PATCH",
+            headers:{ "content-type":"application/json" },
+            body: JSON.stringify({ description: descEl.value || "" })
+          });
+          statusEl.textContent = "Saved.";
+          await loadCampaigns();
+        }catch(e){
+          statusEl.textContent = "Save failed: "+e.message;
+          alert(e.message);
+        }
+      });
+      const uploadBtn = card.querySelector(".upload-avatar");
+      const avatarFile = card.querySelector(".avatar-file");
+      uploadBtn?.addEventListener("click", async ()=>{
+        const file = avatarFile?.files?.[0];
+        if (!file){ alert("Choose an image first."); return; }
+        try{
+          statusEl.textContent = "Uploading avatar...";
+          await uploadAvatar(c.id, file);
+          statusEl.textContent = "Uploaded.";
+          await loadCampaigns();
+        }catch(e){
+          statusEl.textContent = "Upload failed: "+e.message;
+          alert(e.message);
+        }
+      });
+
       const assignBtn = card.querySelector(".assign-btn");
       assignBtn.addEventListener("click", async ()=>{
         const charId = (card.querySelector(".char-id").value || "").trim();
@@ -204,14 +270,27 @@ async function loadMyCharacters(){
   }catch(e){
     MY_CHARACTERS = [];
   }
+  renderJoinCharOptions();
+}
+
+function renderJoinCharOptions(){
+  if (!joinCharSelect) return;
+  const opts = ['<option value=\"\">No character</option>'];
+  opts.push('<option value=\"__new__\">+ Create new character</option>');
+  (MY_CHARACTERS||[]).forEach(ch=>{
+    opts.push(`<option value=\"${ch.id}\">${ch.name || ch.id}</option>`);
+  });
+  joinCharSelect.innerHTML = opts.join(\"\\n\");
 }
 
 document.getElementById("camp-create").addEventListener("click", async ()=>{
   const name = (document.getElementById("camp-name").value || "").trim() || "New Campaign";
+  const description = (createDescEl?.value || "").trim();
   try{
     statusEl.textContent = "Creating...";
-    await api("/campaigns", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ name }) });
+    await api("/campaigns", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ name, description }) });
     document.getElementById("camp-name").value = "";
+    if (createDescEl) createDescEl.value = "";
     await loadCampaigns();
     statusEl.textContent = "Created.";
   }catch(e){
@@ -222,8 +301,21 @@ document.getElementById("camp-create").addEventListener("click", async ()=>{
 
 document.getElementById("camp-join").addEventListener("click", async ()=>{
   const code = (document.getElementById("camp-code").value || "").trim();
-  const charId = prompt("Join with which character? (optional)") || "";
+  let charId = joinCharSelect ? (joinCharSelect.value || "") : "";
   if (!code){ alert("Enter code"); return; }
+  if (charId === "__new__"){
+    const name = prompt("Name for new character?") || "";
+    if (name){
+      try{
+        const res = await api("/characters", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ name }) });
+        charId = res.id || res.character?.id || "";
+        await loadMyCharacters();
+      }catch(e){
+        alert("Failed to create character: "+e.message);
+        return;
+      }
+    }
+  }
   try{
     statusEl.textContent = "Joining...";
     await api("/campaigns/join", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ code, character_id: charId }) });
