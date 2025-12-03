@@ -100,7 +100,10 @@
     }
   }
 
-  function authHeaders(){ return token ? {"Authorization": "Bearer " + token} : {}; }
+  function authHeaders(){
+    if (token){ document.cookie = `token=${token}; path=/; SameSite=Lax`; }
+    return token ? {"Authorization": "Bearer " + token, "X-Auth-Token": token} : {};
+  }
 
   function spellRow(s) {
     const status = (s.status || "yellow");

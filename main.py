@@ -88,7 +88,7 @@ def _require_campaign_access(cid: str, user: str):
 
 @app.post("/campaigns")
 async def create_campaign(req: Request):
-    user = require_auth(req)
+    user, _ = require_auth(req)
     body = await req.json()
     name = (body.get("name") or "").strip()
     if not name:
@@ -109,13 +109,13 @@ async def create_campaign(req: Request):
 
 @app.get("/campaigns")
 async def list_campaigns(req: Request):
-    user = require_auth(req)
+    user, _ = require_auth(req)
     docs = list(CAMPAIGN_COL.find({ "$or":[ {"owner":user}, {"members":user} ] }, {"_id":0}))
     return {"status":"success", "campaigns":[_campaign_view(d, user) for d in docs]}
 
 @app.post("/campaigns/join")
 async def join_campaign(req: Request):
-    user = require_auth(req)
+    user, _ = require_auth(req)
     body = await req.json()
     code = (body.get("code") or "").strip().upper()
     char_id = (body.get("character_id") or "").strip()
@@ -138,13 +138,13 @@ async def join_campaign(req: Request):
 
 @app.get("/campaigns/{cid}")
 async def get_campaign(cid: str, req: Request):
-    user = require_auth(req)
+    user, _ = require_auth(req)
     doc = _require_campaign_access(cid, user)
     return {"status":"success", "campaign": _campaign_view(doc, user)}
 
 @app.post("/campaigns/{cid}/assign_character")
 async def assign_campaign_character(cid: str, req: Request):
-    user = require_auth(req)
+    user, _ = require_auth(req)
     body = await req.json()
     doc = _require_campaign_access(cid, user)
     if doc.get("owner") != user:
@@ -163,7 +163,7 @@ async def assign_campaign_character(cid: str, req: Request):
 
 @app.patch("/campaigns/{cid}/characters/{char_id}")
 async def update_campaign_character(cid: str, char_id: str, req: Request):
-    user = require_auth(req)
+    user, _ = require_auth(req)
     doc = _require_campaign_access(cid, user)
     if doc.get("owner") != user:
         raise HTTPException(403, "Only GM can update")
@@ -186,7 +186,7 @@ async def update_campaign_character(cid: str, char_id: str, req: Request):
 
 @app.post("/campaigns/{cid}/request_edit")
 async def request_edit_rights(cid: str, req: Request):
-    user = require_auth(req)
+    user, _ = require_auth(req)
     body = await req.json()
     char_id = (body.get("character_id") or "").strip()
     if not char_id:
@@ -210,7 +210,7 @@ async def request_edit_rights(cid: str, req: Request):
 
 @app.patch("/campaigns/{cid}/folders")
 async def update_campaign_folders(cid: str, req: Request):
-    user = require_auth(req)
+    user, _ = require_auth(req)
     doc = _require_campaign_access(cid, user)
     if doc.get("owner") != user:
         raise HTTPException(403, "Only GM can edit folders")
