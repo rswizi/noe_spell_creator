@@ -149,7 +149,7 @@
             <div class="avatar-card">
               <div class="avatar-frame"><img id="avatar-preview" alt="Avatar preview"></div>
               <div class="avatar-tools">
-                <input id="name" placeholder="Enter a name..." class="grow" />
+                <input id="name" placeholder="Enter a name..." class="grow" maxlength="22" />
                 <button id="avatar-open" class="btn small">Set avatar</button>
                 <div id="avatar-status" class="muted"></div>
               </div>
@@ -229,13 +229,6 @@
 
         <div class="stats-grid" id="stats-grid"><!-- injected --></div>
 
-        <!-- (optional Defense summary panel kept minimal) -->
-        <div class="panel" style="margin-top:12px;">
-          <details open class="panel">
-            <summary class="hdr"><strong>Defense Summary</strong></summary>
-            <div class="panel-body" id="defense-summary"></div>
-          </details>
-        </div>
       </div>
 
       <!-- INVENTORY -->
@@ -605,6 +598,7 @@
         <option selected>50</option>
         <option>100</option>
       </select>
+      <input id="inv-price-mod" type="number" step="0.05" min="0" value="1" style="width:120px;" title="Price modifier (e.g. 0.9 for 10% discount, 1.2 for 20% markup)">
       <button id="inv-search" class="btn small">Search</button>
       <button id="inv-clear" class="btn btn-secondary small">Clear</button>
     </div>
@@ -721,6 +715,7 @@ const CHARACS = [
 ];
 
 const NATURES = ['Fire','Lightning','Water','Earth','Wind','Sun','Moon','Ki'];
+const INTENSITIES = ['Fire','Water','Earth','Wind','Lightning','Sun','Moon','Ki'];
 const SUB_TIER_SLOTS = {1:1, 2:3, 3:5, 4:7};
 const SUB_TYPES = [
   { key:'lethality', label:'Lethality' },
@@ -790,6 +785,7 @@ const TARGET_GROUPS = [
     { value:'skills.tech.Medicine', label:'Medicine (Tech)' },
     { value:'skills.tech.Engineering', label:'Engineering (Tech)' },
   ]},
+  { label:'Intensities', options: INTENSITIES.map(n=>({ value:`intensities.${n}`, label:`${n} (Magic)` })) },
   { label:'Derived / Resources', options:[
     { value:'derived.hp', label:'HP' },
     { value:'derived.en', label:'EN' },
@@ -832,6 +828,7 @@ let OVERRIDE_ENABLED = false;
 let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, spcap:null, enc:null, et:null, tx:null };
 let ARCHETYPES = [];
 let COMPUTED_ARC_ABILITIES = [];
+let UPGRADE_META = {};
 
 /* Passive bonus aggregations (recomputed whenever ASSIGNED changes) */
 let PASSIVE = {
@@ -916,6 +913,7 @@ const invCatEl = document.getElementById('inv-cat-select');
 const invLimitEl = document.getElementById('inv-limit');
 const invSearchBtn = document.getElementById('inv-search');
 const invClearBtn = document.getElementById('inv-clear');
+const invPriceModEl = document.getElementById('inv-price-mod');
 const invGlobalContEl = document.getElementById('inv-global-cont');
 const invGlobalCurEl = document.getElementById('inv-global-cur');
 const invEquippedFlagEl = document.getElementById('inv-equpped-flag');
@@ -1102,7 +1100,7 @@ function makeDefaultStats(){
     stats[c.key] = { invest: 0, skills: sk };
   }
   const ints = {};
-  for (const n of NATURES){ ints[n] = {knows:false, invest:0}; }
+  for (const n of INTENSITIES){ ints[n] = 0; }
   stats.intensities = ints;
   stats.personal = {
     nicknames: "",
@@ -1142,6 +1140,11 @@ function totalSkillInvest(){
     const rec = (CHAR.stats && CHAR.stats[c.key]) || {};
     for (const s of (c.skills||[])){
       t += Number(rec.skills?.[s] || 0);
+    }
+  }
+  if (CHAR.stats?.intensities){
+    for (const n of INTENSITIES){
+      t += Number(CHAR.stats.intensities[n] || 0);
     }
   }
   return t;
@@ -1822,7 +1825,8 @@ function invClearSearch(){
 }
 
 async function invBuyItem(kind, ref_id, quantity, container_id, currency){
-  const payload = { kind, ref_id, quantity, container_id, currency, equipped: invEquippedFlagEl.value === "1" };
+  const priceModifier = parseFloat(invPriceModEl?.value || "1") || 1;
+  const payload = { kind, ref_id, quantity, container_id, currency, price_modifier: priceModifier, equipped: invEquippedFlagEl.value === "1" };
   const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/purchase`, {
     method: "POST",
     headers: { "Content-Type":"application/json", ...authHeaders() },
@@ -1832,6 +1836,66 @@ async function invBuyItem(kind, ref_id, quantity, container_id, currency){
   if (j.status !== "success") { alert(j.message || "Purchase failed"); return; }
   LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
   invToggleModal(invCatalogModal, invCatalogBackdrop, false);
+}
+
+async function upgradeQuality(item_id, to){
+  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}/upgrade_quality`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ to })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ throw new Error(j.message || "Upgrade failed"); }
+  return j.inventory;
+}
+
+async function installUpgrade(item_id, upgrade_id, target){
+  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}/install_upgrade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ upgrade_id, target })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ throw new Error(j.message || "Install failed"); }
+  return j.inventory;
+}
+
+async function fetchUpgrades(kind, slot){
+  const qs = [];
+  if (kind) qs.push(`kind=${encodeURIComponent(kind)}`);
+  if (slot) qs.push(`slot=${encodeURIComponent(slot)}`);
+  const url = `/upgrades${qs.length ? '?'+qs.join('&') : ''}`;
+  const r = await fetch(url, { headers: { ...authHeaders() } });
+  const j = await r.json();
+  if (j.status !== "success") throw new Error(j.message || "Load upgrades failed");
+  const ups = j.upgrades || [];
+  ups.forEach(u=>{ UPGRADE_META[u.id] = u; });
+  return ups;
+}
+
+async function loadUpgradeOptions(labelEl, selectEl, it){
+  if (!labelEl || !selectEl) return;
+  labelEl.textContent = "Install upgrade (loading...)";
+  selectEl.innerHTML = "";
+  try{
+    const slot = it.equipment_slot || it.slot || "";
+    const ups = await fetchUpgrades(it.kind, slot);
+    if (!ups.length){
+      labelEl.textContent = "Install upgrade (none available)";
+      const o = document.createElement("option"); o.textContent = "-- none --"; selectEl.appendChild(o);
+      return;
+    }
+    labelEl.textContent = "Install upgrade";
+    selectEl.innerHTML = '<option value=\"\">-- select upgrade --</option>';
+    ups.forEach(u=>{
+      const o = document.createElement("option");
+      o.value = u.id; o.textContent = `${u.name || u.id} (${u.kind || ''})`;
+      selectEl.appendChild(o);
+    });
+  }catch(e){
+    labelEl.textContent = "Install upgrade (load failed)";
+    const o = document.createElement("option"); o.textContent = "-- error --"; selectEl.appendChild(o);
+  }
 }
 
 async function toggleEquipInline(it){
@@ -1918,9 +1982,58 @@ equipBtn.addEventListener('click', async ()=>{
 });
 invItemActions.appendChild(equipBtn);
 
-invItemModal.classList.remove('hidden');
-invItemModal.classList.add('open');
-invItemBackdrop.classList.add('open');
+  // Upgrade quality
+  const qualityBtn = document.createElement('button');
+  qualityBtn.className = 'btn small';
+  qualityBtn.textContent = 'Improve quality';
+  qualityBtn.addEventListener('click', async ()=>{
+    const target = prompt('Target quality? (e.g., Good, Excellent, ...)', (it.quality || '').toString());
+    if (!target) return;
+    try{
+      const inv = await upgradeQuality(it.item_id, target);
+      LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+      closeInvItemModal();
+    }catch(e){
+      alert(e.message);
+    }
+  });
+  invItemActions.appendChild(qualityBtn);
+
+  // Install upgrade
+  const upWrap = document.createElement('div');
+  upWrap.className = 'row';
+  upWrap.style.marginTop = '8px';
+  upWrap.innerHTML = `
+    <label class="muted" id="inv-up-label">Install upgrade</label>
+    <select id="inv-up-select" style="min-width:220px;"></select>
+    <button class="btn small" id="inv-up-apply">Install</button>
+  `;
+  invItemActions.appendChild(upWrap);
+  loadUpgradeOptions(upWrap.querySelector('#inv-up-label'), upWrap.querySelector('#inv-up-select'), it);
+  upWrap.querySelector('#inv-up-apply').addEventListener('click', async ()=>{
+    const sel = upWrap.querySelector('#inv-up-select').value;
+    if (!sel){ alert('Select an upgrade first.'); return; }
+    let target = "";
+    const meta = UPGRADE_META[sel];
+    if (meta && Array.isArray(meta.targets) && meta.targets.length){
+      const choice = prompt(`Select target for ${meta.name || 'upgrade'} (${meta.targets.join(', ')})`, meta.targets[0]);
+      if (!choice || !meta.targets.includes(choice)){ alert('Invalid target.'); return; }
+      const existing = (it.upgrades || []).filter(u=>u.target===choice).length;
+      if (existing >= 2){ alert('Target already has two upgrades.'); return; }
+      target = choice;
+    }
+    try{
+      const inv = await installUpgrade(it.item_id, sel, target);
+      LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+      closeInvItemModal();
+    }catch(e){
+      alert(e.message);
+    }
+  });
+
+  invItemModal.classList.remove('hidden');
+  invItemModal.classList.add('open');
+  invItemBackdrop.classList.add('open');
 }
 
 function closeInvItemModal(){
@@ -2533,6 +2646,32 @@ function renderStatistics(){
     gridEl.appendChild(details);
   }
 
+  // Intensities (scale with MAGIC)
+  const intPanel = document.createElement('details'); intPanel.className='panel'; intPanel.open = true;
+  const intSummary = document.createElement('summary'); intSummary.className = 'hdr';
+  intSummary.innerHTML = `<strong>Intensities</strong><span class="muted">(scale on MAGIC)</span>`;
+  intPanel.appendChild(intSummary);
+  const intBody = document.createElement('div'); intBody.className = 'panel-body';
+  const intGrid = document.createElement('div'); intGrid.className = 'skills';
+  intGrid.id = 'intensities-grid';
+  INTENSITIES.forEach(n=>{
+    const invested = Number((CHAR.stats.intensities||{})[n] || 0);
+    const adj = skillAdjTotal('magic', n);
+    const investId = `intensity-${n}-invest`;
+    const totalId = `intensity-${n}-total`;
+    const line = document.createElement('div'); line.className = 'skill-line';
+    line.innerHTML = `
+      <div class="k">${n}</div>
+      <input type="number" class="num" min="0" id="${investId}" value="${invested}">
+      <div class="skill-total badge mod-toggle" data-target="mods-${totalId}" id="${totalId}" title="${adj.notes.join('\n')}">${adj.total>=0? '+'+adj.total : adj.total}</div>
+    `;
+    line.appendChild(setNotesList(`mods-${totalId}`, adj.notes));
+    intGrid.appendChild(line);
+  });
+  intBody.appendChild(intGrid);
+  intPanel.appendChild(intBody);
+  gridEl.appendChild(intPanel);
+
   // Wire listeners
   for (const c of CHARACS){
     const input = document.getElementById(`${c.key}-invest`);
@@ -2737,6 +2876,30 @@ function updateDerived(){
     maxVals.et  = Number(OVERRIDE_VALUES.et  ?? final.et);
     maxVals.tx  = Number(OVERRIDE_VALUES.tx  ?? final.tx);
   }
+  // Intensities listeners
+  INTENSITIES.forEach(n=>{
+    const input = document.getElementById(`intensity-${n}-invest`);
+    input.addEventListener('input', ()=>{
+      const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+      const cap = skillMaxForLevel(lvl);
+      const pool = skillPointPool(lvl);
+      const currentVal = Number(CHAR.stats.intensities?.[n] || 0);
+      const totalOther = totalSkillInvest() - currentVal;
+      const desired = Math.max(0, Math.floor(Number(input.value)||0));
+      const allowed = Math.max(0, pool - totalOther);
+      const val = Math.min(desired, cap, allowed);
+      input.value = val;
+      CHAR.stats.intensities[n] = val;
+      const adj = skillAdjTotal('magic', n);
+      const totalId = `intensity-${n}-total`;
+      document.getElementById(totalId).textContent = adj.total>=0? '+'+adj.total : adj.total;
+      document.getElementById(totalId).title = adj.notes.join('\n');
+      setNotesList(`mods-${totalId}`, adj.notes);
+      updatePointCounters();
+      updateDerived();
+      queueSave();
+    });
+  });
   const cur = {
     hp: Math.max(0, Math.min(Number(CURRENT.hp ?? maxVals.hp), maxVals.hp)),
     en: Math.max(0, Math.min(Number(CURRENT.en ?? maxVals.en), maxVals.en)),
@@ -2798,8 +2961,11 @@ async function loadCharacter(){
 
   // Name
   titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
-  nameEl.value = CHAR.name || '';
-  nameEl.addEventListener('input', ()=> queueSave());
+  nameEl.value = (CHAR.name || '').slice(0,22);
+  nameEl.addEventListener('input', ()=>{
+    if (nameEl.value.length > 22) nameEl.value = nameEl.value.slice(0,22);
+    queueSave();
+  });
   avatarPreview.src = `/characters/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
 
   // Level

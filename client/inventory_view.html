@@ -103,6 +103,10 @@
                 <option>100</option>
               </select>
             </div>
+            <div>
+              <label class="muted">Price modifier</label>
+              <input id="price-mod" type="number" step="0.05" min="0" value="1" style="width:100%;">
+            </div>
             <div class="row" style="align-items:end;">
               <button id="clear" class="btn btn-secondary small">Clear</button>
             </div>
@@ -157,6 +161,7 @@ const SELF_CONTAINER_ID = "self";
 let INV = null;
 let LAST_RESULTS = [];
 let FILTERED = [];
+let PRICE_MOD = 1;
 
 const KIND_PLURAL = { object: "objects", weapon: "weapons", equipment: "equipment", tool: "tools" };
 const QUALITIES = ["Adequate","Good","Very Good","Excellent","Legendary","Mythical","Epic","Divine","Unreal"];
@@ -455,6 +460,7 @@ async function doSearch(){
   const q = ($("#q").value || "").trim();
   const kind = $("#kind").value;
   const limit = parseInt($("#limit").value || "50", 10);
+  PRICE_MOD = parseFloat($("#price-mod").value || "1") || 1;
 
   const rows = await fetchCatalog(kind, q, limit);
   LAST_RESULTS = rows || [];
@@ -523,6 +529,7 @@ function renderResults(){
 
   const globalContainer = $("#global-cont").value;
   const globalCurrency  = $("#global-cur").value || "Jelly";
+  const priceMod = PRICE_MOD || 1;
 
   for (const r of FILTERED){
     const line = document.createElement("div");
@@ -545,7 +552,7 @@ function renderResults(){
 
     line.querySelector(".buy").addEventListener("click", async ()=>{
       const qty = Math.max(1, parseInt(line.querySelector(".qty").value||"1", 10));
-      await buyItem(r.__kind || "object", r.id, qty, globalContainer, globalCurrency);
+      await buyItem(r.__kind || "object", r.id, qty, globalContainer, globalCurrency, priceMod);
     });
 
     list.appendChild(line);
@@ -562,8 +569,8 @@ function clearSearch(){
 
 /* ------------- Purchase ------------- */
 
-async function buyItem(kind, ref_id, quantity, container_id, currency){
-  const payload = { kind, ref_id, quantity, container_id, currency };
+async function buyItem(kind, ref_id, quantity, container_id, currency, price_modifier=1){
+  const payload = { kind, ref_id, quantity, container_id, currency, price_modifier };
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/purchase`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
