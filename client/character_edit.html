@@ -185,25 +185,6 @@
                 <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge mod-toggle" id="tx-val" data-target="mods-derived-tx" title="">--</div>
                 <ul class="mod-list" id="mods-derived-tx" style="display:none"></ul></div>
               </div>
-              <div class="override-row">
-                <label class="row" style="gap:6px;">
-                  <input type="checkbox" id="override-derived"> <span class="muted">Override max values (DM)</span>
-                </label>
-                <div class="pill" id="point-hint"></div>
-              </div>
-              <div class="current-row" id="override-inputs">
-                <label class="muted">Max HP <input id="ov-hp" type="number" min="0"></label>
-                <label class="muted">Max EN <input id="ov-en" type="number" min="0"></label>
-                <label class="muted">Max FO <input id="ov-fo" type="number" min="0"></label>
-                <label class="muted">Max MO <input id="ov-mo" type="number" min="0"></label>
-                <label class="muted">Max SP cap <input id="ov-spcap" type="number" min="0"></label>
-              </div>
-              <div class="current-row">
-                <label class="muted">Current HP <input id="cur-hp" type="number" min="0"></label>
-                <label class="muted">Current EN <input id="cur-en" type="number" min="0"></label>
-                <label class="muted">Current FO <input id="cur-fo" type="number" min="0"></label>
-                <label class="muted">Current SP <input id="cur-sp" type="number" min="0"></label>
-              </div>
             </div>
           </details>
         </div>
@@ -280,6 +261,7 @@
               <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
                 <select id="inv-select" class="grow"></select>
                 <button id="inv-load-btn">Load</button>
+                <a class="btn" id="inv-open-manager" target="_blank" rel="noopener">Open manager</a>
                 <a class="btn" href="inventory_create.html" target="_blank" rel="noopener">Create inventory</a>
                 <span id="inv-status" class="muted"></span>
               </div>
@@ -531,7 +513,37 @@
       </div>
 
       <!-- COMBAT / PERSONAL placeholders -->
-      <div id="tab-com" class="tabpane" style="display:none;"><p class="muted">Combat -- coming next.</p></div>
+      <div id="tab-com" class="tabpane" style="display:none;">
+        <div class="panel">
+          <details open class="panel">
+            <summary class="hdr">
+              <strong>Current & Overrides</strong>
+              <span class="muted">(DM tools)</span>
+            </summary>
+            <div class="panel-body">
+              <div class="override-row" style="justify-content:space-between;">
+                <label class="row" style="gap:6px;">
+                  <input type="checkbox" id="override-derived"> <span class="muted">Override max values</span>
+                </label>
+                <span class="pill" style="border-color:#444;" title="Allows setting custom maxima for DM usage.">DM override</span>
+              </div>
+              <div class="current-row" id="override-inputs">
+                <label class="muted">Max HP <input id="ov-hp" type="number" min="0"></label>
+                <label class="muted">Max EN <input id="ov-en" type="number" min="0"></label>
+                <label class="muted">Max FO <input id="ov-fo" type="number" min="0"></label>
+                <label class="muted">Max MO <input id="ov-mo" type="number" min="0"></label>
+                <label class="muted">Max SP cap <input id="ov-spcap" type="number" min="0"></label>
+              </div>
+              <div class="current-row">
+                <label class="muted">Current HP <input id="cur-hp" type="number" min="0"></label>
+                <label class="muted">Current EN <input id="cur-en" type="number" min="0"></label>
+                <label class="muted">Current FO <input id="cur-fo" type="number" min="0"></label>
+                <label class="muted">Current SP <input id="cur-sp" type="number" min="0"></label>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
       <div id="tab-per" class="tabpane" style="display:none;">
         <div class="panel">
           <details open class="panel">
@@ -776,6 +788,7 @@ const arcAbilitiesEl  = document.getElementById('arc-abilities');
 /* Inventory tab refs */
 const invSelectEl = document.getElementById('inv-select');
 const invLoadBtn = document.getElementById('inv-load-btn');
+const invOpenManagerBtn = document.getElementById('inv-open-manager');
 const invStatusEl = document.getElementById('inv-status');
 const invManagerEl = document.getElementById('inv-manager');
 const invTitleEl = document.getElementById('inv-title');
@@ -804,6 +817,7 @@ const invItemBackdrop = document.getElementById('inv-item-backdrop');
 const invItemTitle = document.getElementById('inv-item-title');
 const invItemBody = document.getElementById('inv-item-body');
 const invItemActions = document.getElementById('inv-item-actions');
+const SELF_CONTAINER_ID = 'self';
 /* Spell list refs */
 const avatarPreview = document.getElementById('avatar-preview');
 const avatarOpenBtn = document.getElementById('avatar-open');
@@ -972,11 +986,14 @@ function skillMaxForLevel(lvl){
   if (lvl <= 51) return 9;
   return 10;
 }
+const STAT_MAX_INVEST = 6; // total cap = base 4 + 6 = 10
 function skillPointPool(lvl){
-  return Math.max(0, (Math.max(1, lvl) - 1) * 2);
+  // 80 at level 1, +2 per level-up
+  return 80 + Math.max(0, (Math.max(1, lvl) - 1) * 2);
 }
 function statPointPool(lvl){
-  return Math.floor((Math.max(1, lvl) - 1) / 9) * 3;
+  // 24 at level 1, +3 every 9 levels (per KP rule)
+  return 24 + Math.floor((Math.max(1, lvl) - 1) / 9) * 3;
 }
 function totalSkillInvest(){
   let t = 0;
@@ -1003,7 +1020,7 @@ function updatePointCounters(){
   const usedStat = totalStatInvest();
   const capSkill = skillMaxForLevel(lvl);
   if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkill} / ${poolSkill}`;
-  if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStat} / ${poolStat} (max per stat: ${poolStat || 0})`;
+  if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStat} / ${poolStat} (max per stat: 10)`;
   if (skillCapEl) skillCapEl.textContent = `Max per skill: ${capSkill}`;
 }
 
@@ -1404,9 +1421,14 @@ async function loadInventoriesList(){
 function renderInventoryUI(){
   if (!LINKED_INV){
     invManagerEl.style.display = 'none';
+    if (invOpenManagerBtn) invOpenManagerBtn.style.display = 'none';
     return;
   }
   invManagerEl.style.display = '';
+  if (invOpenManagerBtn){
+    invOpenManagerBtn.style.display = '';
+    invOpenManagerBtn.href = `inventory_view.html?inv=${encodeURIComponent(LINKED_INV.id||'')}`;
+  }
   invTitleEl.textContent = LINKED_INV.name || 'Inventory';
   // Money + currency selects
   const cur = LINKED_INV.currencies || {};
@@ -1439,7 +1461,7 @@ function renderInventoryUI(){
         <div class="items"></div>
       `;
       const list = div.querySelector('.items');
-      const its = items.filter(it=> (it.container_id||'') === c.id);
+      const its = items.filter(it=> ((it.equipped!==false) ? SELF_CONTAINER_ID : (it.container_id||'')) === c.id);
       if (!its.length){
         list.innerHTML = '<div class="muted">No items.</div>';
       }else{
@@ -2259,7 +2281,7 @@ function renderStatistics(){
       const totalOther = totalStatInvest() - currentVal;
       const desired = Math.max(0, Math.floor(Number(input.value)||0));
       const allowed = Math.max(0, pool - totalOther);
-      const val = Math.min(desired, allowed);
+      const val = Math.min(desired, allowed, STAT_MAX_INVEST);
       if (val !== desired) input.value = val;
       CHAR.stats[c.key].invest = val;
 

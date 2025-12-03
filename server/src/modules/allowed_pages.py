@@ -31,6 +31,7 @@ ALLOWED_PAGES = {"home",
 "equipment_home",
 "equipment_parse",
 "equipment_edit",
+
 "inventory_browse",
 "inventory_create",
 "inventory_view",
