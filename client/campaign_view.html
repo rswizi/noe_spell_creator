@@ -56,7 +56,7 @@
 
     <div class="section">
       <div class="muted">Drag characters between folders to move them</div>
-      <div class="row" style="margin:8px 0; gap:8px;">
+      <div class="row" id="folder-tools" style="margin:8px 0; gap:8px;">
         <input id="add-folder-input" placeholder="New folder path (e.g. Party/Tank)" style="flex:1; min-width:240px;">
         <button id="add-folder-btn">Add folder</button>
       </div>
@@ -80,6 +80,7 @@ const addFolderBtn = document.getElementById("add-folder-btn");
 
 let CAMPAIGN = null;
 let MY_CHARS = [];
+let IS_OWNER = false;
 
 function authHeaders(){
   const tok = localStorage.getItem("auth_token") || "";
@@ -189,6 +190,9 @@ function renderTree(node, prefix=[]){
 function renderCampaign(){
   if (!CAMPAIGN) return;
   titleEl.textContent = CAMPAIGN.name;
+  IS_OWNER = !!CAMPAIGN.is_owner;
+  const tools = document.getElementById("folder-tools");
+  if (tools) tools.style.display = IS_OWNER ? "" : "none";
   foldersEl.innerHTML = "";
   const tree = folderTreeFromChars(CAMPAIGN.characters || []);
   foldersEl.appendChild(renderTree(tree, []));
@@ -209,6 +213,7 @@ async function loadCharacters(){
 async function assignChar(){
   const character_id = charSelect.value || "";
   if (!character_id){ alert("Select a character"); return; }
+  if (!IS_OWNER){ alert("Only the GM can assign."); return; }
   const assigned_to = userSelect.value || "";
   const folder = folderInput.value || "";
   const editable_by_gm = !!editableGmEl.checked;
@@ -223,6 +228,7 @@ async function assignChar(){
 }
 
 async function moveChar(charId, folderPath){
+  if (!IS_OWNER) return;
   statusEl.textContent = "Moving...";
   await api(`/campaigns/${encodeURIComponent(CID)}/characters/${encodeURIComponent(charId)}`, {
     method:"PATCH",
@@ -247,6 +253,7 @@ document.getElementById("assign-btn").addEventListener("click", assignChar);
 addFolderBtn.addEventListener("click", async ()=>{
   const f = (addFolderInput.value || "").trim();
   if (!f){ alert("Enter folder path"); return; }
+  if (!IS_OWNER){ alert("Only the GM can add folders."); return; }
   statusEl.textContent = "Adding folder...";
   try{
     await api(`/campaigns/${encodeURIComponent(CID)}/folders`, {
