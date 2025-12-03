@@ -131,6 +131,7 @@
       <span id="login-chip" class="muted right"></span>
       <a class="btn" href="characters.html">Back to My Characters</a>
       <a class="btn" href="character_admin.html" id="admin-link" style="display:none">All Characters</a>
+      <button class="btn" id="delete-char" style="border-color:#7a1b1b; background:linear-gradient(135deg, rgba(197,53,53,0.35), rgba(60,10,14,0.9)); color:#fff;">Delete</button>
       <label class="row" style="gap:6px; margin-left:8px;">
         <input type="checkbox" id="override-derived"> <span class="muted">Override values (DM)</span>
       </label>
@@ -249,6 +250,8 @@
               <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
                 <select id="inv-select" class="grow"></select>
                 <button id="inv-load-btn">Load</button>
+                <button id="inv-create-link" class="btn small">Create & Link</button>
+                <button id="inv-dup-link" class="btn small">Duplicate & Link</button>
                 <a class="btn" id="inv-open-manager" target="_blank" rel="noopener">Open manager</a>
                 <a class="btn" href="inventory_create.html" target="_blank" rel="noopener">Create inventory</a>
                 <span id="inv-status" class="muted"></span>
@@ -363,6 +366,7 @@
               <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
                 <select id="sl-select" class="grow"></select>
                 <button id="sl-load-btn">Load</button>
+                <button id="sl-create-btn">Create & Link</button>
                 <button id="sl-dup-btn">Duplicate & Link</button>
                 <a class="btn" href="spell_list_home.html" target="_blank" rel="noopener">Open manager</a>
                 <span id="sl-status" class="muted"></span>
@@ -841,6 +845,7 @@ const adminLink = document.getElementById('admin-link');
 const titleEl   = document.getElementById('title');
 const statusEl  = document.getElementById('status');
 const nameEl    = document.getElementById('name');
+const deleteBtn = document.getElementById('delete-char');
 const gridEl    = document.getElementById('stats-grid');
 
 /* derived refs */
@@ -890,6 +895,8 @@ const arcAbilitiesEl  = document.getElementById('arc-abilities');
 /* Inventory tab refs */
 const invSelectEl = document.getElementById('inv-select');
 const invLoadBtn = document.getElementById('inv-load-btn');
+const invCreateLinkBtn = document.getElementById('inv-create-link');
+const invDupLinkBtn = document.getElementById('inv-dup-link');
 const invOpenManagerBtn = document.getElementById('inv-open-manager');
 const invStatusEl = document.getElementById('inv-status');
 const invManagerEl = document.getElementById('inv-manager');
@@ -950,6 +957,7 @@ if (avatarPreview){
 }
 const slSelectEl = document.getElementById('sl-select');
 const slLoadBtn = document.getElementById('sl-load-btn');
+const slCreateBtn = document.getElementById('sl-create-btn');
 const slDupBtn = document.getElementById('sl-dup-btn');
 const slStatusEl = document.getElementById('sl-status');
 const slSummaryEl = document.getElementById('sl-summary');
@@ -1511,6 +1519,51 @@ async function loadInventoriesList(){
   }
 }
 
+async function createInventoryAndLink(){
+  const charName = nameEl.value?.trim() || 'Character';
+  const invName = `${charName} Inventory`;
+  try{
+    invStatusEl.textContent = 'Creating inventory...';
+    const res = await api('/inventories', {
+      method:'POST',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify({ name: invName })
+    });
+    const inv = res.inventory || res;
+    SELECTED_INV_ID = inv.id;
+    CHAR.inventory_id = SELECTED_INV_ID;
+    await loadInventoriesList();
+    await loadInventoryById(SELECTED_INV_ID);
+    invStatusEl.textContent = 'Created and linked.';
+  }catch(e){
+    invStatusEl.textContent = 'Create failed: ' + e.message;
+    alert(e.message);
+  }
+}
+
+async function duplicateAndLinkInventory(){
+  if (!SELECTED_INV_ID){ invStatusEl.textContent = 'Load an inventory first to duplicate.'; return; }
+  const charName = nameEl.value?.trim() || 'Character';
+  const invName = `${charName} Inventory`;
+  try{
+    invStatusEl.textContent = 'Duplicating inventory...';
+    const res = await api(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/duplicate`, {
+      method:'POST',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify({ name: invName })
+    });
+    const inv = res.inventory || res;
+    SELECTED_INV_ID = inv.id;
+    CHAR.inventory_id = SELECTED_INV_ID;
+    await loadInventoriesList();
+    await loadInventoryById(SELECTED_INV_ID);
+    invStatusEl.textContent = 'Duplicated and linked.';
+  }catch(e){
+    invStatusEl.textContent = 'Duplicate failed: ' + e.message;
+    alert(e.message);
+  }
+}
+
 function renderInventoryUI(){
   if (!LINKED_INV){
     invManagerEl.style.display = 'none';
@@ -1554,6 +1607,9 @@ function renderInventoryUI(){
         <div class="container-head">
           <strong>${c.name || 'Container'}</strong>
           <span class="muted">Enc: ${Number(c.enc_total||0).toFixed(1)} ${c.include===false? '(excluded)':''}</span>
+          <label class="row muted" style="gap:6px; align-items:center;">
+            <input type="checkbox" data-cont="${c.id}" ${c.include===false?'':'checked'}> Include
+          </label>
         </div>
         <div class="items"></div>
       `;
@@ -1582,6 +1638,10 @@ function renderInventoryUI(){
       invContainersEl.appendChild(div);
     });
   }
+  // Wire include toggles
+  invContainersEl.querySelectorAll('input[data-cont]').forEach(cb=>{
+    cb.addEventListener('change', ()=> toggleContainerInclude(cb.getAttribute('data-cont'), cb.checked));
+  });
 
   // Global container select for purchases/moves
   invGlobalContEl.innerHTML = '';
@@ -1591,7 +1651,7 @@ function renderInventoryUI(){
 
   // Transactions
   const txs = (LINKED_INV.transactions || []).slice(-12).reverse();
-  invTxEl.innerHTML = txs.length ? txs.map(t=>`<div class="row"><span class="pill">${t.currency||''} ${t.amount||0}</span><span class="muted">${escapeHtml(t.note||'')}</span><span class="muted">${t.ts||''}</span></div>`).join('') : '<div class="muted">No transactions.</div>';
+  invTxEl.innerHTML = txs.length ? txs.map(t=>`<div class="row"><span class="pill">${t.currency||''} ${t.amount||0}</span><span class="muted">${invEscapeHtml(t.note||'')}</span><span class="muted">${t.ts||''}</span></div>`).join('') : '<div class="muted">No transactions.</div>';
 }
 
 async function loadInventoryById(id){
@@ -1622,6 +1682,7 @@ function invEscapeHtml(s){
     .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
     .replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
+function escapeHtml(s){ return invEscapeHtml(s); }
 function invToggleModal(modal, backdrop, open){
   if (!modal || !backdrop) return;
   if (open){
@@ -1655,13 +1716,15 @@ async function invAddContainer(){
 
 async function invAddFunds(){
   const currency = invFundCurEl.value || "Jelly";
-  const amount = parseInt(invFundAmtEl.value || "0", 10);
-  const note = (invFundNoteEl.value || (amount >= 0 ? "Top up" : "Withdrawal")).trim();
-  if (!amount){ invFundStatus.textContent = "Enter a non-zero amount."; return; }
+  const amountRaw = parseInt(invFundAmtEl.value || "0", 10);
+  const note = (invFundNoteEl.value || (amountRaw >= 0 ? "Top up" : "Withdrawal")).trim();
+  if (!amountRaw){ invFundStatus.textContent = "Enter a non-zero amount."; return; }
+  const amount = Math.abs(amountRaw);
   if (!SELECTED_INV_ID){ invFundStatus.textContent = "Link an inventory first."; return; }
   invFundStatus.textContent = "Saving transaction...";
   try{
-    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/deposit`, {
+    const path = amountRaw < 0 ? `/inventories/${encodeURIComponent(SELECTED_INV_ID)}/withdraw` : `/inventories/${encodeURIComponent(SELECTED_INV_ID)}/deposit`;
+    const r = await fetch(path, {
       method:"POST",
       headers:{ "Content-Type":"application/json", ...authHeaders() },
       body: JSON.stringify({ currency, amount, note })
@@ -1782,6 +1845,23 @@ async function toggleEquipInline(it){
   LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
 }
 
+async function toggleContainerInclude(containerId, include){
+  if (!SELECTED_INV_ID || !containerId) return;
+  try{
+    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/containers/${encodeURIComponent(containerId)}`, {
+      method:"PATCH",
+      headers:{ "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify({ include })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success") throw new Error(j.message || "Update failed");
+    LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+  }catch(e){
+    alert(e.message);
+    renderInventoryUI();
+  }
+}
+
 function openInvItemModal(it){
   invItemTitle.textContent = it.alt_name ? `${it.alt_name} (${it.name || 'Item'})` : (it.name || 'Item');
   const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
@@ -1839,11 +1919,13 @@ equipBtn.addEventListener('click', async ()=>{
 invItemActions.appendChild(equipBtn);
 
 invItemModal.classList.remove('hidden');
+invItemModal.classList.add('open');
 invItemBackdrop.classList.add('open');
 }
 
 function closeInvItemModal(){
   invItemModal.classList.add('hidden');
+  invItemModal.classList.remove('open');
   invItemBackdrop.classList.remove('open');
 }
 
@@ -1907,7 +1989,12 @@ avatarFileEl?.addEventListener('change', ()=>{
     const img = new Image();
     img.onload = ()=>{
       AVATAR_IMG = img;
-      avatarZoomEl.value = "1";
+      // Fit the image in the 256x256 frame by default, then allow zooming in
+      const fitZoom = Math.min(avatarCanvas.width / img.width, avatarCanvas.height / img.height);
+      avatarZoomEl.min = (fitZoom * 0.5).toFixed(2);
+      avatarZoomEl.max = (fitZoom * 4).toFixed(2);
+      avatarZoomEl.step = "0.01";
+      avatarZoomEl.value = fitZoom.toFixed(2);
       avatarOffsetXEl.value = "0";
       avatarOffsetYEl.value = "0";
       drawAvatarCanvas();
@@ -2333,9 +2420,15 @@ async function duplicateAndLinkSpellList(){
     slStatusEl.textContent = 'Select a spell list first.';
     return;
   }
+  const charName = nameEl.value?.trim() || 'Character';
+  const listName = `${charName}'s Spell List`;
   slStatusEl.textContent = 'Duplicating...';
   try{
-    const res = await api('/spell_lists/' + encodeURIComponent(SELECTED_SPELL_LIST_ID) + '/duplicate', { method:'POST' });
+    const res = await api('/spell_lists/' + encodeURIComponent(SELECTED_SPELL_LIST_ID) + '/duplicate', {
+      method:'POST',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify({ name: listName })
+    });
     if (res.list){
       LINKED_SPELL_LIST = res.list;
       SELECTED_SPELL_LIST_ID = res.list.id;
@@ -2347,6 +2440,30 @@ async function duplicateAndLinkSpellList(){
     }
   }catch(e){
     slStatusEl.textContent = 'Duplicate failed: ' + e.message;
+  }
+}
+
+async function createAndLinkSpellList(){
+  const charName = nameEl.value?.trim() || 'Character';
+  const listName = `${charName}'s Spell List`;
+  slStatusEl.textContent = 'Creating spell list...';
+  try{
+    const res = await api('/spell_lists', {
+      method:'POST',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify({ name: listName })
+    });
+    const list = res.list || res.spell_list || res;
+    SELECTED_SPELL_LIST_ID = list.id;
+    LINKED_SPELL_LIST = list;
+    CHAR.spell_list_id = SELECTED_SPELL_LIST_ID;
+    await loadSpellListsList();
+    await reloadSpellListData();
+    slStatusEl.textContent = 'Created and linked.';
+    queueSave();
+  }catch(e){
+    slStatusEl.textContent = 'Create failed: ' + e.message;
+    alert(e.message);
   }
 }
 
@@ -2717,6 +2834,26 @@ function queueSave(){
   SAVE_TIMER = setTimeout(saveNow, 350);
 }
 
+async function deleteCharacter(){
+  if (!CID) { alert('Missing character id.'); return; }
+  const typed = prompt('Type "I CONFIRM" to delete this character. This cannot be undone.');
+  if ((typed || '').trim() !== 'I CONFIRM') return;
+  try{
+    statusEl.textContent = 'Deleting...';
+    const res = await fetch('/characters/' + encodeURIComponent(CID), {
+      method:'DELETE',
+      headers: authHeaders()
+    });
+    const j = await res.json().catch(()=>({}));
+    if (j.status !== 'success') throw new Error(j.message || 'Delete failed');
+    statusEl.textContent = 'Character deleted.';
+    location.href = 'characters.html';
+  }catch(e){
+    statusEl.textContent = 'Delete failed: ' + e.message;
+    alert(e.message);
+  }
+}
+
 async function saveNow(){
   try{
     const payload = {
@@ -2775,9 +2912,12 @@ abiOpenAddBtn?.addEventListener('click', openAbilityAddModal);
 abiAddClose?.addEventListener('click', closeAbilityAddModal);
 abiAddCancel?.addEventListener('click', closeAbilityAddModal);
 abiAddBackdrop?.addEventListener('click', (e)=>{ if (e.target===abiAddBackdrop) closeAbilityAddModal(); });
+deleteBtn?.addEventListener('click', deleteCharacter);
 
 invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
 invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));
+invCreateLinkBtn?.addEventListener('click', createInventoryAndLink);
+invDupLinkBtn?.addEventListener('click', duplicateAndLinkInventory);
 invAddContBtn.addEventListener('click', invAddContainer);
 invFundOpenBtn?.addEventListener('click', ()=>{ invFundStatus.textContent=''; invToggleModal(invFundModal, invFundBackdrop, true); });
 invFundClose?.addEventListener('click', ()=> invToggleModal(invFundModal, invFundBackdrop, false));
@@ -2820,6 +2960,7 @@ arcApplyBtn.addEventListener('click', async ()=>{
 
 slLoadBtn.addEventListener('click', ()=> loadSpellListById(slSelectEl.value));
 slSelectEl.addEventListener('change', ()=> loadSpellListById(slSelectEl.value));
+slCreateBtn?.addEventListener('click', createAndLinkSpellList);
 slDupBtn.addEventListener('click', duplicateAndLinkSpellList);
 slOpenAddBtn.addEventListener('click', openSpellAddModal);
 slAddClose.addEventListener('click', closeSpellAddModal);

@@ -6,16 +6,58 @@
   <title>NoE — My Characters</title>
   
 <style>
-  :root { color-scheme: dark; }
-  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; }
+  :root {
+    color-scheme: dark;
+    --bg: #14090c;
+    --bg-2: #0c0b12;
+    --panel: #121219;
+    --border: #252533;
+    --accent: #c53535;
+    --text: #f3f3f5;
+  }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--text);
+    background: linear-gradient(180deg, #1a0c0f 0%, #0b0b10 100%);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-size: 100% 100%;
+  }
   .page { min-height: 100vh; display: grid; place-items: start center; }
-  .wrap { width: 100%; max-width: 880px; padding: 28px 16px; }
+  .wrap { width: 100%; max-width: 1100px; padding: 28px 16px 60px; }
   .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
-  .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .card { border:1px solid #333; border-radius:16px; padding:14px; background:#0d0d0d; }
-  .muted { opacity:.8; font-size:.9rem; }
-  button, a.btn, input { padding:8px 12px; border-radius:10px; border:1px solid #444; background:#111; color:#eaeaea; }
-  .primary { background:#1d1d1d; }
+  h1 { margin:0; font-size:24px; letter-spacing:0.5px; }
+  .grid { display:grid; gap:14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .card {
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:12px;
+    background: linear-gradient(135deg, rgba(197,53,53,0.15), rgba(12,12,18,0.95));
+    box-shadow: 0 10px 28px rgba(0,0,0,0.28);
+    display:flex;
+    gap:10px;
+    cursor:pointer;
+    transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+  }
+  .card:hover { border-color: var(--accent); box-shadow: 0 14px 32px rgba(0,0,0,0.35); transform: translateY(-2px); }
+  .card .avatar {
+    width:78px; height:78px; border:1px solid #333; border-radius:12px; overflow:hidden; background:#0b0b10; flex-shrink:0;
+    display:grid; place-items:center;
+  }
+  .card .avatar img { width:100%; height:100%; object-fit:cover; }
+  .card .meta { display:grid; gap:4px; }
+  .card .muted { opacity:.8; font-size:.9rem; }
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; border:1px solid #2f2f3f; font-size:.82rem; }
+  button, a.btn, input {
+    padding:10px 12px; border-radius:12px; border:1px solid var(--border);
+    background:#181821; color:var(--text); text-decoration:none;
+    transition: background .15s ease, border .15s ease, transform .1s ease;
+  }
+  button:hover, a.btn:hover { background:#1f1f2a; border-color:#2f2f42; }
+  button:active, a.btn:active { transform: translateY(1px); }
+  .primary { background: linear-gradient(135deg, rgba(197,53,53,0.35), rgba(20,20,29,0.9)); border-color: var(--accent); color: #fff; }
+  .muted { opacity:.82; font-size:.9rem; }
 </style>
 
 </head>
@@ -98,9 +140,16 @@ async function loadList() {
   const arr = data.characters || [];
   document.getElementById('empty-msg').style.display = arr.length ? 'none' : '';
   for (const c of arr) {
+    const avatarUrl = `/characters/${encodeURIComponent(c.id)}/avatar?ts=${Date.now()}`;
     list.append(el('div', {class:'card', onclick: ()=>location.href='character_edit.html?id='+encodeURIComponent(c.id)},
-      el('div', {}, c.name || '(unnamed)'),
-      el('div', {class:'muted'}, 'ID: '+c.id)
+      el('div', {class:'avatar'},
+        el('img', {src: avatarUrl, alt:'avatar', onerror:"this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';"})
+      ),
+      el('div', {class:'meta'},
+        el('strong', {}, c.name || '(unnamed)'),
+        el('div', {class:'muted'}, 'ID: '+c.id),
+        el('div', {class:'pill'}, c.owner ? `Owner: ${c.owner}` : 'Owner: self')
+      )
     ));
   }
 }
