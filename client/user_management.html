@@ -85,6 +85,7 @@
             <td>
               <button class="btn small" data-role="moderator">Make Moderator</button>
               <button class="btn small" data-role="user">Demote to User</button>
+              <button class="btn small danger" data-delete="1">Delete</button>
             </td>
           </tr>`;
       }).join("");
@@ -117,6 +118,21 @@
     }
   }
 
+  async function deleteUser(username){
+    if (!confirm(`Delete user ${username}? This cannot be undone.`)) return;
+    try{
+      const r = await fetch(`/admin/users/${encodeURIComponent(username)}`, {
+        method:"DELETE",
+        headers: { ...authHeaders() }
+      });
+      const j = await r.json();
+      if (j.status !== "success"){ alert(j.message || "Delete failed."); return; }
+      await loadUsers();
+    }catch{
+      alert("Network error.");
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     // Make the section visible on page load
     const sec = $("#user-mgmt");
@@ -131,12 +147,16 @@
     // Delegate role button clicks
     $("#user-mgmt").addEventListener("click", (ev) => {
       const btn = ev.target.closest("button[data-role]");
-      if (!btn) return;
-      const row = btn.closest("tr[data-username]");
+      const del = ev.target.closest("button[data-delete]");
+      const row = ev.target.closest("tr[data-username]");
       if (!row) return;
       const username = row.getAttribute("data-username");
-      const role = btn.getAttribute("data-role");
-      setRole(username, role);
+      if (btn){
+        const role = btn.getAttribute("data-role");
+        setRole(username, role);
+      } else if (del){
+        deleteUser(username);
+      }
     });
   });
 })();

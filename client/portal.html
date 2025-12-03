@@ -39,6 +39,8 @@
       <a class="btn" href="characters.html">👤 Character Sheet Maneger (Bêta)</a>
       <a class="btn" href="campaign_manager.html" target="_blank">📖 Campaign Manager (Alpha)</a>
       <a class="btn" href="abilities_home.html">🪬 Abilities & Traits Manager (Bêta)</a>
+      <a class="btn" id="my-account-link" href="my_account.html">🔐 My Account</a>
+      <a class="btn" id="admin-users-link" href="user_management.html" style="display:none;">🛡️ User Manager (Admin)</a>
     </div>
     <div class="muted">Use your existing account. Moderators see extra tools inside each manager.</div>
   </div>
@@ -58,6 +60,7 @@
       <input type="password" id="login-password" placeholder="Enter password" />
 
       <div id="login-status" style="opacity:.85; margin-top:8px;"></div>
+      <button class="btn linklike" id="forgot-pass" style="margin-top:6px;">Forgot password?</button>
 
       <div class="modal-actions">
         <button class="btn btn-secondary" id="cancel-login">Cancel</button>
@@ -91,20 +94,24 @@
       const chipName = document.getElementById("chip-name");
       const loginBtn = document.getElementById("open-login");
       const signupEl = document.getElementById("open-signup");
+      const adminLink = document.getElementById("admin-users-link");
 
       chipName.textContent = `${username} (${role})`;
       chip.style.display = "flex";
       loginBtn.style.display = "none";
       signupEl.style.display = "none";
+      if (adminLink) adminLink.style.display = (role && role.toLowerCase()==="admin") ? "block" : "none";
     }
 
     function setLoggedOutUI() {
       const chip     = document.getElementById("user-chip");
       const loginBtn = document.getElementById("open-login");
       const signupEl = document.getElementById("open-signup");
+      const adminLink = document.getElementById("admin-users-link");
       chip.style.display = "none";
       loginBtn.style.display = "inline-block";
       signupEl.style.display = "inline-block";
+      if (adminLink) adminLink.style.display = "none";
     }
 
     // --- auth calls ---
@@ -166,6 +173,29 @@
       document.getElementById("cancel-login").addEventListener("click", (e) => { e.preventDefault(); closeLogin(); });
       document.getElementById("login-backdrop").addEventListener("click", closeLogin);
       document.getElementById("login-btn").addEventListener("click", (e) => { e.preventDefault(); login(); });
+      document.getElementById("forgot-pass").addEventListener("click", async (e) => {
+        e.preventDefault();
+        const ident = prompt("Enter your email or username to receive a reset code:");
+        if (!ident) return;
+        try{
+          statusEl.textContent = "Requesting reset...";
+          await fetch(`${API_BASE}/auth/forgot`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ email: ident, username: ident }) });
+          alert("If the account exists, a reset code was generated. Enter code + new password next.");
+          const code = prompt("Enter reset code:");
+          if (!code) return;
+          const username = prompt("Confirm username:");
+          const newpw = prompt("Enter new password:");
+          if (!username || !newpw) return;
+          const res = await fetch(`${API_BASE}/auth/reset`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ username, code, password:newpw }) });
+          const j = await res.json();
+          if (j.status === "success"){ alert("Password updated."); statusEl.textContent=""; }
+          else { alert(j.message || "Reset failed"); }
+        }catch(err){
+          alert("Reset failed.");
+        }finally{
+          statusEl.textContent = "";
+        }
+      });
 
       document.getElementById("chip-logout").addEventListener("click", (e) => { e.preventDefault(); logout(); });
 

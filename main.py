@@ -219,6 +219,58 @@ async def auth_login(request: Request):
     logger.info("Login ok: %s (%s)", username, role)
     return {"status": "success", "token": token, "username": username, "role": role}
 
+@app.post("/auth/forgot")
+async def auth_forgot(request: Request):
+    body = await request.json()
+    ident = (body.get("email") or body.get("username") or "").strip().lower()
+    if not ident:
+        return {"status": "error", "message": "Email or username required"}
+    users = get_col("users")
+    user = users.find_one({"$or":[{"username": ident},{"email": ident}]})
+    if not user:
+        return {"status":"success"}  # do not leak existence
+    code = _ensure_join_code()
+    users.update_one({"_id": user["_id"]}, {"$set": {"reset_code": code, "reset_at": datetime.datetime.utcnow().isoformat()+"Z"}})
+    # In a real deployment, send code by email; here we just store it.
+    return {"status":"success"}
+
+@app.post("/auth/reset")
+async def auth_reset(request: Request):
+    body = await request.json()
+    username = (body.get("username") or "").strip()
+    code = (body.get("code") or "").strip()
+    new_pw = body.get("password") or ""
+    if not username or not code or not new_pw:
+        return {"status":"error","message":"Missing fields"}
+    users = get_col("users")
+    user = users.find_one({"username": username, "reset_code": code})
+    if not user:
+        return {"status":"error","message":"Invalid code"}
+    users.update_one({"_id": user["_id"]}, {"$set": {"password": _sha256(new_pw)}, "$unset": {"reset_code": "", "reset_at": ""}})
+    return {"status":"success"}
+
+@app.get("/auth/me/details")
+async def my_account(req: Request):
+    username, role = require_auth(req)
+    u = get_col("users").find_one({"username": username}, {"_id":0, "username":1, "email":1, "role":1, "created_at":1})
+    return {"status":"success", "user": u}
+
+@app.put("/auth/me")
+async def update_account(req: Request):
+    username, role = require_auth(req)
+    body = await req.json()
+    email = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
+    update = {}
+    if email:
+        update["email"] = email
+    if password:
+        update["password"] = _sha256(password)
+    if not update:
+        return {"status":"error","message":"Nothing to update"}
+    get_col("users").update_one({"username": username}, {"$set": update})
+    return {"status":"success"}
+
 @app.get("/auth/me")
 async def auth_me(request: Request):
     token = get_auth_token(request)
@@ -4042,3 +4094,14 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
     existing.pop("_id", None)
     return {"status":"success","ability": existing}
 
+
+# --- Admin: delete user ---
+@app.delete("/admin/users/{target_username}")
+async def admin_delete_user(target_username: str, request: Request):
+    admin_username, _ = require_auth(request, roles=["admin"])
+    users = get_col("users")
+    r = users.delete_one({"username": target_username})
+    if r.deleted_count == 0:
+        return JSONResponse({"status": "error", "message": "User not found."}, status_code=404)
+    write_audit("delete_user", admin_username, spell_id="?", before={"user": target_username}, after=None)
+    return {"status":"success","username": target_username}

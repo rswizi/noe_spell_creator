@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Account</title>
+  <style>
+    :root { color-scheme: dark; --bg:#14090c; --bg-2:#0c0b12; --panel:#121219; --border:#252533; --accent:#c53535; --text:#f3f3f5; }
+    body { margin:0; font-family:"Segoe UI","Inter",-apple-system,BlinkMacSystemFont,sans-serif; color:var(--text); background:linear-gradient(180deg,#1a0c0f 0%,#0b0b10 100%); }
+    .page{min-height:100vh; display:grid; place-items:start center;}
+    .wrap{width:100%; max-width:720px; padding:28px 16px 60px;}
+    .panel{border:1px solid var(--border); border-radius:14px; padding:16px; background:var(--panel); box-shadow:0 8px 24px rgba(0,0,0,0.25);}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    label{display:grid; gap:4px;}
+    input{padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#181821; color:var(--text);}
+    button{padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#181821; color:var(--text);}
+    button:hover{background:#1f1f2a; border-color:#2f2f42;}
+    .muted{opacity:.8; font-size:.9rem;}
+  </style>
+</head>
+<body>
+  <div class="page"><div class="wrap">
+    <div class="row" style="justify-content:space-between; margin-bottom:12px;">
+      <h2>My Account</h2>
+      <a class="btn" href="portal.html">Portal</a>
+    </div>
+    <div class="panel">
+      <div class="muted" id="acct-info"></div>
+      <div class="row" style="margin-top:12px;">
+        <label class="grow">Email
+          <input id="acct-email" placeholder="Enter new email">
+        </label>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <label class="grow">New password
+          <input id="acct-pass" type="password" placeholder="Leave blank to keep">
+        </label>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <button id="acct-save">Save</button>
+        <span class="muted" id="acct-status"></span>
+      </div>
+    </div>
+  </div></div>
+
+  <script>
+    const infoEl = document.getElementById("acct-info");
+    const emailEl = document.getElementById("acct-email");
+    const passEl = document.getElementById("acct-pass");
+    const statusEl = document.getElementById("acct-status");
+
+    function authHeaders(){
+      const tok = localStorage.getItem("auth_token") || "";
+      return tok ? { "Authorization": "Bearer "+tok, "X-Auth-Token": tok } : {};
+    }
+    async function api(path, opt={}){
+      const headers = Object.assign({}, opt.headers||{}, authHeaders());
+      const resp = await fetch(path, { credentials:'include', ...opt, headers });
+      const ct = resp.headers.get("content-type") || "";
+      const data = ct.includes("application/json") ? await resp.json() : { status:"error", message: await resp.text() };
+      if (!resp.ok || data.status === "error") throw new Error(data.message || `HTTP ${resp.status}`);
+      return data;
+    }
+
+    async function loadAccount(){
+      const res = await api("/auth/me/details");
+      const u = res.user || {};
+      infoEl.textContent = `Username: ${u.username || ""} • Role: ${u.role || ""} • Created: ${u.created_at || ""}`;
+      emailEl.value = u.email || "";
+    }
+
+    async function saveAccount(){
+      const email = emailEl.value.trim();
+      const password = passEl.value;
+      const body = {};
+      if (email) body.email = email;
+      if (password) body.password = password;
+      if (!body.email && !body.password){ statusEl.textContent = "Nothing to update."; return; }
+      statusEl.textContent = "Saving...";
+      try{
+        await api("/auth/me", { method:"PUT", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) });
+        statusEl.textContent = "Saved.";
+        passEl.value = "";
+      }catch(e){
+        statusEl.textContent = e.message;
+      }
+    }
+
+    document.getElementById("acct-save").addEventListener("click", saveAccount);
+    loadAccount().catch(e=>{ statusEl.textContent = e.message; });
+  </script>
+</body>
+</html>
