@@ -191,7 +191,7 @@ function renderTree(node, prefix=[]){
 function renderCampaign(){
   if (!CAMPAIGN) return;
   titleEl.textContent = `${CAMPAIGN.name} (${CAMPAIGN.join_code || "code?"})`;
-  IS_OWNER = !!CAMPAIGN.is_owner;
+  IS_OWNER = !!(CAMPAIGN.is_owner || CAMPAIGN.is_admin);
   const tools = document.getElementById("folder-tools");
   if (tools) tools.style.display = IS_OWNER ? "" : "none";
   foldersEl.innerHTML = "";

@@ -24,7 +24,7 @@ from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES
 EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 from server.src.modules.allowed_pages import ALLOWED_PAGES
 CAMPAIGN_COL = get_col("campaigns")
-def _campaign_view(doc: dict, user: str | None = None) -> dict:
+def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) -> dict:
     if not doc:
         return {}
     d = dict(doc)
@@ -32,6 +32,10 @@ def _campaign_view(doc: dict, user: str | None = None) -> dict:
     if user:
         d["is_owner"] = d.get("owner") == user
         d["is_member"] = user in (d.get("members") or [])
+        d["is_admin"] = (role or "").lower() == "admin"
+    # compute avatar url if stored
+    if d.get("avatar"):
+        d["avatar_url"] = f"/campaigns/{d['id']}/avatar"
     return d
 
 def _gen_join_code():
@@ -90,7 +94,7 @@ def _require_campaign_access(cid: str, user: str, role: str | None = None):
 
 @app.post("/campaigns")
 async def create_campaign(req: Request):
-    user, _ = require_auth(req)
+    user, role = require_auth(req)
     body = await req.json()
     name = (body.get("name") or "").strip()
     if not name:
@@ -105,19 +109,21 @@ async def create_campaign(req: Request):
         "characters": [],
         "folders": [],
         "created_at": datetime.datetime.utcnow().isoformat()+"Z",
+        "description": body.get("description") or "",
+        "avatar": None,
     }
     CAMPAIGN_COL.insert_one(doc)
-    return {"status":"success", "campaign": _campaign_view(doc, user)}
+    return {"status":"success", "campaign": _campaign_view(doc, user, role)}
 
 @app.get("/campaigns")
 async def list_campaigns(req: Request):
-    user, _ = require_auth(req)
+    user, role = require_auth(req)
     docs = list(CAMPAIGN_COL.find({ "$or":[ {"owner":user}, {"members":user} ] }, {"_id":0}))
-    return {"status":"success", "campaigns":[_campaign_view(d, user) for d in docs]}
+    return {"status":"success", "campaigns":[_campaign_view(d, user, role) for d in docs]}
 
 @app.post("/campaigns/join")
 async def join_campaign(req: Request):
-    user, _ = require_auth(req)
+    user, role = require_auth(req)
     body = await req.json()
     code = (body.get("code") or "").strip().upper()
     char_id = (body.get("character_id") or "").strip()
@@ -136,13 +142,13 @@ async def join_campaign(req: Request):
         chars.append({"character_id": char_id, "assigned_to": user, "folder": folder, "editable_by_gm": False, "edit_requests":[]})
         CAMPAIGN_COL.update_one({"id": doc["id"]}, {"$set": {"characters": chars}})
         doc["characters"] = chars
-    return {"status":"success", "campaign": _campaign_view(doc, user)}
+    return {"status":"success", "campaign": _campaign_view(doc, user, role)}
 
 @app.get("/campaigns/{cid}")
 async def get_campaign(cid: str, req: Request):
     user, role = require_auth(req)
     doc = _require_campaign_access(cid, user, role)
-    return {"status":"success", "campaign": _campaign_view(doc, user)}
+    return {"status":"success", "campaign": _campaign_view(doc, user, role)}
 
 @app.post("/campaigns/{cid}/assign_character")
 async def assign_campaign_character(cid: str, req: Request):
@@ -161,7 +167,7 @@ async def assign_campaign_character(cid: str, req: Request):
     chars.append({"character_id": char_id, "assigned_to": assigned_to, "folder": folder, "editable_by_gm": editable, "edit_requests":[]})
     CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": chars}})
     doc["characters"] = chars
-    return {"status":"success", "campaign": _campaign_view(doc, user)}
+    return {"status":"success", "campaign": _campaign_view(doc, user, role)}
 
 @app.patch("/campaigns/{cid}/characters/{char_id}")
 async def update_campaign_character(cid: str, char_id: str, req: Request):
@@ -184,7 +190,7 @@ async def update_campaign_character(cid: str, char_id: str, req: Request):
         raise HTTPException(404, "Character not in campaign")
     CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": updated}})
     doc["characters"] = updated
-    return {"status":"success", "campaign": _campaign_view(doc, user)}
+    return {"status":"success", "campaign": _campaign_view(doc, user, role)}
 
 @app.post("/campaigns/{cid}/request_edit")
 async def request_edit_rights(cid: str, req: Request):
@@ -208,7 +214,7 @@ async def request_edit_rights(cid: str, req: Request):
         raise HTTPException(404, "Character not in campaign")
     CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": updated}})
     doc["characters"] = updated
-    return {"status":"success", "campaign": _campaign_view(doc, user)}
+    return {"status":"success", "campaign": _campaign_view(doc, user, role)}
 
 @app.patch("/campaigns/{cid}/folders")
 async def update_campaign_folders(cid: str, req: Request):
@@ -225,7 +231,24 @@ async def update_campaign_folders(cid: str, req: Request):
     folders_list = sorted(folders)
     CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"folders": folders_list}})
     doc["folders"] = folders_list
-    return {"status":"success","campaign": _campaign_view(doc, user)}
+    return {"status":"success","campaign": _campaign_view(doc, user, role)}
+
+@app.post("/campaigns/{cid}/avatar")
+async def upload_campaign_avatar(cid: str, file: UploadFile = File(...), request: Request = None):
+    user, role = require_auth(request)
+    doc = _require_campaign_access(cid, user, role)
+    if doc.get("owner") != user and (role or "").lower() != "admin":
+        raise HTTPException(403, "Only GM/admin can set avatar")
+    content = await file.read()
+    CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"avatar": content}})
+    return {"status":"success"}
+
+@app.get("/campaigns/{cid}/avatar")
+async def get_campaign_avatar(cid: str):
+    doc = CAMPAIGN_COL.find_one({"id": cid})
+    if not doc or not doc.get("avatar"):
+        raise HTTPException(404, "No avatar")
+    return Response(content=doc["avatar"], media_type="image/png")
 # ---------- Auth ----------
 @app.post("/auth/login")
 async def auth_login(request: Request):
