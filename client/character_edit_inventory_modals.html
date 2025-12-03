@@ -1,0 +1,63 @@
+<!-- Funds modal -->
+<div id="inv-fund-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="inv-fund-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-fund-title">
+  <div class="modal-card" style="max-width:540px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="inv-fund-title">Add / Remove funds</div>
+      <button class="modal-close" id="inv-fund-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <label class="muted">Currency</label>
+      <select id="inv-fund-cur"></select>
+      <input id="inv-fund-amt" type="number" step="1" placeholder="Amount (use negative for removal)" style="width:160px;">
+      <input id="inv-fund-note" placeholder="Note (optional)" style="flex:1; min-width:220px;">
+    </div>
+    <div class="row" style="margin-top:12px; gap:8px;">
+      <button id="inv-fund-save" class="btn">Apply</button>
+      <button id="inv-fund-cancel" class="btn btn-secondary">Cancel</button>
+    </div>
+    <div id="inv-fund-status" class="muted" style="margin-top:6px;"></div>
+  </div>
+</div>
+
+<!-- Catalog modal -->
+<div id="inv-catalog-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="inv-catalog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-catalog-title">
+  <div class="modal-card" style="max-width:980px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="inv-catalog-title">Add from Catalog</div>
+      <button class="modal-close" id="inv-catalog-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="row" style="gap:10px; flex-wrap:wrap; margin-top:6px;">
+      <input id="inv-q" placeholder="Search name…" style="flex:1">
+      <select id="inv-kind">
+        <option value="object">Objects</option>
+        <option value="weapon">Weapons</option>
+        <option value="equipment">Equipment</option>
+        <option value="tool">Tools</option>
+      </select>
+      <select id="inv-cat-select">
+        <option value="__all">All</option>
+      </select>
+      <select id="inv-limit">
+        <option>25</option>
+        <option selected>50</option>
+        <option>100</option>
+      </select>
+      <button id="inv-search" class="btn small">Search</button>
+      <button id="inv-clear" class="btn btn-secondary small">Clear</button>
+    </div>
+    <div class="row" style="gap:10px; margin-top:8px; flex-wrap:wrap;">
+      <label class="muted">Container</label>
+      <select id="inv-global-cont"></select>
+      <label class="muted">Currency</label>
+      <select id="inv-global-cur"></select>
+      <label class="muted">Equipped?</label>
+      <select id="inv-equpped-flag">
+        <option value="1">Yes</option>
+        <option value="0">No</option>
+      </select>
+    </div>
+    <div id="inv-results" class="list" style="margin-top:10px; max-height:420px; overflow:auto;"></div>
+  </div>
+</div>
