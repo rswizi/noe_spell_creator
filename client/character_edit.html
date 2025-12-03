@@ -544,6 +544,135 @@
 
   </div></div>
 
+<!-- Avatar modal -->
+<div id="avatar-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="avatar-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="avatar-title">
+  <div class="modal-card">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="avatar-title">Set Avatar</div>
+      <button class="modal-close" id="avatar-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="row" style="gap:10px; flex-wrap:wrap;">
+      <input type="file" id="avatar-file" accept="image/png,image/jpeg">
+      <label class="muted">Zoom <input id="avatar-zoom" type="range" min="1" max="3" step="0.05" value="1"></label>
+      <label class="muted">Offset X <input id="avatar-offset-x" type="range" min="-120" max="120" step="2" value="0"></label>
+      <label class="muted">Offset Y <input id="avatar-offset-y" type="range" min="-120" max="120" step="2" value="0"></label>
+    </div>
+    <canvas id="avatar-canvas" width="256" height="256" class="avatar-crop" style="margin-top:10px;"></canvas>
+    <div class="row" style="margin-top:12px; gap:10px;">
+      <button class="btn" id="avatar-upload">Upload</button>
+      <button class="btn btn-secondary" id="avatar-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Funds modal -->
+<div id="inv-fund-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="inv-fund-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-fund-title">
+  <div class="modal-card" style="max-width:540px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="inv-fund-title">Add / Remove funds</div>
+      <button class="modal-close" id="inv-fund-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <label class="muted">Currency</label>
+      <select id="inv-fund-cur"></select>
+      <input id="inv-fund-amt" type="number" step="1" placeholder="Amount (use negative for removal)" style="width:160px;">
+      <input id="inv-fund-note" placeholder="Note (optional)" style="flex:1; min-width:220px;">
+    </div>
+    <div class="row" style="margin-top:12px; gap:8px;">
+      <button id="inv-fund-save" class="btn">Apply</button>
+      <button id="inv-fund-cancel" class="btn btn-secondary">Cancel</button>
+    </div>
+    <div id="inv-fund-status" class="muted" style="margin-top:6px;"></div>
+  </div>
+</div>
+
+<!-- Catalog modal -->
+<div id="inv-catalog-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="inv-catalog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-catalog-title">
+  <div class="modal-card" style="max-width:980px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="inv-catalog-title">Add from Catalog</div>
+      <button class="modal-close" id="inv-catalog-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="row" style="gap:10px; flex-wrap:wrap; margin-top:6px;">
+      <input id="inv-q" placeholder="Search name…" style="flex:1">
+      <select id="inv-kind">
+        <option value="object">Objects</option>
+        <option value="weapon">Weapons</option>
+        <option value="equipment">Equipment</option>
+        <option value="tool">Tools</option>
+      </select>
+      <select id="inv-cat-select">
+        <option value="__all">All</option>
+      </select>
+      <select id="inv-limit">
+        <option>25</option>
+        <option selected>50</option>
+        <option>100</option>
+      </select>
+      <button id="inv-search" class="btn small">Search</button>
+      <button id="inv-clear" class="btn btn-secondary small">Clear</button>
+    </div>
+    <div class="row" style="gap:10px; margin-top:8px; flex-wrap:wrap;">
+      <label class="muted">Container</label>
+      <select id="inv-global-cont"></select>
+      <label class="muted">Currency</label>
+      <select id="inv-global-cur"></select>
+      <label class="muted">Equipped?</label>
+      <select id="inv-equpped-flag">
+        <option value="1">Yes</option>
+        <option value="0">No</option>
+      </select>
+    </div>
+    <div id="inv-results" class="list" style="margin-top:10px; max-height:420px; overflow:auto;"></div>
+  </div>
+</div>
+
+<!-- Sublimation modal -->
+<div id="sub-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="sub-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sub-title">
+  <div class="modal-card" style="max-width:520px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="sub-title">Add sublimation</div>
+      <button class="modal-close" id="sub-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <label class="muted">Type
+        <select id="sub-type">
+          <option value="lethality">Lethality</option>
+          <option value="blessing">Blessing</option>
+          <option value="excellence">Excellence</option>
+          <option value="defense">Defense</option>
+          <option value="speed">Speed</option>
+          <option value="devastation">Devastation</option>
+          <option value="clarity">Clarity</option>
+          <option value="endurance">Endurance</option>
+        </select>
+      </label>
+      <label class="muted">Tier
+        <select id="sub-tier">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+      </label>
+      <label class="muted" id="sub-skill-label" style="display:none;">Target skill
+        <select id="sub-skill"></select>
+      </label>
+      <label class="muted" id="sub-nature-label" style="display:none;">Nature
+        <select id="sub-nature"></select>
+      </label>
+    </div>
+    <div class="row" style="margin-top:12px; gap:8px;">
+      <button class="btn" id="sub-add-btn">Add</button>
+      <button class="btn btn-secondary" id="sub-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* --- auth helper --- */
 function getToken(){ return localStorage.getItem('auth_token') || ''; }
@@ -822,6 +951,7 @@ const subOpenBtn = document.getElementById('sub-open-btn');
 const subModal = document.getElementById('sub-modal');
 const subBackdrop = document.getElementById('sub-backdrop');
 const subClose = document.getElementById('sub-close');
+const subCancel = document.getElementById('sub-cancel');
 const overrideInputsWrap = document.getElementById('override-inputs');
 /* Personal refs */
 const pNickEl = document.getElementById('p-nicknames');
@@ -854,19 +984,20 @@ const pBackstoryEl = document.getElementById('p-backstory');
   updateSubSpecialFields();
 })();
 subOpenBtn?.addEventListener('click', ()=>{
+  subModal?.classList.remove('hidden');
+  subBackdrop?.classList.remove('hidden');
   subModal?.classList.add('open');
   subBackdrop?.classList.add('open');
 });
-subClose?.addEventListener('click', ()=>{
+const closeSubModal = ()=>{
   subModal?.classList.remove('open');
   subBackdrop?.classList.remove('open');
-});
-subBackdrop?.addEventListener('click', (e)=>{
-  if (e.target === subBackdrop){
-    subModal?.classList.remove('open');
-    subBackdrop?.classList.remove('open');
-  }
-});
+  subModal?.classList.add('hidden');
+  subBackdrop?.classList.add('hidden');
+};
+subClose?.addEventListener('click', closeSubModal);
+subCancel?.addEventListener('click', closeSubModal);
+subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) closeSubModal(); });
 
 // Overrides & current handlers
 overrideToggle?.addEventListener('change', ()=>{
@@ -1116,6 +1247,7 @@ function addSublimationFromForm(){
   subWarningEl.textContent = '';
   SUBLIMATIONS = SUBLIMATIONS.concat([{ id:`sub_${Date.now()}_${Math.random().toString(16).slice(2)}`, type, tier, skill, nature }]);
   onSublimationChanged();
+  if (typeof closeSubModal === 'function') closeSubModal();
 }
 
 /* ---------- PASSIVE AGGREGATION (char & skills) ---------- */
@@ -1465,11 +1597,13 @@ function invToggleModal(modal, backdrop, open){
   if (open){
     modal.classList.remove('hidden');
     modal.classList.add('open');
+    backdrop.classList.remove('hidden');
     backdrop.classList.add('open');
   }else{
     modal.classList.add('hidden');
     modal.classList.remove('open');
     backdrop.classList.remove('open');
+    backdrop.classList.add('hidden');
   }
 }
 
@@ -1492,17 +1626,25 @@ async function invAddContainer(){
 async function invAddFunds(){
   const currency = invFundCurEl.value || "Jelly";
   const amount = parseInt(invFundAmtEl.value || "0", 10);
-  const note = (invFundNoteEl.value || "Top up").trim();
-  if (!amount || amount <= 0){ alert("Enter a positive amount."); return; }
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/deposit`, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json", ...authHeaders() },
-    body: JSON.stringify({ currency, amount, note })
-  });
-  const j = await r.json().catch(()=>({}));
-  if (j.status !== "success"){ alert(j.message || "Deposit failed"); return; }
-  invFundAmtEl.value = ""; invFundNoteEl.value = "";
-  LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+  const note = (invFundNoteEl.value || (amount >= 0 ? "Top up" : "Withdrawal")).trim();
+  if (!amount){ invFundStatus.textContent = "Enter a non-zero amount."; return; }
+  if (!SELECTED_INV_ID){ invFundStatus.textContent = "Link an inventory first."; return; }
+  invFundStatus.textContent = "Saving transaction...";
+  try{
+    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/deposit`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify({ currency, amount, note })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success") throw new Error(j.message || "Update failed");
+    invFundAmtEl.value = ""; invFundNoteEl.value = "";
+    LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+    invFundStatus.textContent = "Saved.";
+    invToggleModal(invFundModal, invFundBackdrop, false);
+  }catch(e){
+    invFundStatus.textContent = "Failed: " + e.message;
+  }
 }
 
 function invGetRowCategory(r){
@@ -2575,7 +2717,14 @@ abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilit
 invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
 invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));
 invAddContBtn.addEventListener('click', invAddContainer);
-invFundAddBtn.addEventListener('click', invAddFunds);
+invFundOpenBtn?.addEventListener('click', ()=>{ invFundStatus.textContent=''; invToggleModal(invFundModal, invFundBackdrop, true); });
+invFundClose?.addEventListener('click', ()=> invToggleModal(invFundModal, invFundBackdrop, false));
+invFundCancel?.addEventListener('click', ()=> invToggleModal(invFundModal, invFundBackdrop, false));
+invFundBackdrop?.addEventListener('click', (e)=>{ if (e.target===invFundBackdrop) invToggleModal(invFundModal, invFundBackdrop, false); });
+invFundSave?.addEventListener('click', invAddFunds);
+invCatalogOpenBtn?.addEventListener('click', ()=> invToggleModal(invCatalogModal, invCatalogBackdrop, true));
+invCatalogClose?.addEventListener('click', ()=> invToggleModal(invCatalogModal, invCatalogBackdrop, false));
+invCatalogBackdrop?.addEventListener('click', (e)=>{ if (e.target===invCatalogBackdrop) invToggleModal(invCatalogModal, invCatalogBackdrop, false); });
 invSearchBtn.addEventListener('click', invDoSearch);
 invClearBtn.addEventListener('click', invClearSearch);
 invCatEl.addEventListener('change', ()=>{
@@ -2740,91 +2889,3 @@ function wirePersonal(){
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
 
-</body>
-</html>
-
-<!-- Avatar modal -->
-<div id="avatar-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-<div id="avatar-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="avatar-title">
-  <div class="modal-card">
-    <header class="row" style="justify-content:space-between; align-items:center;">
-      <div class="modal-title" id="avatar-title">Set Avatar</div>
-      <button class="modal-close" id="avatar-close" aria-label="Close">✕</button>
-    </header>
-    <div class="row" style="gap:10px; flex-wrap:wrap;">
-      <input type="file" id="avatar-file" accept="image/png,image/jpeg">
-      <label class="muted">Zoom <input id="avatar-zoom" type="range" min="1" max="3" step="0.05" value="1"></label>
-      <label class="muted">Offset X <input id="avatar-offset-x" type="range" min="-120" max="120" step="2" value="0"></label>
-      <label class="muted">Offset Y <input id="avatar-offset-y" type="range" min="-120" max="120" step="2" value="0"></label>
-    </div>
-    <canvas id="avatar-canvas" width="256" height="256" class="avatar-crop" style="margin-top:10px;"></canvas>
-    <div class="row" style="margin-top:12px; gap:10px;">
-      <button class="btn" id="avatar-upload">Upload</button>
-      <button class="btn btn-secondary" id="avatar-cancel">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- Funds modal -->
-<div id="inv-fund-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-<div id="inv-fund-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-fund-title">
-  <div class="modal-card" style="max-width:540px;">
-    <header class="row" style="justify-content:space-between; align-items:center;">
-      <div class="modal-title" id="inv-fund-title">Add / Remove funds</div>
-      <button class="modal-close" id="inv-fund-close" aria-label="Close">&times;</button>
-    </header>
-    <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px;">
-      <label class="muted">Currency</label>
-      <select id="inv-fund-cur"></select>
-      <input id="inv-fund-amt" type="number" step="1" placeholder="Amount (use negative for removal)" style="width:160px;">
-      <input id="inv-fund-note" placeholder="Note (optional)" style="flex:1; min-width:220px;">
-    </div>
-    <div class="row" style="margin-top:12px; gap:8px;">
-      <button id="inv-fund-save" class="btn">Apply</button>
-      <button id="inv-fund-cancel" class="btn btn-secondary">Cancel</button>
-    </div>
-    <div id="inv-fund-status" class="muted" style="margin-top:6px;"></div>
-  </div>
-</div>
-
-<!-- Catalog modal -->
-<div id="inv-catalog-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-<div id="inv-catalog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-catalog-title">
-  <div class="modal-card" style="max-width:980px;">
-    <header class="row" style="justify-content:space-between; align-items:center;">
-      <div class="modal-title" id="inv-catalog-title">Add from Catalog</div>
-      <button class="modal-close" id="inv-catalog-close" aria-label="Close">&times;</button>
-    </header>
-    <div class="row" style="gap:10px; flex-wrap:wrap; margin-top:6px;">
-      <input id="inv-q" placeholder="Search name…" style="flex:1">
-      <select id="inv-kind">
-        <option value="object">Objects</option>
-        <option value="weapon">Weapons</option>
-        <option value="equipment">Equipment</option>
-        <option value="tool">Tools</option>
-      </select>
-      <select id="inv-cat-select">
-        <option value="__all">All</option>
-      </select>
-      <select id="inv-limit">
-        <option>25</option>
-        <option selected>50</option>
-        <option>100</option>
-      </select>
-      <button id="inv-search" class="btn small">Search</button>
-      <button id="inv-clear" class="btn btn-secondary small">Clear</button>
-    </div>
-    <div class="row" style="gap:10px; margin-top:8px; flex-wrap:wrap;">
-      <label class="muted">Container</label>
-      <select id="inv-global-cont"></select>
-      <label class="muted">Currency</label>
-      <select id="inv-global-cur"></select>
-      <label class="muted">Equipped?</label>
-      <select id="inv-equpped-flag">
-        <option value="1">Yes</option>
-        <option value="0">No</option>
-      </select>
-    </div>
-    <div id="inv-results" class="list" style="margin-top:10px; max-height:420px; overflow:auto;"></div>
-  </div>
-</div>
