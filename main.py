@@ -1,5 +1,7 @@
 import datetime
 import re
+import secrets
+import string
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -21,6 +23,27 @@ from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER
 EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 from server.src.modules.allowed_pages import ALLOWED_PAGES
+CAMPAIGN_COL = get_col("campaigns")
+def _campaign_view(doc: dict, user: str | None = None) -> dict:
+    if not doc:
+        return {}
+    d = dict(doc)
+    d.pop("_id", None)
+    if user:
+        d["is_owner"] = d.get("owner") == user
+        d["is_member"] = user in (d.get("members") or [])
+    return d
+
+def _gen_join_code():
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(6))
+
+def _ensure_join_code():
+    for _ in range(10):
+        code = _gen_join_code()
+        if not CAMPAIGN_COL.find_one({"join_code": code}):
+            return code
+    return _gen_join_code()
 
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
@@ -54,6 +77,128 @@ def serve_page(page: str):
         return FileResponse(CLIENT_DIR / f"{page}.html")
     raise HTTPException(404, "Page not found")
 
+# ---------- Campaigns ----------
+def _require_campaign_access(cid: str, user: str):
+    doc = CAMPAIGN_COL.find_one({"id": cid})
+    if not doc:
+        raise HTTPException(404, "Campaign not found")
+    if user != doc.get("owner") and user not in (doc.get("members") or []):
+        raise HTTPException(403, "Access denied")
+    return doc
+
+@app.post("/campaigns")
+async def create_campaign(req: Request):
+    user = require_auth(req)
+    body = await req.json()
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "Name required")
+    cid = next_id_str("camp")
+    doc = {
+        "id": cid,
+        "name": name,
+        "owner": user,
+        "join_code": _ensure_join_code(),
+        "members": [],
+        "characters": [],
+        "folders": [],
+        "created_at": datetime.datetime.utcnow().isoformat()+"Z",
+    }
+    CAMPAIGN_COL.insert_one(doc)
+    return {"status":"success", "campaign": _campaign_view(doc, user)}
+
+@app.get("/campaigns")
+async def list_campaigns(req: Request):
+    user = require_auth(req)
+    docs = list(CAMPAIGN_COL.find({ "$or":[ {"owner":user}, {"members":user} ] }, {"_id":0}))
+    return {"status":"success", "campaigns":[_campaign_view(d, user) for d in docs]}
+
+@app.post("/campaigns/join")
+async def join_campaign(req: Request):
+    user = require_auth(req)
+    body = await req.json()
+    code = (body.get("code") or "").strip().upper()
+    if not code:
+        raise HTTPException(400, "Code required")
+    doc = CAMPAIGN_COL.find_one({"join_code": code})
+    if not doc:
+        raise HTTPException(404, "Campaign not found")
+    if user != doc.get("owner") and user not in (doc.get("members") or []):
+        CAMPAIGN_COL.update_one({"id": doc["id"]}, {"$addToSet": {"members": user}})
+        doc["members"] = (doc.get("members") or []) + [user]
+    return {"status":"success", "campaign": _campaign_view(doc, user)}
+
+@app.get("/campaigns/{cid}")
+async def get_campaign(cid: str, req: Request):
+    user = require_auth(req)
+    doc = _require_campaign_access(cid, user)
+    return {"status":"success", "campaign": _campaign_view(doc, user)}
+
+@app.post("/campaigns/{cid}/assign_character")
+async def assign_campaign_character(cid: str, req: Request):
+    user = require_auth(req)
+    body = await req.json()
+    doc = _require_campaign_access(cid, user)
+    if doc.get("owner") != user:
+        raise HTTPException(403, "Only GM can assign characters")
+    char_id = (body.get("character_id") or "").strip()
+    if not char_id:
+        raise HTTPException(400, "character_id required")
+    assigned_to = (body.get("assigned_to") or "").strip()
+    folder = (body.get("folder") or "").strip()
+    editable = bool(body.get("editable_by_gm"))
+    chars = [c for c in (doc.get("characters") or []) if c.get("character_id") != char_id]
+    chars.append({"character_id": char_id, "assigned_to": assigned_to, "folder": folder, "editable_by_gm": editable, "edit_requests":[]})
+    CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": chars}})
+    doc["characters"] = chars
+    return {"status":"success", "campaign": _campaign_view(doc, user)}
+
+@app.patch("/campaigns/{cid}/characters/{char_id}")
+async def update_campaign_character(cid: str, char_id: str, req: Request):
+    user = require_auth(req)
+    doc = _require_campaign_access(cid, user)
+    if doc.get("owner") != user:
+        raise HTTPException(403, "Only GM can update")
+    body = await req.json()
+    updated = []
+    found = False
+    for c in doc.get("characters") or []:
+        if c.get("character_id") == char_id:
+            found = True
+            c = dict(c)
+            if "assigned_to" in body: c["assigned_to"] = (body.get("assigned_to") or "").strip()
+            if "folder" in body: c["folder"] = (body.get("folder") or "").strip()
+            if "editable_by_gm" in body: c["editable_by_gm"] = bool(body.get("editable_by_gm"))
+        updated.append(c)
+    if not found:
+        raise HTTPException(404, "Character not in campaign")
+    CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": updated}})
+    doc["characters"] = updated
+    return {"status":"success", "campaign": _campaign_view(doc, user)}
+
+@app.post("/campaigns/{cid}/request_edit")
+async def request_edit_rights(cid: str, req: Request):
+    user = require_auth(req)
+    body = await req.json()
+    char_id = (body.get("character_id") or "").strip()
+    if not char_id:
+        raise HTTPException(400, "character_id required")
+    doc = _require_campaign_access(cid, user)
+    updated = []
+    found = False
+    for c in doc.get("characters") or []:
+        if c.get("character_id") == char_id:
+            found = True
+            c = dict(c)
+            reqs = set(c.get("edit_requests") or [])
+            reqs.add(user)
+            c["edit_requests"] = list(reqs)
+        updated.append(c)
+    if not found:
+        raise HTTPException(404, "Character not in campaign")
+    CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": updated}})
+    doc["characters"] = updated
+    return {"status":"success", "campaign": _campaign_view(doc, user)}
 # ---------- Auth ----------
 @app.post("/auth/login")
 async def auth_login(request: Request):

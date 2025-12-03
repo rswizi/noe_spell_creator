@@ -46,4 +46,5 @@ ALLOWED_PAGES = {"home",
 "abilities_home",
 "abilities_list",
 "abilities_create",
-"archetypes_admin"}
+"archetypes_admin",
+"campaign_manager"}
