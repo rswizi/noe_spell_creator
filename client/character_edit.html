@@ -846,6 +846,7 @@ const skillCounterEl = document.getElementById('skill-counter');
 const statCounterEl = document.getElementById('stat-counter');
 const skillCapEl = document.getElementById('skill-cap');
 const overrideToggle = document.getElementById('override-derived');
+const overrideInputsWrap = document.getElementById('override-inputs');
 const ovHpEl = document.getElementById('ov-hp');
 const ovEnEl = document.getElementById('ov-en');
 const ovFoEl = document.getElementById('ov-fo');
@@ -2928,7 +2929,7 @@ async function loadCharacter(){
    COMPUTED_ARC_ABILITIES = CHAR.computed_archetype_abilities || [];
   CURRENT = Object.assign({hp:null,en:null,fo:null,sp:null}, CHAR.current || {});
   OVERRIDE_ENABLED = !!CHAR.override_stats?.enabled;
-  OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,spcap:null}, CHAR.override_stats?.values || {});
+  OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,spcap:null,enc:null,et:null,tx:null}, CHAR.override_stats?.values || {});
   if (overrideToggle) overrideToggle.checked = OVERRIDE_ENABLED;
   if (!CHAR.archetype_rank) CHAR.archetype_rank = _archetypeRankForLevel(CHAR.level);
   LINKED_SPELL_LIST = null;

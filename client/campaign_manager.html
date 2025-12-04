@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -148,7 +148,7 @@ function render(){
           </div>
         </div>
         <div class="row" style="gap:8px; align-items:center;">
-          <span class="pill">${c.is_owner ? "Join code:" : "Code:"} ${c.join_code || "—"}</span>
+          <span class="pill">${c.is_owner ? "Join code:" : "Code:"} ${c.join_code || "--"}</span>
           <a class="btn small" href="campaign_view.html?cid=${encodeURIComponent(c.id)}">Open</a>
         </div>
       </div>
