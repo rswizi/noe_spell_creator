@@ -1665,29 +1665,6 @@ function renderInventoryUI(){
           `;
           row.querySelector('.toggle').addEventListener('click', ()=> it.consumable ? useItemInline(it) : toggleEquipInline(it));
           row.querySelector('.open').addEventListener('click', ()=> openInvItemModal(it));
-          const moveWrap = document.createElement('div');
-          moveWrap.className = 'row';
-          moveWrap.style.gap = '6px';
-          const moveSelect = document.createElement('select');
-          const allowed = containers.filter(cc=> it.equipped!==false ? true : cc.id !== SELF_CONTAINER_ID);
-          const currentTarget = it.equipped!==false ? (it.stowed_container_id || it.container_id || SELF_CONTAINER_ID) : (it.container_id || '');
-          allowed.forEach(cc=>{
-            const o=document.createElement('option');
-            o.value = cc.id;
-            o.textContent = cc.name || cc.id;
-            if (currentTarget === cc.id) o.selected = true;
-            moveSelect.appendChild(o);
-          });
-          const moveBtn = document.createElement('button');
-          moveBtn.className = 'btn small';
-          moveBtn.textContent = 'Move';
-          moveBtn.addEventListener('click', async ()=>{
-            const target = moveSelect.value;
-            await moveItemToContainer(it, target);
-          });
-          moveWrap.appendChild(moveSelect);
-          moveWrap.appendChild(moveBtn);
-          row.appendChild(moveWrap);
           list.appendChild(row);
         });
       }
@@ -2560,42 +2537,53 @@ async function renderPinnedSchools(){
   }
   slSchoolsEl.innerHTML = '';
   if (!SCHOOLS.length){ slSchoolsEl.innerHTML = '<div class="muted">No schools.</div>'; return; }
-  const onlyPinned = !!slShowPinnedOnly?.checked;
+  const onlyPinned = !!(slShowPinnedOnly && slShowPinnedOnly.checked);
   const metaSchools = SPELLLIST_META.school_meta || {};
   const schools = SCHOOLS.slice().sort((a,b)=>{
     const pa = PINNED.has(String(a.id||a.name));
     const pb = PINNED.has(String(b.id||b.name));
     return Number(pb) - Number(pa);
   });
+  const iv = currentIV() || {};
+  const ivMag = iv.mag || 0;
   const filtered = schools.filter(s=> !onlyPinned || PINNED.has(String(s.id||s.name)));
   if (!filtered.length){ slSchoolsEl.innerHTML = '<div class="muted">No pinned schools yet.</div>'; return; }
   filtered.forEach(s=>{
     const key = String(s.id||s.name);
     const meta = metaSchools[key] || {};
     const lvlVal = meta.level ?? s.level;
-    const msVal = meta.ms ?? s.ms_level ?? s.ms;
+    const msVal = meta.ms ?? meta.ms_level ?? s.ms_level ?? s.ms ?? ivMag;
+    const category = s.category || s.type || meta.category || '--';
     const lvlTxt = lvlVal != null ? `Level: ${lvlVal}` : '';
-    const msTxt = msVal != null ? `MS: ${msVal}` : '';
-    const statTxt = [lvlTxt, msTxt].filter(Boolean).join(' \u00b7 ') || '—';
+    const msTxt = msVal != null ? `MS: ${msVal}` : 'MS: --';
+    const statTxt = [msTxt, `Category: ${category}`, lvlTxt].filter(Boolean).join(' ? ');
     const pinned = PINNED.has(key);
     const div = document.createElement('div');
     div.className = 'abi-item';
     div.innerHTML = `
       <div class="grow">
         <div><strong>${s.name || s.id}</strong></div>
-        <div class="muted">${s.type || ''} ${statTxt}</div>
+        <div class="muted">${statTxt}</div>
       </div>
       <span class="tag">${pinned ? 'Pinned' : 'Unpinned'}</span>
       <button class="btn small">${pinned ? 'Unpin' : 'Pin'}</button>
     `;
     div.querySelector('button').addEventListener('click', async ()=>{
-      if (pinned) PINNED.delete(key); else PINNED.add(key);
+      const nowPinned = PINNED.has(key);
+      if (nowPinned) PINNED.delete(key); else PINNED.add(key);
+      try{
+        await saveSpellListMeta({ pinned_schools: Array.from(PINNED) });
+      }catch(e){
+        // revert if save fails
+        if (nowPinned) PINNED.add(key); else PINNED.delete(key);
+        alert(e.message || 'Failed to save pinned schools');
+      }
       renderPinnedSchools();
-      try{ await saveSpellListMeta({ pinned_schools: Array.from(PINNED) }); }catch{}
     });
     slSchoolsEl.appendChild(div);
   });
 }
+
 
 function renderSpellRows(){
   if (!slSpellsBody) return;
