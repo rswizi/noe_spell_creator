@@ -65,10 +65,14 @@
     .total { font-weight:600; }
     .hdr { display:flex; align-items:center; gap:10px; }
     .skills { display:grid; gap:8px; margin-top:10px; }
-    .skill-line { display:grid; grid-template-columns: auto 1fr auto; gap:8px; align-items:center; }
+    .skill-line { display:grid; grid-template-columns: minmax(140px, 1fr) 140px 76px; gap:8px; align-items:center; }
+    .skill-line input.num { width:100%; }
     .skill-total { min-width:64px; text-align:right; font-variant-numeric: tabular-nums; }
     .charac-badge { font-variant-numeric: tabular-nums; }
     .badge { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; background:#181821; }
+    .hdr input.num { width:120px; }
+    .intensities-panel { grid-column: 1 / -1; }
+    .intensities-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 
     .derived-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); }
     .kv { display:grid; grid-template-columns: auto 1fr; gap:6px 8px; align-items:center; }
@@ -118,9 +122,25 @@
       max-height:90vh; overflow:auto;
     }
     /* Personal tab */
-    .personal-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom:10px; }
-    .kv-field { display:grid; gap:4px; min-width:0; }
-    .kv-field input, .kv-field textarea { width:100%; }
+    .personal-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items:start; margin-bottom:10px; }
+    .kv-field { display:grid; gap:6px; min-width:0; }
+    .kv-field input, .kv-field textarea, .kv-field .richtext { width:100%; box-sizing:border-box; }
+    .richtext{
+      min-height:100px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:#181821;
+      outline:none;
+      overflow:auto;
+    }
+    .richtext:focus{ border-color:#2f2f42; box-shadow:0 0 0 1px #2f2f42; }
+    .richtext:empty:before{
+      content: attr(data-placeholder);
+      opacity: .55;
+      pointer-events:none;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -492,22 +512,22 @@
               <div class="personal-grid">
                 <label class="kv-field">
                   <span class="k">Friends</span>
-                  <textarea id="p-friends" rows="3" placeholder="Allies, contacts"></textarea>
+                  <div id="p-friends" class="richtext" contenteditable="true" data-placeholder="Allies, contacts"></div>
                 </label>
                 <label class="kv-field">
                   <span class="k">Enemies</span>
-                  <textarea id="p-enemies" rows="3" placeholder="Rivals, threats"></textarea>
+                  <div id="p-enemies" class="richtext" contenteditable="true" data-placeholder="Rivals, threats"></div>
                 </label>
               </div>
 
               <label class="kv-field">
                 <span class="k">Notes</span>
-                <textarea id="p-notes" rows="4" placeholder="Any additional notes"></textarea>
+                <div id="p-notes" class="richtext" contenteditable="true" data-placeholder="Any additional notes"></div>
               </label>
 
               <label class="kv-field">
                 <span class="k">Backstory</span>
-                <textarea id="p-backstory" rows="6" placeholder="Describe the character's history"></textarea>
+                <div id="p-backstory" class="richtext" contenteditable="true" data-placeholder="Describe the character's history"></div>
               </label>
             </div>
           </details>
@@ -1188,6 +1208,23 @@ function updateSubSpecialFields(){
   subNatureEl.style.display = subNatureLabel.style.display = isBless ? '' : 'none';
 }
 
+function sublimationDescription(sub){
+  const t = (sub.type || '').toLowerCase();
+  const tier = Math.min(4, Math.max(1, Number(sub.tier) || 1));
+  if (t === 'lethality') return `+${2 * tier} neutral weapon dmg (not animarmas)`;
+  if (t === 'blessing') return `+${2 * tier} ${(sub.nature || 'magic').toLowerCase()} dmg to space actions`;
+  if (t === 'excellence'){
+    const name = (sub.skill || '').split('|')[1] || 'skill';
+    return `+${tier} to ${name}`;
+  }
+  if (t === 'defense') return `+${12 * tier} HP`;
+  if (t === 'speed') return `+${tier} MO`;
+  if (t === 'devastation') return `+${tier} Condition DC`;
+  if (t === 'clarity') return `+${2 * tier} EN`;
+  if (t === 'endurance') return `+${2 * tier} FO`;
+  return '';
+}
+
 function renderSublimations(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
   const cap = slotsForLevel(lvl);
@@ -1202,12 +1239,13 @@ function renderSublimations(){
     SUBLIMATIONS.forEach(sub=>{
       const row = document.createElement('div');
       row.className = 'abi-item';
+      const desc = sublimationDescription(sub);
       row.innerHTML = `
         <div class="grow">
-          <div><strong>${sub.type}</strong> <span class="pill">Tier ${sub.tier}</span></div>
-          <div class="muted" style="font-size:.9rem;">
-            ${sub.type==='excellence' ? `Skill: ${sub.skill || '—'}` : ''}
-            ${sub.type==='blessing' ? `Nature: ${sub.nature || '—'}` : ''}
+          <div class="row" style="align-items:center; gap:8px;">
+            <strong>${sub.type}</strong>
+            <span class="pill">Tier ${sub.tier}</span>
+            ${desc ? `<span class="pill muted" style="opacity:.9;">${desc}</span>` : ''}
           </div>
         </div>
       `;
@@ -2632,12 +2670,12 @@ function renderStatistics(){
 
   // Intensities (scale with MAGIC)
   const intPanel = document.createElement('details'); intPanel.className='panel'; intPanel.open = true;
+  intPanel.classList.add('intensities-panel');
   const intSummary = document.createElement('summary'); intSummary.className = 'hdr';
   intSummary.innerHTML = `<strong>Intensities</strong><span class="muted">(scale on MAGIC)</span>`;
   intPanel.appendChild(intSummary);
   const intBody = document.createElement('div'); intBody.className = 'panel-body';
-  const intGrid = document.createElement('div'); intGrid.className = 'skills';
-  intGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(220px, 1fr))';
+  const intGrid = document.createElement('div'); intGrid.className = 'skills intensities-grid';
   intGrid.id = 'intensities-grid';
   INTENSITIES.forEach(n=>{
     const invested = investVal((CHAR.stats.intensities||{})[n], 0);
@@ -3221,16 +3259,16 @@ function fillPersonal(){
   pWeightEl.value = p.weight || '';
   pEloEl.value = p.elo || '';
   pRankEl.value = p.rank || '';
-  pFriendsEl.value = p.friends || '';
-  pEnemiesEl.value = p.enemies || '';
-  pNotesEl.value = p.notes || '';
-  pBackstoryEl.value = p.backstory || '';
+  pFriendsEl.innerHTML = p.friends || '';
+  pEnemiesEl.innerHTML = p.enemies || '';
+  pNotesEl.innerHTML = p.notes || '';
+  pBackstoryEl.innerHTML = p.backstory || '';
 }
 
 function wirePersonal(){
-  const bind = (el, key) => {
+  const bind = (el, key, { rich=false } = {}) => {
     el.addEventListener('input', ()=>{
-      CHAR.stats.personal[key] = el.value;
+      CHAR.stats.personal[key] = rich ? el.innerHTML : el.value;
       queueSave();
     });
   };
@@ -3239,10 +3277,10 @@ function wirePersonal(){
   bind(pWeightEl, 'weight');
   bind(pEloEl, 'elo');
   bind(pRankEl, 'rank');
-  bind(pFriendsEl, 'friends');
-  bind(pEnemiesEl, 'enemies');
-  bind(pNotesEl, 'notes');
-  bind(pBackstoryEl, 'backstory');
+  bind(pFriendsEl, 'friends', { rich:true });
+  bind(pEnemiesEl, 'enemies', { rich:true });
+  bind(pNotesEl, 'notes', { rich:true });
+  bind(pBackstoryEl, 'backstory', { rich:true });
 }
 
 /* boot */
