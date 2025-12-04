@@ -72,7 +72,22 @@
     .badge { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; background:#181821; }
     .hdr input.num { width:88px; }
     .intensities-panel { grid-column: 1 / -1; }
-    .intensities-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .intensities-grid {
+      display:grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap:10px 12px;
+    }
+    .intensity-line {
+      display:grid;
+      grid-template-columns: minmax(80px, 1fr) 70px 62px;
+      gap:6px;
+      align-items:center;
+    }
+    .intensity-line input.num { width:100%; }
+    .intensity-line .skill-total { text-align:right; }
+    @media (max-width: 900px){
+      .intensities-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    }
 
     .derived-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); }
     .kv { display:grid; grid-template-columns: auto 1fr; gap:6px 8px; align-items:center; }
@@ -2747,17 +2762,17 @@ function renderStatistics(){
   const intBody = document.createElement('div'); intBody.className = 'panel-body';
   const intGrid = document.createElement('div'); intGrid.className = 'skills intensities-grid';
   intGrid.id = 'intensities-grid';
-  INTENSITIES.forEach(n=>{
-    const invested = investVal((CHAR.stats.intensities||{})[n], 0);
-    const adj = skillAdjTotal('magic', n);
-    const investId = `intensity-${n}-invest`;
-    const totalId = `intensity-${n}-total`;
-    const line = document.createElement('div'); line.className = 'skill-line';
-    line.innerHTML = `
-      <div class="k">${n}</div>
-      <input type="number" class="num" min="0" id="${investId}" value="${invested}">
-      <div class="skill-total badge mod-toggle" data-target="mods-${totalId}" id="${totalId}" title="${adj.notes.join('\n')}">${adj.total>=0? '+'+adj.total : adj.total}</div>
-    `;
+    INTENSITIES.forEach(n=>{
+      const invested = investVal((CHAR.stats.intensities||{})[n], 0);
+      const adj = skillAdjTotal('magic', n);
+      const investId = `intensity-${n}-invest`;
+      const totalId = `intensity-${n}-total`;
+      const line = document.createElement('div'); line.className = 'intensity-line';
+      line.innerHTML = `
+        <div class="k">${n}</div>
+        <input type="number" class="num" min="0" id="${investId}" value="${invested}">
+        <div class="skill-total badge mod-toggle" data-target="mods-${totalId}" id="${totalId}" title="${adj.notes.join('\n')}">${adj.total>=0? '+'+adj.total : adj.total}</div>
+      `;
     line.appendChild(setNotesList(`mods-${totalId}`, adj.notes));
     intGrid.appendChild(line);
   });
