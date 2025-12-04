@@ -278,10 +278,8 @@
               <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
                 <select id="inv-select" class="grow"></select>
                 <button id="inv-load-btn">Load</button>
-                <button id="inv-create-link" class="btn small">Create & Link</button>
                 <button id="inv-dup-link" class="btn small">Duplicate & Link</button>
                 <a class="btn" id="inv-open-manager" target="_blank" rel="noopener">Open manager</a>
-                <a class="btn" href="inventory_create.html" target="_blank" rel="noopener">Create inventory</a>
                 <span id="inv-status" class="muted"></span>
               </div>
 
@@ -923,7 +921,6 @@ const arcAbilitiesEl  = document.getElementById('arc-abilities');
 /* Inventory tab refs */
 const invSelectEl = document.getElementById('inv-select');
 const invLoadBtn = document.getElementById('inv-load-btn');
-const invCreateLinkBtn = document.getElementById('inv-create-link');
 const invDupLinkBtn = document.getElementById('inv-dup-link');
 const invOpenManagerBtn = document.getElementById('inv-open-manager');
 const invStatusEl = document.getElementById('inv-status');
@@ -1884,36 +1881,74 @@ function invParseCustomPriceInput(inputStr){
 }
 
 async function invPromptPricingChoice(row){
-  const basePrice = row?.price != null ? Number(row.price) : 0;
-  const label = invEscapeHtml(row?.name || row?.title || 'Item');
-  const choice = prompt(
-    `Choose purchase option for ${label} (base price: ${basePrice || 0}):\\n` +
-    `1) Buy Market Price\\n` +
-    `2) Buy (set % discount/markup or custom price)\\n` +
-    `3) Take (price 0)`,
-    "1"
-  );
-  if (!choice) return null;
-  const pick = String(choice).trim()[0];
-  if (pick === '1') return { pricingMode: 'market' };
-  if (pick === '3') return { pricingMode: 'take', customPrice: 0 };
-  if (pick !== '2'){
-    alert('Invalid choice.');
-    return null;
-  }
-  const defaultPct = Math.round(((parseFloat(invPriceModEl?.value || "1") || 1) * 100));
-  const customInput = prompt(
-    "Enter % modifier (e.g. %90 for 10% off, %120 for +20%) or exact unit price. Leave blank to cancel.",
-    `%${defaultPct}`
-  );
-  if (customInput === null) return null;
-  const parsed = invParseCustomPriceInput(customInput);
-  if (!parsed){
-    alert('Invalid price or modifier.');
-    return null;
-  }
-  return { pricingMode: 'custom', ...parsed };
+  return await new Promise(resolve=>{
+    const basePrice = row?.price != null ? Number(row.price) : 0;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:4000; display:grid; place-items:center; padding:12px;';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#11121b; border:1px solid #2a2a3a; border-radius:12px; padding:14px; width:min(420px, 96vw); box-shadow:0 12px 40px rgba(0,0,0,0.45); color:#f3f3f5; font-family:inherit;';
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+        <div>
+          <div style="font-weight:700;">${invEscapeHtml(row?.name || row?.title || 'Item')}</div>
+          <div class="muted" style="font-size:0.9rem;">Base price: ${basePrice || 0}</div>
+        </div>
+        <button id="price-close" class="btn small" style="background:#222635; border-color:#2f3548;">?</button>
+      </div>
+      <div style="display:grid; gap:8px;">
+        <label style="display:flex; gap:6px; align-items:center;">
+          <input type="radio" name="price-mode" value="market" checked> <span>Buy at market price</span>
+        </label>
+        <label style="display:flex; gap:6px; align-items:center;">
+          <input type="radio" name="price-mode" value="custom"> <span>Custom</span>
+        </label>
+        <div id="price-custom" style="display:grid; gap:6px; grid-template-columns: 1fr 1fr;">
+          <div style="display:flex; gap:6px; align-items:center;">
+            <span class="muted" style="min-width:80px;">% modifier</span>
+            <input id="price-mod-input" type="number" step="1" min="0" style="flex:1; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" value="${Math.round(((parseFloat(invPriceModEl?.value || '1') || 1) * 100))}">
+          </div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <span class="muted" style="min-width:80px;">Exact price</span>
+            <input id="price-exact-input" type="number" step="1" min="0" style="flex:1; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" placeholder="${basePrice || 0}">
+          </div>
+          <div class="muted" style="grid-column:1/-1; font-size:0.9rem;">Tip: fill either % modifier or exact price. Leave both blank to cancel.</div>
+        </div>
+        <label style="display:flex; gap:6px; align-items:center;">
+          <input type="radio" name="price-mode" value="take"> <span>Take (price 0)</span>
+        </label>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
+          <button id="price-cancel" class="btn small btn-secondary">Cancel</button>
+          <button id="price-apply" class="btn small">Apply</button>
+        </div>
+      </div>
+    `;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const cleanup = (val)=>{ overlay.remove(); resolve(val); };
+    card.querySelector('#price-close').addEventListener('click', ()=>cleanup(null));
+    card.querySelector('#price-cancel').addEventListener('click', ()=>cleanup(null));
+    overlay.addEventListener('click', (e)=>{ if (e.target === overlay) cleanup(null); });
+
+    const applyBtn = card.querySelector('#price-apply');
+    applyBtn.addEventListener('click', ()=>{
+      const mode = card.querySelector('input[name="price-mode"]:checked')?.value || 'market';
+      if (mode === 'take'){ cleanup({ pricingMode:'take', customPrice:0 }); return; }
+      if (mode === 'market'){ cleanup({ pricingMode:'market' }); return; }
+      const pctRaw = card.querySelector('#price-mod-input').value;
+      const priceRaw = card.querySelector('#price-exact-input').value;
+      const parsedPct = pctRaw ? invParseCustomPriceInput(`%${pctRaw}`) : null;
+      const parsedPrice = priceRaw ? invParseCustomPriceInput(priceRaw) : null;
+      const choice = parsedPrice || parsedPct;
+      if (!choice){
+        alert('Enter a % modifier or an exact price for custom mode.');
+        return;
+      }
+      cleanup({ pricingMode:'custom', ...choice });
+    });
+  });
 }
+
 
   async function invDoSearch(){
     const q = (invQEl.value || "").trim();
@@ -2238,6 +2273,44 @@ function openInvItemModal(it){
     });
     invItemActions.appendChild(refillBtn);
   }
+
+  // Move controls (inside modal)
+  const moveWrap = document.createElement('div');
+  moveWrap.className = 'row';
+  moveWrap.style.marginTop = '10px';
+  moveWrap.style.gap = '6px';
+  moveWrap.style.display = 'none';
+  const moveSelect = document.createElement('select');
+  const allowed = (LINKED_INV?.containers || []).filter(cc=> it.equipped!==false ? true : cc.id !== SELF_CONTAINER_ID);
+  const currentTarget = it.equipped!==false ? (it.stowed_container_id || it.container_id || SELF_CONTAINER_ID) : (it.container_id || '');
+  allowed.forEach(cc=>{
+    const o=document.createElement('option');
+    o.value = cc.id;
+    o.textContent = cc.name || cc.id;
+    if (cc.id === currentTarget) o.selected = true;
+    moveSelect.appendChild(o);
+  });
+  const moveBtn = document.createElement('button');
+  moveBtn.className = 'btn small';
+  moveBtn.textContent = 'Move';
+  moveBtn.addEventListener('click', ()=>{
+    const dest = moveSelect.value;
+    if (!dest) return;
+    moveItemToContainer(it, dest);
+    closeInvItemModal();
+  });
+  moveWrap.appendChild(moveSelect);
+  moveWrap.appendChild(moveBtn);
+
+  const moveToggle = document.createElement('button');
+  moveToggle.className = 'btn small';
+  moveToggle.style.marginTop = '8px';
+  moveToggle.textContent = 'Move';
+  moveToggle.addEventListener('click', ()=>{
+    moveWrap.style.display = moveWrap.style.display === 'none' ? '' : 'none';
+  });
+  invItemActions.appendChild(moveToggle);
+  invItemActions.appendChild(moveWrap);
 
   const sellBtn = document.createElement('button');
   sellBtn.className = 'btn small';
