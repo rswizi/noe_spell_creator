@@ -787,6 +787,14 @@ const TARGET_GROUPS = [
 ];
 function totalFromInvest(v){ return (parseInt(v||0,10) || 0) + 4; }
 function modFromTotal(total){ return Math.floor((Number(total)-10)/2); }
+function numOr(v, fb=0){
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fb;
+}
+function investVal(v, fb=0){
+  if (v && typeof v === 'object') return numOr(v.invest, fb);
+  return numOr(v, fb);
+}
 
 /* State */
 const params = new URLSearchParams(location.search);
@@ -1110,12 +1118,12 @@ function totalSkillInvest(){
   for (const c of CHARACS){
     const rec = (CHAR.stats && CHAR.stats[c.key]) || {};
     for (const s of (c.skills||[])){
-      t += Number(rec.skills?.[s] || 0);
+      t += investVal(rec.skills?.[s], 0);
     }
   }
   if (CHAR.stats?.intensities){
     for (const n of INTENSITIES){
-      t += Number(CHAR.stats.intensities[n] || 0);
+      t += investVal(CHAR.stats.intensities[n], 0);
     }
   }
   return t;
@@ -1123,7 +1131,7 @@ function totalSkillInvest(){
 function totalStatInvest(){
   let t = 0;
   for (const c of CHARACS){
-    t += Number(CHAR.stats?.[c.key]?.invest || 0);
+    t += investVal(CHAR.stats?.[c.key]?.invest, 0);
   }
   return t;
 }
@@ -2016,15 +2024,13 @@ function closeInvItemModal(){
 function deriveSpellListInitialValuesFromChar(){
   if (!CHAR || !CHAR.stats) return null;
   const iv = {
-    mag: totalFromInvest(CHAR.stats.magic?.invest || 0),
+    mag: totalFromInvest(investVal(CHAR.stats.magic?.invest, 0)),
     natures: {fire:0,water:0,wind:0,earth:0,sun:0,moon:0,lightning:0,ki:0},
     skills: {aura:0,incantation:0,enchantement:0,potential:0,restoration:0,stealth:0,investigation:0,charm:0,intimidation:0,absorption:0,spirit:0},
   };
   const ints = CHAR.stats.intensities || {};
   for (const k of Object.keys(iv.natures)){
-    const rec = ints[k] || {};
-    const val = typeof rec === 'object' ? rec.invest : rec;
-    iv.natures[k] = Math.max(0, Math.floor(Number(val)||0));
+    iv.natures[k] = Math.max(0, Math.floor(investVal(ints[k], 0)));
   }
   const skillMap = {
     aura:['magic','Aura'],
@@ -2558,7 +2564,7 @@ async function createAndLinkSpellList(){
 }
 
 function charBaseMod(key){
-  const invest = CHAR.stats?.[key]?.invest ?? 0;
+  const invest = investVal(CHAR.stats?.[key]?.invest, 0);
   return modFromTotal(totalFromInvest(invest));
 }
 function charAdjMod(key){
@@ -2567,7 +2573,7 @@ function charAdjMod(key){
   return { mod:value, notes };
 }
 function skillBaseTotal(key, skill){
-  const inv = CHAR.stats?.[key]?.skills?.[skill] ?? 0;
+  const inv = investVal(CHAR.stats?.[key]?.skills?.[skill], 0);
   return inv + charBaseMod(key);
 }
 function skillAdjTotal(key, skill){
@@ -2581,7 +2587,8 @@ function renderStatistics(){
   gridEl.innerHTML = '';
   for (const c of CHARACS){
     const rec = (CHAR.stats && CHAR.stats[c.key]) || { invest:0, skills:{} };
-    const total = totalFromInvest(rec.invest);
+    const investedChar = investVal(rec.invest, 0);
+    const total = totalFromInvest(investedChar);
     const modInfo = charAdjMod(c.key);
 
     const details = document.createElement('details'); details.className='panel'; details.open = true;
@@ -2593,7 +2600,7 @@ function renderStatistics(){
       <span class="charac-badge mod-toggle" data-target="mods-char-${c.key}" title="${modInfo.notes.join('\n')}">[ <span class="total" id="${c.key}-total">${total}</span> | <span id="${c.key}-mod">${modInfo.mod>=0? '+'+modInfo.mod : modInfo.mod}</span> ]</span>
       <span class="grow"></span>
       <span class="k">Invested</span>
-      <input type="number" class="num" min="0" id="${c.key}-invest" value="${Number(rec.invest)||0}">
+      <input type="number" class="num" min="0" id="${c.key}-invest" value="${investedChar}">
     `;
     details.appendChild(sum);
 
@@ -2601,7 +2608,7 @@ function renderStatistics(){
     const skills = document.createElement('div'); skills.className='skills';
 
     for (const s of c.skills){
-      const invested = Number((rec.skills||{})[s] || 0);
+      const invested = investVal((rec.skills||{})[s], 0);
       const adj = skillAdjTotal(c.key, s);
       const investId = skillId(c.key, s, 'invest');
       const totalId = skillId(c.key, s, 'total');
@@ -2633,7 +2640,7 @@ function renderStatistics(){
   intGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(220px, 1fr))';
   intGrid.id = 'intensities-grid';
   INTENSITIES.forEach(n=>{
-    const invested = Number((CHAR.stats.intensities||{})[n] || 0);
+    const invested = investVal((CHAR.stats.intensities||{})[n], 0);
     const adj = skillAdjTotal('magic', n);
     const investId = `intensity-${n}-invest`;
     const totalId = `intensity-${n}-total`;
@@ -2656,9 +2663,9 @@ function renderStatistics(){
     input.addEventListener('input', ()=>{
       const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
       const pool = statPointPool(lvl);
-      const currentVal = Number(CHAR.stats[c.key].invest || 0);
+      const currentVal = investVal(CHAR.stats[c.key].invest, 0);
       const totalOther = totalStatInvest() - currentVal;
-      const desired = Math.max(0, Math.floor(Number(input.value)||0));
+      const desired = Math.max(0, Math.floor(investVal(input.value, 0)));
       const allowed = Math.max(0, pool - totalOther);
       const val = Math.min(desired, allowed, STAT_MAX_INVEST);
       if (val !== desired) input.value = val;
@@ -2691,9 +2698,9 @@ function renderStatistics(){
         const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
         const cap = skillMaxForLevel(lvl);
         const pool = skillPointPool(lvl);
-        const currentVal = Number(CHAR.stats[c.key].skills?.[s] || 0);
+        const currentVal = investVal(CHAR.stats[c.key].skills?.[s], 0);
         const totalOther = totalSkillInvest() - currentVal;
-        const desired = Math.max(0, Math.floor(Number(si.value)||0));
+        const desired = Math.max(0, Math.floor(investVal(si.value, 0)));
         const allowed = Math.max(0, pool - totalOther);
         const val = Math.min(desired, cap, allowed);
         if (val !== desired) si.value = val;
@@ -2841,10 +2848,6 @@ function updateDerived(){
 
   // Apply passive modifiers to derived
   const final = applyPassiveModifiersToDerived(base, invEnc);
-  const numOr = (v, fb) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : fb;
-  };
   // Overrides
   const maxVals = { ...final };
   if (OVERRIDE_ENABLED){
@@ -2870,9 +2873,9 @@ function updateDerived(){
       const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
       const cap = skillMaxForLevel(lvl);
       const pool = skillPointPool(lvl);
-      const currentVal = numOr(CHAR.stats.intensities?.[n], 0);
+      const currentVal = investVal(CHAR.stats.intensities?.[n], 0);
       const totalOther = totalSkillInvest() - currentVal;
-      const desired = Math.max(0, Math.floor(numOr(input.value, 0)));
+      const desired = Math.max(0, Math.floor(investVal(input.value, 0)));
       const allowed = Math.max(0, pool - totalOther);
       const val = Math.min(desired, cap, allowed);
       input.value = val;
