@@ -2841,18 +2841,27 @@ function updateDerived(){
 
   // Apply passive modifiers to derived
   const final = applyPassiveModifiersToDerived(base, invEnc);
+  const numOr = (v, fb) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fb;
+  };
   // Overrides
   const maxVals = { ...final };
   if (OVERRIDE_ENABLED){
-    maxVals.hp = Number(OVERRIDE_VALUES.hp ?? final.hp);
-    maxVals.en = Number(OVERRIDE_VALUES.en ?? final.en);
-    maxVals.fo = Number(OVERRIDE_VALUES.fo ?? final.fo);
-    maxVals.mo = Number(OVERRIDE_VALUES.mo ?? final.mo);
-    maxVals.spcap = Number(OVERRIDE_VALUES.spcap ?? final.spcap);
+    maxVals.hp = numOr(OVERRIDE_VALUES.hp ?? final.hp, final.hp);
+    maxVals.en = numOr(OVERRIDE_VALUES.en ?? final.en, final.en);
+    maxVals.fo = numOr(OVERRIDE_VALUES.fo ?? final.fo, final.fo);
+    maxVals.mo = numOr(OVERRIDE_VALUES.mo ?? final.mo, final.mo);
+    maxVals.spcap = numOr(OVERRIDE_VALUES.spcap ?? final.spcap, final.spcap);
     // allow overriding derived enc/et/tx if provided
-    maxVals.enc = Number(OVERRIDE_VALUES.enc ?? final.enc);
-    maxVals.et  = Number(OVERRIDE_VALUES.et  ?? final.et);
-    maxVals.tx  = Number(OVERRIDE_VALUES.tx  ?? final.tx);
+    maxVals.enc = numOr(OVERRIDE_VALUES.enc ?? final.enc, final.enc);
+    maxVals.et  = numOr(OVERRIDE_VALUES.et  ?? final.et, final.et);
+    maxVals.tx  = numOr(OVERRIDE_VALUES.tx  ?? final.tx, final.tx);
+  }else{
+    // ensure all are finite
+    Object.keys(maxVals).forEach(k=>{
+      maxVals[k] = numOr(maxVals[k], 0);
+    });
   }
   // Intensities listeners
   INTENSITIES.forEach(n=>{
@@ -2861,9 +2870,9 @@ function updateDerived(){
       const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
       const cap = skillMaxForLevel(lvl);
       const pool = skillPointPool(lvl);
-      const currentVal = Number(CHAR.stats.intensities?.[n] || 0);
+      const currentVal = numOr(CHAR.stats.intensities?.[n], 0);
       const totalOther = totalSkillInvest() - currentVal;
-      const desired = Math.max(0, Math.floor(Number(input.value)||0));
+      const desired = Math.max(0, Math.floor(numOr(input.value, 0)));
       const allowed = Math.max(0, pool - totalOther);
       const val = Math.min(desired, cap, allowed);
       input.value = val;
@@ -2879,10 +2888,10 @@ function updateDerived(){
     });
   });
   const cur = {
-    hp: Math.max(0, Math.min(Number(CURRENT.hp ?? maxVals.hp), maxVals.hp)),
-    en: Math.max(0, Math.min(Number(CURRENT.en ?? maxVals.en), maxVals.en)),
-    fo: Math.max(0, Math.min(Number(CURRENT.fo ?? maxVals.fo), maxVals.fo)),
-    sp: Math.max(0, Math.min(Number(CURRENT.sp ?? maxVals.spcap), maxVals.spcap)),
+    hp: Math.max(0, Math.min(numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp), maxVals.hp)),
+    en: Math.max(0, Math.min(numOr(CURRENT.en ?? maxVals.en, maxVals.en), maxVals.en)),
+    fo: Math.max(0, Math.min(numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo), maxVals.fo)),
+    sp: Math.max(0, Math.min(numOr(CURRENT.sp ?? maxVals.spcap, maxVals.spcap), maxVals.spcap)),
   };
   if (CURRENT.hp == null) cur.hp = maxVals.hp;
   if (CURRENT.en == null) cur.en = maxVals.en;
