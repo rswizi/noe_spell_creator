@@ -1835,43 +1835,91 @@ function invBuildCategoryOptions(rows){
 }
 
 function invRenderResults(){
-  const list = invResultsEl;
-  list.innerHTML = '';
-  if (!INV_FILTERED.length){
-    list.innerHTML = '<div class="muted">No results.</div>';
-    return;
-  }
-  const container = invGlobalContEl.value;
-  const currency  = invGlobalCurEl.value || "Jelly";
+    const list = invResultsEl;
+    list.innerHTML = '';
+    if (!INV_FILTERED.length){
+      list.innerHTML = '<div class="muted">No results.</div>';
+      return;
+    }
+    const container = invGlobalContEl.value;
+    const currency  = invGlobalCurEl.value || "Jelly";
   INV_FILTERED.forEach(r=>{
     const line = document.createElement("div");
     line.className = "row";
     line.style.borderBottom = "1px solid #222";
     line.style.padding = "6px 0";
-    const cat = invGetRowCategory(r);
-    const price = (r.price != null) ? `Price: ${r.price}` : "";
-    const enc = (r.enc != null) ? `Enc: ${Number(r.enc||0).toFixed(1)}` : "";
-    line.innerHTML = `
-      <div style="flex:1;min-width:260px;">
-        <div><b>${invEscapeHtml(r.name || r.title || "Item")}</b></div>
-        <div class="muted">${invEscapeHtml(cat)} ${price ? " • "+price : ""} ${enc ? " • "+enc : ""}</div>
-      </div>
-      <input type="number" min="1" value="1" style="width:90px" class="qty">
-      <button class="btn small buy">Add</button>
-    `;
-    line.querySelector(".buy").addEventListener("click", async ()=>{
-      const qty = Math.max(1, parseInt(line.querySelector(".qty").value||"1", 10));
-      await invBuyItem(r.__kind || "object", r.id, qty, container, currency);
+      const cat = invGetRowCategory(r);
+      const price = (r.price != null) ? `Price: ${r.price}` : "";
+      const enc = (r.enc != null) ? `Enc: ${Number(r.enc||0).toFixed(1)}` : "";
+      line.innerHTML = `
+        <div style="flex:1;min-width:260px;">
+          <div><b>${invEscapeHtml(r.name || r.title || "Item")}</b></div>
+          <div class="muted">${invEscapeHtml(cat)} ${price ? " - "+price : ""} ${enc ? " - "+enc : ""}</div>
+        </div>
+        <input type="number" min="1" value="1" style="width:90px" class="qty">
+        <button class="btn small buy">Add</button>
+      `;
+      line.querySelector(".buy").addEventListener("click", async ()=>{
+        const qty = Math.max(1, parseInt(line.querySelector(".qty").value||"1", 10));
+      const choice = await invPromptPricingChoice(r);
+      if (!choice) return;
+      await invBuyItem(r.__kind || "object", r.id, qty, container, currency, choice);
     });
     list.appendChild(line);
   });
 }
 
-async function invDoSearch(){
-  const q = (invQEl.value || "").trim();
-  const kind = invKindEl.value;
-  const limit = parseInt(invLimitEl.value || "50", 10);
-  INV_LAST_RESULTS = await invFetchCatalog(kind, q, limit);
+function invParseCustomPriceInput(inputStr){
+  if (inputStr == null) return null;
+  const raw = String(inputStr).trim();
+  if (!raw) return null;
+  const percentMark = raw.startsWith('%') || raw.endsWith('%');
+  const numeric = raw.replace('%','');
+  const num = Number(numeric);
+  if (!Number.isFinite(num) || num < 0) return null;
+  if (percentMark){
+    return { priceModifier: num / 100 };
+  }
+  return { customPrice: num };
+}
+
+async function invPromptPricingChoice(row){
+  const basePrice = row?.price != null ? Number(row.price) : 0;
+  const label = invEscapeHtml(row?.name || row?.title || 'Item');
+  const choice = prompt(
+    `Choose purchase option for ${label} (base price: ${basePrice || 0}):\\n` +
+    `1) Buy Market Price\\n` +
+    `2) Buy (set % discount/markup or custom price)\\n` +
+    `3) Take (price 0)`,
+    "1"
+  );
+  if (!choice) return null;
+  const pick = String(choice).trim()[0];
+  if (pick === '1') return { pricingMode: 'market' };
+  if (pick === '3') return { pricingMode: 'take', customPrice: 0 };
+  if (pick !== '2'){
+    alert('Invalid choice.');
+    return null;
+  }
+  const defaultPct = Math.round(((parseFloat(invPriceModEl?.value || "1") || 1) * 100));
+  const customInput = prompt(
+    "Enter % modifier (e.g. %90 for 10% off, %120 for +20%) or exact unit price. Leave blank to cancel.",
+    `%${defaultPct}`
+  );
+  if (customInput === null) return null;
+  const parsed = invParseCustomPriceInput(customInput);
+  if (!parsed){
+    alert('Invalid price or modifier.');
+    return null;
+  }
+  return { pricingMode: 'custom', ...parsed };
+}
+
+  async function invDoSearch(){
+    const q = (invQEl.value || "").trim();
+    const kind = invKindEl.value;
+    const limit = parseInt(invLimitEl.value || "50", 10);
+    INV_LAST_RESULTS = await invFetchCatalog(kind, q, limit);
   INV_FILTERED = INV_LAST_RESULTS.slice();
   invBuildCategoryOptions(INV_LAST_RESULTS);
   invRenderResults();
@@ -1885,26 +1933,34 @@ function invClearSearch(){
   invRenderResults();
 }
 
-async function invBuyItem(kind, ref_id, quantity, container_id, currency){
-  const equipFlag = invEquippedFlagEl.value === "1";
-  if (!equipFlag && container_id === SELF_CONTAINER_ID){
-    const firstNonSelf = Array.from(invGlobalContEl.options || []).map(o=>o.value).find(v=>v !== SELF_CONTAINER_ID);
-    container_id = firstNonSelf || "";
+async function invBuyItem(kind, ref_id, quantity, container_id, currency, opts = {}){
+    const equipFlag = invEquippedFlagEl.value === "1";
+    if (!equipFlag && container_id === SELF_CONTAINER_ID){
+      const firstNonSelf = Array.from(invGlobalContEl.options || []).map(o=>o.value).find(v=>v !== SELF_CONTAINER_ID);
+      container_id = firstNonSelf || "";
+    }
+    const pricingMode = opts.pricingMode || 'market';
+    const priceModifier = (opts.priceModifier != null) ? opts.priceModifier : (parseFloat(invPriceModEl?.value || "1") || 1);
+    const customPrice = opts.customPrice;
+    const payload = { kind, ref_id, quantity, container_id, currency, equipped: equipFlag, pricing_mode: pricingMode };
+    if (pricingMode === 'custom'){
+      if (priceModifier != null) payload.price_modifier = priceModifier;
+      if (customPrice != null) payload.custom_price = customPrice;
+    } else if (pricingMode === 'take') {
+      payload.custom_price = 0;
+    }
+    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/purchase`, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success") { alert(j.message || "Purchase failed"); return; }
+    LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+    invToggleModal(invCatalogModal, invCatalogBackdrop, false);
   }
-  const priceModifier = parseFloat(invPriceModEl?.value || "1") || 1;
-  const payload = { kind, ref_id, quantity, container_id, currency, price_modifier: priceModifier, equipped: equipFlag };
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/purchase`, {
-    method: "POST",
-    headers: { "Content-Type":"application/json", ...authHeaders() },
-    body: JSON.stringify(payload)
-  });
-  const j = await r.json().catch(()=>({}));
-  if (j.status !== "success") { alert(j.message || "Purchase failed"); return; }
-  LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
-  invToggleModal(invCatalogModal, invCatalogBackdrop, false);
-}
-
-async function upgradeQuality(item_id, to){
+  
+  async function upgradeQuality(item_id, to){
   const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}/upgrade_quality`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },

@@ -3142,32 +3142,66 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     if not src:
         raise HTTPException(404, "Catalog item not found")
 
-    base_price = int(src.get("price") or 0)
-    enc = float(src.get("enc") or 0.0)
-    subcat = src.get("category") if kind == "equipment" else None
-    name = src.get("name") or (subcat == "armor" and f"Armor - {src.get('type')}") or src.get("style") or "Item"
-    eq_slot = src.get("slot") if kind == "equipment" else None
+  base_price = int(src.get("price") or 0)
+  enc = float(src.get("enc") or 0.0)
+  subcat = src.get("category") if kind == "equipment" else None
+  name = src.get("name") or (subcat == "armor" and f"Armor - {src.get('type')}") or src.get("style") or "Item"
+  eq_slot = src.get("slot") if kind == "equipment" else None
+  pricing_mode = (payload.get("pricing_mode") or "market").strip().lower()
+  raw_price_modifier = payload.get("price_modifier", None)
+  raw_custom_price = payload.get("custom_price", None)
+  try:
+      price_modifier = float(raw_price_modifier)
+  except Exception:
+      price_modifier = None
+  try:
+      custom_price = float(raw_custom_price)
+  except Exception:
+      custom_price = None
 
     unit_price = base_price
     base_upgrades: list[dict] = []
     add_upgrades: list[dict] = []
     fee = 0
-    if kind in ("weapon", "equipment"):
-        unit_price = _qprice(base_price, quality)
-        # base (pre-installed) upgrades from catalog
-        try:
-            base_upgrades, _fee0, _steps0 = _prepare_new_upgrades([], src.get("upgrades") or [], kind, eq_slot, quality)
+  if kind in ("weapon", "equipment"):
+      unit_price = _qprice(base_price, quality)
+      # base (pre-installed) upgrades from catalog
+      try:
+          base_upgrades, _fee0, _steps0 = _prepare_new_upgrades([], src.get("upgrades") or [], kind, eq_slot, quality)
         except HTTPException as e:
             # user visible error
             raise
-        add_upgrades, fee, steps = _prepare_new_upgrades(base_upgrades, upgrades_req, kind, eq_slot, quality)
-        unit_price += fee
+          add_upgrades, fee, steps = _prepare_new_upgrades(base_upgrades, upgrades_req, kind, eq_slot, quality)
+          unit_price += fee
 
-    total = unit_price * qty
+  if pricing_mode not in ("market", "custom", "take"):
+      if custom_price is not None or (price_modifier is not None and price_modifier != 1):
+          pricing_mode = "custom"
+      else:
+          pricing_mode = "market"
 
-    # money (negative transaction)
-    cur = inv.get("currencies", {})
-    cur[currency] = int(cur.get(currency, 0)) - total
+  note_tag = "market price"
+  if pricing_mode == "take":
+      unit_price = 0
+      note_tag = "take"
+  elif pricing_mode == "custom":
+      if custom_price is not None:
+          unit_price = max(0, int(round(custom_price)))
+          note_tag = "custom price"
+      elif price_modifier is not None:
+          unit_price = max(0, int(round(unit_price * price_modifier)))
+          note_tag = f"{int(round(price_modifier * 100))}%"
+      else:
+          unit_price = max(0, int(round(unit_price)))
+          note_tag = "custom price"
+  else:
+      unit_price = max(0, int(round(unit_price)))
+
+  total = int(unit_price * qty)
+
+  # money (negative transaction)
+  cur = inv.get("currencies", {})
+  cur[currency] = int(cur.get(currency, 0)) - total
 
     containers = _ensure_self_container(inv.get("containers") or [])
     valid_container_ids = {c.get("id") for c in containers}
@@ -3186,22 +3220,22 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "name": name,
         "quantity": qty,
         "quality": (quality if kind in ("weapon", "equipment") else None),
-        "enc": enc,
-        "base_price": base_price,
-        "paid_unit": unit_price,
-        "upgrades": base_upgrades + add_upgrades,
-        "container_id": container_id,
-        "stowed_container_id": stowed_container_id,
-        "modifiers": src.get("modifiers") or [],
-        "equipped": is_equipped,
+      "enc": enc,
+      "base_price": base_price,
+      "paid_unit": unit_price,
+      "upgrades": base_upgrades + add_upgrades,
+      "container_id": container_id,
+      "stowed_container_id": stowed_container_id,
+      "modifiers": src.get("modifiers") or [],
+      "equipped": is_equipped,
     }
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
         "amount": -total,
-        "note": f"Purchase {name} x{qty}",
-        "source": "purchase"
-    }
+      "note": f"{'Take' if pricing_mode == 'take' else 'Purchase'} {name} x{qty} ({note_tag})",
+      "source": "purchase"
+  }
 
     items = inv.get("items") or []
     items = items + [item]
