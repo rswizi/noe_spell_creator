@@ -275,17 +275,17 @@ async function loadMyCharacters(){
 
 function renderJoinCharOptions(){
   if (!joinCharSelect) return;
-  const opts = ['<option value=\"\">No character</option>'];
-  opts.push('<option value=\"__new__\">+ Create new character</option>');
+  const opts = ['<option value="">No character</option>'];
+  opts.push('<option value="__new__">+ Create new character</option>');
   (MY_CHARACTERS||[]).forEach(ch=>{
-    opts.push(`<option value=\"${ch.id}\">${ch.name || ch.id}</option>`);
+    opts.push(`<option value="${ch.id}">${ch.name || ch.id}</option>`);
   });
-  joinCharSelect.innerHTML = opts.join(\"\\n\");
+  joinCharSelect.innerHTML = opts.join('\n');
 }
 
 document.getElementById("camp-create").addEventListener("click", async ()=>{
   const name = (document.getElementById("camp-name").value || "").trim() || "New Campaign";
-  const description = (createDescEl?.value || "").trim();
+  const description = ((createDescEl && createDescEl.value) || "").trim();
   try{
     statusEl.textContent = "Creating...";
     await api("/campaigns", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ name, description }) });
