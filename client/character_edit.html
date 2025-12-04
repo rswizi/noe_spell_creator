@@ -3451,7 +3451,6 @@ deleteBtn?.addEventListener('click', deleteCharacter);
 
 invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
 invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));
-invCreateLinkBtn?.addEventListener('click', createInventoryAndLink);
 invDupLinkBtn?.addEventListener('click', duplicateAndLinkInventory);
 invAddContBtn.addEventListener('click', invAddContainer);
 invFundOpenBtn?.addEventListener('click', ()=>{ invFundStatus.textContent=''; invToggleModal(invFundModal, invFundBackdrop, true); });
