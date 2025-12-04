@@ -595,13 +595,37 @@ async function moveItem(item_id, container_id){
 }
 
 async function toggleEquip(item_id, equipped){
-  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}`, {
-    method: "PATCH",
+    const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ equipped })
+  });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success"){ alert(j.message || "Update failed"); return; }
+    applyInventory(j.inventory);
+  }
+
+async function sellItem(item_id, price){
+  const currency = $("#global-cur").value || "Jelly";
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/sell`, {
+    method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ equipped })
+    body: JSON.stringify({ price, currency })
   });
   const j = await r.json().catch(()=>({}));
-  if (j.status !== "success"){ alert(j.message || "Update failed"); return; }
+  if (j.status !== "success"){ alert(j.message || "Sell failed"); return; }
+  applyInventory(j.inventory);
+}
+
+async function disposeItem(item_id){
+  const currency = $("#global-cur").value || "Jelly";
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/dispose`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ currency })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Dispose failed"); return; }
   applyInventory(j.inventory);
 }
 
@@ -661,15 +685,42 @@ function openItemModal(it){
     await toggleEquip(it.item_id, !equipped);
     closeItemModal();
   });
-  equipRow.appendChild(document.createTextNode(equipped ? "Item is equipped" : "Item is not equipped"));
-  equipRow.appendChild(equipBtn);
-  actions.appendChild(equipRow);
+    equipRow.appendChild(document.createTextNode(equipped ? "Item is equipped" : "Item is not equipped"));
+    equipRow.appendChild(equipBtn);
+    actions.appendChild(equipRow);
 
-  // Only for weapons/equipment: show Upgrade Quality + Install Upgrade
-  if (it.kind === "weapon" || it.kind === "equipment"){
-    const wrap = document.createElement("div");
-    wrap.className = "row";
-    wrap.style.marginTop = "10px";
+    const sellRow = document.createElement("div");
+    sellRow.className = "row";
+    sellRow.style.marginTop = "8px";
+    const sellBtn = document.createElement("button");
+    sellBtn.className = "btn small";
+    sellBtn.textContent = "Sell";
+    sellBtn.addEventListener("click", async ()=>{
+      const fallback = Number(it.base_price ?? it.paid_unit ?? 0) || 0;
+      const ask = prompt("Sell price per unit (blank to cancel)", fallback);
+      if (ask === null) return;
+      const price = Number(ask);
+      if (!Number.isFinite(price) || price < 0){ alert("Enter a valid price."); return; }
+      await sellItem(it.item_id, price);
+      closeItemModal();
+    });
+    const disposeBtn = document.createElement("button");
+    disposeBtn.className = "btn btn-secondary small";
+    disposeBtn.textContent = "Dispose";
+    disposeBtn.addEventListener("click", async ()=>{
+      if (!confirm("Dispose this item? This removes it with no revenue.")) return;
+      await disposeItem(it.item_id);
+      closeItemModal();
+    });
+    sellRow.appendChild(sellBtn);
+    sellRow.appendChild(disposeBtn);
+    actions.appendChild(sellRow);
+
+    // Only for weapons/equipment: show Upgrade Quality + Install Upgrade
+    if (it.kind === "weapon" || it.kind === "equipment"){
+      const wrap = document.createElement("div");
+      wrap.className = "row";
+      wrap.style.marginTop = "10px";
 
     // Quality selector
     const qlab = document.createElement("label");

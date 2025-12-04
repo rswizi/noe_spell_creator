@@ -2031,6 +2031,31 @@ async function toggleEquipInline(it){
   LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
 }
 
+async function sellItemInline(it, price){
+  const currency = invGlobalCurEl?.value || "Jelly";
+  const payload = { price, currency };
+  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}/sell`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify(payload)
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Sell failed"); return; }
+  LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+}
+
+async function disposeItemInline(it){
+  const currency = invGlobalCurEl?.value || "Jelly";
+  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}/dispose`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify({ currency })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Dispose failed"); return; }
+  LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+}
+
 async function toggleContainerInclude(containerId, include){
   if (!SELECTED_INV_ID || !containerId) return;
   try{
@@ -2131,14 +2156,38 @@ function openInvItemModal(it){
   });
 invItemActions.appendChild(altWrap);
 
-const equipBtn = document.createElement('button');
-equipBtn.className = 'btn small';
-equipBtn.textContent = it.equipped===false ? 'Equip' : 'Unequip';
-equipBtn.addEventListener('click', async ()=>{
-  await toggleEquipInline(it);
-  closeInvItemModal();
-});
-invItemActions.appendChild(equipBtn);
+  const equipBtn = document.createElement('button');
+  equipBtn.className = 'btn small';
+  equipBtn.textContent = it.equipped===false ? 'Equip' : 'Unequip';
+  equipBtn.addEventListener('click', async ()=>{
+    await toggleEquipInline(it);
+    closeInvItemModal();
+  });
+  invItemActions.appendChild(equipBtn);
+
+  const sellBtn = document.createElement('button');
+  sellBtn.className = 'btn small';
+  sellBtn.textContent = 'Sell';
+  sellBtn.addEventListener('click', async ()=>{
+    const fallback = Number(it.base_price ?? it.paid_unit ?? 0) || 0;
+    const ask = prompt('Sell price per unit (blank to cancel)', fallback);
+    if (ask === null) return;
+    const price = Number(ask);
+    if (!Number.isFinite(price) || price < 0){ alert('Enter a valid price'); return; }
+    await sellItemInline(it, price);
+    closeInvItemModal();
+  });
+  invItemActions.appendChild(sellBtn);
+
+  const disposeBtn = document.createElement('button');
+  disposeBtn.className = 'btn btn-secondary small';
+  disposeBtn.textContent = 'Dispose';
+  disposeBtn.addEventListener('click', async ()=>{
+    if (!confirm('Dispose this item? This removes it with no revenue.')) return;
+    await disposeItemInline(it);
+    closeInvItemModal();
+  });
+  invItemActions.appendChild(disposeBtn);
 
   // Upgrade quality
   const qualityBtn = document.createElement('button');

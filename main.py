@@ -3547,6 +3547,93 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
     return {"status": "success", "inventory": inv2, "transaction": tx}
 
+
+def _pop_inventory_item(inv: dict, item_id: str):
+    containers = _ensure_self_container(inv.get("containers") or [])
+    items = inv.get("items") or []
+    idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Item not found")
+    item = items[idx]
+    remaining = items[:idx] + items[idx+1:]
+    return item, remaining, containers
+
+
+@app.post("/inventories/{inv_id}/items/{item_id}/dispose")
+def dispose_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    it, remaining, containers = _pop_inventory_item(inv, item_id)
+    currency = (payload.get("currency") or _pick_currency(inv)).strip()
+    qty = int(it.get("quantity") or 1)
+
+    curmap = inv.get("currencies", {})
+    # no currency delta (disposed)
+
+    containers, inv_enc_total = _recompute_encumbrance(remaining, containers)
+    tx = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "currency": currency,
+        "amount": 0,
+        "note": f"Disposed {it.get('name','Item')} x{qty}",
+        "source": "dispose",
+        "item_id": item_id
+    }
+    db.inventories.update_one({"id": inv_id}, {
+        "$set": {"currencies": curmap, "items": remaining, "containers": containers, "enc_total": inv_enc_total},
+        "$push": {"transactions": tx}
+    })
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2, "transaction": tx}
+
+
+@app.post("/inventories/{inv_id}/items/{item_id}/sell")
+def sell_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    it, remaining, containers = _pop_inventory_item(inv, item_id)
+    currency = (payload.get("currency") or _pick_currency(inv)).strip()
+    qty = int(it.get("quantity") or 1)
+    base_price = int(it.get("base_price") or 0)
+    quality = it.get("quality") or "Adequate"
+    kind = it.get("kind") or "object"
+    market_unit = _qprice(base_price, quality) if kind in ("weapon", "equipment") else base_price
+    fallback_unit = int(it.get("paid_unit") or market_unit)
+    try:
+        price_input = float(payload.get("price")) if payload.get("price") is not None else fallback_unit
+    except Exception:
+        price_input = fallback_unit
+    unit_price = max(0, int(round(price_input)))
+    total = unit_price * qty
+
+    curmap = inv.get("currencies", {})
+    curmap[currency] = int(curmap.get(currency, 0)) + total
+
+    containers, inv_enc_total = _recompute_encumbrance(remaining, containers)
+    tx = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "currency": currency,
+        "amount": total,
+        "note": f"Sold {it.get('name','Item')} x{qty} @ {unit_price}",
+        "source": "sell",
+        "item_id": item_id
+    }
+    db.inventories.update_one({"id": inv_id}, {
+        "$set": {"currencies": curmap, "items": remaining, "containers": containers, "enc_total": inv_enc_total},
+        "$push": {"transactions": tx}
+    })
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2, "transaction": tx}
+
+
 @app.get("/catalog/weapons")
 def catalog_weapons(request: Request, q: str = "", limit: int = 50):
     require_auth(request)
