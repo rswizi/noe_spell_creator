@@ -2827,6 +2827,8 @@ def _recompute_encumbrance(items: list[dict], containers: list[dict]) -> tuple[l
         cid = it.get("container_id") or SELF_CONTAINER_ID
         if it.get("equipped") is not False:
             cid = SELF_CONTAINER_ID
+        elif cid == SELF_CONTAINER_ID:
+            cid = it.get("stowed_container_id") or _default_stow_container(containers)
         dest = cont_map.get(cid) or cont_map.get(SELF_CONTAINER_ID)
         if dest is None and containers:
             dest = containers[0]
@@ -2931,6 +2933,45 @@ def patch_container(request: Request, inv_id: str, cid: str, payload: dict = Bod
 
     containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
     db.inventories.update_one({"id": inv_id}, {"$set": {"containers": containers, "enc_total": inv_total}})
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2}
+
+
+@app.delete("/inventories/{inv_id}/containers/{cid}")
+def delete_container(request: Request, inv_id: str, cid: str):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    containers = _ensure_self_container(inv.get("containers") or [])
+    target = next((c for c in containers if c.get("id") == cid), None)
+    if not target:
+        raise HTTPException(404, "Container not found")
+    if target.get("built_in"):
+        raise HTTPException(400, "Cannot delete this container")
+
+    remaining = [c for c in containers if c.get("id") != cid]
+    items = inv.get("items") or []
+    non_self = [c for c in remaining if c.get("id") != SELF_CONTAINER_ID]
+    if not non_self:
+        extra = _new_container("Storage")
+        remaining.append(extra)
+    fallback = _default_stow_container(remaining)
+
+    for it in items:
+        if it.get("container_id") == cid and not it.get("equipped"):
+            it["container_id"] = fallback
+            it["stowed_container_id"] = it.get("stowed_container_id") or fallback
+        if it.get("stowed_container_id") == cid:
+            it["stowed_container_id"] = fallback
+
+    remaining, inv_total = _recompute_encumbrance(items, remaining)
+    db.inventories.update_one(
+        {"id": inv_id, "owner": user},
+        {"$set": {"containers": remaining, "items": items, "enc_total": inv_total}}
+    )
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
     return {"status": "success", "inventory": inv2}
 
@@ -3294,6 +3335,8 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
     move_target = None
     if target_container is not None:
         move_target = target_container if target_container in valid_ids else _default_stow_container(containers)
+        if move_target == SELF_CONTAINER_ID and not (equipped is True or it.get("equipped")):
+            raise HTTPException(400, "Only equipped items can be placed in Self")
 
     if equipped is not None:
         is_eq = bool(equipped)
@@ -3304,6 +3347,8 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
             it["container_id"] = SELF_CONTAINER_ID
         else:
             dest = move_target or it.get("stowed_container_id") or _default_stow_container(containers)
+            if dest == SELF_CONTAINER_ID:
+                dest = _default_stow_container(containers)
             it["container_id"] = dest or _default_stow_container(containers)
             if it["container_id"] != SELF_CONTAINER_ID:
                 it["stowed_container_id"] = it["container_id"]

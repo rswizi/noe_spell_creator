@@ -616,8 +616,8 @@
       <select id="inv-global-cur"></select>
       <label class="muted">Equipped?</label>
       <select id="inv-equpped-flag">
+        <option value="0" selected>No</option>
         <option value="1">Yes</option>
-        <option value="0">No</option>
       </select>
     </div>
     <div id="inv-results" class="list" style="margin-top:10px; max-height:420px; overflow:auto;"></div>
@@ -1630,6 +1630,7 @@ function renderInventoryUI(){
           <label class="row muted" style="gap:6px; align-items:center;">
             <input type="checkbox" data-cont="${c.id}" ${c.include===false?'':'checked'}> Include
           </label>
+          ${c.built_in ? '' : `<button class="btn small" data-del="${c.id}">Delete</button>`}
         </div>
         <div class="items"></div>
       `;
@@ -1652,6 +1653,29 @@ function renderInventoryUI(){
           `;
           row.querySelector('.toggle').addEventListener('click', ()=> toggleEquipInline(it));
           row.querySelector('.open').addEventListener('click', ()=> openInvItemModal(it));
+          const moveWrap = document.createElement('div');
+          moveWrap.className = 'row';
+          moveWrap.style.gap = '6px';
+          const moveSelect = document.createElement('select');
+          const allowed = containers.filter(cc=> it.equipped!==false ? true : cc.id !== SELF_CONTAINER_ID);
+          const currentTarget = it.equipped!==false ? (it.stowed_container_id || it.container_id || SELF_CONTAINER_ID) : (it.container_id || '');
+          allowed.forEach(cc=>{
+            const o=document.createElement('option');
+            o.value = cc.id;
+            o.textContent = cc.name || cc.id;
+            if (currentTarget === cc.id) o.selected = true;
+            moveSelect.appendChild(o);
+          });
+          const moveBtn = document.createElement('button');
+          moveBtn.className = 'btn small';
+          moveBtn.textContent = 'Move';
+          moveBtn.addEventListener('click', async ()=>{
+            const target = moveSelect.value;
+            await moveItemToContainer(it, target);
+          });
+          moveWrap.appendChild(moveSelect);
+          moveWrap.appendChild(moveBtn);
+          row.appendChild(moveWrap);
           list.appendChild(row);
         });
       }
@@ -1662,12 +1686,17 @@ function renderInventoryUI(){
   invContainersEl.querySelectorAll('input[data-cont]').forEach(cb=>{
     cb.addEventListener('change', ()=> toggleContainerInclude(cb.getAttribute('data-cont'), cb.checked));
   });
+  invContainersEl.querySelectorAll('button[data-del]').forEach(btn=>{
+    btn.addEventListener('click', ()=> deleteContainer(btn.getAttribute('data-del')));
+  });
 
   // Global container select for purchases/moves
   invGlobalContEl.innerHTML = '';
   containers.forEach(c=>{
     const o=document.createElement('option'); o.value=c.id; o.textContent=c.name||c.id; invGlobalContEl.appendChild(o);
   });
+  const firstNonSelf = Array.from(invGlobalContEl.options).map(o=>o.value).find(v=>v !== SELF_CONTAINER_ID);
+  if (firstNonSelf) invGlobalContEl.value = firstNonSelf;
 
   // Transactions
   const txs = (LINKED_INV.transactions || []).slice(-12).reverse();
@@ -1842,8 +1871,13 @@ function invClearSearch(){
 }
 
 async function invBuyItem(kind, ref_id, quantity, container_id, currency){
+  const equipFlag = invEquippedFlagEl.value === "1";
+  if (!equipFlag && container_id === SELF_CONTAINER_ID){
+    const firstNonSelf = Array.from(invGlobalContEl.options || []).map(o=>o.value).find(v=>v !== SELF_CONTAINER_ID);
+    container_id = firstNonSelf || "";
+  }
   const priceModifier = parseFloat(invPriceModEl?.value || "1") || 1;
-  const payload = { kind, ref_id, quantity, container_id, currency, price_modifier: priceModifier, equipped: invEquippedFlagEl.value === "1" };
+  const payload = { kind, ref_id, quantity, container_id, currency, price_modifier: priceModifier, equipped: equipFlag };
   const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/purchase`, {
     method: "POST",
     headers: { "Content-Type":"application/json", ...authHeaders() },
@@ -1940,6 +1974,42 @@ async function toggleContainerInclude(containerId, include){
   }catch(e){
     alert(e.message);
     renderInventoryUI();
+  }
+}
+
+async function moveItemToContainer(it, containerId){
+  if (!SELECTED_INV_ID || !containerId) return;
+  if (it.equipped===false && containerId === SELF_CONTAINER_ID){
+    alert('Only equipped items can be on Self.');
+    return;
+  }
+  try{
+    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}`, {
+      method:"PATCH",
+      headers:{ "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify({ container_id: containerId })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success"){ throw new Error(j.message || "Move failed"); }
+    LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function deleteContainer(containerId){
+  if (!SELECTED_INV_ID || !containerId) return;
+  if (!confirm('Delete this container? Items will be moved to another container.')) return;
+  try{
+    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/containers/${encodeURIComponent(containerId)}`, {
+      method:"DELETE",
+      headers:{ ...authHeaders() }
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success"){ throw new Error(j.message || "Delete failed"); }
+    LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+  }catch(e){
+    alert(e.message);
   }
 }
 
