@@ -320,10 +320,17 @@ function renderInventory(){
 
         const toggle = document.createElement("button");
         toggle.className = "btn small";
-        toggle.textContent = equipped ? "Unequip" : "Equip";
-        toggle.addEventListener("click", async ()=>{
-          await toggleEquip(it.item_id, !equipped);
-        });
+        if (it.consumable){
+          toggle.textContent = "Use";
+          toggle.addEventListener("click", async ()=>{
+            await useItem(it.item_id);
+          });
+        }else{
+          toggle.textContent = equipped ? "Unequip" : "Equip";
+          toggle.addEventListener("click", async ()=>{
+            await toggleEquip(it.item_id, !equipped);
+          });
+        }
 
         const details = document.createElement("button");
         details.className = "btn small view";
@@ -605,6 +612,40 @@ async function toggleEquip(item_id, equipped){
     applyInventory(j.inventory);
   }
 
+function alchemyTierFromPrice(price){
+  const ladder = [ [10000,6],[2000,5],[1000,4],[200,3],[100,2],[50,1] ];
+  let tier = 1;
+  const p = Number(price||0);
+  for (const [min,t] of ladder){
+    if (p >= min){ tier = t; break; }
+  }
+  return tier;
+}
+
+async function useItem(item_id){
+  const currency = $("#global-cur").value || "Jelly";
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/use`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ currency })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Use failed"); return; }
+  applyInventory(j.inventory);
+}
+
+async function refillAlchemy(item_id){
+  const currency = $("#global-cur").value || "Jelly";
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/refill_alchemy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ currency })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Refill failed"); return; }
+  applyInventory(j.inventory);
+}
+
 async function sellItem(item_id, price){
   const currency = $("#global-cur").value || "Jelly";
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/sell`, {
@@ -675,19 +716,98 @@ function openItemModal(it){
   const actions = $("#item-actions");
   actions.innerHTML = "";
 
-  const equipRow = document.createElement("div");
-  equipRow.className = "row";
-  equipRow.style.marginTop = "8px";
-  const equipBtn = document.createElement("button");
-  equipBtn.className = "btn small";
-  equipBtn.textContent = equipped ? "Unequip" : "Equip";
-  equipBtn.addEventListener("click", async ()=>{
-    await toggleEquip(it.item_id, !equipped);
-    closeItemModal();
-  });
-    equipRow.appendChild(document.createTextNode(equipped ? "Item is equipped" : "Item is not equipped"));
-    equipRow.appendChild(equipBtn);
-    actions.appendChild(equipRow);
+    const flagRow = document.createElement("div");
+    flagRow.className = "row";
+    flagRow.style.marginTop = "8px";
+    const consumableToggle = document.createElement("label");
+    consumableToggle.className = "muted";
+    consumableToggle.style.display = "flex";
+    consumableToggle.style.alignItems = "center";
+    consumableToggle.style.gap = "6px";
+    consumableToggle.innerHTML = `<input type="checkbox" id="flag-consumable" ${it.consumable ? "checked" : ""}> Consumable`;
+    const alchemyToggle = document.createElement("label");
+    alchemyToggle.className = "muted";
+    alchemyToggle.style.display = "flex";
+    alchemyToggle.style.alignItems = "center";
+    alchemyToggle.style.gap = "6px";
+    alchemyToggle.innerHTML = `<input type="checkbox" id="flag-alchemy" ${it.alchemy_tool ? "checked" : ""}> Alchemy tool`;
+    flagRow.appendChild(consumableToggle);
+    flagRow.appendChild(alchemyToggle);
+    actions.appendChild(flagRow);
+
+    consumableToggle.querySelector("input").addEventListener("change", async (e)=>{
+      const consumable = e.target.checked;
+      const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(it.item_id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ consumable })
+      });
+      const j = await r.json().catch(()=>({}));
+      if (j.status !== "success"){ alert(j.message || "Update failed"); e.target.checked = !consumable; return; }
+      applyInventory(j.inventory);
+      closeItemModal();
+    });
+    alchemyToggle.querySelector("input").addEventListener("change", async (e)=>{
+      const alchemy_tool = e.target.checked;
+      const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(it.item_id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ alchemy_tool })
+      });
+      const j = await r.json().catch(()=>({}));
+      if (j.status !== "success"){ alert(j.message || "Update failed"); e.target.checked = !alchemy_tool; return; }
+      applyInventory(j.inventory);
+      closeItemModal();
+    });
+
+    if (it.consumable){
+      const useRow = document.createElement("div");
+      useRow.className = "row";
+      useRow.style.marginTop = "8px";
+      const useBtn = document.createElement("button");
+      useBtn.className = "btn small";
+      useBtn.textContent = "Use";
+      if ((Number(it.quantity)||0) <= 0) useBtn.disabled = true;
+      useBtn.addEventListener("click", async ()=>{
+        await useItem(it.item_id);
+        closeItemModal();
+      });
+      useRow.appendChild(document.createTextNode("Consumable item"));
+      useRow.appendChild(useBtn);
+      actions.appendChild(useRow);
+    }else{
+      const equipRow = document.createElement("div");
+      equipRow.className = "row";
+      equipRow.style.marginTop = "8px";
+      const equipBtn = document.createElement("button");
+      equipBtn.className = "btn small";
+      equipBtn.textContent = equipped ? "Unequip" : "Equip";
+      equipBtn.addEventListener("click", async ()=>{
+        await toggleEquip(it.item_id, !equipped);
+        closeItemModal();
+      });
+      equipRow.appendChild(document.createTextNode(equipped ? "Item is equipped" : "Item is not equipped"));
+      equipRow.appendChild(equipBtn);
+      actions.appendChild(equipRow);
+    }
+
+    if (it.alchemy_tool){
+      const tier = alchemyTierFromPrice(it.base_price);
+      const cost = 50 * tier;
+      const refillRow = document.createElement("div");
+      refillRow.className = "row";
+      refillRow.style.marginTop = "8px";
+      const refillBtn = document.createElement("button");
+      refillBtn.className = "btn small";
+      refillBtn.textContent = `Refill (+1, ${cost} Jelly)`;
+      refillBtn.addEventListener("click", async ()=>{
+        await refillAlchemy(it.item_id);
+        closeItemModal();
+      });
+      refillRow.appendChild(document.createTextNode(`Alchemy tool (tier ${tier})`));
+      refillRow.appendChild(refillBtn);
+      actions.appendChild(refillRow);
+    }
 
     const sellRow = document.createElement("div");
     sellRow.className = "row";

@@ -3352,7 +3352,9 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
     alt_name = payload.get("alt_name", None)
     equipped = payload.get("equipped", None)
     target_container = payload.get("container_id", None)
-    if alt_name is None and equipped is None and target_container is None:
+    consumable = payload.get("consumable", None)
+    alchemy_tool = payload.get("alchemy_tool", None)
+    if alt_name is None and equipped is None and target_container is None and consumable is None and alchemy_tool is None:
         raise HTTPException(400, "Nothing to update")
 
     containers = _ensure_self_container(inv.get("containers") or [])
@@ -3364,6 +3366,15 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
     it = dict(items[idx])
     if alt_name is not None:
         it["alt_name"] = (alt_name or "").strip()
+    if consumable is not None:
+        it["consumable"] = bool(consumable)
+        if it["consumable"]:
+            # consumables should not stay equipped
+            it["equipped"] = False
+            if it.get("container_id") == SELF_CONTAINER_ID:
+                it["container_id"] = it.get("stowed_container_id") or _default_stow_container(containers)
+    if alchemy_tool is not None:
+        it["alchemy_tool"] = bool(alchemy_tool)
 
     valid_ids = {c.get("id") for c in containers}
     move_target = None
@@ -3373,6 +3384,8 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
             raise HTTPException(400, "Only equipped items can be placed in Self")
 
     if equipped is not None:
+        if it.get("consumable"):
+            raise HTTPException(400, "Consumable items cannot be equipped")
         is_eq = bool(equipped)
         it["equipped"] = is_eq
         if is_eq:
@@ -3559,6 +3572,22 @@ def _pop_inventory_item(inv: dict, item_id: str):
     return item, remaining, containers
 
 
+def _alchemy_tier_from_price(price: float) -> int:
+    # map based on provided price ladder; fallback to nearest lower tier, minimum 1
+    table = [
+        (10000, 6),  # special
+        (2000, 5),
+        (1000, 4),
+        (200, 3),
+        (100, 2),
+        (50, 1),
+    ]
+    for p, tier in table:
+        if price >= p:
+            return tier
+    return 1
+
+
 @app.post("/inventories/{inv_id}/items/{item_id}/dispose")
 def dispose_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
     user, role = require_auth(request)
@@ -3628,6 +3657,102 @@ def sell_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(
     }
     db.inventories.update_one({"id": inv_id}, {
         "$set": {"currencies": curmap, "items": remaining, "containers": containers, "enc_total": inv_enc_total},
+        "$push": {"transactions": tx}
+    })
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2, "transaction": tx}
+
+
+@app.post("/inventories/{inv_id}/items/{item_id}/use")
+def use_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    items = inv.get("items") or []
+    idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Item not found")
+    it = dict(items[idx])
+    if not it.get("consumable"):
+        raise HTTPException(400, "Item is not consumable")
+
+    qty = max(0, int(it.get("quantity") or 1))
+    if qty <= 0:
+        raise HTTPException(400, "No quantity remaining")
+    new_qty = max(0, qty - 1)
+    keep_item = it.get("alchemy_tool") or new_qty > 0
+    currency = (payload.get("currency") or _pick_currency(inv)).strip()
+
+    if keep_item:
+        it["quantity"] = new_qty
+        it["equipped"] = False
+        items[idx] = it
+    else:
+        items = items[:idx] + items[idx+1:]
+
+    containers = _ensure_self_container(inv.get("containers") or [])
+    containers, inv_enc_total = _recompute_encumbrance(items, containers)
+    curmap = inv.get("currencies", {})
+
+    tx = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "currency": currency,
+        "amount": 0,
+        "note": f"Used {it.get('name','Item')} (remaining {new_qty})",
+        "source": "use",
+        "item_id": item_id
+    }
+    db.inventories.update_one({"id": inv_id}, {
+        "$set": {"items": items, "containers": containers, "enc_total": inv_enc_total, "currencies": curmap},
+        "$push": {"transactions": tx}
+    })
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2, "transaction": tx}
+
+
+@app.post("/inventories/{inv_id}/items/{item_id}/refill_alchemy")
+def refill_alchemy_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    items = inv.get("items") or []
+    idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Item not found")
+    it = dict(items[idx])
+    if not it.get("alchemy_tool"):
+        raise HTTPException(400, "Item is not an alchemy tool")
+
+    base_price = int(it.get("base_price") or 0)
+    tier = _alchemy_tier_from_price(base_price)
+    cost = 50 * max(1, tier)
+    currency = (payload.get("currency") or _pick_currency(inv)).strip()
+
+    curmap = inv.get("currencies", {})
+    curmap[currency] = int(curmap.get(currency, 0)) - cost
+
+    it["quantity"] = max(0, int(it.get("quantity") or 0)) + 1
+    items[idx] = it
+
+    containers = _ensure_self_container(inv.get("containers") or [])
+    containers, inv_enc_total = _recompute_encumbrance(items, containers)
+
+    tx = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "currency": currency,
+        "amount": -cost,
+        "note": f"Refill {it.get('name','Alchemy tool')} (+1) tier {tier}",
+        "source": "refill_alchemy",
+        "item_id": item_id
+    }
+    db.inventories.update_one({"id": inv_id}, {
+        "$set": {"items": items, "containers": containers, "enc_total": inv_enc_total, "currencies": curmap},
         "$push": {"transactions": tx}
     })
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
