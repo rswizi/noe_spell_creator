@@ -678,37 +678,30 @@ function openItemModal(it){
   const totalPaid = (Number(it.paid_unit||0) * Number(it.quantity||1)) || 0;
 
   $("#item-body").innerHTML = `
-    <div class="row">
+    <div class="row" style="flex-wrap:wrap; gap:6px;">
       <span class="pill">Kind: <b>${escapeHtml(it.kind || "object")}</b></span>
       ${it.subcategory ? `<span class="pill">Sub: <b>${escapeHtml(it.subcategory)}</b></span>` : "" }
       ${it.quality ? `<span class="pill">Quality: <b>${escapeHtml(it.quality)}</b></span>` : "" }
       ${it.variant ? `<span class="pill">Variant: <b>${escapeHtml(it.variant)}</b></span>` : "" }
+      <span class="pill">${equipped ? "Equipped" : "Unequipped"}</span>
     </div>
-    <div class="row">
+    <div class="row" style="flex-wrap:wrap; gap:6px;">
       <span class="pill">Quantity: <b>${it.quantity||1}</b></span>
       <span class="pill">Enc (unit): <b>${Number(it.enc||0).toFixed(1)}</b></span>
       <span class="pill">Enc (total): <b>${totalEnc.toFixed(1)}</b></span>
-    </div>
-    <div class="row">
       <span class="pill">Base price (unit): <b>${Number(it.base_price||0)}</b></span>
       <span class="pill">Paid (unit): <b>${Number(it.paid_unit||0)}</b></span>
       <span class="pill">Paid (total): <b>${totalPaid}</b></span>
     </div>
-    <div class="row">
-      <span class="pill">${equipped ? "Equipped" : "Unequipped"}</span>
-      ${Array.isArray(it.modifiers) && it.modifiers.length ? `<span class="muted">Modifiers: ${it.modifiers.map(m=>`<span class="pill">${escapeHtml(m.mode||"add") } ${escapeHtml(m.value||0)} -> ${escapeHtml(m.target||"")}</span>`).join(" ")} </span>` : ""}
-    </div>
+    ${Array.isArray(it.modifiers) && it.modifiers.length ? `<div class="row" style="flex-wrap:wrap; gap:6px;">
+      <span class="pill">Mods:</span>
+      ${it.modifiers.map(m=>`<span class="pill">${escapeHtml(m.mode||"add") } ${escapeHtml(m.value||0)} -> ${escapeHtml(m.target||"")}</span>`).join(" ")}
+    </div>` : ""}
     ${Array.isArray(it.upgrades) && it.upgrades.length
-      ? `<div class="row">Upgrades: ${it.upgrades.map(u=>`<span class="pill">${escapeHtml(u.name||u)}${u.target?` → ${escapeHtml(u.target)}`:""}</span>`).join(" ")}</div>`
+      ? `<div class="row" style="flex-wrap:wrap; gap:6px;">Upgrades: ${it.upgrades.map(u=>`<span class="pill">${escapeHtml(u.name||u)}${u.target?` ? ${escapeHtml(u.target)}`:""}</span>`).join(" ")}</div>`
       : ""
     }
 
-    <!-- Alt name edit -->
-    <div class="row" style="margin-top:8px;">
-      <label class="muted">Alternative name</label>
-      <input id="alt-name" value="${escapeAttr(it.alt_name || "")}" style="flex:1; min-width:200px;">
-      <button class="btn small" id="save-alt">Save</button>
-    </div>
     <div class="muted" style="margin-top:8px;">Ref ID: ${escapeHtml(it.ref_id || "")}</div>
     <div class="muted">Item ID: ${escapeHtml(it.item_id || "")}</div>
   `;
@@ -716,131 +709,103 @@ function openItemModal(it){
   const actions = $("#item-actions");
   actions.innerHTML = "";
 
-    const flagRow = document.createElement("div");
-    flagRow.className = "row";
-    flagRow.style.marginTop = "8px";
-    const consumableToggle = document.createElement("label");
-    consumableToggle.className = "muted";
-    consumableToggle.style.display = "flex";
-    consumableToggle.style.alignItems = "center";
-    consumableToggle.style.gap = "6px";
-    consumableToggle.innerHTML = `<input type="checkbox" id="flag-consumable" ${it.consumable ? "checked" : ""}> Consumable`;
-    const alchemyToggle = document.createElement("label");
-    alchemyToggle.className = "muted";
-    alchemyToggle.style.display = "flex";
-    alchemyToggle.style.alignItems = "center";
-    alchemyToggle.style.gap = "6px";
-    alchemyToggle.innerHTML = `<input type="checkbox" id="flag-alchemy" ${it.alchemy_tool ? "checked" : ""}> Alchemy tool`;
-    flagRow.appendChild(consumableToggle);
-    flagRow.appendChild(alchemyToggle);
-    actions.appendChild(flagRow);
+  const altToggle = document.createElement("div");
+  altToggle.className = "row";
+  altToggle.style.marginTop = "8px";
+  altToggle.style.gap = "6px";
+  const altBtn = document.createElement("button");
+  altBtn.className = "btn small";
+  altBtn.textContent = "Set alt name";
+  altToggle.appendChild(altBtn);
+  actions.appendChild(altToggle);
 
-    consumableToggle.querySelector("input").addEventListener("change", async (e)=>{
-      const consumable = e.target.checked;
-      const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(it.item_id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ consumable })
-      });
-      const j = await r.json().catch(()=>({}));
-      if (j.status !== "success"){ alert(j.message || "Update failed"); e.target.checked = !consumable; return; }
-      applyInventory(j.inventory);
+  const altWrap = document.createElement("div");
+  altWrap.className = "row";
+  altWrap.style.marginTop = "8px";
+  altWrap.style.display = "none";
+  altWrap.innerHTML = `
+    <input id="alt-name" value="${escapeAttr(it.alt_name || "")}" style="flex:1; min-width:200px;">
+    <button class="btn small" id="save-alt">Save</button>
+  `;
+  altBtn.addEventListener("click", ()=>{ altWrap.style.display = altWrap.style.display === "none" ? "" : "none"; });
+  actions.appendChild(altWrap);
+
+  document.getElementById("save-alt").addEventListener("click", async ()=>{
+    const alt = document.getElementById("alt-name").value || "";
+    const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(it.item_id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ alt_name: alt })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success"){ alert(j.message || "Save failed"); return; }
+    applyInventory(j.inventory);
+    closeItemModal();
+  });
+
+  if (it.consumable){
+    const useRow = document.createElement("div");
+    useRow.className = "row";
+    useRow.style.marginTop = "8px";
+    const useBtn = document.createElement("button");
+    useBtn.className = "btn small";
+    useBtn.textContent = "Use";
+    if ((Number(it.quantity)||0) <= 0) useBtn.disabled = true;
+    useBtn.addEventListener("click", async ()=>{
+      await useItem(it.item_id);
       closeItemModal();
     });
-    alchemyToggle.querySelector("input").addEventListener("change", async (e)=>{
-      const alchemy_tool = e.target.checked;
-      const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(it.item_id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ alchemy_tool })
-      });
-      const j = await r.json().catch(()=>({}));
-      if (j.status !== "success"){ alert(j.message || "Update failed"); e.target.checked = !alchemy_tool; return; }
-      applyInventory(j.inventory);
+    useRow.appendChild(document.createTextNode("Consumable item"));
+    useRow.appendChild(useBtn);
+    actions.appendChild(useRow);
+  }else{
+    const equipRow = document.createElement("div");
+    equipRow.className = "row";
+    equipRow.style.marginTop = "8px";
+    const equipBtn = document.createElement("button");
+    equipBtn.className = "btn small";
+    equipBtn.textContent = equipped ? "Unequip" : "Equip";
+    equipBtn.addEventListener("click", async ()=>{
+      await toggleEquip(it.item_id, !equipped);
       closeItemModal();
     });
+    equipRow.appendChild(document.createTextNode(equipped ? "Item is equipped" : "Item is not equipped"));
+    equipRow.appendChild(equipBtn);
+    actions.appendChild(equipRow);
+  }
 
-    if (it.consumable){
-      const useRow = document.createElement("div");
-      useRow.className = "row";
-      useRow.style.marginTop = "8px";
-      const useBtn = document.createElement("button");
-      useBtn.className = "btn small";
-      useBtn.textContent = "Use";
-      if ((Number(it.quantity)||0) <= 0) useBtn.disabled = true;
-      useBtn.addEventListener("click", async ()=>{
-        await useItem(it.item_id);
-        closeItemModal();
-      });
-      useRow.appendChild(document.createTextNode("Consumable item"));
-      useRow.appendChild(useBtn);
-      actions.appendChild(useRow);
-    }else{
-      const equipRow = document.createElement("div");
-      equipRow.className = "row";
-      equipRow.style.marginTop = "8px";
-      const equipBtn = document.createElement("button");
-      equipBtn.className = "btn small";
-      equipBtn.textContent = equipped ? "Unequip" : "Equip";
-      equipBtn.addEventListener("click", async ()=>{
-        await toggleEquip(it.item_id, !equipped);
-        closeItemModal();
-      });
-      equipRow.appendChild(document.createTextNode(equipped ? "Item is equipped" : "Item is not equipped"));
-      equipRow.appendChild(equipBtn);
-      actions.appendChild(equipRow);
-    }
+  const sellRow = document.createElement("div");
+  sellRow.className = "row";
+  sellRow.style.marginTop = "8px";
+  const sellBtn = document.createElement("button");
+  sellBtn.className = "btn small";
+  sellBtn.textContent = "Sell";
+  sellBtn.addEventListener("click", async ()=>{
+    const fallback = Number(it.base_price ?? it.paid_unit ?? 0) || 0;
+    const ask = prompt("Sell price per unit (blank to cancel)", fallback);
+    if (ask === null) return;
+    const price = Number(ask);
+    if (!Number.isFinite(price) || price < 0){ alert("Enter a valid price."); return; }
+    await sellItem(it.item_id, price);
+    closeItemModal();
+  });
+  const disposeBtn = document.createElement("button");
+  disposeBtn.className = "btn btn-secondary small";
+  disposeBtn.textContent = "Dispose";
+  disposeBtn.addEventListener("click", async ()=>{
+    if (!confirm("Dispose this item? This removes it with no revenue.")) return;
+    await disposeItem(it.item_id);
+    closeItemModal();
+  });
+  sellRow.appendChild(sellBtn);
+  sellRow.appendChild(disposeBtn);
+  actions.appendChild(sellRow);
 
-    if (it.alchemy_tool){
-      const tier = alchemyTierFromPrice(it.base_price);
-      const cost = 50 * tier;
-      const refillRow = document.createElement("div");
-      refillRow.className = "row";
-      refillRow.style.marginTop = "8px";
-      const refillBtn = document.createElement("button");
-      refillBtn.className = "btn small";
-      refillBtn.textContent = `Refill (+1, ${cost} Jelly)`;
-      refillBtn.addEventListener("click", async ()=>{
-        await refillAlchemy(it.item_id);
-        closeItemModal();
-      });
-      refillRow.appendChild(document.createTextNode(`Alchemy tool (tier ${tier})`));
-      refillRow.appendChild(refillBtn);
-      actions.appendChild(refillRow);
-    }
-
-    const sellRow = document.createElement("div");
-    sellRow.className = "row";
-    sellRow.style.marginTop = "8px";
-    const sellBtn = document.createElement("button");
-    sellBtn.className = "btn small";
-    sellBtn.textContent = "Sell";
-    sellBtn.addEventListener("click", async ()=>{
-      const fallback = Number(it.base_price ?? it.paid_unit ?? 0) || 0;
-      const ask = prompt("Sell price per unit (blank to cancel)", fallback);
-      if (ask === null) return;
-      const price = Number(ask);
-      if (!Number.isFinite(price) || price < 0){ alert("Enter a valid price."); return; }
-      await sellItem(it.item_id, price);
-      closeItemModal();
-    });
-    const disposeBtn = document.createElement("button");
-    disposeBtn.className = "btn btn-secondary small";
-    disposeBtn.textContent = "Dispose";
-    disposeBtn.addEventListener("click", async ()=>{
-      if (!confirm("Dispose this item? This removes it with no revenue.")) return;
-      await disposeItem(it.item_id);
-      closeItemModal();
-    });
-    sellRow.appendChild(sellBtn);
-    sellRow.appendChild(disposeBtn);
-    actions.appendChild(sellRow);
-
-    // Only for weapons/equipment: show Upgrade Quality + Install Upgrade
-    if (it.kind === "weapon" || it.kind === "equipment"){
-      const wrap = document.createElement("div");
-      wrap.className = "row";
-      wrap.style.marginTop = "10px";
+  // Only for weapons/equipment: show Upgrade Quality + Install Upgrade
+  if (it.kind === "weapon" || it.kind === "equipment"){
+    const wrap = document.createElement("div");
+    wrap.className = "row";
+    wrap.style.marginTop = "10px";
 
     // Quality selector
     const qlab = document.createElement("label");
@@ -858,42 +823,61 @@ function openItemModal(it){
     qbtn.addEventListener("click", async ()=>{
       const to = qsel.value;
       if (!to || to === it.quality){ alert("Select a higher/different quality."); return; }
-      if (!confirm(`Upgrade ${it.name} to quality "${to}"? This will create a transaction.`)) return;
       await upgradeQuality(it.item_id, to);
+      closeItemModal();
     });
-
-    // Install upgrade controls
-    const ulab = document.createElement("label");
-    ulab.className = "muted"; ulab.textContent = "Install upgrade";
-    const uselect = document.createElement("select");
-    uselect.id = "upgrade-select";
-    uselect.style.minWidth = "220px";
-    const ubtn = document.createElement("button");
-    ubtn.className = "btn small";
-    ubtn.textContent = "Install";
-    ubtn.addEventListener("click", async ()=>{
-      const upid = uselect.value || "";
-      if (!upid){ alert("Select an upgrade."); return; }
-      if (!confirm(`Install upgrade on ${it.name}? This will create a transaction.`)) return;
-      await installUpgrade(it.item_id, upid);
-    });
-
-    wrap.appendChild(qlab); wrap.appendChild(qsel); wrap.appendChild(qbtn);
-    wrap.appendChild(ulab); wrap.appendChild(uselect); wrap.appendChild(ubtn);
+    wrap.appendChild(qlab);
+    wrap.appendChild(qsel);
+    wrap.appendChild(qbtn);
     actions.appendChild(wrap);
 
-    // Populate upgrade select
-    loadUpgradeOptions(ulab, uselect, it);
+    const upRow = document.createElement("div");
+    upRow.className = "row";
+    upRow.style.marginTop = "8px";
+    const ulabel = document.createElement("label"); ulabel.className = "muted"; ulabel.textContent = "Install upgrade";
+    const uselect = document.createElement("select"); uselect.id = "up-select";
+    uselect.innerHTML = '<option value="">-- select upgrade --</option>';
+    const ubtn = document.createElement("button"); ubtn.className = "btn small"; ubtn.textContent = "Install";
+    upRow.appendChild(ulabel); upRow.appendChild(uselect); upRow.appendChild(ubtn);
+    actions.appendChild(upRow);
+
+    loadUpgradeOptions(ulabel, uselect, it);
+    ubtn.addEventListener("click", async ()=>{
+      const sel = uselect.value;
+      if (!sel){ alert("Select an upgrade first."); return; }
+      let target = "";
+      const meta = UPGRADE_META[sel];
+      if (meta && Array.isArray(meta.targets) && meta.targets.length){
+        const choice = prompt(`Select target for ${meta.name || 'upgrade'} (${meta.targets.join(', ')})`, meta.targets[0]);
+        if (!choice || !meta.targets.includes(choice)){ alert("Invalid target."); return; }
+        const existing = (it.upgrades || []).filter(u=>u.target===choice).length;
+        if (existing >= 2){ alert("Target already has two upgrades."); return; }
+        target = choice;
+      }
+      await installUpgrade(it.item_id, sel, target);
+      closeItemModal();
+    });
   }
 
-  // save alt name handler
-  $("#save-alt").addEventListener("click", async ()=>{
-    const alt = ($("#alt-name").value || "").trim();
-    await saveAltName(it.item_id, alt);
-  });
-
-  $("#item-modal").classList.remove("hidden");
+  if (it.alchemy_tool){
+    const tier = alchemyTierFromPrice(it.base_price);
+    const cost = 50 * tier;
+    const refillRow = document.createElement("div");
+    refillRow.className = "row";
+    refillRow.style.marginTop = "8px";
+    const refillBtn = document.createElement("button");
+    refillBtn.className = "btn small";
+    refillBtn.textContent = `Refill (+1, ${cost} Jelly)`;
+    refillBtn.addEventListener("click", async ()=>{
+      await refillAlchemy(it.item_id);
+      closeItemModal();
+    });
+    refillRow.appendChild(document.createTextNode(`Alchemy tool (tier ${tier})`));
+    refillRow.appendChild(refillBtn);
+    actions.appendChild(refillRow);
+  }
 }
+
 
 function closeItemModal(){
   $("#item-modal").classList.add("hidden");

@@ -2147,36 +2147,51 @@ function openInvItemModal(it){
   invItemTitle.textContent = it.alt_name ? `${it.alt_name} (${it.name || 'Item'})` : (it.name || 'Item');
   const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
   const totalPaid = (Number(it.paid_unit||0) * Number(it.quantity||1)) || 0;
+  const equipped = it.equipped !== false;
   invItemBody.innerHTML = `
-    <div class="row">
+    <div class="row" style="flex-wrap:wrap; gap:6px;">
       <span class="pill">Kind: <b>${invEscapeHtml(it.kind||'')}</b></span>
+      ${it.subcategory ? `<span class="pill">Sub: <b>${invEscapeHtml(it.subcategory)}</b></span>` : ''}
       ${it.quality ? `<span class="pill">Quality: <b>${invEscapeHtml(it.quality)}</b></span>` : ''}
       ${it.variant ? `<span class="pill">Variant: <b>${invEscapeHtml(it.variant)}</b></span>` : ''}
+      <span class="pill">${equipped ? 'Equipped' : 'Unequipped'}</span>
     </div>
-    <div class="row">
+    <div class="row" style="flex-wrap:wrap; gap:6px;">
       <span class="pill">Qty: <b>${it.quantity||1}</b></span>
       <span class="pill">Enc (unit): <b>${Number(it.enc||0).toFixed(1)}</b></span>
       <span class="pill">Enc (total): <b>${totalEnc.toFixed(1)}</b></span>
-    </div>
-    <div class="row">
       <span class="pill">Base price: <b>${Number(it.base_price||0)}</b></span>
       <span class="pill">Paid (unit): <b>${Number(it.paid_unit||0)}</b></span>
       <span class="pill">Paid (total): <b>${totalPaid}</b></span>
     </div>
-    <div class="row">
-      <span class="pill">${it.equipped===false?'Unequipped':'Equipped'}</span>
-      ${Array.isArray(it.modifiers) && it.modifiers.length ? `<span class="muted">Mods: ${it.modifiers.map(m=>`<span class="pill">${invEscapeHtml(m.mode||'add')} ${invEscapeHtml(m.value||0)} -> ${invEscapeHtml(m.target||'')}</span>`).join(' ')}</span>` : ''}
-    </div>
+    ${Array.isArray(it.modifiers) && it.modifiers.length ? `<div class="row" style="flex-wrap:wrap; gap:6px;">
+      <span class="pill">Mods:</span>
+      ${it.modifiers.map(m=>`<span class="pill">${invEscapeHtml(m.mode||'add')} ${invEscapeHtml(m.value||0)} -> ${invEscapeHtml(m.target||'')}</span>`).join(' ')}
+    </div>` : ''}
   `;
   invItemActions.innerHTML = '';
+
+  const altToggle = document.createElement('div');
+  altToggle.className = 'row';
+  altToggle.style.marginTop = '8px';
+  altToggle.style.gap = '6px';
+  const altBtn = document.createElement('button');
+  altBtn.className = 'btn small';
+  altBtn.textContent = 'Set alt name';
+  altToggle.appendChild(altBtn);
+  invItemActions.appendChild(altToggle);
+
   const altWrap = document.createElement('div');
   altWrap.className = 'row';
   altWrap.style.marginTop = '8px';
+  altWrap.style.display = 'none';
   altWrap.innerHTML = `
-    <label class="muted">Alt name</label>
     <input id="inv-alt-name" value="${invEscapeHtml(it.alt_name||'')}" style="flex:1; min-width:200px;">
     <button class="btn small" id="inv-save-alt">Save</button>
   `;
+  altBtn.addEventListener('click', ()=>{
+    altWrap.style.display = altWrap.style.display === 'none' ? '' : 'none';
+  });
   altWrap.querySelector('#inv-save-alt').addEventListener('click', async ()=>{
     const alt = document.getElementById('inv-alt-name').value || '';
     const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}`, {
@@ -2189,43 +2204,6 @@ function openInvItemModal(it){
     LINKED_INV = j.inventory; renderInventoryUI(); closeInvItemModal();
   });
   invItemActions.appendChild(altWrap);
-
-  const flagsRow = document.createElement('div');
-  flagsRow.className = 'row';
-  flagsRow.style.marginTop = '6px';
-  flagsRow.innerHTML = `
-    <label class="muted" style="display:flex; align-items:center; gap:6px;">
-      <input type="checkbox" id="inv-flag-consumable" ${it.consumable ? 'checked' : ''}> Consumable
-    </label>
-    <label class="muted" style="display:flex; align-items:center; gap:6px;">
-      <input type="checkbox" id="inv-flag-alchemy" ${it.alchemy_tool ? 'checked' : ''}> Alchemy tool
-    </label>
-  `;
-  flagsRow.querySelector('#inv-flag-consumable').addEventListener('change', async (e)=>{
-    const consumable = e.target.checked;
-    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}`, {
-      method:"PATCH",
-      headers:{ "Content-Type":"application/json", ...authHeaders() },
-      body: JSON.stringify({ consumable })
-    });
-    const j = await r.json().catch(()=>({}));
-    if (j.status !== "success"){ alert(j.message || "Update failed"); e.target.checked = !consumable; return; }
-    LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
-    closeInvItemModal();
-  });
-  flagsRow.querySelector('#inv-flag-alchemy').addEventListener('change', async (e)=>{
-    const alchemy_tool = e.target.checked;
-    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}`, {
-      method:"PATCH",
-      headers:{ "Content-Type":"application/json", ...authHeaders() },
-      body: JSON.stringify({ alchemy_tool })
-    });
-    const j = await r.json().catch(()=>({}));
-    if (j.status !== "success"){ alert(j.message || "Update failed"); e.target.checked = !alchemy_tool; return; }
-    LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
-    closeInvItemModal();
-  });
-  invItemActions.appendChild(flagsRow);
 
   if (it.consumable){
     const useBtn = document.createElement('button');
@@ -2286,21 +2264,23 @@ function openInvItemModal(it){
   invItemActions.appendChild(disposeBtn);
 
   // Upgrade quality
-  const qualityBtn = document.createElement('button');
-  qualityBtn.className = 'btn small';
-  qualityBtn.textContent = 'Improve quality';
-  qualityBtn.addEventListener('click', async ()=>{
-    const target = prompt('Target quality? (e.g., Good, Excellent, ...)', (it.quality || '').toString());
-    if (!target) return;
-    try{
-      const inv = await upgradeQuality(it.item_id, target);
-      LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
-      closeInvItemModal();
-    }catch(e){
-      alert(e.message);
-    }
-  });
-  invItemActions.appendChild(qualityBtn);
+  if (it.kind === 'weapon' || it.kind === 'equipment'){
+    const qualityBtn = document.createElement('button');
+    qualityBtn.className = 'btn small';
+    qualityBtn.textContent = 'Improve quality';
+    qualityBtn.addEventListener('click', async ()=>{
+      const target = prompt('Target quality? (e.g., Good, Excellent, ...)', (it.quality || '').toString());
+      if (!target) return;
+      try{
+        const inv = await upgradeQuality(it.item_id, target);
+        LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+        closeInvItemModal();
+      }catch(e){
+        alert(e.message);
+      }
+    });
+    invItemActions.appendChild(qualityBtn);
+  }
 
   // Install upgrade
   const upWrap = document.createElement('div');
@@ -2311,28 +2291,30 @@ function openInvItemModal(it){
     <select id="inv-up-select" style="min-width:220px;"></select>
     <button class="btn small" id="inv-up-apply">Install</button>
   `;
-  invItemActions.appendChild(upWrap);
-  loadUpgradeOptions(upWrap.querySelector('#inv-up-label'), upWrap.querySelector('#inv-up-select'), it);
-  upWrap.querySelector('#inv-up-apply').addEventListener('click', async ()=>{
-    const sel = upWrap.querySelector('#inv-up-select').value;
-    if (!sel){ alert('Select an upgrade first.'); return; }
-    let target = "";
-    const meta = UPGRADE_META[sel];
-    if (meta && Array.isArray(meta.targets) && meta.targets.length){
-      const choice = prompt(`Select target for ${meta.name || 'upgrade'} (${meta.targets.join(', ')})`, meta.targets[0]);
-      if (!choice || !meta.targets.includes(choice)){ alert('Invalid target.'); return; }
-      const existing = (it.upgrades || []).filter(u=>u.target===choice).length;
-      if (existing >= 2){ alert('Target already has two upgrades.'); return; }
-      target = choice;
-    }
-    try{
-      const inv = await installUpgrade(it.item_id, sel, target);
-      LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
-      closeInvItemModal();
-    }catch(e){
-      alert(e.message);
-    }
-  });
+  if (it.kind === 'weapon' || it.kind === 'equipment'){
+    invItemActions.appendChild(upWrap);
+    loadUpgradeOptions(upWrap.querySelector('#inv-up-label'), upWrap.querySelector('#inv-up-select'), it);
+    upWrap.querySelector('#inv-up-apply').addEventListener('click', async ()=>{
+      const sel = upWrap.querySelector('#inv-up-select').value;
+      if (!sel){ alert('Select an upgrade first.'); return; }
+      let target = "";
+      const meta = UPGRADE_META[sel];
+      if (meta && Array.isArray(meta.targets) && meta.targets.length){
+        const choice = prompt(`Select target for ${meta.name || 'upgrade'} (${meta.targets.join(', ')})`, meta.targets[0]);
+        if (!choice || !meta.targets.includes(choice)){ alert('Invalid target.'); return; }
+        const existing = (it.upgrades || []).filter(u=>u.target===choice).length;
+        if (existing >= 2){ alert('Target already has two upgrades.'); return; }
+        target = choice;
+      }
+      try{
+        const inv = await installUpgrade(it.item_id, sel, target);
+        LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+        closeInvItemModal();
+      }catch(e){
+        alert(e.message);
+      }
+    });
+  }
 
   invItemModal.classList.remove('hidden');
   invItemModal.classList.add('open');
