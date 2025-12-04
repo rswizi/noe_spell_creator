@@ -38,6 +38,7 @@
       <label>Name</label><input id="m-name" />
       <label>Price</label><input id="m-price" type="number" />
       <label>Enc.</label><input id="m-enc" type="number" />
+      <label>Consumable</label><input id="m-consumable" type="checkbox" />
       <label>Description</label><textarea id="m-desc" rows="4"></textarea>
     </div>
         <div class="row" style="margin-top:8px;">
@@ -166,7 +167,10 @@ function openEdit(id){
   document.getElementById("m-name").value  = o.name || "";
   document.getElementById("m-price").value = o.price ?? 0;
   document.getElementById("m-enc").value   = o.enc ?? 0;
-  document.getElementById("m-desc").value  = o.description || "";\n  setModifiers(modListEl, o.modifiers || []);\n  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("m-desc").value  = o.description || "";
+  document.getElementById("m-consumable").checked = !!o.consumable;
+  setModifiers(modListEl, o.modifiers || []);
+  document.getElementById("modal").classList.remove("hidden");
   document.getElementById("modal").setAttribute("aria-hidden","false");
 }
 function closeEdit(){
@@ -194,6 +198,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
     price: Number(document.getElementById("m-price").value || 0),
     enc:   Number(document.getElementById("m-enc").value || 0),
     description: document.getElementById("m-desc").value.trim(),
+    consumable: document.getElementById("m-consumable").checked,
   };
   body.modifiers = collectModifiers(modListEl);
   const r = await fetch(`${API_BASE}/objects/${EDIT_ID}`, {

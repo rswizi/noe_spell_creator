@@ -196,6 +196,7 @@ function openEdit(id){
   document.getElementById("m-tier").value = t.tier || "";
   document.getElementById("m-enc").value  = t.enc ?? 0;
   document.getElementById("m-method").value = t.method || "crafting";
+  document.getElementById("m-consumable").checked = !!t.consumable;
   document.getElementById("m-desc").value = t.description || "";
   setModifiers(modListEl, t.modifiers || []);
   document.getElementById("m-title").textContent = "Edit Tool - " + (t.name || "") + " [" + t.id + "]";

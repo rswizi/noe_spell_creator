@@ -2091,6 +2091,7 @@ def _tool_from_body(b: dict) -> dict:
     method = (b.get("method") or "crafting").strip().lower()
     if method not in ("crafting","alchemy"): method = "crafting"
     desc = (b.get("description") or "").strip()
+    consumable = bool(b.get("consumable"))
     out = {
         "name": name,
         "name_key": norm_key(name),
@@ -2098,6 +2099,7 @@ def _tool_from_body(b: dict) -> dict:
         "enc": enc,
         "method": method,
         "description": desc,
+        "consumable": consumable,
         "modifiers": _modifiers_from_body(b),
     }
     out.update(_derive_for(method, tier))
@@ -3228,6 +3230,8 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "stowed_container_id": stowed_container_id,
         "modifiers": src.get("modifiers") or [],
         "equipped": is_equipped,
+        "consumable": bool(src.get("consumable")),
+        "alchemy_tool": bool(src.get("alchemy_tool")),
     }
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
