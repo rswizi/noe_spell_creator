@@ -2940,7 +2940,12 @@ function charAdjMod(key){
   return { mod:value, notes };
 }
 function skillBaseTotal(key, skill){
-  const inv = investVal(CHAR.stats?.[key]?.skills?.[skill], 0);
+  // Intensities are stored under stats.intensities instead of magic.skills
+  const lowerSkill = String(skill || '').toLowerCase();
+  const isIntensity = key === 'magic' && INTENSITIES.some(n => n.toLowerCase() === lowerSkill);
+  const inv = isIntensity
+    ? investVal((CHAR.stats?.intensities || {})[skill] ?? (CHAR.stats?.intensities || {})[INTENSITIES.find(n => n.toLowerCase() === lowerSkill)], 0)
+    : investVal(CHAR.stats?.[key]?.skills?.[skill], 0);
   return inv + charBaseMod(key);
 }
 function skillAdjTotal(key, skill){
