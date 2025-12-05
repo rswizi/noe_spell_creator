@@ -65,9 +65,9 @@
     .total { font-weight:600; }
     .hdr { display:flex; align-items:center; gap:10px; }
     .skills { display:grid; gap:8px; margin-top:10px; }
-    .skill-line { display:grid; grid-template-columns: minmax(120px, 1fr) 120px 72px; gap:8px; align-items:center; }
-    .skill-line input.num { width:100%; }
-    .skill-total { min-width:64px; text-align:right; font-variant-numeric: tabular-nums; }
+    .skill-line { display:grid; grid-template-columns: minmax(120px, 1fr) 78px 58px; gap:8px; align-items:center; }
+    .skill-line input.num { width:100%; max-width:70px; }
+    .skill-total { min-width:48px; text-align:center; font-variant-numeric: tabular-nums; padding:2px 4px; }
     .charac-badge { font-variant-numeric: tabular-nums; }
     .badge { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; background:#181821; }
     .hdr input.num { width:88px; }
@@ -83,8 +83,8 @@
       gap:6px;
       align-items:center;
     }
-    .intensity-line input.num { width:100%; }
-    .intensity-line .skill-total { text-align:right; }
+    .intensity-line input.num { width:100%; max-width:70px; }
+    .intensity-line .skill-total { text-align:center; min-width:48px; }
     @media (max-width: 900px){
       .intensities-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
     }
