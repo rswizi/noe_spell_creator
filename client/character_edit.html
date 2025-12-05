@@ -400,21 +400,24 @@
               <div id="sl-summary" class="muted" style="margin-bottom:8px;"></div>
 
               <div class="panel" style="margin-bottom:12px;">
-              <details open class="panel">
-                <summary class="hdr">
-                  <strong>Pinned Schools</strong>
-                  <span class="muted">(toggle to pin/unpin)</span>
-                </summary>
-                <div class="panel-body">
-                  <div class="row" style="justify-content:flex-end; margin-bottom:6px; gap:8px; flex-wrap:wrap;">
-                    <label class="row muted" style="gap:6px; align-items:center;">
-                      <input type="checkbox" id="sl-show-pinned"> Show pinned only
-                    </label>
+                <details open class="panel">
+                  <summary class="hdr">
+                    <strong>Schools</strong>
+                    <span class="muted">(add and track MS)</span>
+                  </summary>
+                  <div class="panel-body">
+                    <div class="row" style="margin-bottom:8px; gap:8px; flex-wrap:wrap;">
+                      <button class="btn small" id="sl-add-menu-btn">Add schools</button>
+                      <div id="sl-add-menu" class="row" style="gap:6px; display:none; flex-wrap:wrap;">
+                        <button class="btn small" id="sl-quick-add">Quick Add</button>
+                        <button class="btn small" id="sl-manual-add">Manual Add</button>
+                      </div>
+                      <span class="muted" id="sl-schools-status"></span>
+                    </div>
+                    <div id="sl-schools" class="abi-list"></div>
                   </div>
-                  <div id="sl-schools" class="abi-list"></div>
-                </div>
-              </details>
-            </div>
+                </details>
+              </div>
 
               <div class="panel">
                 <details open class="panel">
@@ -471,6 +474,29 @@
               <button class="btn btn-secondary" id="sl-add-cancel">Close</button>
             </div>
             <div id="sl-add-status" class="muted" style="margin-top:6px;"></div>
+          </div>
+        </div>
+
+        <div id="sl-sch-modal-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+        <div id="sl-sch-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sl-sch-title">
+          <div class="modal-card" style="max-width:720px;">
+            <header class="row" style="justify-content:space-between; align-items:center;">
+              <div class="modal-title" id="sl-sch-title">Add Schools</div>
+              <button class="modal-close" id="sl-sch-close" aria-label="Close">�o</button>
+            </header>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th style="width:8%;">Add</th><th>School</th><th style="width:20%;">Type</th><th style="width:18%;">Category</th></tr></thead>
+                <tbody id="sl-sch-body">
+                  <tr><td colspan="4" class="empty">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="row" style="margin-top:10px; gap:8px;">
+              <button class="btn btn-secondary" id="sl-sch-cancel">Cancel</button>
+              <button class="btn" id="sl-sch-apply">Add selected</button>
+            </div>
+            <div id="sl-sch-status" class="muted" style="margin-top:6px;"></div>
           </div>
         </div>
       </div>
@@ -846,7 +872,7 @@ let LINKED_SPELL_LIST = null;
 let SELECTED_SPELL_LIST_ID = '';
 let SPELLLIST_SPELLS = [];
 let SPELLLIST_META = {};
-let PINNED = new Set();
+let ADDED_SCHOOLS = new Set();
 let SCHOOLS = [];
 let SUBLIMATIONS = [];
 let SUB_HIDDEN = {};
@@ -988,13 +1014,24 @@ const slDupBtn = document.getElementById('sl-dup-btn');
 const slStatusEl = document.getElementById('sl-status');
 const slSummaryEl = document.getElementById('sl-summary');
 const slSchoolsEl = document.getElementById('sl-schools');
+const slSchoolsStatusEl = document.getElementById('sl-schools-status');
+const slAddMenuBtn = document.getElementById('sl-add-menu-btn');
+const slAddMenu = document.getElementById('sl-add-menu');
+const slQuickAddBtn = document.getElementById('sl-quick-add');
+const slManualAddBtn = document.getElementById('sl-manual-add');
+const slSchModal = document.getElementById('sl-sch-modal');
+const slSchBackdrop = document.getElementById('sl-sch-modal-backdrop');
+const slSchClose = document.getElementById('sl-sch-close');
+const slSchCancel = document.getElementById('sl-sch-cancel');
+const slSchApply = document.getElementById('sl-sch-apply');
+const slSchBody = document.getElementById('sl-sch-body');
+const slSchStatus = document.getElementById('sl-sch-status');
 const slSpellsBody = document.getElementById('sl-spells-body');
 const slOpenAddBtn = document.getElementById('sl-open-add');
 const slAddModal = document.getElementById('sl-add-modal');
 const slAddBackdrop = document.getElementById('sl-add-backdrop');
 const slAddClose = document.getElementById('sl-add-close');
 const slAddCancel = document.getElementById('sl-add-cancel');
-const slShowPinnedOnly = document.getElementById('sl-show-pinned');
 const slSearchQ = document.getElementById('sl-search-q');
 const slSearchBtn = document.getElementById('sl-search-btn');
 const slSearchBody = document.getElementById('sl-search-body');
@@ -2530,60 +2567,136 @@ function renderSpellListSummary(){
   slSummaryEl.textContent = `${LINKED_SPELL_LIST.name || 'Spell List'} · Spells: ${count} · MAG: ${iv.mag}`;
 }
 
-async function renderPinnedSchools(){
+function msForSchool(school){
+  const iv = currentIV() || {};
+  const skillKey = (school.linked_skill || '').toLowerCase();
+  const skillVal = numOr(iv.skills?.[skillKey], 0);
+  const ints = (school.linked_intensities || []).map(lc);
+  const vals = ints.map(k => numOr(iv.natures?.[k], 0)).sort((a,b)=>b-a);
+  const magMod = charAdjMod('magic').mod;
+  if (vals.length >= 2){
+    return skillVal + magMod + Math.min(vals[0]||0, vals[1]||0);
+  }
+  if (vals.length === 1){
+    return skillVal + vals[0];
+  }
+  return skillVal + magMod;
+}
+
+function isComplexEligible(school){
+  const magTotal = totalFromInvest(investVal(CHAR.stats.magic?.invest, 0));
+  if (magTotal < 10) return false;
+  const linked = (school.linked_intensities || []).map(lc);
+  const needed = linked.length <= 1 ? 1 : 2;
+  const iv = currentIV() || {};
+  const count = linked.map(k=> numOr(iv.natures?.[k], 0)).filter(v=> v >= 10).length;
+  return count >= needed;
+}
+
+function toggleSchoolModal(open){
+  if (!slSchModal || !slSchBackdrop) return;
+  if (open){
+    slSchModal.classList.remove('hidden'); slSchBackdrop.classList.remove('hidden');
+    slSchModal.classList.add('open'); slSchBackdrop.classList.add('open');
+  }else{
+    slSchModal.classList.add('hidden'); slSchBackdrop.classList.add('hidden');
+    slSchModal.classList.remove('open'); slSchBackdrop.classList.remove('open');
+    if (slSchStatus) slSchStatus.textContent = '';
+  }
+}
+
+async function renderAddedSchools(){
   if (!slSchoolsEl) return;
   if (!SCHOOLS.length){
     try{ await fetchSchools(); }catch{}
   }
   slSchoolsEl.innerHTML = '';
-  if (!SCHOOLS.length){ slSchoolsEl.innerHTML = '<div class="muted">No schools.</div>'; return; }
-  const onlyPinned = !!(slShowPinnedOnly && slShowPinnedOnly.checked);
-  const metaSchools = SPELLLIST_META.school_meta || {};
-  const schools = SCHOOLS.slice().sort((a,b)=>{
-    const pa = PINNED.has(String(a.id||a.name));
-    const pb = PINNED.has(String(b.id||b.name));
-    return Number(pb) - Number(pa);
-  });
-  const iv = currentIV() || {};
-  const ivMag = iv.mag || 0;
-  const filtered = schools.filter(s=> !onlyPinned || PINNED.has(String(s.id||s.name)));
-  if (!filtered.length){ slSchoolsEl.innerHTML = '<div class="muted">No pinned schools yet.</div>'; return; }
-  filtered.forEach(s=>{
-    const key = String(s.id||s.name);
-    const meta = metaSchools[key] || {};
-    const lvlVal = meta.level ?? s.level;
-    const msVal = meta.ms ?? meta.ms_level ?? s.ms_level ?? s.ms ?? ivMag;
-    const category = s.category || s.type || meta.category || '--';
-    const lvlTxt = lvlVal != null ? `Level: ${lvlVal}` : '';
-    const msTxt = msVal != null ? `MS: ${msVal}` : 'MS: --';
-    const statTxt = [msTxt, `Category: ${category}`, lvlTxt].filter(Boolean).join(' ? ');
-    const pinned = PINNED.has(key);
+  if (!ADDED_SCHOOLS.size){
+    slSchoolsEl.innerHTML = '<div class="muted">No schools added yet.</div>';
+    return;
+  }
+  const list = Array.from(ADDED_SCHOOLS).map(id=>{
+    const s = (SCHOOLS||[]).find(x=>String(x.id||x.name)===String(id));
+    return s ? { id, s } : null;
+  }).filter(Boolean);
+  if (!list.length){
+    slSchoolsEl.innerHTML = '<div class="muted">No schools added yet.</div>';
+    return;
+  }
+  list.forEach(({id,s})=>{
+    const ms = msForSchool(s);
+    const cat = s.category || s.type || '--';
     const div = document.createElement('div');
     div.className = 'abi-item';
     div.innerHTML = `
       <div class="grow">
-        <div><strong>${s.name || s.id}</strong></div>
-        <div class="muted">${statTxt}</div>
+        <div><strong>${s.name || id}</strong></div>
+        <div class="muted">MS: ${ms} | Category: ${cat}</div>
       </div>
-      <span class="tag">${pinned ? 'Pinned' : 'Unpinned'}</span>
-      <button class="btn small">${pinned ? 'Unpin' : 'Pin'}</button>
+      <span class="tag">${(s.school_type || s.type || '').toUpperCase()}</span>
+      <button class="btn small" data-remove="${id}">Remove</button>
     `;
     div.querySelector('button').addEventListener('click', async ()=>{
-      const nowPinned = PINNED.has(key);
-      if (nowPinned) PINNED.delete(key); else PINNED.add(key);
-      try{
-        await saveSpellListMeta({ pinned_schools: Array.from(PINNED) });
-      }catch(e){
-        // revert if save fails
-        if (nowPinned) PINNED.add(key); else PINNED.delete(key);
-        alert(e.message || 'Failed to save pinned schools');
-      }
-      renderPinnedSchools();
+      ADDED_SCHOOLS.delete(String(id));
+      try{ await saveSpellListMeta({ selected_schools: Array.from(ADDED_SCHOOLS) }); }catch{}
+      renderAddedSchools();
     });
     slSchoolsEl.appendChild(div);
   });
 }
 
+
+async function quickAddSchools(){
+  if (!SCHOOLS.length){ await fetchSchools(); }
+  const before = new Set(ADDED_SCHOOLS);
+  SCHOOLS.forEach(s=>{
+    const type = (s.school_type || s.type || '').toLowerCase();
+    if (type === 'simple'){
+      ADDED_SCHOOLS.add(String(s.id||s.name));
+    }else if (type === 'complex' && isComplexEligible(s)){
+      ADDED_SCHOOLS.add(String(s.id||s.name));
+    }
+  });
+  const addedCount = ADDED_SCHOOLS.size - before.size;
+  if (slSchoolsStatusEl) slSchoolsStatusEl.textContent = addedCount ? `Added ${addedCount} school(s).` : 'No new schools met the requirements.';
+  try{ await saveSpellListMeta({ selected_schools: Array.from(ADDED_SCHOOLS) }); }catch{}
+  renderAddedSchools();
+}
+
+async function openManualAddModal(){
+  if (!slSchBody) return;
+  slSchBody.innerHTML = '<tr><td colspan="4" class="empty">Loading...</td></tr>';
+  if (!SCHOOLS.length){ await fetchSchools(); }
+  const available = (SCHOOLS||[]).filter(s=> !ADDED_SCHOOLS.has(String(s.id||s.name)));
+  available.sort((a,b)=> (b.category||'').localeCompare(a.category||'') || (a.name||'').localeCompare(b.name||''));
+  slSchBody.innerHTML = '';
+  if (!available.length){
+    slSchBody.innerHTML = '<tr><td colspan="4" class="empty">No remaining schools to add.</td></tr>';
+  }else{
+    available.forEach(s=>{
+      const id = String(s.id||s.name);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="checkbox" value="${id}"></td>
+        <td>${s.name || id}</td>
+        <td>${s.school_type || s.type || ''}</td>
+        <td>${s.category || ''}</td>
+      `;
+      slSchBody.appendChild(tr);
+    });
+  }
+  toggleSchoolModal(true);
+}
+
+async function applyManualAdd(){
+  if (!slSchBody) return;
+  const selected = Array.from(slSchBody.querySelectorAll('input[type="checkbox"]:checked')).map(el=>el.value);
+  selected.forEach(id=> ADDED_SCHOOLS.add(String(id)));
+  try{ await saveSpellListMeta({ selected_schools: Array.from(ADDED_SCHOOLS) }); }catch{}
+  toggleSchoolModal(false);
+  renderAddedSchools();
+  if (slSchoolsStatusEl) slSchoolsStatusEl.textContent = selected.length ? `Added ${selected.length} school(s).` : 'No schools selected.';
+}
 
 function renderSpellRows(){
   if (!slSpellsBody) return;
@@ -2704,7 +2817,8 @@ async function loadSpellListsList(){
 async function loadSpellListMeta(id){
   const res = await api(`/spell_lists/${encodeURIComponent(id)}/meta`);
   SPELLLIST_META = res.meta || {};
-  PINNED = new Set((SPELLLIST_META.pinned_schools || []).map(String));
+  const raw = SPELLLIST_META.selected_schools || SPELLLIST_META.pinned_schools || [];
+  ADDED_SCHOOLS = new Set((raw || []).map(String));
 }
 
 async function saveSpellListMeta(patch){
@@ -2782,13 +2896,13 @@ async function renderSpellSearch(){
 
 async function reloadSpellListData(){
   if (!SELECTED_SPELL_LIST_ID){
-    SPELLLIST_SPELLS=[]; SPELLLIST_META={}; PINNED=new Set(); renderSpellRows(); renderPinnedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); return;
+    SPELLLIST_SPELLS=[]; SPELLLIST_META={}; ADDED_SCHOOLS=new Set(); renderSpellRows(); renderAddedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); return;
   }
   await loadSpellListMeta(SELECTED_SPELL_LIST_ID);
   SPELLLIST_SPELLS = await fetchSpellListSpells(SELECTED_SPELL_LIST_ID);
   renderSpellListSummary();
   await fetchSchools();
-  renderPinnedSchools();
+  renderAddedSchools();
   renderSpellRows();
   renderAbilitySpellsBucket();
 }
@@ -3493,7 +3607,17 @@ slOpenAddBtn.addEventListener('click', openSpellAddModal);
 slAddClose.addEventListener('click', closeSpellAddModal);
 slAddCancel.addEventListener('click', closeSpellAddModal);
 slAddBackdrop.addEventListener('click', (e)=>{ if (e.target===slAddBackdrop) closeSpellAddModal(); });
-slShowPinnedOnly?.addEventListener('change', renderPinnedSchools);
+slAddMenuBtn?.addEventListener('click', ()=>{
+  if (!slAddMenu) return;
+  const shown = slAddMenu.style.display !== 'none';
+  slAddMenu.style.display = shown ? 'none' : 'flex';
+});
+slQuickAddBtn?.addEventListener('click', ()=>{ if (slAddMenu) slAddMenu.style.display = 'none'; quickAddSchools(); });
+slManualAddBtn?.addEventListener('click', ()=>{ if (slAddMenu) slAddMenu.style.display = 'none'; openManualAddModal(); });
+slSchApply?.addEventListener('click', applyManualAdd);
+slSchCancel?.addEventListener('click', ()=> toggleSchoolModal(false));
+slSchClose?.addEventListener('click', ()=> toggleSchoolModal(false));
+slSchBackdrop?.addEventListener('click', (e)=>{ if (e.target===slSchBackdrop) toggleSchoolModal(false); });
 slSearchBtn.addEventListener('click', renderSpellSearch);
 slSearchQ.addEventListener('keydown', (e)=>{ if (e.key==='Enter') renderSpellSearch(); });
 
@@ -3619,4 +3743,5 @@ function wirePersonal(){
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
+
 
