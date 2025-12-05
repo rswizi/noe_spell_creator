@@ -119,11 +119,11 @@
         <div>
           <div class="muted" style="margin-bottom:6px;">Skills</div>
           <div id="iv-skills" class="chips"></div>
-          <div class="muted" style="margin-top:10px;">MAG: <span id="iv-mag" class="k">0</span></div>
+      <div class="muted" style="margin-top:10px;">MAG: <span id="iv-mag" class="k">0</span></div>
         </div>
       </div>
       <div class="hint" style="margin-top:10px;">
-        MS = MAG + linked skill + (best of: top two linked intensities) or (top one intensity +2).
+        MS = linked skill total + lowest of up to two linked intensities you know + MAG mod (only when using two). Using a single linked intensity: skill total + that intensity (no MAG mod).
       </div>
     </div>
 
@@ -704,7 +704,7 @@ function currentIV(){
   return normalizeIV(IV_OVERRIDE || spellList?.initial_values || {});
 }
 function bestMSForSchool(iv, school, opts={}){
-  const mag = +((iv.mag ?? 0) || 0);
+  const mag = +((iv.mag ?? 0) || 0); // MAG modifier
   const skillKey = lc(school.linked_skill || "");
   const skillVal = +((iv.skills?.[skillKey]) ?? 0);
   const ints = (school.linked_intensities || []).map(lc);
@@ -714,26 +714,28 @@ function bestMSForSchool(iv, school, opts={}){
 
   const top1 = arr[0] || {key:null, val:0};
   const top2 = arr[1] || {key:null, val:0};
+  const lowestTwo = top2.key ? Math.min(top1.val, top2.val) : top1.val;
 
   if (opts.forceTwo){
-    const ms = mag + skillVal + top1.val + (top2.val || 0);
+    const ms = skillVal + mag + lowestTwo;
     return {
       ms, useOne:false, pick:[top1.val, top2.val||0],
-      mag, skillVal, top1: top1.val, top2: top2.val,
+      mag, skillVal, top1: top1.val, top2: top2.val, lowest: lowestTwo,
       pickNames: [top1.key, top2.key].filter(Boolean)
     };
   }
 
-  const msTwo = mag + skillVal + top1.val + top2.val;
-  const msOne = mag + skillVal + top1.val + 2;
-  const useOne = msOne > msTwo;
+  const hasTwo = !!top2.key;
+  const msTwo = hasTwo ? (skillVal + mag + Math.min(top1.val, top2.val)) : -Infinity;
+  const msOne = skillVal + top1.val;
+  const useOne = msOne >= msTwo;
   const ms = useOne ? msOne : msTwo;
   const pickNames = useOne ? [top1.key].filter(Boolean) : [top1.key, top2.key].filter(Boolean);
 
   return {
     ms, useOne,
-    pick: useOne? [top1.val, "+2 bonus"]:[top1.val, top2.val],
-    mag, skillVal, top1: top1.val, top2: top2.val,
+    pick: useOne? [top1.val] : [top1.val, top2.val],
+    mag, skillVal, top1: top1.val, top2: top2.val, lowest: useOne ? top1.val : Math.min(top1.val, top2.val),
     pickNames
   };
 }
