@@ -3490,7 +3490,8 @@ async function loadCharacter(){
   if (!CHAR.stats) CHAR.stats = makeDefaultStats();
   if (!CHAR.stats.intensities) CHAR.stats.intensities = makeDefaultStats().intensities;
   XP = numOr(CHAR.xp, 0);
-  const levelFromData = numOr(CHAR.level, 0) || levelFromXp(XP) || 1;
+  const storedLevel = numOr(CHAR.level ?? CHAR.stats?.level, 0);
+  const levelFromData = storedLevel || levelFromXp(XP) || 1;
   CHAR.level = Math.max(1, Math.min(MAX_LEVEL, Math.floor(levelFromData)));
   CHAR.xp = XP;
   CHAR.stats.level = CHAR.level;
