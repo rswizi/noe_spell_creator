@@ -2742,6 +2742,7 @@ function addXp(amount){
   CHAR.xp = XP;
   const lvl = levelFromXp(XP);
   CHAR.level = lvl;
+  CHAR.stats.level = CHAR.level;
   levelEl.value = lvl;
   renderXpProgress();
   renderSublimations();
@@ -2753,6 +2754,7 @@ function addXp(amount){
 function setLevelManual(lvl){
   const val = Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(lvl)||1)));
   CHAR.level = val;
+  CHAR.stats.level = CHAR.level;
   levelEl.value = val;
   if (XP < xpForLevel(val)) XP = xpForLevel(val);
   CHAR.xp = XP;
@@ -3487,9 +3489,11 @@ async function loadCharacter(){
   CHAR = res.character || {};
   if (!CHAR.stats) CHAR.stats = makeDefaultStats();
   if (!CHAR.stats.intensities) CHAR.stats.intensities = makeDefaultStats().intensities;
-  if (!('level' in CHAR)) CHAR.level = 1;
   XP = numOr(CHAR.xp, 0);
+  const levelFromData = numOr(CHAR.level, 0) || levelFromXp(XP) || 1;
+  CHAR.level = Math.max(1, Math.min(MAX_LEVEL, Math.floor(levelFromData)));
   CHAR.xp = XP;
+  CHAR.stats.level = CHAR.level;
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
   if (!CHAR.archetype_id) CHAR.archetype_id = '';
@@ -3522,6 +3526,7 @@ async function loadCharacter(){
     CHAR.level = lvl;
     if (XP < xpForLevel(lvl)) XP = xpForLevel(lvl);
     CHAR.xp = XP;
+    CHAR.stats.level = CHAR.level;
     renderXpProgress();
     renderSublimations();
     updatePointCounters();
@@ -3584,7 +3589,7 @@ async function saveNow(){
       name: nameEl.value || '',
       level: CHAR.level || 1,
       xp: Math.max(0, Math.floor(XP||0)),
-      stats: CHAR.stats,
+      stats: { ...CHAR.stats, level: CHAR.level },
       abilities: CHAR.abilities || [],
       inventory_id: SELECTED_INV_ID || '',
       spell_list_id: SELECTED_SPELL_LIST_ID || '',
