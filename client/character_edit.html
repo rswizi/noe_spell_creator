@@ -3382,19 +3382,18 @@ function updateDerived(){
 
   // Base
   const base = {};
+  const msTEC = milestone('tech');
   base.hp = 39 + lvl + 12*msBOD + 6*msWIL;
   base.en = 5 + Math.floor(lvl/5) + msWIL + 2*msMAG;
   base.fo = 2 + Math.floor(lvl/5) + msWIL + (2*msPRE) + msWIS;
   base.mo = 4 + msDEX + msREF;
   base.spcap = Math.floor(base.hp * 0.10);
-  const athletics = skillTotalAdjustedFor('body','Athletics');
-  const spirit = skillTotalAdjustedFor('willpower','Spirit');
-  base.enc = 10 + (athletics*5) + (spirit*2);
+  base.enc = 10 + (10 * msBOD) + (5 * msWIL);
   const invEnc = LINKED_INV?.enc_total || 0;
-  base.et = 1 + Math.floor(lvl/9) + msMAG;
-  const resistance = skillTotalAdjustedFor('body','Resistance');
-  const alchemy = skillTotalAdjustedFor('tech','Alchemy') || 0;
-  base.tx = resistance + alchemy;
+  base.et = 1 + Math.floor(lvl/10) + msMAG;
+  const etTech = 1 + Math.floor(lvl/10) + msTEC;
+  base._notes = Object.assign(base._notes || {}, { et: [`Alt (TEC): ${etTech}`] });
+  base.tx = 2 + msBOD + (2 * msTEC);
 
   // Apply passive modifiers to derived
   const final = applyPassiveModifiersToDerived(base, invEnc);
@@ -3470,7 +3469,12 @@ function updateDerived(){
   moEl.textContent = maxVals.mo;
   spcapEl.textContent = `${cur.sp} / ${maxVals.spcap}`;
   encEl.textContent = `${Number(final.current_enc || 0).toFixed(1)} / ${maxVals.enc ?? final.enc}`;
-  etEl.textContent = maxVals.et ?? final.et;
+  const etDisplay = (()=> {
+    const etVal = maxVals.et ?? final.et;
+    const etTech = 1 + Math.floor(lvl/10) + milestone('tech');
+    return `${etVal} (TEC ${etTech})`;
+  })();
+  etEl.textContent = etDisplay;
   txEl.textContent = maxVals.tx ?? final.tx;
   updatePointCounters();
 }
