@@ -401,6 +401,12 @@
                 <span id="sl-status" class="muted"></span>
               </div>
               <div id="sl-summary" class="muted" style="margin-bottom:8px;"></div>
+              <div class="row" id="sl-counters" style="gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+                <span class="pill" id="cnt-sch-simple">Simple schools: --</span>
+                <span class="pill" id="cnt-sch-complex">Complex schools: --</span>
+                <span class="pill" id="cnt-sp-simple">Simple spells known: --</span>
+                <span class="pill" id="cnt-sp-complex">Complex spells known: --</span>
+              </div>
 
               <div class="panel" style="margin-bottom:12px;">
                 <details open class="panel">
@@ -1033,6 +1039,10 @@ const slCreateBtn = document.getElementById('sl-create-btn');
 const slDupBtn = document.getElementById('sl-dup-btn');
 const slStatusEl = document.getElementById('sl-status');
 const slSummaryEl = document.getElementById('sl-summary');
+const cntSchSimpleEl = document.getElementById('cnt-sch-simple');
+const cntSchComplexEl = document.getElementById('cnt-sch-complex');
+const cntSpSimpleEl = document.getElementById('cnt-sp-simple');
+const cntSpComplexEl = document.getElementById('cnt-sp-complex');
 const slSchoolsEl = document.getElementById('sl-schools');
 const xpProgressEl = document.getElementById('xp-progress');
 const xpAddBtn = document.getElementById('xp-add-btn');
@@ -2604,6 +2614,52 @@ function renderXpProgress(){
   }
 }
 
+function renderSchoolSpellCounters(){
+  const magVal = totalFromInvest(investVal(CHAR.stats.magic?.invest, 0));
+  const msMAG = milestone('magic');
+  let simpleSchools = 0, complexSchools = 0;
+  ADDED_SCHOOLS.forEach(id=>{
+    const s = (SCHOOLS||[]).find(x=>String(x.id||x.name)===String(id));
+    if (!s) return;
+    const type = (s.school_type || s.type || '').toLowerCase();
+    if (type === 'complex') complexSchools++; else simpleSchools++;
+  });
+  const metaMap = SPELLLIST_META.spell_meta || {};
+  const isKnown = (sp)=> ((metaMap[sp.id]?.status || 'known') === 'known');
+  const findSchoolByRef = (ref)=>{
+    const id = String(ref.id || ref.name || '').toLowerCase();
+    return (SCHOOLS||[]).find(s=> String(s.id||'').toLowerCase()===id || String(s.name||'').toLowerCase()===id);
+  };
+  const spellTypes = (sp)=>{
+    const refs = sp.schools || [];
+    const types = [];
+    refs.forEach(r=>{
+      const s = findSchoolByRef(r);
+      if (!s || s.upgrade) return;
+      const t = (s.school_type || s.type || '').toLowerCase();
+      if (t) types.push(t);
+    });
+    return types;
+  };
+  let simpleKnown = 0, complexKnown = 0;
+  SPELLLIST_SPELLS.forEach(sp=>{
+    if (!isKnown(sp)) return;
+    const types = spellTypes(sp);
+    if (!types.length) return;
+    const hasComplex = types.includes('complex');
+    const onlySimple = types.every(t=>t==='simple');
+    if (hasComplex) complexKnown++;
+    else if (onlySimple) simpleKnown++;
+  });
+  const maxSimpleSchools = '8';
+  const maxComplexSchools = msMAG || 0;
+  const maxSimpleKnown = magVal;
+  const maxComplexKnown = msMAG * 2;
+  if (cntSchSimpleEl)  cntSchSimpleEl.textContent  = `Simple schools: ${simpleSchools}${maxSimpleSchools ? ` / ${maxSimpleSchools}` : ''}`;
+  if (cntSchComplexEl) cntSchComplexEl.textContent = `Complex schools: ${complexSchools} / ${maxComplexSchools}`;
+  if (cntSpSimpleEl)   cntSpSimpleEl.textContent   = `Simple spells known: ${simpleKnown} / ${maxSimpleKnown}`;
+  if (cntSpComplexEl)  cntSpComplexEl.textContent  = `Complex spells known: ${complexKnown} / ${maxComplexKnown}`;
+}
 function msForSchool(school){
   const iv = currentIV() || {};
   const skillKey = (school.linked_skill || '').toLowerCase();
@@ -3858,5 +3914,9 @@ function wirePersonal(){
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
+
+
+
+
 
 
