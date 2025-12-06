@@ -2701,6 +2701,10 @@ async function quickAddSchools(){
 }
 
 async function openManualAddModal(){
+  if (!SELECTED_SPELL_LIST_ID){
+    slSchoolsStatusEl.textContent = 'Link a spell list first.';
+    return;
+  }
   if (!slSchBody) return;
   slSchBody.innerHTML = '<tr><td colspan="4" class="empty">Loading...</td></tr>';
   if (!SCHOOLS.length){ await fetchSchools(); }
@@ -2727,6 +2731,10 @@ async function openManualAddModal(){
 
 async function applyManualAdd(){
   if (!slSchBody) return;
+  if (!SELECTED_SPELL_LIST_ID){
+    slSchoolsStatusEl.textContent = 'Link a spell list first.';
+    return;
+  }
   const selected = Array.from(slSchBody.querySelectorAll('input[type="checkbox"]:checked')).map(el=>el.value);
   selected.forEach(id=> ADDED_SCHOOLS.add(String(id)));
   try{ await saveSpellListMeta({ selected_schools: Array.from(ADDED_SCHOOLS) }); }catch{}
@@ -2898,6 +2906,9 @@ async function saveSpellListMeta(patch){
   const j = await res.json();
   if (j.status !== "success") throw new Error(j.message || "Save failed");
   SPELLLIST_META = { ...SPELLLIST_META, ...(patch || {}) };
+  if (patch && Array.isArray(patch.selected_schools)){
+    ADDED_SCHOOLS = new Set(patch.selected_schools.map(String));
+  }
 }
 
 async function fetchSpellListSpells(id){
