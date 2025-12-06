@@ -3210,6 +3210,31 @@ function renderStatistics(){
   intPanel.appendChild(intBody);
   gridEl.appendChild(intPanel);
 
+  // Intensity listeners (once)
+  INTENSITIES.forEach(n=>{
+    const input = document.getElementById(`intensity-${n}-invest`);
+    input.addEventListener('input', ()=>{
+      const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+      const cap = skillMaxForLevel(lvl);
+      const pool = skillPointPool(lvl);
+      const currentVal = investVal(CHAR.stats.intensities?.[n], 0);
+      const totalOther = totalSkillInvest() - currentVal;
+      const desired = Math.max(0, Math.floor(investVal(input.value, 0)));
+      const allowed = Math.max(0, pool - totalOther);
+      const val = Math.min(desired, cap, allowed);
+      input.value = val;
+      CHAR.stats.intensities[n] = val;
+      const adj = skillAdjTotal('magic', n);
+      const totalId = `intensity-${n}-total`;
+      document.getElementById(totalId).textContent = adj.total>=0? '+'+adj.total : adj.total;
+      document.getElementById(totalId).title = adj.notes.join('\\n');
+      setNotesList(`mods-${totalId}`, adj.notes);
+      updatePointCounters();
+      updateDerived();
+      queueSave();
+    });
+  });
+
   // Wire listeners
   for (const c of CHARACS){
     const input = document.getElementById(`${c.key}-invest`);
@@ -3418,30 +3443,6 @@ function updateDerived(){
       maxVals[k] = numOr(maxVals[k], 0);
     });
   }
-  // Intensities listeners
-  INTENSITIES.forEach(n=>{
-    const input = document.getElementById(`intensity-${n}-invest`);
-    input.addEventListener('input', ()=>{
-      const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-      const cap = skillMaxForLevel(lvl);
-      const pool = skillPointPool(lvl);
-      const currentVal = investVal(CHAR.stats.intensities?.[n], 0);
-      const totalOther = totalSkillInvest() - currentVal;
-      const desired = Math.max(0, Math.floor(investVal(input.value, 0)));
-      const allowed = Math.max(0, pool - totalOther);
-      const val = Math.min(desired, cap, allowed);
-      input.value = val;
-      CHAR.stats.intensities[n] = val;
-      const adj = skillAdjTotal('magic', n);
-      const totalId = `intensity-${n}-total`;
-      document.getElementById(totalId).textContent = adj.total>=0? '+'+adj.total : adj.total;
-      document.getElementById(totalId).title = adj.notes.join('\n');
-      setNotesList(`mods-${totalId}`, adj.notes);
-      updatePointCounters();
-      updateDerived();
-      queueSave();
-    });
-  });
   const cur = {
     hp: Math.max(0, Math.min(numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp), maxVals.hp)),
     en: Math.max(0, Math.min(numOr(CURRENT.en ?? maxVals.en, maxVals.en), maxVals.en)),
