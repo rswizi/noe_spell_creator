@@ -214,8 +214,11 @@
               <span class="grow"></span>
               <span class="k">Level</span>
               <input id="level" type="number" class="num" min="1" value="1" />
+              <button class="btn small" id="xp-add-btn">Add XP</button>
+              <button class="btn small" id="level-set-btn">Set level</button>
             </summary>
             <div class="panel-body">
+              <div class="row muted" id="xp-progress" style="gap:8px;"></div>
               <div class="derived-grid">
                 <div class="kv"><div class="k">HP</div> <div class="val badge mod-toggle" id="hp-val" data-target="mods-derived-hp" title="">--</div>
                 <ul class="mod-list" id="mods-derived-hp" style="display:none"></ul></div>
@@ -854,6 +857,21 @@ function investVal(v, fb=0){
   if (v && typeof v === 'object') return numOr(v.invest, fb);
   return numOr(v, fb);
 }
+const MAX_LEVEL = 100;
+function xpForLevel(level){
+  const lvl = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level||1)));
+  return 100 * ((lvl-1) * lvl / 2);
+}
+function levelFromXp(xp){
+  const val = Math.max(0, Math.floor(xp||0));
+  let lvl = 1;
+  for (let i=1;i<MAX_LEVEL;i++){
+    const next = xpForLevel(i+1);
+    if (val < next) break;
+    lvl = i+1;
+  }
+  return lvl;
+}
 
 /* State */
 const params = new URLSearchParams(location.search);
@@ -873,6 +891,7 @@ let SELECTED_SPELL_LIST_ID = '';
 let SPELLLIST_SPELLS = [];
 let SPELLLIST_META = {};
 let ADDED_SCHOOLS = new Set();
+let XP = 0;
 let SCHOOLS = [];
 let SUBLIMATIONS = [];
 let SUB_HIDDEN = {};
@@ -1014,6 +1033,9 @@ const slDupBtn = document.getElementById('sl-dup-btn');
 const slStatusEl = document.getElementById('sl-status');
 const slSummaryEl = document.getElementById('sl-summary');
 const slSchoolsEl = document.getElementById('sl-schools');
+const xpProgressEl = document.getElementById('xp-progress');
+const xpAddBtn = document.getElementById('xp-add-btn');
+const levelSetBtn = document.getElementById('level-set-btn');
 const slSchoolsStatusEl = document.getElementById('sl-schools-status');
 const slAddMenuBtn = document.getElementById('sl-add-menu-btn');
 const slAddMenu = document.getElementById('sl-add-menu');
@@ -2567,6 +2589,20 @@ function renderSpellListSummary(){
   slSummaryEl.textContent = `${LINKED_SPELL_LIST.name || 'Spell List'} · Spells: ${count} · MAG: ${iv.mag}`;
 }
 
+function renderXpProgress(){
+  if (!xpProgressEl) return;
+  const lvl = Math.max(1, Math.floor(Number(CHAR.level)||1));
+  const xp = Math.max(0, Math.floor(Number(XP)||0));
+  const nextCap = lvl >= MAX_LEVEL ? null : xpForLevel(lvl+1);
+  const curCap = xpForLevel(lvl);
+  const toNext = nextCap == null ? 0 : Math.max(0, nextCap - xp);
+  if (nextCap == null){
+    xpProgressEl.textContent = `XP: ${xp} (level ${lvl} maxed)`;
+  }else{
+    xpProgressEl.textContent = `XP: ${xp} (level ${lvl}) · Need ${toNext} more to reach level ${lvl+1}`;
+  }
+}
+
 function msForSchool(school){
   const iv = currentIV() || {};
   const skillKey = (school.linked_skill || '').toLowerCase();
@@ -2696,6 +2732,34 @@ async function applyManualAdd(){
   toggleSchoolModal(false);
   renderAddedSchools();
   if (slSchoolsStatusEl) slSchoolsStatusEl.textContent = selected.length ? `Added ${selected.length} school(s).` : 'No schools selected.';
+}
+
+function addXp(amount){
+  const inc = Math.max(0, Math.floor(Number(amount)||0));
+  if (!inc) return;
+  XP = Math.max(0, XP + inc);
+  CHAR.xp = XP;
+  const lvl = levelFromXp(XP);
+  CHAR.level = lvl;
+  levelEl.value = lvl;
+  renderXpProgress();
+  renderSublimations();
+  updatePointCounters();
+  updateDerived();
+  queueSave();
+}
+
+function setLevelManual(lvl){
+  const val = Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(lvl)||1)));
+  CHAR.level = val;
+  levelEl.value = val;
+  if (XP < xpForLevel(val)) XP = xpForLevel(val);
+  CHAR.xp = XP;
+  renderXpProgress();
+  renderSublimations();
+  updatePointCounters();
+  updateDerived();
+  queueSave();
 }
 
 function renderSpellRows(){
@@ -3419,6 +3483,8 @@ async function loadCharacter(){
   if (!CHAR.stats) CHAR.stats = makeDefaultStats();
   if (!CHAR.stats.intensities) CHAR.stats.intensities = makeDefaultStats().intensities;
   if (!('level' in CHAR)) CHAR.level = 1;
+  XP = numOr(CHAR.xp, 0);
+  CHAR.xp = XP;
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
   if (!CHAR.archetype_id) CHAR.archetype_id = '';
@@ -3446,7 +3512,18 @@ async function loadCharacter(){
 
   // Level
   levelEl.value = Math.max(1, Number(CHAR.level)||1);
-  levelEl.addEventListener('input', ()=>{ CHAR.level = Math.max(1, Math.floor(Number(levelEl.value)||1)); renderSublimations(); updatePointCounters(); updateDerived(); queueSave(); });
+  levelEl.addEventListener('input', ()=>{
+    const lvl = Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(levelEl.value)||1)));
+    CHAR.level = lvl;
+    if (XP < xpForLevel(lvl)) XP = xpForLevel(lvl);
+    CHAR.xp = XP;
+    renderXpProgress();
+    renderSublimations();
+    updatePointCounters();
+    updateDerived();
+    queueSave();
+  });
+  renderXpProgress();
 
   renderSublimations();
 
@@ -3501,6 +3578,7 @@ async function saveNow(){
     const payload = {
       name: nameEl.value || '',
       level: CHAR.level || 1,
+      xp: Math.max(0, Math.floor(XP||0)),
       stats: CHAR.stats,
       abilities: CHAR.abilities || [],
       inventory_id: SELECTED_INV_ID || '',
@@ -3618,6 +3696,18 @@ slSchApply?.addEventListener('click', applyManualAdd);
 slSchCancel?.addEventListener('click', ()=> toggleSchoolModal(false));
 slSchClose?.addEventListener('click', ()=> toggleSchoolModal(false));
 slSchBackdrop?.addEventListener('click', (e)=>{ if (e.target===slSchBackdrop) toggleSchoolModal(false); });
+xpAddBtn?.addEventListener('click', ()=>{
+  const raw = prompt('Add how much XP?', '100');
+  if (raw === null) return;
+  const val = Math.floor(Number(raw)||0);
+  if (val > 0) addXp(val);
+});
+levelSetBtn?.addEventListener('click', ()=>{
+  const raw = prompt('Set level (1-100)', String(CHAR.level||1));
+  if (raw === null) return;
+  const val = Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(raw)||1)));
+  setLevelManual(val);
+});
 slSearchBtn.addEventListener('click', renderSpellSearch);
 slSearchQ.addEventListener('keydown', (e)=>{ if (e.key==='Enter') renderSpellSearch(); });
 
