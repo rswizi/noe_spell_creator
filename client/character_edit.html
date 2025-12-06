@@ -375,6 +375,11 @@
                 </div>
                 <div class="abi-bucket">
                   <h3>Spells (from linked list)</h3>
+                  <div class="row" style="gap:8px; align-items:center; margin-bottom:6px;">
+                    <label class="row muted" style="gap:6px; align-items:center;">
+                      <input type="checkbox" id="abi-spells-only-learned"> Show learned only
+                    </label>
+                  </div>
                   <div id="abi-list-spells" class="abi-list"></div>
                 </div>
               </div>
@@ -1069,6 +1074,7 @@ const slSearchQ = document.getElementById('sl-search-q');
 const slSearchBtn = document.getElementById('sl-search-btn');
 const slSearchBody = document.getElementById('sl-search-body');
 const slAddStatus = document.getElementById('sl-add-status');
+const abiSpellsOnlyLearnedEl = document.getElementById('abi-spells-only-learned');
 /* Sublimations refs */
 const subTypeEl = document.getElementById('sub-type');
 const subTierEl = document.getElementById('sub-tier');
@@ -2885,7 +2891,8 @@ function renderAbilitySpellsBucket(){
   el.innerHTML = '';
   if (!SPELLLIST_SPELLS.length){ el.innerHTML = '<div class="muted">No linked spells.</div>'; return; }
   const metaMap = SPELLLIST_META.spell_meta || {};
-  SPELLLIST_SPELLS.forEach(sp=>{
+  const onlyLearned = !!(abiSpellsOnlyLearnedEl && abiSpellsOnlyLearnedEl.checked);
+  SPELLLIST_SPELLS.filter(sp=> !onlyLearned || (metaMap[sp.id]?.status === 'learnt')).forEach(sp=>{
     const meta = metaMap[sp.id] || {};
     const alt = meta.alt_name || '';
     const nameDisplay = alt || sp.name || 'Spell';
