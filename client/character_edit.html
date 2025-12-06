@@ -857,6 +857,7 @@ function investVal(v, fb=0){
   if (v && typeof v === 'object') return numOr(v.invest, fb);
   return numOr(v, fb);
 }
+const lc = (s)=> String(s||'').toLowerCase();
 const MAX_LEVEL = 100;
 function xpForLevel(level){
   const lvl = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level||1)));
