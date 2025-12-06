@@ -485,7 +485,7 @@
           <div class="modal-card" style="max-width:720px;">
             <header class="row" style="justify-content:space-between; align-items:center;">
               <div class="modal-title" id="sl-sch-title">Add Schools</div>
-              <button class="modal-close" id="sl-sch-close" aria-label="Close">�o</button>
+              <button class="modal-close" id="sl-sch-close" aria-label="Close" style="font-size:20px;">×</button>
             </header>
             <div class="table-wrap">
               <table class="table">
@@ -2696,7 +2696,8 @@ async function quickAddSchools(){
   });
   const addedCount = ADDED_SCHOOLS.size - before.size;
   if (slSchoolsStatusEl) slSchoolsStatusEl.textContent = addedCount ? `Added ${addedCount} school(s).` : 'No new schools met the requirements.';
-  try{ await saveSpellListMeta({ selected_schools: Array.from(ADDED_SCHOOLS) }); }catch{}
+  const payload = { selected_schools: Array.from(ADDED_SCHOOLS), pinned_schools: Array.from(ADDED_SCHOOLS) };
+  try{ await saveSpellListMeta(payload); }catch{}
   renderAddedSchools();
 }
 
@@ -2737,7 +2738,8 @@ async function applyManualAdd(){
   }
   const selected = Array.from(slSchBody.querySelectorAll('input[type="checkbox"]:checked')).map(el=>el.value);
   selected.forEach(id=> ADDED_SCHOOLS.add(String(id)));
-  try{ await saveSpellListMeta({ selected_schools: Array.from(ADDED_SCHOOLS) }); }catch{}
+  const payload = { selected_schools: Array.from(ADDED_SCHOOLS), pinned_schools: Array.from(ADDED_SCHOOLS) };
+  try{ await saveSpellListMeta(payload); }catch{}
   toggleSchoolModal(false);
   renderAddedSchools();
   if (slSchoolsStatusEl) slSchoolsStatusEl.textContent = selected.length ? `Added ${selected.length} school(s).` : 'No schools selected.';
