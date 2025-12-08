@@ -1848,15 +1848,14 @@ async function invAddFunds(){
   const amountRaw = parseInt(invFundAmtEl.value || "0", 10);
   const note = (invFundNoteEl.value || (amountRaw >= 0 ? "Top up" : "Withdrawal")).trim();
   if (!amountRaw){ invFundStatus.textContent = "Enter a non-zero amount."; return; }
-  const amount = Math.abs(amountRaw);
   if (!SELECTED_INV_ID){ invFundStatus.textContent = "Link an inventory first."; return; }
   invFundStatus.textContent = "Saving transaction...";
   try{
-    const path = amountRaw < 0 ? `/inventories/${encodeURIComponent(SELECTED_INV_ID)}/withdraw` : `/inventories/${encodeURIComponent(SELECTED_INV_ID)}/deposit`;
+    const path = `/inventories/${encodeURIComponent(SELECTED_INV_ID)}/funds`;
     const r = await fetch(path, {
       method:"POST",
       headers:{ "Content-Type":"application/json", ...authHeaders() },
-      body: JSON.stringify({ currency, amount, note })
+      body: JSON.stringify({ currency, amount: amountRaw, note })
     });
     const j = await r.json().catch(()=>({}));
     if (j.status !== "success") throw new Error(j.message || "Update failed");
