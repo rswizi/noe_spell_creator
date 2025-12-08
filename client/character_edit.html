@@ -378,7 +378,7 @@
                   <h3>Spells (from linked list)</h3>
                   <div class="row" style="gap:8px; align-items:center; margin-bottom:6px;">
                     <label class="row muted" style="gap:6px; align-items:center;">
-                      <input type="checkbox" id="abi-spells-only-learned" checked> Learned Only
+                      <input type="checkbox" id="abi-spells-only-learned" checked> Prepared Only
                     </label>
                   </div>
                   <div id="abi-list-spells" class="abi-list"></div>
@@ -2647,7 +2647,7 @@ function renderSchoolSpellCounters(){
     if (type === 'complex') complexSchools++; else simpleSchools++;
   });
   const metaMap = SPELLLIST_META.spell_meta || {};
-  const isLearned = (sp)=> ((metaMap[sp.id]?.status || 'known') === 'learnt');
+  const isPrepared = (sp)=> ((metaMap[sp.id]?.status || 'known') === 'learnt');
   const findSchoolByRef = (ref)=>{
     const id = String(ref.id || ref.name || '').toLowerCase();
     return (SCHOOLS||[]).find(s=> String(s.id||'').toLowerCase()===id || String(s.name||'').toLowerCase()===id);
@@ -2663,24 +2663,24 @@ function renderSchoolSpellCounters(){
     });
     return types;
   };
-  let simpleKnown = 0, complexKnown = 0;
+  let simplePrepared = 0, complexPrepared = 0;
   SPELLLIST_SPELLS.forEach(sp=>{
-    if (!isLearned(sp)) return;
+    if (!isPrepared(sp)) return;
     const types = spellTypes(sp);
     if (!types.length) return;
     const hasComplex = types.includes('complex');
     const onlySimple = types.every(t=>t==='simple');
-    if (hasComplex) complexKnown++;
-    else if (onlySimple) simpleKnown++;
+    if (hasComplex) complexPrepared++;
+    else if (onlySimple) simplePrepared++;
   });
   const maxSimpleSchools = '∞';
   const maxComplexSchools = msMAG || 0;
-  const maxSimpleKnown = magVal;
-  const maxComplexKnown = msMAG * 2;
+  const maxSimplePrepared = magVal;
+  const maxComplexPrepared = msMAG * 2;
   if (cntSchSimpleEl)  cntSchSimpleEl.textContent  = `Simple schools: ${simpleSchools}${maxSimpleSchools ? ` / ${maxSimpleSchools}` : ''}`;
   if (cntSchComplexEl) cntSchComplexEl.textContent = `Complex schools: ${complexSchools} / ${maxComplexSchools}`;
-  if (cntSpSimpleEl)   cntSpSimpleEl.textContent   = `Simple spells known: ${simpleKnown} / ${maxSimpleKnown}`;
-  if (cntSpComplexEl)  cntSpComplexEl.textContent  = `Complex spells known: ${complexKnown} / ${maxComplexKnown}`;
+  if (cntSpSimpleEl)   cntSpSimpleEl.textContent   = `Simple spells prepared: ${simplePrepared} / ${maxSimplePrepared}`;
+  if (cntSpComplexEl)  cntSpComplexEl.textContent  = `Complex spells prepared: ${complexPrepared} / ${maxComplexPrepared}`;
 }
 function msForSchool(school){
   const iv = currentIV() || {};
@@ -2876,8 +2876,8 @@ function renderSpellRows(){
       <td>${sp.category || '—'}</td>
       <td>
         <select class="sl-status" data-id="${sp.id}">
-          <option value="known" ${status==="known"?"selected":""}>Known</option>
-          <option value="learnt" ${status==="learnt"?"selected":""}>Learnt</option>
+        <option value="known" ${status==="known"?"selected":""}>Learnt</option>
+        <option value="learnt" ${status==="learnt"?"selected":""}>Prepared</option>
         </select>
       </td>
       <td><button class="btn small" data-remove="${sp.id}">Remove</button></td>
@@ -2928,9 +2928,10 @@ function renderAbilitySpellsBucket(){
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
     const div = document.createElement('div');
     div.className = 'abi-item';
+    const statusLabel = (meta.status === 'learnt') ? 'Prepared' : 'Learnt';
     div.innerHTML = `
       <div class="grow">
-        <div><strong>${nameDisplay}</strong> <span class="muted">${meta.status || 'known'}</span></div>
+        <div><strong>${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
