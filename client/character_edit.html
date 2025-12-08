@@ -281,6 +281,7 @@
               <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
                 <select id="inv-select" class="grow"></select>
                 <button id="inv-load-btn">Load</button>
+                <button id="inv-create-btn" class="btn small">Create & Link</button>
                 <button id="inv-dup-link" class="btn small">Duplicate & Link</button>
                 <a class="btn" id="inv-open-manager" target="_blank" rel="noopener">Open manager</a>
                 <span id="inv-status" class="muted"></span>
@@ -1017,6 +1018,7 @@ const invFundSave = document.getElementById('inv-fund-save');
 const invFundCancel = document.getElementById('inv-fund-cancel');
 const invFundStatus = document.getElementById('inv-fund-status');
 const invCatalogOpenBtn = document.getElementById('inv-catalog-open');
+const invCreateBtn = document.getElementById('inv-create-btn');
 const invCatalogModal = document.getElementById('inv-catalog-modal');
 const invCatalogBackdrop = document.getElementById('inv-catalog-backdrop');
 const invCatalogClose = document.getElementById('inv-catalog-close');
@@ -3740,6 +3742,7 @@ deleteBtn?.addEventListener('click', deleteCharacter);
 
 invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
 invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));
+invCreateBtn?.addEventListener('click', createInventoryAndLink);
 invDupLinkBtn?.addEventListener('click', duplicateAndLinkInventory);
 invAddContBtn.addEventListener('click', invAddContainer);
 invFundOpenBtn?.addEventListener('click', ()=>{ invFundStatus.textContent=''; invToggleModal(invFundModal, invFundBackdrop, true); });
