@@ -2916,6 +2916,7 @@ function renderAbilitySpellsBucket(){
     const nameDisplay = alt || sp.name || 'Spell';
     const desc = sp.description || '';
     const flavor = sp.flavor || sp.flavour || '';
+    const userFlavor = meta.flavor || meta.flavour || '';
     const effectsDesc = Array.isArray(sp.effects_detail)
       ? sp.effects_detail.map(e=>e.description || '').filter(Boolean).join(' | ')
       : '';
@@ -2932,6 +2933,7 @@ function renderAbilitySpellsBucket(){
         <div><strong>${nameDisplay}</strong> <span class="muted">${meta.status || 'known'}</span></div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
+        ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
         ${effectsDesc ? `<div class="muted" style="font-size:.8rem">Effects: ${effectsDesc}</div>` : ''}
         <div class="muted" style="font-size:.8rem">${cost} ${range?` • ${range}`:''} ${aoe?` • ${aoe}`:''}</div>
       </div>
