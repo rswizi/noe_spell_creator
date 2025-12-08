@@ -1853,15 +1853,11 @@ async function invAddFunds(){
   if (!SELECTED_INV_ID){ invFundStatus.textContent = "Link an inventory first."; return; }
   invFundStatus.textContent = "Saving transaction...";
   try{
-    const isWithdraw = amountRaw < 0;
-    const amount = Math.abs(amountRaw);
-    const path = isWithdraw
-      ? `/inventories/${encodeURIComponent(SELECTED_INV_ID)}/withdraw`
-      : `/inventories/${encodeURIComponent(SELECTED_INV_ID)}/deposit`;
+    const path = `/inventories/${encodeURIComponent(SELECTED_INV_ID)}/deposit`;
     const r = await fetch(path, {
       method:"POST",
       headers:{ "Content-Type":"application/json", ...authHeaders() },
-      body: JSON.stringify({ currency, amount, note })
+      body: JSON.stringify({ currency, amount: amountRaw, note })
     });
     const j = await r.json().catch(()=>({}));
     if (j.status !== "success") throw new Error(j.message || "Update failed");
