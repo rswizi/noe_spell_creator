@@ -3411,7 +3411,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
     et: [`Base = ${base.et}`],
     tx: [`Base = ${base.tx}`],
     enc:[`Base = ${base.enc}`],
-    spcap:[`Base = ${base.spcap}`],
+    spcap:[]
   };
   notes.enc.unshift(`Current enc = ${Number(currentEnc||0).toFixed(1)}`);
   if (base._notes){
@@ -3470,6 +3470,19 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   for (const op of ops.set){ out[op.k] = op.v; notes[op.k].push(`Set to ${op.v} -> ${op.origin}`); }
   for (const op of ops.mul){ const before = out[op.k]; out[op.k] = Math.round(before * op.v); notes[op.k].push(`*${op.v} (from ${before}) -> ${op.origin}`); }
   for (const op of ops.add){ out[op.k] = out[op.k] + op.v; notes[op.k].push(`${op.v>=0?'+':''}${op.v} -> ${op.origin}`); }
+
+  // Recompute spcap off final HP, then apply any spcap-specific modifiers that were already added
+  const baseSpcap = Math.floor(out.hp * 0.10);
+  const spcapOps = {
+    set: ops.set.filter(op=>op.k==='spcap'),
+    mul: ops.mul.filter(op=>op.k==='spcap'),
+    add: ops.add.filter(op=>op.k==='spcap'),
+  };
+  notes.spcap = [`Base = ${baseSpcap}`];
+  out.spcap = baseSpcap;
+  for (const op of spcapOps.set){ out.spcap = op.v; notes.spcap.push(`Set to ${op.v} -> ${op.origin}`); }
+  for (const op of spcapOps.mul){ const before = out.spcap; out.spcap = Math.round(before * op.v); notes.spcap.push(`*${op.v} (from ${before}) -> ${op.origin}`); }
+  for (const op of spcapOps.add){ out.spcap = out.spcap + op.v; notes.spcap.push(`${op.v>=0?'+':''}${op.v} -> ${op.origin}`); }
 
   // Tooltips with breakdown
   hpEl.title = notes.hp.join('\n');   setNotesList('mods-derived-hp', notes.hp);
