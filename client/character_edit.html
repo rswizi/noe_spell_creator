@@ -377,7 +377,7 @@
                   <h3>Spells (from linked list)</h3>
                   <div class="row" style="gap:8px; align-items:center; margin-bottom:6px;">
                     <label class="row muted" style="gap:6px; align-items:center;">
-                      <input type="checkbox" id="abi-spells-only-learned"> Show learned only
+                      <input type="checkbox" id="abi-spells-only-learned" checked> Learned Only
                     </label>
                   </div>
                   <div id="abi-list-spells" class="abi-list"></div>
@@ -1076,6 +1076,19 @@ const slSearchBtn = document.getElementById('sl-search-btn');
 const slSearchBody = document.getElementById('sl-search-body');
 const slAddStatus = document.getElementById('sl-add-status');
 const abiSpellsOnlyLearnedEl = document.getElementById('abi-spells-only-learned');
+const ABI_SPELLS_FILTER_KEY = 'abi_spells_only_learned';
+
+function initAbiSpellsFilter(){
+  if (!abiSpellsOnlyLearnedEl) return;
+  try{
+    const stored = localStorage.getItem(ABI_SPELLS_FILTER_KEY);
+    abiSpellsOnlyLearnedEl.checked = stored ? stored === '1' : true;
+  }catch{}
+  abiSpellsOnlyLearnedEl.addEventListener('change', ()=>{
+    try{ localStorage.setItem(ABI_SPELLS_FILTER_KEY, abiSpellsOnlyLearnedEl.checked ? '1' : '0'); }catch{}
+    renderAbilitySpellsBucket();
+  });
+}
 /* Sublimations refs */
 const subTypeEl = document.getElementById('sub-type');
 const subTierEl = document.getElementById('sub-tier');
@@ -1093,6 +1106,7 @@ const subModal = document.getElementById('sub-modal');
 const subBackdrop = document.getElementById('sub-backdrop');
 const subClose = document.getElementById('sub-close');
 const subCancel = document.getElementById('sub-cancel');
+initAbiSpellsFilter();
 /* Personal refs */
 const pNickEl = document.getElementById('p-nicknames');
 const pHeightEl = document.getElementById('p-height');
