@@ -2917,12 +2917,15 @@ function renderAbilitySpellsBucket(){
     const meta = metaMap[sp.id] || {};
     const alt = meta.alt_name || '';
     const nameDisplay = alt || sp.name || 'Spell';
-    const desc = sp.description || '';
+    const desc = meta.description || sp.description || sp.description_long || sp.desc || '';
     const flavor = sp.flavor || sp.flavour || '';
     const userFlavor = meta.flavor || meta.flavour || '';
-    const effectsDesc = Array.isArray(sp.effects_detail)
-      ? sp.effects_detail.map(e=>e.description || '').filter(Boolean).join(' | ')
-      : '';
+    const effectDetails = Array.isArray(sp.effects_detail) ? sp.effects_detail : (Array.isArray(sp.effects) ? sp.effects : []);
+    let effectsDesc = effectDetails.map(e=> e.description || e.detail || e).filter(Boolean).join(' | ');
+    if (!effectsDesc){
+      const rawEffect = sp.effects || sp.effect || sp.effect_text || sp.effectText || sp.effect_description || sp.effects_description;
+      if (rawEffect) effectsDesc = String(rawEffect);
+    }
     const costParts = [];
     if (sp.mp_cost != null) costParts.push(`MP: ${sp.mp_cost}`);
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
