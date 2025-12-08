@@ -2647,7 +2647,7 @@ function renderSchoolSpellCounters(){
     if (type === 'complex') complexSchools++; else simpleSchools++;
   });
   const metaMap = SPELLLIST_META.spell_meta || {};
-  const isKnown = (sp)=> ((metaMap[sp.id]?.status || 'known') === 'known');
+  const isLearned = (sp)=> ((metaMap[sp.id]?.status || 'known') === 'learnt');
   const findSchoolByRef = (ref)=>{
     const id = String(ref.id || ref.name || '').toLowerCase();
     return (SCHOOLS||[]).find(s=> String(s.id||'').toLowerCase()===id || String(s.name||'').toLowerCase()===id);
@@ -2665,7 +2665,7 @@ function renderSchoolSpellCounters(){
   };
   let simpleKnown = 0, complexKnown = 0;
   SPELLLIST_SPELLS.forEach(sp=>{
-    if (!isKnown(sp)) return;
+    if (!isLearned(sp)) return;
     const types = spellTypes(sp);
     if (!types.length) return;
     const hasComplex = types.includes('complex');
@@ -2673,7 +2673,7 @@ function renderSchoolSpellCounters(){
     if (hasComplex) complexKnown++;
     else if (onlySimple) simpleKnown++;
   });
-  const maxSimpleSchools = '8';
+  const maxSimpleSchools = '∞';
   const maxComplexSchools = msMAG || 0;
   const maxSimpleKnown = magVal;
   const maxComplexKnown = msMAG * 2;
