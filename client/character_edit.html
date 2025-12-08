@@ -903,6 +903,7 @@ let SELECTED_SPELL_LIST_ID = '';
 let SPELLLIST_SPELLS = [];
 let SPELLLIST_META = {};
 let ADDED_SCHOOLS = new Set();
+const setAddedSchools = (arr=[])=>{ ADDED_SCHOOLS = new Set(arr.map(String)); CHAR.stats.selected_schools = Array.from(ADDED_SCHOOLS); };
 let XP = 0;
 let SCHOOLS = [];
 let SUBLIMATIONS = [];
@@ -2758,9 +2759,11 @@ async function quickAddSchools(){
   });
   const addedCount = ADDED_SCHOOLS.size - before.size;
   if (slSchoolsStatusEl) slSchoolsStatusEl.textContent = addedCount ? `Added ${addedCount} school(s).` : 'No new schools met the requirements.';
+  CHAR.stats.selected_schools = Array.from(ADDED_SCHOOLS);
   const payload = { selected_schools: Array.from(ADDED_SCHOOLS), pinned_schools: Array.from(ADDED_SCHOOLS) };
   try{ await saveSpellListMeta(payload); }catch{}
   renderAddedSchools();
+  renderSchoolSpellCounters();
 }
 
 async function openManualAddModal(){
@@ -2957,8 +2960,8 @@ async function loadSpellListsList(){
 async function loadSpellListMeta(id){
   const res = await api(`/spell_lists/${encodeURIComponent(id)}/meta`);
   SPELLLIST_META = res.meta || {};
-  const raw = SPELLLIST_META.selected_schools || SPELLLIST_META.pinned_schools || [];
-  ADDED_SCHOOLS = new Set((raw || []).map(String));
+  const raw = SPELLLIST_META.selected_schools || SPELLLIST_META.pinned_schools || CHAR.stats?.selected_schools || [];
+  setAddedSchools(raw || []);
 }
 
 async function saveSpellListMeta(patch){
@@ -3667,7 +3670,7 @@ async function saveNow(){
       name: nameEl.value || '',
       level: CHAR.level || 1,
       xp: Math.max(0, Math.floor(XP||0)),
-      stats: { ...CHAR.stats, level: CHAR.level },
+      stats: { ...CHAR.stats, level: CHAR.level, selected_schools: Array.from(ADDED_SCHOOLS) },
       abilities: CHAR.abilities || [],
       inventory_id: SELECTED_INV_ID || '',
       spell_list_id: SELECTED_SPELL_LIST_ID || '',
@@ -3921,6 +3924,8 @@ function wirePersonal(){
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
+
+
 
 
 
