@@ -3015,7 +3015,13 @@ async function loadSpellListsList(){
 async function loadSpellListMeta(id){
   const res = await api(`/spell_lists/${encodeURIComponent(id)}/meta`);
   SPELLLIST_META = res.meta || {};
-  const raw = SPELLLIST_META.selected_schools || SPELLLIST_META.pinned_schools || CHAR.stats?.selected_schools || [];
+  const metaSel = Array.isArray(SPELLLIST_META.selected_schools) ? SPELLLIST_META.selected_schools : null;
+  const metaPinned = Array.isArray(SPELLLIST_META.pinned_schools) ? SPELLLIST_META.pinned_schools : null;
+  const statSel = Array.isArray(CHAR.stats?.selected_schools) ? CHAR.stats.selected_schools : null;
+  const raw = (metaSel && metaSel.length) ? metaSel
+            : (metaPinned && metaPinned.length) ? metaPinned
+            : (statSel && statSel.length) ? statSel
+            : (metaSel ?? metaPinned ?? statSel ?? []);
   setAddedSchools(raw || []);
 }
 
@@ -3097,7 +3103,9 @@ async function renderSpellSearch(){
 
 async function reloadSpellListData(){
   if (!SELECTED_SPELL_LIST_ID){
-    SPELLLIST_SPELLS=[]; SPELLLIST_META={}; setAddedSchools(CHAR.stats?.selected_schools || []); renderSpellRows(); renderAddedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); return;
+    SPELLLIST_SPELLS=[]; SPELLLIST_META={};
+    if (CHAR && CHAR.stats) setAddedSchools(CHAR.stats.selected_schools || []);
+    renderSpellRows(); renderAddedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); return;
   }
   await loadSpellListMeta(SELECTED_SPELL_LIST_ID);
   SPELLLIST_SPELLS = await fetchSpellListSpells(SELECTED_SPELL_LIST_ID);
@@ -3740,6 +3748,7 @@ async function saveNow(){
       level: CHAR.level || 1,
       xp: Math.max(0, Math.floor(XP||0)),
       stats: { ...CHAR.stats, level: CHAR.level, selected_schools: Array.from(ADDED_SCHOOLS) },
+      selected_schools: Array.from(ADDED_SCHOOLS),
       abilities: CHAR.abilities || [],
       inventory_id: SELECTED_INV_ID || '',
       spell_list_id: SELECTED_SPELL_LIST_ID || '',
