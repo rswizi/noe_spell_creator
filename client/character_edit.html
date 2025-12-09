@@ -1082,6 +1082,8 @@ const slSearchBody = document.getElementById('sl-search-body');
 const slAddStatus = document.getElementById('sl-add-status');
 const abiSpellsOnlyLearnedEl = document.getElementById('abi-spells-only-learned');
 const ABI_SPELLS_FILTER_KEY = 'abi_spells_only_learned';
+let EFFECTS_BY_ID = {};
+let EFFECTS_PROMISE = null;
 
 function initAbiSpellsFilter(){
   if (!abiSpellsOnlyLearnedEl) return;
@@ -1093,6 +1095,18 @@ function initAbiSpellsFilter(){
     try{ localStorage.setItem(ABI_SPELLS_FILTER_KEY, abiSpellsOnlyLearnedEl.checked ? '1' : '0'); }catch{}
     renderAbilitySpellsBucket();
   });
+}
+
+async function ensureEffectsLoaded(){
+  if (Object.keys(EFFECTS_BY_ID).length) return EFFECTS_BY_ID;
+  if (EFFECTS_PROMISE) return EFFECTS_PROMISE;
+  EFFECTS_PROMISE = api('/effects').then(res=>{
+    const list = res.effects || [];
+    EFFECTS_BY_ID = {};
+    list.forEach(e=>{ EFFECTS_BY_ID[String(e.id||e._id||'').toLowerCase()] = e; });
+    return EFFECTS_BY_ID;
+  }).catch(()=>({})).finally(()=>{ EFFECTS_PROMISE = null; });
+  return EFFECTS_PROMISE;
 }
 /* Sublimations refs */
 const subTypeEl = document.getElementById('sub-type');
@@ -2911,6 +2925,10 @@ function renderAbilitySpellsBucket(){
   if (!el) return;
   el.innerHTML = '';
   if (!SPELLLIST_SPELLS.length){ el.innerHTML = '<div class="muted">No linked spells.</div>'; return; }
+  // lazy-load effects for descriptions
+  if (!Object.keys(EFFECTS_BY_ID).length && !EFFECTS_PROMISE){
+    ensureEffectsLoaded().then(()=> renderAbilitySpellsBucket());
+  }
   const metaMap = SPELLLIST_META.spell_meta || {};
   const onlyLearned = !!(abiSpellsOnlyLearnedEl && abiSpellsOnlyLearnedEl.checked);
   SPELLLIST_SPELLS.filter(sp=> !onlyLearned || (metaMap[sp.id]?.status === 'learnt')).forEach(sp=>{
@@ -2920,10 +2938,23 @@ function renderAbilitySpellsBucket(){
     const desc = meta.description || sp.description || sp.description_long || sp.desc || '';
     const flavor = sp.flavor || sp.flavour || '';
     const userFlavor = meta.flavor || meta.flavour || '';
-    const effectDetails = Array.isArray(sp.effects_detail) ? sp.effects_detail : (Array.isArray(sp.effects) ? sp.effects : []);
+    const effectDetails = Array.isArray(sp.effects_detail) ? sp.effects_detail : [];
     let effectsDesc = effectDetails.map(e=> e.description || e.detail || e).filter(Boolean).join(' | ');
-    if (!effectsDesc){
-      const rawEffect = sp.effects || sp.effect || sp.effect_text || sp.effectText || sp.effect_description || sp.effects_description;
+    const effectCounts = {};
+    (sp.effects || []).forEach(eid=>{
+      const k = String(eid||'').toLowerCase();
+      effectCounts[k] = (effectCounts[k]||0) + 1;
+    });
+    const resolvedEffects = Object.entries(effectCounts).map(([id,count])=>{
+      const eff = EFFECTS_BY_ID[id] || {};
+      const base = eff.description || eff.effect || eff.text || eff.name || id;
+      const countTxt = count > 1 ? ` x${count}` : '';
+      return `${base}${countTxt}`;
+    }).filter(Boolean);
+    if (resolvedEffects.length){
+      effectsDesc = effectsDesc ? `${effectsDesc} | ${resolvedEffects.join(' | ')}` : resolvedEffects.join(' | ');
+    }else if (!effectsDesc){
+      const rawEffect = sp.effect || sp.effect_text || sp.effectText || sp.effect_description || sp.effects_description;
       if (rawEffect) effectsDesc = String(rawEffect);
     }
     const costParts = [];
