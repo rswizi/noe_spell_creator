@@ -2495,8 +2495,12 @@ function deriveSpellListInitialValuesFromChar(){
     skills: {aura:0,incantation:0,enchantement:0,potential:0,restoration:0,stealth:0,investigation:0,charm:0,intimidation:0,absorption:0,spirit:0},
   };
   const ints = CHAR.stats.intensities || {};
+  const intsLc = {};
+  for (const [name, val] of Object.entries(ints)){
+    intsLc[name.toLowerCase()] = investVal(val, 0);
+  }
   for (const k of Object.keys(iv.natures)){
-    iv.natures[k] = Math.max(0, Math.floor(investVal(ints[k], 0)));
+    iv.natures[k] = Math.max(0, Math.floor(intsLc[k] ?? 0));
   }
   const skillMap = {
     aura:['magic','Aura'],
