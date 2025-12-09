@@ -2771,6 +2771,8 @@ async function renderAddedSchools(){
     div.querySelector('button').addEventListener('click', async ()=>{
       ADDED_SCHOOLS.delete(String(id));
       try{ await saveSpellListMeta({ selected_schools: Array.from(ADDED_SCHOOLS) }); }catch{}
+      if (CHAR && CHAR.stats) CHAR.stats.selected_schools = Array.from(ADDED_SCHOOLS);
+      queueSave();
       renderAddedSchools();
     });
     slSchoolsEl.appendChild(div);
@@ -2796,6 +2798,7 @@ async function quickAddSchools(){
   try{ await saveSpellListMeta(payload); }catch{}
   renderAddedSchools();
   renderSchoolSpellCounters();
+  queueSave();
 }
 
 async function openManualAddModal(){
