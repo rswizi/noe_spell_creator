@@ -410,8 +410,8 @@
               <div class="row" id="sl-counters" style="gap:8px; flex-wrap:wrap; margin-bottom:10px;">
                 <span class="pill" id="cnt-sch-simple">Simple schools: --</span>
                 <span class="pill" id="cnt-sch-complex">Complex schools: --</span>
-                <span class="pill" id="cnt-sp-simple">Simple spells known: --</span>
-                <span class="pill" id="cnt-sp-complex">Complex spells known: --</span>
+                <span class="pill" id="cnt-sp-simple">Simple spell slots: --</span>
+                <span class="pill" id="cnt-sp-complex">Complex spell slots: --</span>
               </div>
 
               <div class="panel" style="margin-bottom:12px;">
@@ -907,6 +907,7 @@ let ADDED_SCHOOLS = new Set();
 const setAddedSchools = (arr=[])=>{
   ADDED_SCHOOLS = new Set((arr || []).map(String));
   if (CHAR && CHAR.stats) CHAR.stats.selected_schools = Array.from(ADDED_SCHOOLS);
+  renderSchoolSpellCounters();
 };
 let XP = 0;
 let SCHOOLS = [];
@@ -2653,7 +2654,9 @@ function renderXpProgress(){
   }
 }
 
-function renderSchoolSpellCounters(){
+async function renderSchoolSpellCounters(){
+  if (!CHAR || !CHAR.stats) return;
+  try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
   const magVal = totalFromInvest(investVal(CHAR.stats.magic?.invest, 0));
   const msMAG = milestone('magic');
   let simpleSchools = 0, complexSchools = 0;
@@ -2690,14 +2693,14 @@ function renderSchoolSpellCounters(){
     if (hasComplex) complexPrepared++;
     else if (onlySimple) simplePrepared++;
   });
-  const maxSimpleSchools = '∞';
+  const maxSimpleSchools = null; // unlimited simple schools
   const maxComplexSchools = msMAG || 0;
   const maxSimplePrepared = magVal;
   const maxComplexPrepared = msMAG * 2;
-  if (cntSchSimpleEl)  cntSchSimpleEl.textContent  = `Simple schools: ${simpleSchools}${maxSimpleSchools ? ` / ${maxSimpleSchools}` : ''}`;
+  if (cntSchSimpleEl)  cntSchSimpleEl.textContent  = `Simple schools: ${simpleSchools}${maxSimpleSchools != null ? ` / ${maxSimpleSchools}` : ''}`;
   if (cntSchComplexEl) cntSchComplexEl.textContent = `Complex schools: ${complexSchools} / ${maxComplexSchools}`;
-  if (cntSpSimpleEl)   cntSpSimpleEl.textContent   = `Simple spells prepared: ${simplePrepared} / ${maxSimplePrepared}`;
-  if (cntSpComplexEl)  cntSpComplexEl.textContent  = `Complex spells prepared: ${complexPrepared} / ${maxComplexPrepared}`;
+  if (cntSpSimpleEl)   cntSpSimpleEl.textContent   = `Simple spell slots: ${simplePrepared} / ${maxSimplePrepared}`;
+  if (cntSpComplexEl)  cntSpComplexEl.textContent  = `Complex spell slots: ${complexPrepared} / ${maxComplexPrepared}`;
 }
 function msForSchool(school){
   const iv = currentIV() || {};
@@ -2774,6 +2777,7 @@ async function renderAddedSchools(){
       if (CHAR && CHAR.stats) CHAR.stats.selected_schools = Array.from(ADDED_SCHOOLS);
       queueSave();
       renderAddedSchools();
+      renderSchoolSpellCounters();
     });
     slSchoolsEl.appendChild(div);
   });
@@ -2843,6 +2847,8 @@ async function applyManualAdd(){
   toggleSchoolModal(false);
   renderAddedSchools();
   if (slSchoolsStatusEl) slSchoolsStatusEl.textContent = selected.length ? `Added ${selected.length} school(s).` : 'No schools selected.';
+  renderSchoolSpellCounters();
+  queueSave();
 }
 
 function addXp(amount){
@@ -2912,6 +2918,7 @@ function renderSpellRows(){
       SPELLLIST_META.spell_meta[id] = { ...cur, status: sel.value };
       saveSpellListMeta({ spell_meta: SPELLLIST_META.spell_meta }).catch(()=>{});
       renderAbilitySpellsBucket();
+      renderSchoolSpellCounters();
     });
   });
   slSpellsBody.querySelectorAll('button[data-remove]').forEach(btn=>{
@@ -3108,7 +3115,7 @@ async function reloadSpellListData(){
   if (!SELECTED_SPELL_LIST_ID){
     SPELLLIST_SPELLS=[]; SPELLLIST_META={};
     if (CHAR && CHAR.stats) setAddedSchools(CHAR.stats.selected_schools || []);
-    renderSpellRows(); renderAddedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); return;
+    renderSpellRows(); renderAddedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); renderSchoolSpellCounters(); return;
   }
   await loadSpellListMeta(SELECTED_SPELL_LIST_ID);
   SPELLLIST_SPELLS = await fetchSpellListSpells(SELECTED_SPELL_LIST_ID);
@@ -3117,6 +3124,7 @@ async function reloadSpellListData(){
   renderAddedSchools();
   renderSpellRows();
   renderAbilitySpellsBucket();
+  renderSchoolSpellCounters();
 }
 
 async function loadArchetypesList(){
@@ -4006,6 +4014,7 @@ function wirePersonal(){
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
+
 
 
 
