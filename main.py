@@ -4262,6 +4262,10 @@ async def create_ability(request: Request, payload: dict = Body(...)):
 
     active_in  = payload.get("active") or {}
     passive_in = payload.get("passive") or {}
+    # Archetype-specific metadata (optional)
+    archetype_version = int(payload.get("archetype_version") or 1)
+    archetype_original_rank = int(payload.get("archetype_original_rank") or 0)
+    archetype_replaces = (payload.get("archetype_replaces") or "").strip()
 
     # --- active part ---
     active_block = None
@@ -4326,6 +4330,9 @@ async def create_ability(request: Request, payload: dict = Body(...)):
         "creator": username,
         "created_at": now,
         "updated_at": now,
+        "archetype_version": archetype_version,
+        "archetype_original_rank": archetype_original_rank,
+        "archetype_replaces": archetype_replaces,
     }
     col.insert_one(dict(doc))
     doc.pop("_id", None)
@@ -4397,6 +4404,9 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
 
     active_in  = payload.get("active")  or existing.get("active")  or {}
     passive_in = payload.get("passive") or existing.get("passive") or {}
+    archetype_version = int(payload.get("archetype_version") or existing.get("archetype_version") or 1)
+    archetype_original_rank = int(payload.get("archetype_original_rank") or existing.get("archetype_original_rank") or 0)
+    archetype_replaces = (payload.get("archetype_replaces") or existing.get("archetype_replaces") or "").strip()
 
     active_block = None
     if ab_type in ("active","mixed"):
@@ -4450,6 +4460,9 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
         "active": active_block,
         "passive": passive_block,
         "updated_at": now,
+        "archetype_version": archetype_version,
+        "archetype_original_rank": archetype_original_rank,
+        "archetype_replaces": archetype_replaces,
     }
     col.update_one({"id": aid}, {"$set": updated})
     existing.update(updated)
