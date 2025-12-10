@@ -123,7 +123,7 @@
         </div>
       </div>
       <div class="hint" style="margin-top:10px;">
-        MS = linked skill total + lowest of up to two linked intensities you know + MAG mod (only when using two). Using a single linked intensity: skill total + that intensity (no MAG mod).
+        MS = linked skill total + the best linked nature value. Compare your highest linked nature vs (second-highest linked nature + MAG). If the highest is strictly larger, use it; otherwise use the second-highest plus MAG.
       </div>
     </div>
 
@@ -548,18 +548,18 @@ async function logout() {
 }
 
 const CATS = [
-  {name:"Avant-Garde", ms:92, days:50},
-  {name:"Supreme Archmage", ms:82, days:46},
-  {name:"Archmage", ms:72, days:36},
-  {name:"Grand Master", ms:62, days:32},
-  {name:"Master", ms:52, days:28},
-  {name:"High Mage", ms:42, days:22},
-  {name:"Magister", ms:37, days:20},
-  {name:"Mage", ms:32, days:16},
-  {name:"Adept", ms:27, days:14},
-  {name:"Disciple", ms:22, days:10},
-  {name:"Apprentice", ms:17, days:8},
-  {name:"Novice", ms:12, days:2},
+  {name:"Avant-Garde", ms:44, days:50},
+  {name:"Supreme Archmage", ms:40, days:46},
+  {name:"Archmage", ms:36, days:36},
+  {name:"Grand Master", ms:32, days:32},
+  {name:"Master", ms:28, days:28},
+  {name:"High Mage", ms:24, days:22},
+  {name:"Magister", ms:20, days:20},
+  {name:"Mage", ms:16, days:16},
+  {name:"Adept", ms:12, days:14},
+  {name:"Disciple", ms:8, days:10},
+  {name:"Apprentice", ms:6, days:8},
+  {name:"Novice", ms:4, days:2},
   {name:"Unqualified", ms:-Infinity, days:0},
 ];
 const CAT_ORDER = Object.fromEntries(CATS.map((c,i)=>[c.name, CATS.length-1 - i]));
@@ -703,40 +703,63 @@ function normalizeIV(iv){
 function currentIV(){
   return normalizeIV(IV_OVERRIDE || spellList?.initial_values || {});
 }
+
+function pickNatureForMs(natureEntries, mag){
+  const arr = (natureEntries || [])
+    .slice()
+    .sort((a,b)=> (b.val - a.val) || a.key.localeCompare(b.key));
+
+  const top1 = arr[0] || {key:null, val:0};
+  const top2 = arr[1] || {key:null, val:0};
+  const hasSecond = !!top2.key;
+
+  if (!hasSecond){
+    return {
+      natureTotal: top1.val,
+      natureBase: top1.val,
+      pickNames: [top1.key].filter(Boolean),
+      top1: top1.val,
+      top2: top2.val,
+      useSecond: false,
+      magUsed: 0,
+    };
+  }
+
+  const secondPlusMag = top2.val + mag;
+  const useSecond = !(top1.val > secondPlusMag);
+  const pick = useSecond ? top2 : top1;
+
+  return {
+    natureTotal: useSecond ? secondPlusMag : top1.val,
+    natureBase: pick.val,
+    pickNames: [pick.key].filter(Boolean),
+    top1: top1.val,
+    top2: top2.val,
+    useSecond,
+    magUsed: useSecond ? mag : 0,
+  };
+}
 function bestMSForSchool(iv, school, opts={}){
   const mag = +((iv.mag ?? 0) || 0); // MAG modifier
   const skillKey = lc(school.linked_skill || "");
   const skillVal = +((iv.skills?.[skillKey]) ?? 0);
   const ints = (school.linked_intensities || []).map(lc);
 
-  const arr = ints.map(k => ({ key:k, val:+((iv.natures?.[k]) ?? 0) }))
-                  .sort((a,b)=> (b.val - a.val) || a.key.localeCompare(b.key));
-
-  const top1 = arr[0] || {key:null, val:0};
-  const top2 = arr[1] || {key:null, val:0};
-  const lowestTwo = top2.key ? Math.min(top1.val, top2.val) : top1.val;
-
-  if (opts.forceTwo){
-    const ms = skillVal + mag + lowestTwo;
-    return {
-      ms, useOne:false, pick:[top1.val, top2.val||0],
-      mag, skillVal, top1: top1.val, top2: top2.val, lowest: lowestTwo,
-      pickNames: [top1.key, top2.key].filter(Boolean)
-    };
-  }
-
-  const hasTwo = !!top2.key;
-  const msTwo = hasTwo ? (skillVal + mag + Math.min(top1.val, top2.val)) : -Infinity;
-  const msOne = skillVal + top1.val;
-  const useOne = msOne >= msTwo;
-  const ms = useOne ? msOne : msTwo;
-  const pickNames = useOne ? [top1.key].filter(Boolean) : [top1.key, top2.key].filter(Boolean);
-
+  const arr = ints.map(k => ({ key:k, val:+((iv.natures?.[k]) ?? 0) }));
+  const choice = pickNatureForMs(arr, mag);
+  const ms = skillVal + choice.natureTotal;
   return {
-    ms, useOne,
-    pick: useOne? [top1.val] : [top1.val, top2.val],
-    mag, skillVal, top1: top1.val, top2: top2.val, lowest: useOne ? top1.val : Math.min(top1.val, top2.val),
-    pickNames
+    ms,
+    useOne: !choice.useSecond,
+    pick: [choice.natureBase],
+    mag,
+    magUsed: choice.magUsed,
+    skillVal,
+    top1: choice.top1,
+    top2: choice.top2,
+    natureBase: choice.natureBase,
+    natureTotal: choice.natureTotal,
+    pickNames: choice.pickNames
   };
 }
 
@@ -914,39 +937,26 @@ function msWithChosenNatures(iv, school, chosen) {
   if (!chosenKeys.length) {
     const b = bestMSForSchool(iv, school, { forceTwo: isComplexNeedsTwo(school) });
     return {
-      ms: b.ms,
-      useOne: b.useOne,
-      pick: Array.isArray(b.pick) ? b.pick : [b.top1, b.top2],
-      mag: b.mag,
-      skillVal: b.skillVal,
-      top1: b.top1,
-      top2: b.top2,
-      pickNames: b.pickNames || [],
+      ...b,
       chosen: b.pickNames || []
     };
   }
 
-  // Map to values, take up to 2 (since MS formula never uses more than 2)
-  const vals = chosenKeys
-    .map(k => ({ key: k, val: +((iv.natures?.[k]) ?? 0) }))
-    .sort((a,b) => (b.val - a.val) || a.key.localeCompare(b.key));
-
-  const top1 = vals[0] || { key: null, val: 0 };
-  const top2 = vals[1] || { key: null, val: 0 };
-
-  // For variants: sum the selected values (1 or 2), no “+2” substitution.
-  const usedVals = vals.slice(0, 2);
-  const natureSum = usedVals.reduce((acc, v) => acc + (+v.val || 0), 0);
-
+  const vals = chosenKeys.map(k => ({ key: k, val: +((iv.natures?.[k]) ?? 0) }));
+  const choice = pickNatureForMs(vals, mag);
+  const ms = skillVal + choice.natureTotal;
   return {
-    ms: mag + skillVal + natureSum,
-    useOne: chosenKeys.length === 1,
-    pick: usedVals.map(v => v.val),
+    ms,
+    useOne: !choice.useSecond,
+    pick: [choice.natureBase],
     mag,
+    magUsed: choice.magUsed,
     skillVal,
-    top1: top1.val,
-    top2: top2.val,
-    pickNames: usedVals.map(v => v.key),
+    top1: choice.top1,
+    top2: choice.top2,
+    natureBase: choice.natureBase,
+    natureTotal: choice.natureTotal,
+    pickNames: choice.pickNames,
     chosen: chosenKeys
   };
 }
@@ -1106,10 +1116,14 @@ function renderSchools(){
 
     const tdBreak = document.createElement("td");
     const bd = r.breakdown;
-    const pickTxt = r.variant
-      ? (r.variant.natures||[]).map(title).join(" + ")
-      : (bd.useOne ? `${bd.top1} + 2` : `${bd.top1} + ${bd.top2}`);
-    tdBreak.innerHTML = `MAG ${bd.mag} + Skill ${bd.skillVal} + ${pickTxt}`;
+    const natureNames = (bd.pickNames && bd.pickNames.length)
+      ? bd.pickNames.map(title).join(" + ")
+      : (r.variant ? (r.variant.natures||[]).map(title).join(" + ") : "Nature");
+    const natureVal = (typeof bd.natureBase === "number")
+      ? bd.natureBase
+      : (Array.isArray(bd.pick) && bd.pick.length ? bd.pick[0] : 0);
+    const magTxt = bd.magUsed ? ` + MAG ${bd.magUsed}` : "";
+    tdBreak.innerHTML = `Skill ${bd.skillVal} + ${natureNames}: ${natureVal}${magTxt}`;
     tr.appendChild(tdBreak);
 
     const tdMS = document.createElement("td");
