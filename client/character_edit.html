@@ -1247,7 +1247,6 @@ function skillMaxForLevel(lvl){
   if (lvl <= 51) return 9;
   return 10;
 }
-const STAT_MAX_INVEST = 6; // total cap = base 4 + 6 = 10
 function skillPointPool(lvl){
   // 80 at level 1, +2 per level-up
   return 80 + Math.max(0, (Math.max(1, lvl) - 1) * 2);
@@ -1255,6 +1254,15 @@ function skillPointPool(lvl){
 function statPointPool(lvl){
   // 24 at level 1, +3 every 9 levels (per KP rule)
   return 24 + Math.floor((Math.max(1, lvl) - 1) / 9) * 3;
+}
+function statInvestCap(lvl){
+  const lv = Math.max(1, Math.floor(Number(lvl) || 1));
+  // Base total cap 10, +1 every 10 levels, max 20
+  const maxTotal = Math.min(20, 10 + Math.floor(lv / 10));
+  return Math.max(0, maxTotal - 4); // convert back to invest (base is 4)
+}
+function statTotalCap(lvl){
+  return totalFromInvest(statInvestCap(lvl));
 }
 function totalSkillInvest(){
   let t = 0;
@@ -1285,8 +1293,9 @@ function updatePointCounters(){
   const usedSkill = totalSkillInvest();
   const usedStat = totalStatInvest();
   const capSkill = skillMaxForLevel(lvl);
+  const capStatTotal = statTotalCap(lvl);
   if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkill} / ${poolSkill}`;
-  if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStat} / ${poolStat} (max per stat: 10)`;
+  if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStat} / ${poolStat} (max per stat: ${capStatTotal})`;
   if (skillCapEl) skillCapEl.textContent = `Max per skill: ${capSkill}`;
 }
 
@@ -3507,7 +3516,8 @@ function renderStatistics(){
       const totalOther = totalStatInvest() - currentVal;
       const desired = Math.max(0, Math.floor(investVal(input.value, 0)));
       const allowed = Math.max(0, pool - totalOther);
-      const val = Math.min(desired, allowed, STAT_MAX_INVEST);
+      const capInvest = statInvestCap(lvl);
+      const val = Math.min(desired, allowed, capInvest);
       if (val !== desired) input.value = val;
       CHAR.stats[c.key].invest = val;
 
