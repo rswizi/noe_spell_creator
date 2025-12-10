@@ -2502,21 +2502,9 @@ function deriveSpellListInitialValuesFromChar(){
   for (const k of Object.keys(iv.natures)){
     iv.natures[k] = Math.max(0, Math.floor(intsLc[k] ?? 0));
   }
-  const skillMap = {
-    aura:['magic','Aura'],
-    incantation:['magic','Incantation'],
-    enchantement:['magic','Enchantment'],
-    potential:['magic','Potential'],
-    restoration:['magic','Restoration'],
-    stealth:['dexterity','Stealth'],
-    investigation:['wisdom','Investigation'],
-    charm:['presence','Charm'],
-    intimidation:['willpower','Intimidation'],
-    absorption:['willpower','Absorption'],
-    spirit:['willpower','Spirit'],
-  };
-  for (const [key,[ck,sk]] of Object.entries(skillMap)){
-    iv.skills[key] = skillTotalAdjustedFor(ck, sk).total;
+  for (const [key, ckey] of Object.entries(SKILL_TO_CHAR)){
+    const label = SKILL_LABEL[key] || title(key);
+    iv.skills[key] = skillTotalAdjustedFor(ckey, label).total;
   }
   return iv;
 }
@@ -2637,6 +2625,32 @@ const SKILL_ALIASES = {
   incatation: "incantation",
   resto: "restoration",
 };
+const SKILL_LABEL = {
+  aura: "Aura",
+  incantation: "Incantation",
+  enchantement: "Enchantment",
+  potential: "Potential",
+  restoration: "Restoration",
+  stealth: "Stealth",
+  investigation: "Investigation",
+  charm: "Charm",
+  intimidation: "Intimidation",
+  absorption: "Absorption",
+  spirit: "Spirit",
+};
+const SKILL_TO_CHAR = {
+  aura: "magic",
+  incantation: "magic",
+  enchantement: "magic",
+  potential: "magic",
+  restoration: "magic",
+  stealth: "dexterity",
+  investigation: "wisdom",
+  charm: "presence",
+  intimidation: "willpower",
+  absorption: "willpower",
+  spirit: "willpower",
+};
 function normSkillKey(s){
   const cleaned = (s || "").toString().trim().toLowerCase().replace(/[^a-z]/g, "");
   return SKILL_ALIASES[cleaned] || cleaned;
@@ -2648,6 +2662,13 @@ function skillValFromIV(skillName, iv){
   // fallback: loose match
   const found = Object.entries(iv.skills).find(([k])=> normSkillKey(k) === key);
   return found ? numOr(found[1], 0) : 0;
+}
+function skillValFromChar(skillName){
+  const key = normSkillKey(skillName);
+  const ckey = SKILL_TO_CHAR[key];
+  if (!ckey) return null;
+  const label = SKILL_LABEL[key] || title(key);
+  return skillTotalAdjustedFor(ckey, label);
 }
 
 function currentIV(){
@@ -2757,7 +2778,9 @@ function msForSchool(school){
   const iv = currentIV() || {};
   const skillKeyRaw = school.linked_skill || '';
   const skillKey = normSkillKey(skillKeyRaw);
-  const skillVal = skillValFromIV(skillKeyRaw, iv);
+  const valFromIV = skillValFromIV(skillKeyRaw, iv);
+  const valFromChar = skillValFromChar(skillKeyRaw);
+  const skillVal = Math.max(valFromIV ?? 0, valFromChar ?? 0);
   const ints = (school.linked_intensities || []).map(lc);
   const vals = ints
     .map(k => ({ key:k, val:numOr(iv.natures?.[k], 0) }))
