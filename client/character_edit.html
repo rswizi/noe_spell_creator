@@ -1329,6 +1329,10 @@ function buildSkillOptions(){
       opts.push({ value:`${c.key}|${s}`, label:`${s} (${c.name})` });
     }
   }
+  // Allow intensities as targetable “skills” for Excellence
+  INTENSITIES.forEach(n=>{
+    opts.push({ value:`magic|${n}`, label:`${n} (Intensity)` });
+  });
   return opts;
 }
 
