@@ -2623,6 +2623,11 @@ function normalizeIV(iv){
   return { mag: +(iv?.mag||0), natures:n, skills:s };
 }
 
+function title(str){
+  const s = (str ?? '').toString();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+}
+
 function currentIV(){
   return normalizeIV(deriveSpellListInitialValuesFromChar());
 }
