@@ -145,10 +145,28 @@
             </select>
           </div>
 
-          <div class="row">
-            <label for="ab-source-ref">Source Detail</label>
-            <input id="ab-source-ref" class="grow" />
+        <div class="row">
+          <label for="ab-source-ref">Source Detail</label>
+          <input id="ab-source-ref" class="grow" />
+        </div>
+
+        <div id="arc-meta" class="row" style="flex-direction:column; align-items:flex-start; display:none; gap:8px; margin-top:4px;">
+          <div class="row" style="width:100%; gap:8px; align-items:center; flex-wrap:wrap;">
+            <label style="min-width:140px;">Archetype Version</label>
+            <input id="ab-arc-version" type="number" min="1" value="1" style="width:120px;">
+            <label style="min-width:140px;">Original Rank</label>
+            <input id="ab-arc-orig-rank" type="number" min="1" max="12" value="1" style="width:120px;">
           </div>
+          <div class="row" style="width:100%; gap:8px; align-items:center; flex-wrap:wrap;">
+            <label style="min-width:140px;">Replaces Ability</label>
+            <div style="display:flex; gap:6px; align-items:center; flex:1; min-width:260px;">
+              <input id="ab-arc-repl-search" class="grow" placeholder="Search ability by name...">
+              <select id="ab-arc-repl" style="flex:1; min-width:200px;">
+                <option value="">-- none --</option>
+              </select>
+            </div>
+          </div>
+        </div>
 
           <div class="row">
             <label for="ab-tags">Tags</label>
@@ -269,6 +287,12 @@ const costOValEl  = document.getElementById('cost-other-value');
 
 const btnSave     = document.getElementById('btn-save');
 
+const arcMetaEl    = document.getElementById('arc-meta');
+const arcVersionEl = document.getElementById('ab-arc-version');
+const arcOrigRankEl= document.getElementById('ab-arc-orig-rank');
+const arcReplSel   = document.getElementById('ab-arc-repl');
+const arcReplSearch= document.getElementById('ab-arc-repl-search');
+
 const CUSTOM_TARGET_VALUE = '__custom__';
 const PASSIVE_TARGET_GROUPS = (()=>{
   const characteristics = [
@@ -310,6 +334,7 @@ const PASSIVE_TARGET_GROUPS = (()=>{
 })();
 
 let currentAbilityId = null;
+let ALL_ABILITIES = [];
 
 async function checkMe(){
   try{
@@ -398,6 +423,32 @@ function updateTypeVisibility(){
 }
 typeEl.addEventListener('change', updateTypeVisibility);
 
+function updateArchetypeMeta(){
+  const isArc = (sourceCatEl.value || '').toLowerCase() === 'archetype';
+  arcMetaEl.style.display = isArc ? '' : 'none';
+}
+sourceCatEl.addEventListener('change', updateArchetypeMeta);
+
+async function loadAbilitiesForReplace(){
+  try{
+    const res = await api('/abilities');
+    ALL_ABILITIES = res.abilities || [];
+    renderReplaceOptions();
+  }catch(e){
+    console.error('Failed to load abilities list', e);
+  }
+}
+
+function renderReplaceOptions(filter=""){
+  const term = (filter||"").toLowerCase();
+  const opts = ALL_ABILITIES.filter(a => !term || (a.name||"").toLowerCase().includes(term));
+  arcReplSel.innerHTML = `<option value="">-- none --</option>` + opts.map(a=>`<option value="${a.id}">${a.name} (${a.id})</option>`).join("");
+}
+arcReplSearch.addEventListener('input', ()=>{
+  clearTimeout(arcReplSearch._t);
+  arcReplSearch._t = setTimeout(()=> renderReplaceOptions(arcReplSearch.value), 200);
+});
+
 function buildPayloadFromForm(){
   const tags = (tagsEl.value || '').split(',')
     .map(t=>t.trim()).filter(Boolean);
@@ -452,6 +503,11 @@ function buildPayloadFromForm(){
   const out = base;
   if (active) out.active = active;
   if (passive) out.passive = passive;
+  if ((sourceCatEl.value || '').toLowerCase() === 'archetype'){
+    out.archetype_original_rank = Number(arcOrigRankEl.value || 0);
+    out.archetype_version = Number(arcVersionEl.value || 1);
+    out.archetype_replaces = (arcReplSel.value || '').trim();
+  }
   return out;
 }
 
@@ -464,6 +520,9 @@ function populateForm(a){
   sourceRefEl.value  = a.source_ref || '';
   tagsEl.value       = (a.tags || []).join(', ');
   descEl.value       = a.description || '';
+  arcVersionEl.value = a.archetype_version || 1;
+  arcOrigRankEl.value= a.archetype_original_rank || 1;
+  arcReplSel.value   = a.archetype_replaces || '';
 
   // passive
   const passive = a.passive || {};
@@ -488,6 +547,8 @@ function populateForm(a){
   costOValEl.value   = costs.other_value ?? 0;
 
   updateTypeVisibility();
+  updateArchetypeMeta();
+  renderReplaceOptions(arcReplSearch.value || "");
 }
 
 async function loadAbilities(){
@@ -560,7 +621,7 @@ btnSave.addEventListener('click', async ()=>{
   }
 });
 
-checkMe().then(loadAbilities);
+checkMe().then(()=> Promise.all([loadAbilities(), loadAbilitiesForReplace()]));
 </script>
 </body>
 </html>
