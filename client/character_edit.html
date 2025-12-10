@@ -2711,15 +2711,38 @@ function msForSchool(school){
   const skillKey = (school.linked_skill || '').toLowerCase();
   const skillVal = numOr(iv.skills?.[skillKey], 0);
   const ints = (school.linked_intensities || []).map(lc);
-  const vals = ints.map(k => numOr(iv.natures?.[k], 0)).sort((a,b)=>b-a);
+  const vals = ints
+    .map(k => ({ key:k, val:numOr(iv.natures?.[k], 0) }))
+    .sort((a,b)=> (b.val - a.val) || a.key.localeCompare(b.key));
+  const top1 = vals[0] || { key:null, val:0 };
+  const top2 = vals[1] || { key:null, val:0 };
   const magMod = charAdjMod('magic').mod;
-  if (vals.length >= 2){
-    return skillVal + magMod + Math.min(vals[0]||0, vals[1]||0);
+
+  let natureBase = top1.val;
+  let natureName = top1.key;
+  let magUsed = 0;
+
+  if (top2.key){
+    const secondPlusMag = top2.val + magMod;
+    const useSecond = !(top1.val > secondPlusMag);
+    natureBase = useSecond ? top2.val : top1.val;
+    natureName = useSecond ? top2.key : top1.key;
+    magUsed = useSecond ? magMod : 0;
   }
-  if (vals.length === 1){
-    return skillVal + vals[0];
-  }
-  return skillVal + magMod;
+
+  const natureTotal = natureBase + magUsed;
+  return {
+    ms: skillVal + natureTotal,
+    skillVal,
+    skillKey,
+    top1: top1.val,
+    top2: top2.val,
+    natureName,
+    natureBase,
+    natureTotal,
+    magUsed,
+    magMod,
+  };
 }
 
 function isComplexEligible(school){
@@ -2763,14 +2786,22 @@ async function renderAddedSchools(){
     return;
   }
   list.forEach(({id,s})=>{
-    const ms = msForSchool(s);
+    const msInfo = msForSchool(s);
+    const ms = msInfo.ms;
     const cat = s.category || s.type || '--';
+    const tipLines = [
+      `Skill (${s.linked_skill || 'skill'}): ${msInfo.skillVal || 0}`,
+      `Top nature: ${msInfo.top1 || 0}`,
+      `Second nature: ${msInfo.top2 || 0}`,
+      `Used: ${msInfo.natureName ? title(msInfo.natureName) : '—'} ${msInfo.natureBase || 0}${msInfo.magUsed ? ` + MAG ${msInfo.magUsed}` : ''}`,
+      `Total MS: ${ms}`,
+    ];
     const div = document.createElement('div');
     div.className = 'abi-item';
     div.innerHTML = `
       <div class="grow">
         <div><strong>${s.name || id}</strong></div>
-        <div class="muted">MS: ${ms} | Category: ${cat}</div>
+        <div class="muted" title="${tipLines.join('\n').replace(/"/g,'&quot;')}">MS: ${ms} | Category: ${cat}</div>
       </div>
       <span class="tag">${(s.school_type || s.type || '').toUpperCase()}</span>
       <button class="btn small" data-remove="${id}">Remove</button>
@@ -3388,6 +3419,7 @@ function renderStatistics(){
       setNotesList(`mods-${totalId}`, adj.notes);
       updatePointCounters();
       updateDerived();
+      renderAddedSchools();
       queueSave();
     });
   });
@@ -3424,6 +3456,7 @@ function renderStatistics(){
       }
       updatePointCounters();
       updateDerived();
+      renderAddedSchools();
       queueSave();
     });
 
@@ -3447,6 +3480,7 @@ function renderStatistics(){
         setNotesList(`mods-${skillId(c.key, s, 'total')}`, adj.notes);
         updatePointCounters();
         updateDerived();
+        renderAddedSchools();
         queueSave();
       });
     }
@@ -3651,6 +3685,7 @@ function updateDerived(){
   etEl.textContent = etDisplay;
   txEl.textContent = maxVals.tx ?? final.tx;
   updatePointCounters();
+  renderAddedSchools();
 }
 
 /* LOAD & SAVE */
