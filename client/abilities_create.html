@@ -78,12 +78,12 @@
             </select>
           </div>
 
-          <div class="row">
-            <label for="ab-source-cat">Source</label>
-            <select id="ab-source-cat" class="grow">
-              <option value="Specie">Specie</option>
-              <option value="Talent">Talent</option>
-              <option value="Archetype">Archetype</option>
+      <div class="row">
+        <label for="ab-source-cat">Source</label>
+        <select id="ab-source-cat" class="grow">
+          <option value="Specie">Specie</option>
+          <option value="Talent">Talent</option>
+          <option value="Archetype">Archetype</option>
               <option value="Expertise">Expertise</option>
               <option value="Awakening">Awakening</option>
               <option value="Apotheosis">Apotheosis</option>
@@ -92,14 +92,27 @@
           </div>
 
           <div class="row">
-            <label for="ab-source-ref">Source Detail</label>
-            <input id="ab-source-ref" class="grow" placeholder="Ex: Elf, Boxer, Expert Tracker…" />
-          </div>
+        <label for="ab-source-ref">Source Detail</label>
+        <input id="ab-source-ref" class="grow" placeholder="Ex: Elf, Boxer, Expert Tracker…" />
+      </div>
 
-          <div class="row">
-            <label for="ab-tags">Tags</label>
-            <input id="ab-tags" class="grow" placeholder="Comma-separated: mobility, damage, support…" />
-          </div>
+      <div id="arc-meta" class="row" style="flex-direction:column; align-items:flex-start; display:none; gap:8px; margin-top:4px;">
+        <div class="row" style="width:100%; gap:8px; align-items:center;">
+          <label style="min-width:140px;">Archetype Version</label>
+          <input id="ab-arc-version" type="number" min="1" value="1" style="width:120px;">
+          <label style="min-width:140px;">Original Rank</label>
+          <input id="ab-arc-orig-rank" type="number" min="1" max="12" value="1" style="width:120px;">
+        </div>
+        <div class="row" style="width:100%; gap:8px; align-items:center;">
+          <label style="min-width:140px;">Replaces Ability ID</label>
+          <input id="ab-arc-replaces" class="grow" placeholder="Ability ID this version replaces (optional)">
+        </div>
+      </div>
+
+      <div class="row">
+        <label for="ab-tags">Tags</label>
+        <input id="ab-tags" class="grow" placeholder="Comma-separated: mobility, damage, support…" />
+      </div>
 
           <h3>General Description</h3>
           <textarea id="ab-description" placeholder="Lore + global explanation of what this ability does."></textarea>
@@ -189,6 +202,10 @@ const statusLine   = document.getElementById('status-line');
 const nameEl       = document.getElementById('ab-name');
 const typeEl       = document.getElementById('ab-type');
 const sourceCatEl  = document.getElementById('ab-source-cat');
+const arcMetaEl    = document.getElementById('arc-meta');
+const arcVersionEl = document.getElementById('ab-arc-version');
+const arcOrigRankEl= document.getElementById('ab-arc-orig-rank');
+const arcReplacesEl= document.getElementById('ab-arc-replaces');
 const sourceRefEl  = document.getElementById('ab-source-ref');
 const tagsEl       = document.getElementById('ab-tags');
 const descEl       = document.getElementById('ab-description');
@@ -344,6 +361,13 @@ function updateTypeVisibility(){
 typeEl.addEventListener('change', updateTypeVisibility);
 updateTypeVisibility();
 
+function updateArchetypeMeta(){
+  const isArc = (sourceCatEl.value || '').toLowerCase() === 'archetype';
+  arcMetaEl.style.display = isArc ? '' : 'none';
+}
+sourceCatEl.addEventListener('change', updateArchetypeMeta);
+updateArchetypeMeta();
+
 function buildPayload(){
   const tags = (tagsEl.value || '').split(',')
     .map(t=>t.trim()).filter(Boolean);
@@ -398,6 +422,11 @@ function buildPayload(){
   const out = base;
   if (active) out.active = active;
   if (passive) out.passive = passive;
+  if ((sourceCatEl.value || '').toLowerCase() === 'archetype'){
+    out.archetype_original_rank = Number(arcOrigRankEl.value || 0);
+    out.archetype_version = Number(arcVersionEl.value || 1);
+    out.archetype_replaces = (arcReplacesEl.value || '').trim();
+  }
   return out;
 }
 

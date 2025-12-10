@@ -55,7 +55,7 @@
     @media(min-width:900px){ .two-col{grid-template-columns:2fr 1fr;} }
     .rule-row,.rank-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
     .rule-row select,.rule-row input{min-width:120px;}
-    .rank-row select,.rank-row input{min-width:160px;}
+    .rank-row select{min-width:200px; flex:1;}
   </style>
 </head>
 <body>
@@ -63,6 +63,12 @@
     <h1>Archetypes (Moderator)</h1>
     <div class="muted" style="margin-bottom:14px;">Build archetypes, wire abilities and versions, and enforce prerequisites (highest/2nd/3rd stat or minimum values). Hybrid sources pull from existing archetypes.</div>
 
+    <div class="row" style="margin-bottom:12px; justify-content:space-between;">
+      <div class="row" style="gap:10px; align-items:center;">
+        <h1 style="margin:0;">Archetypes (Moderator)</h1>
+      </div>
+      <a class="subtle" href="abilities_home.html" style="text-decoration:none; padding:8px 12px; border-radius:10px; border:1px solid #3a3a46; background:#1c1c24; color:#e5e5e8;">Back</a>
+    </div>
     <div class="two-col">
       <div class="card stack">
         <div class="row">
@@ -89,8 +95,7 @@
 
         <div class="card" style="margin:0;">
           <div class="row" style="justify-content:space-between;align-items:center;">
-            <div class="section-title">Ranks</div>
-            <button class="subtle" id="rank-add">+ Add rank</button>
+            <div class="section-title">Ranks (12 fixed)</div>
           </div>
           <div id="rank-list" class="stack"></div>
         </div>
@@ -186,34 +191,23 @@ function ruleRow(rule={}){
   return div;
 }
 
-function rankRow(r={}){
+function rankRow(idx, r={}){
   const div = document.createElement('div');
   div.className = 'rank-row';
   div.innerHTML = `
-    <input class="rk-rank" type="number" placeholder="Rank" value="${r.rank||''}" style="width:80px;">
+    <div class="pill">Rank ${idx+1}</div>
     <select class="rk-abil" style="flex:1; min-width:220px;"></select>
-    <input class="rk-ver" type="number" placeholder="Version" value="${r.version||1}" style="width:80px;">
-    <input class="rk-orig" type="number" placeholder="Original rank" value="${r.original_rank||''}" style="width:120px;">
-    <select class="rk-repl" style="flex:1; min-width:220px;"></select>
-    <input class="rk-note" placeholder="Note" value="${r.note||''}" style="flex:1; min-width:160px;">
-    <button class="subtle rk-del">Remove</button>
   `;
   populateAbilitySelect(div.querySelector('.rk-abil'), r.ability_id || "");
-  populateReplaceSelect(div.querySelector('.rk-repl'), r.replaces_id || "");
-  div.querySelector('.rk-del').addEventListener('click', ()=>div.remove());
   return div;
 }
 
 function collectDoc(){
   const ranks=[];
-  document.querySelectorAll('#rank-list .rank-row').forEach(row=>{
+  document.querySelectorAll('#rank-list .rank-row').forEach((row, idx)=>{
     ranks.push({
-      rank: Number(row.querySelector('.rk-rank').value||0),
+      rank: idx + 1,
       ability_id: row.querySelector('.rk-abil').value.trim(),
-      version: Number(row.querySelector('.rk-ver').value||1),
-      original_rank: Number(row.querySelector('.rk-orig').value||0),
-      replaces_id: row.querySelector('.rk-repl').value.trim(),
-      note: row.querySelector('.rk-note').value.trim(),
     });
   });
   const charOrder = [];
@@ -264,8 +258,10 @@ function loadToForm(a){
   setSelectedSources(a.sources || []);
   $("#arc-prereq-text").value = a.prereq_text || "";
   const rl = $("#rank-list"); rl.innerHTML = "";
-  (a.ranks||[]).forEach(r=> rl.appendChild(rankRow(r)));
-  if (!a.ranks || !a.ranks.length){ rl.appendChild(rankRow({})); }
+  const ranks = a.ranks || [];
+  for (let i=0; i<12; i++){
+    rl.appendChild(rankRow(i, ranks[i] || {}));
+  }
   const pl = $("#pr-list"); pl.innerHTML = "";
   const rules = [];
   const order = a.prereq_rules?.char_order || [];
@@ -320,14 +316,16 @@ async function loadAbilities(){
   ABILITIES = j.abilities || [];
   // refresh selects
   document.querySelectorAll('.rk-abil').forEach(sel=> populateAbilitySelect(sel, sel.value));
-  document.querySelectorAll('.rk-repl').forEach(sel=> populateReplaceSelect(sel, sel.value));
 }
 
 document.getElementById("arc-save").addEventListener("click", saveArchetype);
 document.getElementById("arc-refresh").addEventListener("click", loadList);
-document.getElementById("rank-add").addEventListener("click", ()=> document.getElementById("rank-list").appendChild(rankRow({})));
 document.getElementById("pr-add").addEventListener("click", ()=> document.getElementById("pr-list").appendChild(ruleRow({})));
-document.getElementById("rank-list").appendChild(rankRow({}));
+(()=>{
+  const rl = document.getElementById("rank-list");
+  rl.innerHTML = "";
+  for (let i=0; i<12; i++){ rl.appendChild(rankRow(i, {})); }
+})();
 document.getElementById("pr-list").appendChild(ruleRow({}));
 
 loadAbilities().then(loadList);
