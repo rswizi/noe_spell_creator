@@ -580,6 +580,21 @@ function qs(name){ const p=new URLSearchParams(location.search); return p.get(na
 function openModal(m,b){ m.classList.add("open"); b.classList.add("open"); document.documentElement.classList.add("modal-open"); document.body.classList.add("modal-open"); }
 function closeModal(m,b){ m.classList.remove("open"); b.classList.remove("open"); if(!document.querySelector('.modal.open')){ document.documentElement.classList.remove("modal-open"); document.body.classList.remove("modal-open"); } }
 function execRTOn(el, cmd){ document.getSelection().removeAllRanges(); document.execCommand(cmd, false, null); el.focus(); }
+const SKILL_ALIASES = {
+  enchantment: "enchantement",
+  enchante: "enchantement",
+  incantation: "incantation",
+  incantaion: "incantation",
+  icnantaion: "incantation",
+  incatation: "incantation",
+  restauraion: "restoration",
+  restauration: "restoration",
+};
+function normSkillKey(s){
+  let cleaned = lc(s).replace(/[^a-z]/g, "");
+  if (cleaned.endsWith("magic")) cleaned = cleaned.slice(0, -5);
+  return SKILL_ALIASES[cleaned] || cleaned;
+}
 function escapeHtml(s){
   return String(s ?? "")
     .replace(/&/g,"&amp;")
@@ -741,7 +756,7 @@ function pickNatureForMs(natureEntries, mag){
 }
 function bestMSForSchool(iv, school, opts={}){
   const mag = +((iv.mag ?? 0) || 0); // MAG modifier
-  const skillKey = lc(school.linked_skill || "");
+  const skillKey = normSkillKey(school.linked_skill || "");
   const skillVal = +((iv.skills?.[skillKey]) ?? 0);
   const ints = (school.linked_intensities || []).map(lc);
 
@@ -755,6 +770,7 @@ function bestMSForSchool(iv, school, opts={}){
     mag,
     magUsed: choice.magUsed,
     skillVal,
+    skillKey,
     top1: choice.top1,
     top2: choice.top2,
     natureBase: choice.natureBase,
@@ -925,7 +941,7 @@ function computeAll(){
 
 function msWithChosenNatures(iv, school, chosen) {
   const mag = +((iv.mag ?? 0) || 0);
-  const skillKey = lc(school.linked_skill || "");
+  const skillKey = normSkillKey(school.linked_skill || "");
   const skillVal = +((iv.skills?.[skillKey]) ?? 0);
 
   const ALL_NATURES = ["fire","water","wind","earth","sun","moon","lightning","ki"];
@@ -952,6 +968,7 @@ function msWithChosenNatures(iv, school, chosen) {
     mag,
     magUsed: choice.magUsed,
     skillVal,
+    skillKey,
     top1: choice.top1,
     top2: choice.top2,
     natureBase: choice.natureBase,
@@ -1050,6 +1067,23 @@ function msBonusForLinkedRules(school, variantUsedNatures) {
 
   return out;
 }
+function msTooltip(row){
+  const bd = row.breakdown || {};
+  const names = (bd.pickNames && bd.pickNames.length)
+    ? bd.pickNames
+    : (row.variant?.natures || []);
+  const natureLabel = names.length ? names.map(title).join(" + ") : "Nature";
+  const natureVal = (typeof bd.natureBase === "number")
+    ? bd.natureBase
+    : (Array.isArray(bd.pick) && bd.pick.length ? bd.pick[0] : 0);
+  const parts = [];
+  const skillLabel = bd.skillKey ? title(bd.skillKey) : title(row.school?.linked_skill || "Skill");
+  parts.push(`Skill (${skillLabel}): ${bd.skillVal ?? 0}`);
+  parts.push(`Nature (${natureLabel}): ${natureVal}${bd.magUsed ? ` + MAG ${bd.magUsed}` : ""}`);
+  if (row.bonus) parts.push(`Bonuses: ${row.bonus}`);
+  parts.push(`Total MS: ${row.ms}`);
+  return parts.join("\\n");
+}
 function renderSchools(){
   const tbody = document.getElementById("schools-body");
   tbody.innerHTML = "";
@@ -1127,7 +1161,8 @@ function renderSchools(){
     tr.appendChild(tdBreak);
 
     const tdMS = document.createElement("td");
-    tdMS.innerHTML = `<span class="badge ok">MS ${r.ms}</span>`;
+    const tip = escapeHtml(msTooltip(r));
+    tdMS.innerHTML = `<span class="badge ok" title="${tip}">MS ${r.ms}</span>`;
     tr.appendChild(tdMS);
 
     const tdCat = document.createElement("td");
