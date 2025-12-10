@@ -2628,6 +2628,28 @@ function title(str){
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 }
 
+const SKILL_ALIASES = {
+  enchantment: "enchantement",
+  enchante: "enchantement",
+  incantation: "incantation",
+  incantaion: "incantation",
+  icnantaion: "incantation",
+  incatation: "incantation",
+  resto: "restoration",
+};
+function normSkillKey(s){
+  const cleaned = (s || "").toString().trim().toLowerCase().replace(/[^a-z]/g, "");
+  return SKILL_ALIASES[cleaned] || cleaned;
+}
+function skillValFromIV(skillName, iv){
+  const key = normSkillKey(skillName);
+  if (!iv || !iv.skills) return 0;
+  if (key && key in iv.skills) return numOr(iv.skills[key], 0);
+  // fallback: loose match
+  const found = Object.entries(iv.skills).find(([k])=> normSkillKey(k) === key);
+  return found ? numOr(found[1], 0) : 0;
+}
+
 function currentIV(){
   return normalizeIV(deriveSpellListInitialValuesFromChar());
 }
@@ -2711,10 +2733,31 @@ async function renderSchoolSpellCounters(){
   if (cntSpSimpleEl)   cntSpSimpleEl.textContent   = `Simple spell slots: ${simplePrepared} / ${maxSimplePrepared}`;
   if (cntSpComplexEl)  cntSpComplexEl.textContent  = `Complex spell slots: ${complexPrepared} / ${maxComplexPrepared}`;
 }
+const MS_CATEGORIES = [
+  {name:"Avant-Garde", min:44},
+  {name:"Supreme Archmage", min:40},
+  {name:"Archmage", min:36},
+  {name:"Grand Master", min:32},
+  {name:"Master", min:28},
+  {name:"High Mage", min:24},
+  {name:"Magister", min:20},
+  {name:"Mage", min:16},
+  {name:"Adept", min:12},
+  {name:"Disciple", min:8},
+  {name:"Apprentice", min:6},
+  {name:"Novice", min:4},
+];
+function mapMsCategory(ms){
+  const v = Number(ms) || 0;
+  const hit = MS_CATEGORIES.find(c => v >= c.min);
+  return hit ? hit.name : "--";
+}
+
 function msForSchool(school){
   const iv = currentIV() || {};
-  const skillKey = (school.linked_skill || '').toLowerCase();
-  const skillVal = numOr(iv.skills?.[skillKey], 0);
+  const skillKeyRaw = school.linked_skill || '';
+  const skillKey = normSkillKey(skillKeyRaw);
+  const skillVal = skillValFromIV(skillKeyRaw, iv);
   const ints = (school.linked_intensities || []).map(lc);
   const vals = ints
     .map(k => ({ key:k, val:numOr(iv.natures?.[k], 0) }))
@@ -2736,8 +2779,10 @@ function msForSchool(school){
   }
 
   const natureTotal = natureBase + magUsed;
+  const ms = skillVal + natureTotal;
   return {
-    ms: skillVal + natureTotal,
+    ms,
+    category: mapMsCategory(ms),
     skillVal,
     skillKey,
     top1: top1.val,
@@ -2793,7 +2838,7 @@ async function renderAddedSchools(){
   list.forEach(({id,s})=>{
     const msInfo = msForSchool(s);
     const ms = msInfo.ms;
-    const cat = s.category || s.type || '--';
+    const cat = msInfo.category || s.category || s.type || '--';
     const tipLines = [
       `Skill (${s.linked_skill || 'skill'}): ${msInfo.skillVal || 0}`,
       `Top nature: ${msInfo.top1 || 0}`,
