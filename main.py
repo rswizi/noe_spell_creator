@@ -2557,10 +2557,12 @@ def _archetype_prereq_errors(archetype: dict, stats: dict) -> list[str]:
             higher_count = sum(1 for k,v in vals if v > my_val)
             if pos == 1 and higher_count != 0:
                 errors.append(f"{key.title()} is not highest (mod {my_val}, higher mods exist).")
-            if pos == 2 and (higher_count < 1 or higher_count > 1):
-                errors.append(f"{key.title()} is not second-highest (mod {my_val}, higher count {higher_count}).")
-            if pos == 3 and (higher_count < 2 or higher_count > 2):
-                errors.append(f"{key.title()} is not third-highest (mod {my_val}, higher count {higher_count}).")
+            # For 2nd / 3rd place, allow the stat to be higher than required (e.g., being 1st also satisfies "2nd highest").
+            # We only fail if the stat ranks lower than the requested position.
+            if pos == 2 and higher_count > 1:
+                errors.append(f"{key.title()} must be in the top 2 (mod {my_val}, current rank {higher_count+1}).")
+            if pos == 3 and higher_count > 2:
+                errors.append(f"{key.title()} must be in the top 3 (mod {my_val}, current rank {higher_count+1}).")
     char_min = rules.get("char_min") or {}
     for k,v in char_min.items():
         try:
