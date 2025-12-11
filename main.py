@@ -2514,39 +2514,38 @@ def _compute_archetype_unlocked(archetype: dict, lvl: int) -> list[str]:
         keep_ids.append(r["ability_id"])
     return keep_ids
 
-def _check_archetype_prereqs(archetype: dict, stats: dict) -> bool:
+def _archetype_prereq_errors(archetype: dict, stats: dict) -> list[str]:
     rules = archetype.get("prereq_rules") or {}
-    # If no prerequisite rules are defined, always allow.
     if not rules or not (
         rules.get("mag_highest")
         or rules.get("wis_half_mag")
         or (rules.get("char_order") or [])
         or (rules.get("char_min") or {})
     ):
-        return True
-    if not stats: return False
-    # characteristics on stats keys
+        return []
+    if not stats:
+        return ["No stats provided for prerequisite check."]
+    errors = []
     char_keys = ["reflex","dexterity","body","wisdom","presence","magic","willpower","tech"]
     def mod_for(k):
         try:
             return _total_from_invest(stats.get(k,{}).get("invest",0))
         except Exception:
             return 0
+    mod_map = {k: mod_for(k) for k in char_keys}
     if rules.get("mag_highest"):
-        mag = mod_for("magic")
-        others = [mod_for(k) for k in char_keys if k!="magic"]
+        mag = mod_map["magic"]
+        others = [mod_map[k] for k in char_keys if k!="magic"]
         if not all(mag >= o for o in others):
-            return False
+            errors.append(f"Magic mod {mag} is not highest (others: {max(others) if others else 0}).")
     if rules.get("wis_half_mag"):
-        wis = mod_for("wisdom")
-        mag = mod_for("magic")
+        wis = mod_map["wisdom"]
+        mag = mod_map["magic"]
         if wis < (mag/2):
-            return False
-    # ranking rules (highest / second / third)
+            errors.append(f"Wisdom mod {wis} is below half of Magic {mag}.")
     order_rules = rules.get("char_order") or []
     if order_rules:
-        # compute ranked list (stable sort by value desc then key)
-        vals = [(k, mod_for(k)) for k in char_keys]
+        vals = [(k, mod_map[k]) for k in char_keys]
         vals.sort(key=lambda kv: (-kv[1], kv[0]))
         rank_pos = {k:i+1 for i,(k,_) in enumerate(vals)}  # 1-based
         for r in order_rules:
@@ -2554,23 +2553,26 @@ def _check_archetype_prereqs(archetype: dict, stats: dict) -> bool:
             pos = int(r.get("position") or 0)
             if key not in rank_pos or pos not in (1,2,3):
                 continue
-            # allow ties: character must not be strictly below required tier
-            my_val = mod_for(key)
+            my_val = mod_map[key]
             higher_count = sum(1 for k,v in vals if v > my_val)
             if pos == 1 and higher_count != 0:
-                return False
+                errors.append(f"{key.title()} is not highest (mod {my_val}, higher mods exist).")
             if pos == 2 and (higher_count < 1 or higher_count > 1):
-                return False
+                errors.append(f"{key.title()} is not second-highest (mod {my_val}, higher count {higher_count}).")
             if pos == 3 and (higher_count < 2 or higher_count > 2):
-                return False
+                errors.append(f"{key.title()} is not third-highest (mod {my_val}, higher count {higher_count}).")
     char_min = rules.get("char_min") or {}
     for k,v in char_min.items():
         try:
-            if mod_for(k) < int(v):
-                return False
+            req = int(v)
+            if mod_map.get(k, 0) < req:
+                errors.append(f"{k.title()} mod {mod_map.get(k,0)} below minimum {req}.")
         except Exception:
             continue
-    return True
+    return errors
+
+def _check_archetype_prereqs(archetype: dict, stats: dict) -> bool:
+    return len(_archetype_prereq_errors(archetype, stats)) == 0
 
 def _equipment_from_body(b: dict) -> dict:
     cat = (b.get("category") or "").strip().lower()
@@ -3998,8 +4000,9 @@ async def update_character(cid: str, request: Request):
             arc = get_col("archetypes").find_one({"id": arc_id}, {"_id":1})
             if not arc:
                 return JSONResponse({"status":"error","message":"Archetype not found"}, status_code=400)
-            if not _check_archetype_prereqs(arc, updates.get("stats") or before.get("stats") or {}):
-                return JSONResponse({"status":"error","message":"Archetype prerequisites not met"}, status_code=400)
+            errs = _archetype_prereq_errors(arc, updates.get("stats") or before.get("stats") or {})
+            if errs:
+                return JSONResponse({"status":"error","message":"Archetype prerequisites not met", "details": errs}, status_code=400)
         updates["archetype_id"] = arc_id
 
     if "sublimations" in body:
@@ -4016,8 +4019,9 @@ async def update_character(cid: str, request: Request):
         arc = get_col("archetypes").find_one({"id": final_arc_id}, {"_id":0})
         if not arc:
             return JSONResponse({"status":"error","message":"Archetype not found"}, status_code=400)
-        if not _check_archetype_prereqs(arc, final_stats):
-            return JSONResponse({"status":"error","message":"Archetype prerequisites not met"}, status_code=400)
+        errs = _archetype_prereq_errors(arc, final_stats)
+        if errs:
+            return JSONResponse({"status":"error","message":"Archetype prerequisites not met", "details": errs}, status_code=400)
 
     get_col("characters").update_one({"id": cid}, {"$set": updates})
     after = get_col("characters").find_one({"id": cid}, {"_id":0})
