@@ -4110,6 +4110,8 @@ def _flatten_passive_modifiers(ability_docs: list[dict], origin_label: str) -> l
     for ab in ability_docs:
         passive = (ab or {}).get("passive") or {}
         for m in (passive.get("modifiers") or []):
+            if m.get("choice") or str(m.get("target") or "").startswith("choice:"):
+                continue  # skip user-choice modifiers; they are resolved per-character later
             # Some older ability records stored the target under "key".
             # Support both so modifiers are not dropped when flattening.
             target = m.get("target") or m.get("key") or ""

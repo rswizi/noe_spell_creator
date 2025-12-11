@@ -3611,6 +3611,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   for (const ab of passiveAbilities){
     const mods = (ab.passive && ab.passive.modifiers) || [];
     for (const m of mods){
+      if (m.choice || String(m.target||'').startsWith('choice:')) continue; // user-choice modifiers will be resolved later
       allMods.push({
         target:(m.target || m.key || '').toLowerCase().trim(),
         mode:(m.mode||'add').toLowerCase(),
@@ -4140,7 +4141,6 @@ function wirePersonal(){
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
-
 
 
 
