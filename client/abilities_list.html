@@ -439,14 +439,19 @@ async function loadAbilitiesForReplace(){
   }
 }
 
-function renderReplaceOptions(filter=""){
+function renderReplaceOptions(filter="", selected=arcReplSel.value){
   const term = (filter||"").toLowerCase();
   const opts = ALL_ABILITIES.filter(a => !term || (a.name||"").toLowerCase().includes(term));
   arcReplSel.innerHTML = `<option value="">-- none --</option>` + opts.map(a=>`<option value="${a.id}">${a.name} (${a.id})</option>`).join("");
+  if (selected && !opts.find(a=>a.id===selected)){
+    arcReplSel.insertAdjacentHTML('beforeend', `<option value="${selected}" selected>${selected}</option>`);
+  }else{
+    arcReplSel.value = selected || "";
+  }
 }
 arcReplSearch.addEventListener('input', ()=>{
   clearTimeout(arcReplSearch._t);
-  arcReplSearch._t = setTimeout(()=> renderReplaceOptions(arcReplSearch.value), 200);
+  arcReplSearch._t = setTimeout(()=> renderReplaceOptions(arcReplSearch.value, arcReplSel.value), 200);
 });
 
 function buildPayloadFromForm(){
@@ -548,7 +553,7 @@ function populateForm(a){
 
   updateTypeVisibility();
   updateArchetypeMeta();
-  renderReplaceOptions(arcReplSearch.value || "");
+  renderReplaceOptions(arcReplSearch.value || "", a.archetype_replaces || arcReplSel.value);
 }
 
 async function loadAbilities(){
