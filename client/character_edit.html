@@ -66,7 +66,7 @@
     .hdr { display:flex; align-items:center; gap:10px; }
     .skills { display:grid; gap:8px; margin-top:10px; }
     .skill-line { display:grid; grid-template-columns: minmax(120px, 1fr) 78px 58px; gap:8px; align-items:center; }
-    .skill-line input.num { width:60px; max-width:60px; } /* tighter inputs for skill rows */
+    .skill-line input.num { width:50px; max-width:50px; } /* tighter inputs for skill rows */
     .skill-total { min-width:48px; text-align:center; font-variant-numeric: tabular-nums; padding:2px 4px; }
     .charac-badge { font-variant-numeric: tabular-nums; }
     .badge { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-variant-numeric: tabular-nums; background:#181821; }
@@ -83,7 +83,7 @@
       gap:6px;
       align-items:center;
     }
-    .intensity-line input.num { width:60px; max-width:60px; }
+    .intensity-line input.num { width:50px; max-width:50px; }
     .intensity-line .skill-total { text-align:center; min-width:48px; }
     @media (max-width: 900px){
       .intensities-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
@@ -4140,7 +4140,6 @@ function wirePersonal(){
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
-
 
 
 
