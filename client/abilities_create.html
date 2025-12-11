@@ -45,8 +45,9 @@
     .mod-row input, .mod-row select { width:100%; }
     .mod-row button { padding:4px 8px; font-size:.8rem; }
     .mod-row .mod-target-custom { grid-column:1 / span 3; }
-    .mod-row .choice-wrap { grid-column:1 / -1; display:grid; grid-template-columns: auto 1.2fr 0.8fr 1fr; gap:6px; align-items:center; padding:6px 8px; border:1px solid #222; border-radius:10px; background:#0c0c0f; }
+    .mod-row .choice-wrap { grid-column:1 / -1; display:none; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:8px; align-items:center; padding:8px 10px; border:1px solid #222; border-radius:10px; background:#0c0c0f; }
     .mod-row .choice-wrap .muted { grid-column:1 / -1; }
+    .mod-row .choice-actions { grid-column:1 / -1; display:flex; gap:8px; align-items:center; }
 
     .status-line { margin-top:10px; font-size:.85rem; opacity:.9; }
   </style>
@@ -240,13 +241,13 @@ const costOValEl  = document.getElementById('cost-other-value');
 const btnSave     = document.getElementById('btn-save');
 
 const CUSTOM_TARGET_VALUE = '__custom__';
-const CHOICE_KINDS = [
-  { value:'skill_ms',      label:'Skill-based MS (user picks skill → schools)' },
-  { value:'nature_ms',     label:'Nature-based MS (user picks nature → schools)' },
-  { value:'school_ms',     label:'Magic Schools (user picks schools)' },
-  { value:'magic_weapon',  label:'Magic damage on weapons (nature pick)' },
-  { value:'magic_spell',   label:'Magic damage on spells/animarma (nature pick)' },
-  { value:'char_skill',    label:'Skill linked to a characteristic' },
+const CHOICE_OPTIONS = [
+  { value:'choice:skill_ms',     label:'[Choice] Skill-based MS' },
+  { value:'choice:nature_ms',    label:'[Choice] Nature-based MS' },
+  { value:'choice:school_ms',    label:'[Choice] Magic Schools' },
+  { value:'choice:magic_weapon', label:'[Choice] Magic damage on weapons (nature pick)' },
+  { value:'choice:magic_spell',  label:'[Choice] Magic damage on spells/animarma (nature pick)' },
+  { value:'choice:char_skill',   label:'[Choice] Skill linked to a characteristic' },
 ];
 const PASSIVE_TARGET_GROUPS = (()=>{
   const characteristics = [
@@ -283,6 +284,7 @@ const PASSIVE_TARGET_GROUPS = (()=>{
     { label:'Characteristics', options: characteristics.map(c=>({ value:`char.${c.key}`, label:`${c.label} (modifier)` })) },
     { label:'Skills', options: skills.flatMap(c=> c.skills.map(s=>({ value:`skills.${c.key}.${s}`, label:`${s} (${c.label})` }))) },
     { label:'Derived / Resources', options: derived.map(d=>({ value:`derived.${d.key}`, label:d.label })) },
+    { label:'User choice (configurable)', options: CHOICE_OPTIONS },
     { label:'Custom', options:[{ value:CUSTOM_TARGET_VALUE, label:'Custom path...' }]},
   ];
 })();
@@ -359,70 +361,48 @@ function addModifierRow(initial){
   rm.className = 'btn';
   rm.addEventListener('click', ()=> row.remove());
 
-  // Choice configuration (for user-selected targets later)
+  // Choice configuration (for choice:* targets)
   const choiceWrap = document.createElement('div');
   choiceWrap.className = 'choice-wrap';
-  const choiceToggle = document.createElement('input');
-  choiceToggle.type = 'checkbox';
-  choiceToggle.className = 'mod-choice-toggle';
-  choiceToggle.checked = !!initial?.choice;
-
-  const choiceLabel = document.createElement('label');
-  choiceLabel.style.display = 'flex';
-  choiceLabel.style.alignItems = 'center';
-  choiceLabel.style.gap = '6px';
-  choiceLabel.appendChild(choiceToggle);
-  const choiceText = document.createElement('span');
-  choiceText.textContent = 'User will pick the exact target (with restrictions)';
-  choiceLabel.appendChild(choiceText);
-
-  const choiceType = document.createElement('select');
-  choiceType.className = 'choice-type';
-  CHOICE_KINDS.forEach(k=>{
-    const opt = document.createElement('option');
-    opt.value = k.value;
-    opt.textContent = k.label;
-    choiceType.appendChild(opt);
-  });
-
+  const choiceActions = document.createElement('div');
+  choiceActions.className = 'choice-actions';
+  const choiceBtn = document.createElement('button');
+  choiceBtn.type = 'button';
+  choiceBtn.className = 'btn';
+  choiceBtn.textContent = 'Configure choices';
+  choiceActions.appendChild(choiceBtn);
   const choiceMax = document.createElement('input');
   choiceMax.type = 'number';
   choiceMax.min = '0';
   choiceMax.placeholder = 'Max choices (0 = unlimited)';
+  choiceMax.className = 'choice-max';
   choiceMax.value = initial?.choice?.max_choices ?? 0;
-
   const choiceRestrict = document.createElement('input');
   choiceRestrict.type = 'text';
   choiceRestrict.placeholder = 'Restrict list (comma-separated)';
+  choiceRestrict.className = 'choice-restrict';
   choiceRestrict.value = Array.isArray(initial?.choice?.restrict) ? initial.choice.restrict.join(', ') : (initial?.choice?.restrict_text || '');
-
   const choiceHint = document.createElement('div');
   choiceHint.className = 'muted';
   choiceHint.textContent = 'Restrictions depend on type (skills, natures, schools, or characteristics).';
-
-  choiceWrap.appendChild(choiceLabel);
-  choiceWrap.appendChild(choiceType);
+  choiceWrap.appendChild(choiceActions);
   choiceWrap.appendChild(choiceMax);
   choiceWrap.appendChild(choiceRestrict);
   choiceWrap.appendChild(choiceHint);
+  choiceWrap.style.display = 'none';
 
   function syncChoiceUI(){
-    const on = choiceToggle.checked;
-    target.disabled = on;
-    customTarget.disabled = on;
-    choiceType.disabled = !on;
-    choiceMax.disabled = !on;
-    choiceRestrict.disabled = !on;
-    choiceWrap.style.display = 'grid';
-    if (on && !choiceType.value){
-      choiceType.value = CHOICE_KINDS[0].value;
+    const isChoice = (target.value || '').startsWith('choice:');
+    choiceBtn.style.display = isChoice ? '' : 'none';
+    if (!isChoice){
+      choiceWrap.style.display = 'none';
     }
   }
-  // Preselect choice type from saved data or from target prefix
-  const savedKind = initial?.choice?.kind || ((initial?.target || '').startsWith('choice:') ? (initial.target || '').split(':')[1] : '');
-  if (savedKind) choiceType.value = savedKind;
+  choiceBtn.addEventListener('click', ()=>{
+    choiceWrap.style.display = choiceWrap.style.display === 'none' ? 'grid' : 'none';
+  });
+  target.addEventListener('change', syncChoiceUI);
   syncChoiceUI();
-  choiceToggle.addEventListener('change', syncChoiceUI);
 
   row.appendChild(target);
   row.appendChild(mode);
@@ -518,21 +498,19 @@ function buildPayload(){
       const customTarget = row.querySelector('.mod-target-custom');
       const modeEl   = row.querySelector('.mod-mode');
       const valueEl  = row.querySelector('.mod-value');
-      const choiceToggle = row.querySelector('.mod-choice-toggle');
-      const choiceType   = row.querySelector('.choice-type');
-      const choiceMax    = row.querySelector('.choice-wrap input[type=\"number\"]');
-      const choiceRestrict = row.querySelector('.choice-wrap input[type=\"text\"]');
+      const choiceMax    = row.querySelector('.choice-max');
+      const choiceRestrict = row.querySelector('.choice-restrict');
 
-      const choiceEnabled = choiceToggle?.checked;
-      const choice = choiceEnabled ? {
-        kind: (choiceType?.value || '').trim() || 'custom',
+      const isChoice = (targetSel.value || '').startsWith('choice:');
+      const choice = isChoice ? {
+        kind: (targetSel.value || '').replace('choice:','') || 'custom',
         max_choices: Math.max(0, Number(choiceMax?.value || 0)),
         restrict: (choiceRestrict?.value || '').split(',').map(s=>s.trim()).filter(Boolean)
       } : null;
 
       const resolvedTarget = targetSel.value === CUSTOM_TARGET_VALUE ? (customTarget.value || '').trim() : targetSel.value.trim();
       const parsedValue = parseFloat(valueEl.value || '0');
-      // For user-choice modifiers, store a synthetic target so the row persists, but it will be resolved later on character sheets.
+      // For user-choice modifiers, the target already carries choice:<kind>
       const finalTarget = choice ? `choice:${choice.kind}` : resolvedTarget;
       if (!finalTarget) return;
       const modPayload = { target: finalTarget, mode: modeEl.value, value: parsedValue, note:'' };
