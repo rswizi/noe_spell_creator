@@ -2516,6 +2516,14 @@ def _compute_archetype_unlocked(archetype: dict, lvl: int) -> list[str]:
 
 def _check_archetype_prereqs(archetype: dict, stats: dict) -> bool:
     rules = archetype.get("prereq_rules") or {}
+    # If no prerequisite rules are defined, always allow.
+    if not rules or not (
+        rules.get("mag_highest")
+        or rules.get("wis_half_mag")
+        or (rules.get("char_order") or [])
+        or (rules.get("char_min") or {})
+    ):
+        return True
     if not stats: return False
     # characteristics on stats keys
     char_keys = ["reflex","dexterity","body","wisdom","presence","magic","willpower","tech"]
