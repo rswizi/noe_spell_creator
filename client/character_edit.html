@@ -4285,7 +4285,7 @@ async function openChoiceModal(ab){
         const parts = key.split('.');
         const skillName = parts.slice(2).join('.');
         const ck = parts[1] || '';
-        const label = `${skillName} (${title(ck)}) â€” Schools: ${Array.from(new Set(schools)).join(', ')}`;
+        const label = `${skillName} (${title(ck)}) - Schools: ${Array.from(new Set(schools)).join(', ')}`;
         return { key, label };
       }).sort((a,b)=> a.label.localeCompare(b.label));
     }
