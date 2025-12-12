@@ -666,7 +666,8 @@ function buildPayloadFromForm(){
       const choice = isChoice ? {
         kind: (targetSel.value || '').replace('choice:','') || 'custom',
         max_choices: Math.max(0, Number(choiceMax?.value || 0)),
-        restrict: (choiceRestrict?.value || '').split(',').map(s=>s.trim()).filter(Boolean)
+        restrict: (choiceRestrict?.value || '').split(',').map(s=>s.trim()).filter(Boolean),
+        restrict_text: (choiceRestrict?.value || '').trim()
       } : null;
 
       const resolvedTarget = targetSel.value === CUSTOM_TARGET_VALUE ? (customTarget.value || '').trim() : targetSel.value.trim();

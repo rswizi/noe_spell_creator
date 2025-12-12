@@ -1487,6 +1487,14 @@ function normalizeChoiceEntry(val){
   const base = val.base || val.source || '';
   return { base, picks: picks.filter(Boolean) };
 }
+function normalizeRestrict(choice){
+  if (!choice) return [];
+  if (Array.isArray(choice.restrict)) return choice.restrict;
+  if (typeof choice.restrict_text === 'string'){
+    return choice.restrict_text.split(',').map(s=>s.trim()).filter(Boolean);
+  }
+  return [];
+}
 function abilityChoiceSelections(ab, kind){
   const byAb = ABILITY_CHOICES[ab.id] || {};
   return normalizeChoiceEntry(byAb[kind]).picks;
@@ -4394,7 +4402,7 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
 
   for (const m of mods){
     const kind = String(m.target||'').replace('choice:','');
-    const restrict = (m.choice?.restrict) || [];
+    const restrict = normalizeRestrict(m.choice);
     const max = Number(m.choice?.max_choices||0);
     const block = document.createElement('div');
     block.className = 'panel';
