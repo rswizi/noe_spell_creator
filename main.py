@@ -3979,6 +3979,10 @@ async def update_character(cid: str, request: Request):
             elif isinstance(item, dict) and item.get("id"):
                 cleaned.append(str(item["id"]).strip())
         updates["abilities"] = cleaned
+    if "ability_choices" in body:
+        ac = body.get("ability_choices") or {}
+        if isinstance(ac, dict):
+            updates["ability_choices"] = ac
 
     if "inventory_id" in body:
         inv_id = str(body.get("inventory_id") or "").strip()

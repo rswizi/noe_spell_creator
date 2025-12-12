@@ -756,6 +756,22 @@
   </div>
 </div>
 
+<!-- Ability choice config modal -->
+<div id="choice-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="choice-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="choice-title">
+  <div class="modal-card" style="max-width:720px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="choice-title">Configure choices</div>
+      <button class="modal-close" id="choice-close" aria-label="Close">&times;</button>
+    </header>
+    <div id="choice-body" class="list" style="margin-top:10px;"></div>
+    <div class="row" style="justify-content:flex-end; gap:8px; margin-top:12px;">
+      <button class="btn" id="choice-cancel">Cancel</button>
+      <button class="btn" id="choice-save">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* --- auth helper --- */
 function getToken(){ return localStorage.getItem('auth_token') || ''; }
@@ -893,6 +909,7 @@ let ROLE = 'user';
 let SAVE_TIMER = null;
 let CHAR = null;
 let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
+let ABILITY_CHOICES = {}; // per-ability user selections for choice-based modifiers
 let INVENTORIES = [];
 let LINKED_INV = null;
 let SELECTED_INV_ID = '';
@@ -976,6 +993,12 @@ const listArchetypeEl = document.getElementById('abi-list-archetype');
 const listPassiveEl   = document.getElementById('abi-list-passive');
 const listActiveEl    = document.getElementById('abi-list-active');
 const listSpellEl     = document.getElementById('abi-list-spells');
+const choiceModal = document.getElementById('choice-modal');
+const choiceBackdrop = document.getElementById('choice-backdrop');
+const choiceClose = document.getElementById('choice-close');
+const choiceCancel = document.getElementById('choice-cancel');
+const choiceSave = document.getElementById('choice-save');
+const choiceBody = document.getElementById('choice-body');
 const arcSelectEl     = document.getElementById('arc-select');
 const arcApplyBtn     = document.getElementById('arc-apply');
 const arcStatusEl     = document.getElementById('arc-status');
@@ -1452,6 +1475,29 @@ function ensureAgg(obj, key){
   if (!obj[key]) obj[key] = { set:[], mul:[], add:[], notes:[] };
   return obj[key];
 }
+function abilityChoiceSelections(ab, kind){
+  const byAb = ABILITY_CHOICES[ab.id] || {};
+  return byAb[kind] || [];
+}
+function resolvedPassiveMods(ab){
+  const mods = (ab.passive && ab.passive.modifiers) || [];
+  const out = [];
+  for (const m of mods){
+    const t = (m.target || m.key || '').trim();
+    if (!t) continue;
+    if (t.startsWith('choice:')){
+      const kind = t.replace('choice:','');
+      const picks = abilityChoiceSelections(ab, kind);
+      if (!picks.length) continue;
+      picks.forEach(sel=>{
+        out.push({ ...m, target: sel });
+      });
+      continue;
+    }
+    out.push(m);
+  }
+  return out;
+}
 function recomputePassiveAgg(){
   resetPassiveAgg();
   const passiveAbilities = (ASSIGNED||[]).filter(a=>{
@@ -1459,7 +1505,7 @@ function recomputePassiveAgg(){
     return t==='passive' || t==='mixed';
   });
   for (const ab of passiveAbilities){
-    const mods = (ab.passive && ab.passive.modifiers) || [];
+    const mods = resolvedPassiveMods(ab);
     for (const m of mods){
       const t = (m.target || m.key || '').trim();
       const mode = ((m.mode||'add')+'').toLowerCase();
@@ -3609,9 +3655,8 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
 
   const allMods = [];
   for (const ab of passiveAbilities){
-    const mods = (ab.passive && ab.passive.modifiers) || [];
+    const mods = resolvedPassiveMods(ab);
     for (const m of mods){
-      if (m.choice || String(m.target||'').startsWith('choice:')) continue; // user-choice modifiers will be resolved later
       allMods.push({
         target:(m.target || m.key || '').toLowerCase().trim(),
         mode:(m.mode||'add').toLowerCase(),
@@ -3791,6 +3836,7 @@ async function loadCharacter(){
   CHAR.xp = XP;
   CHAR.stats.level = CHAR.level;
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
+  ABILITY_CHOICES = CHAR.ability_choices || {};
   SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
   if (!CHAR.archetype_id) CHAR.archetype_id = '';
   SELECTED_SPELL_LIST_ID = CHAR.spell_list_id || '';
@@ -3888,6 +3934,7 @@ async function saveNow(){
       stats: { ...CHAR.stats, level: CHAR.level, selected_schools: Array.from(ADDED_SCHOOLS) },
       selected_schools: Array.from(ADDED_SCHOOLS),
       abilities: CHAR.abilities || [],
+      ability_choices: ABILITY_CHOICES || {},
       inventory_id: SELECTED_INV_ID || '',
       spell_list_id: SELECTED_SPELL_LIST_ID || '',
       archetype_id: CHAR.archetype_id || '',
@@ -4049,12 +4096,113 @@ async function resolveAssignedAbilities(){
   (bulk.abilities||[]).forEach(a=>{ if (a && a.id) byId[a.id] = a; });
   ASSIGNED = ids.map(id=> byId[id]).filter(Boolean); // preserve order and duplicates
 }
+function abilityHasChoice(ab){
+  return !!((ab?.passive?.modifiers||[]).find(m=> String(m.target||'').startsWith('choice:')));
+}
+function skillOptionsList(){
+  const out = [];
+  for (const c of CHARACS){
+    for (const s of c.skills){
+      out.push({ key:`skills.${c.key}.${s}`, label:`${s} (${c.name})`, charKey:c.key });
+    }
+  }
+  return out;
+}
+async function choiceItemsForKind(kind, restrict){
+  const rset = new Set((restrict||[]).map(x=> String(x).toLowerCase()));
+  if (kind === 'skill_ms'){
+    return skillOptionsList().filter(o=> !rset.has(o.key.toLowerCase()) && !rset.has(o.label.toLowerCase()) && !rset.has(o.charKey?.toLowerCase()));
+  }
+  if (kind === 'char_skill'){
+    return skillOptionsList().filter(o=> !rset.has(o.charKey?.toLowerCase()));
+  }
+  if (kind === 'nature_ms' || kind === 'magic_weapon' || kind === 'magic_spell'){
+    return INTENSITIES.map(n=>({ key:`intensities.${n}`, label:n })).filter(o=> !rset.has(o.label.toLowerCase()) && !rset.has(o.key.toLowerCase()));
+  }
+  if (kind === 'school_ms'){
+    if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
+    return (SCHOOLS||[]).map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||'simple'})` })).filter(o=> !rset.has(o.label.toLowerCase()) && !rset.has(o.key.toLowerCase()));
+  }
+  return [];
+}
+async function openChoiceModal(ab){
+  const mods = (ab.passive?.modifiers||[]).filter(m=> String(m.target||'').startsWith('choice:'));
+  if (!mods.length) return false;
+  choiceBody.innerHTML = '<div class="muted">Loading choices...</div>';
+  choiceModal.classList.remove('hidden'); choiceModal.classList.add('open'); choiceBackdrop.classList.add('open');
+  const existing = ABILITY_CHOICES[ab.id] || {};
+  choiceBody.innerHTML = '';
+  for (const m of mods){
+    const kind = String(m.target||'').replace('choice:','');
+    const restrict = (m.choice?.restrict) || [];
+    const max = Number(m.choice?.max_choices||0);
+    const items = await choiceItemsForKind(kind, restrict);
+    const block = document.createElement('div');
+    block.className = 'panel';
+    const title = document.createElement('div');
+    title.innerHTML = `<strong>${kind.replace(/_/g,' ')}</strong> <span class="muted">(max ${max||'∞'})</span>`;
+    block.appendChild(title);
+    if (!items.length){
+      const empty = document.createElement('div'); empty.className='muted'; empty.textContent='No options available.'; block.appendChild(empty);
+    }else{
+      items.forEach(opt=>{
+        const row = document.createElement('label');
+        row.style.display='flex'; row.style.gap='8px'; row.style.alignItems='center'; row.style.margin='4px 0';
+        const cb = document.createElement('input'); cb.type='checkbox'; cb.dataset.kind = kind; cb.value = opt.key;
+        if ((existing[kind]||[]).includes(opt.key)) cb.checked = true;
+        row.appendChild(cb);
+        const span = document.createElement('span'); span.textContent = opt.label; row.appendChild(span);
+        block.appendChild(row);
+      });
+    }
+    choiceBody.appendChild(block);
+  }
+  return new Promise(resolve=>{
+    const close = ()=>{
+      choiceModal.classList.add('hidden'); choiceModal.classList.remove('open'); choiceBackdrop.classList.remove('open');
+      resolve(false);
+    };
+    const save = ()=>{
+      const selections = {};
+      const boxes = choiceBody.querySelectorAll('input[type="checkbox"][data-kind]');
+      boxes.forEach(box=>{
+        if (!box.checked) return;
+        const k = box.dataset.kind;
+        selections[k] = selections[k] || [];
+        selections[k].push(box.value);
+      });
+      // enforce max per kind
+      for (const m of mods){
+        const kind = String(m.target||'').replace('choice:','');
+        const max = Number(m.choice?.max_choices||0);
+        const arr = selections[kind] || [];
+        if (max > 0 && arr.length > max){
+          alert(`Select at most ${max} options for ${kind.replace(/_/g,' ')}.`);
+          return;
+        }
+      }
+      ABILITY_CHOICES[ab.id] = selections;
+      queueSave();
+      recomputePassiveAgg(); renderStatistics(); updateDerived();
+      choiceModal.classList.add('hidden'); choiceModal.classList.remove('open'); choiceBackdrop.classList.remove('open');
+      resolve(true);
+    };
+    choiceClose.onclick = close;
+    choiceCancel.onclick = close;
+    choiceBackdrop.onclick = (e)=>{ if (e.target===choiceBackdrop) close(); };
+    choiceSave.onclick = save;
+  });
+}
 
 async function addAbilityToChar(aid){
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   CHAR.abilities.push(aid);
   queueSave();
   await resolveAssignedAbilities();
+  const ab = ASSIGNED.find(x=>x.id===aid);
+  if (ab && abilityHasChoice(ab)){
+    await openChoiceModal(ab);
+  }
   recomputePassiveAgg();
   renderAbilitiesTab();
   renderStatistics();
@@ -4066,6 +4214,7 @@ async function removeAbilityFromChar(aid){
   const idx = arr.indexOf(aid);
   if (idx >= 0) arr.splice(idx, 1);
   CHAR.abilities = arr;
+   if (ABILITY_CHOICES[aid]) delete ABILITY_CHOICES[aid];
   queueSave();
   await resolveAssignedAbilities();
   recomputePassiveAgg();
@@ -4081,16 +4230,24 @@ function renderAbilitiesBucket(el, list){
     const div = document.createElement('div');
     div.className = 'abi-item';
     const isPassive = (a.type||'').toLowerCase()!=='active';
+    const hasChoice = abilityHasChoice(a);
+    const desc = isPassive ? (a.passive?.description||a.description||'') : (a.description||'');
     div.innerHTML = `
       <div class="grow">
         <div><strong>${a.name}</strong></div>
-        <div class="muted" style="font-size:.85rem">${isPassive ? (a.passive?.description||a.description||'') : (a.description||'')}</div>
+        <div class="muted" style="font-size:.85rem">${desc}</div>
       </div>
       <span class="tag">${a.type||''}</span>
       <span class="tag">${a.source_category||''}</span>
-      <button title="Remove">🗑</button>
+      <div class="row" style="gap:6px; flex-wrap:wrap;">
+        ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
+        <button class="btn small mod-remove" title="Remove">🗑</button>
+      </div>
     `;
-    div.querySelector('button').addEventListener('click', ()=> removeAbilityFromChar(a.id));
+    div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));
+    if (hasChoice){
+      div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
+    }
     el.appendChild(div);
   }
 }
@@ -4141,8 +4298,3 @@ function wirePersonal(){
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
-
-
-
-
-
