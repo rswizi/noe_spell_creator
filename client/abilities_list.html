@@ -54,9 +54,12 @@
     .mod-row input, .mod-row select { width:100%; }
     .mod-row button { padding:4px 8px; font-size:.8rem; }
     .mod-row .mod-target-custom { grid-column:1 / span 3; }
-    .mod-row .choice-wrap { grid-column:1 / -1; display:none; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:8px; align-items:center; padding:8px 10px; border:1px solid #222; border-radius:10px; background:#0c0c0f; }
+    .mod-row .choice-wrap { grid-column:1 / -1; display:none; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:10px; align-items:start; padding:10px 12px; border:1px solid #222; border-radius:10px; background:#0c0c0f; }
     .mod-row .choice-wrap .muted { grid-column:1 / -1; }
     .mod-row .choice-actions { grid-column:1 / -1; display:flex; gap:8px; align-items:center; }
+    .chip-list { display:flex; flex-wrap:wrap; gap:6px; }
+    .chip { border:1px solid #333; padding:4px 8px; border-radius:999px; font-size:.85rem; display:flex; gap:6px; align-items:center; }
+    .chip input { width:auto; }
 
     .status-line { margin-top:10px; font-size:.85rem; opacity:.9; }
   </style>
@@ -345,6 +348,42 @@ const PASSIVE_TARGET_GROUPS = (()=>{
   ];
 })();
 
+const DEFAULT_NATURES = ['Fire','Water','Earth','Lightning','Wind','Sun','Moon','Ki'];
+const DEFAULT_CHARACTERISTICS = ['Reflex','Dexterity','Body','Wisdom','Presence','Magic','Willpower','Tech'];
+let SCHOOLS_CACHE = null;
+
+async function loadSchoolsCached(){
+  if (SCHOOLS_CACHE) return SCHOOLS_CACHE;
+  try{
+    const res = await api('/schools');
+    SCHOOLS_CACHE = res.schools || [];
+  }catch(e){
+    SCHOOLS_CACHE = [];
+  }
+  return SCHOOLS_CACHE;
+}
+
+function skillsFromSchools(schools){
+  const set = new Set();
+  (schools || []).forEach(s=>{ if (s.linked_skill) set.add(s.linked_skill); });
+  if (set.size === 0){
+    const grp = PASSIVE_TARGET_GROUPS.find(g=>g.label==='Skills');
+    (grp?.options||[]).forEach(o=>{
+      const name = (o.label || '').split(' (')[0];
+      if (name) set.add(name);
+    });
+  }
+  return Array.from(set).sort();
+}
+
+function naturesFromSchools(schools){
+  const set = new Set(DEFAULT_NATURES);
+  (schools || []).forEach(s=>{
+    (s.linked_intensities || []).forEach(n=> set.add(n));
+  });
+  return Array.from(set).sort();
+}
+
 let currentAbilityId = null;
 let ALL_ABILITIES = [];
 
@@ -392,12 +431,6 @@ function addModifierRow(initial){
   customTarget.value = matchedPreset ? '' : (initial?.target || '');
   customTarget.style.display = (target.value === CUSTOM_TARGET_VALUE) ? '' : 'none';
 
-  target.addEventListener('change', ()=>{
-    const useCustom = target.value === CUSTOM_TARGET_VALUE;
-    customTarget.style.display = useCustom ? '' : 'none';
-    if (!useCustom) customTarget.value = '';
-  });
-
   const mode = document.createElement('select');
   mode.className = 'mod-mode';
   ['add','mul','set'].forEach(m=>{
@@ -413,6 +446,12 @@ function addModifierRow(initial){
   value.step = '0.1';
   value.value = initial?.value ?? 0;
 
+  const configBtn = document.createElement('button');
+  configBtn.type = 'button';
+  configBtn.textContent = 'Configure';
+  configBtn.className = 'btn mod-config-btn';
+  configBtn.style.display = 'none';
+
   const rm = document.createElement('button');
   rm.type = 'button';
   rm.textContent = 'Remove';
@@ -422,13 +461,6 @@ function addModifierRow(initial){
   // Choice configuration
   const choiceWrap = document.createElement('div');
   choiceWrap.className = 'choice-wrap';
-  const choiceActions = document.createElement('div');
-  choiceActions.className = 'choice-actions';
-  const choiceBtn = document.createElement('button');
-  choiceBtn.type = 'button';
-  choiceBtn.className = 'btn';
-  choiceBtn.textContent = 'Configure choices';
-  choiceActions.appendChild(choiceBtn);
   const choiceMax = document.createElement('input');
   choiceMax.type = 'number';
   choiceMax.min = '0';
@@ -440,31 +472,107 @@ function addModifierRow(initial){
   choiceRestrict.placeholder = 'Restrict list (comma-separated)';
   choiceRestrict.className = 'choice-restrict';
   choiceRestrict.value = Array.isArray(initial?.choice?.restrict) ? initial.choice.restrict.join(', ') : (initial?.choice?.restrict_text || '');
-  const choiceHint = document.createElement('div');
-  choiceHint.className = 'muted';
-  choiceHint.textContent = 'Restrictions depend on type (skills, natures, schools, or characteristics).';
-  choiceWrap.appendChild(choiceActions);
   choiceWrap.appendChild(choiceMax);
   choiceWrap.appendChild(choiceRestrict);
-  choiceWrap.appendChild(choiceHint);
   choiceWrap.style.display = 'none';
+
+  async function renderChoiceConfigurator(kind, wrap, restrictInput){
+    const restrictSet = new Set((restrictInput.value || '').split(',').map(s=>s.trim()).filter(Boolean));
+    wrap.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.innerHTML = `<strong>Configure: ${kind.replace('_',' ')}</strong>`;
+    wrap.appendChild(header);
+
+    const maxBox = document.createElement('div');
+    maxBox.style.display = 'flex';
+    maxBox.style.flexDirection = 'column';
+    maxBox.innerHTML = `<label class="muted">Max choices (0 = unlimited)</label>`;
+    maxBox.appendChild(choiceMax);
+    wrap.appendChild(maxBox);
+
+    const listBox = document.createElement('div');
+    listBox.className = 'chip-list';
+
+    const schools = await loadSchoolsCached();
+    const skills = skillsFromSchools(schools);
+    const natures = naturesFromSchools(schools);
+
+    let items = [];
+    if (kind === 'skill_ms'){
+      items = skills.map(s=>{
+        const linked = schools.filter(sc=> (sc.linked_skill||'').toLowerCase() === s.toLowerCase()).map(sc=>sc.name||sc.id);
+        const label = linked.length ? `${s} (${linked.join(', ')})` : s;
+        return { key: s, label };
+      });
+    }else if (kind === 'nature_ms' || kind === 'magic_weapon' || kind === 'magic_spell'){
+      items = natures.map(n=>{
+        const linked = schools.filter(sc=> (sc.linked_intensities||[]).map(x=>x.toLowerCase()).includes(n.toLowerCase())).map(sc=>sc.name||sc.id);
+        const label = linked.length ? `${n} (${linked.join(', ')})` : n;
+        return { key:n, label };
+      });
+    }else if (kind === 'school_ms'){
+      items = (schools || []).map(sc=>({ key: sc.id, label: `${sc.name} (${sc.school_type||'simple'})` }));
+    }else if (kind === 'char_skill'){
+      items = DEFAULT_CHARACTERISTICS.map(c=>({ key:c.toLowerCase(), label:c }));
+    }
+
+    items.forEach(item=>{
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip';
+      const excluded = restrictSet.has(item.key);
+      chip.style.opacity = excluded ? 0.5 : 1;
+      chip.textContent = excluded ? `Excluded: ${item.label}` : item.label;
+      chip.addEventListener('click', ()=>{
+        if (restrictSet.has(item.key)) restrictSet.delete(item.key);
+        else restrictSet.add(item.key);
+        restrictInput.value = Array.from(restrictSet).join(', ');
+        chip.style.opacity = restrictSet.has(item.key) ? 0.5 : 1;
+        chip.textContent = restrictSet.has(item.key) ? `Excluded: ${item.label}` : item.label;
+      });
+      listBox.appendChild(chip);
+    });
+
+    if (!items.length){
+      const empty = document.createElement('div');
+      empty.className = 'muted';
+      empty.textContent = 'No data found to configure.';
+      wrap.appendChild(empty);
+    }else{
+      wrap.appendChild(listBox);
+    }
+
+    const hint = document.createElement('div');
+    hint.className = 'muted';
+    hint.textContent = 'Click to toggle exclusions. Users will only see non-excluded entries.';
+    wrap.appendChild(hint);
+  }
 
   function syncChoiceUI(){
     const isChoice = (target.value || '').startsWith('choice:');
-    choiceBtn.style.display = isChoice ? '' : 'none';
+    configBtn.style.display = isChoice ? '' : 'none';
     if (!isChoice){
       choiceWrap.style.display = 'none';
     }
   }
-  choiceBtn.addEventListener('click', ()=>{
+  target.addEventListener('change', ()=>{
+    const useCustom = target.value === CUSTOM_TARGET_VALUE;
+    customTarget.style.display = useCustom ? '' : 'none';
+    if (!useCustom) customTarget.value = '';
+    syncChoiceUI();
+  });
+  configBtn.addEventListener('click', async ()=>{
+    const kind = (target.value || '').replace('choice:','');
+    await renderChoiceConfigurator(kind, choiceWrap, choiceRestrict);
     choiceWrap.style.display = choiceWrap.style.display === 'none' ? 'grid' : 'none';
   });
-  target.addEventListener('change', syncChoiceUI);
   syncChoiceUI();
 
   row.appendChild(target);
   row.appendChild(mode);
   row.appendChild(value);
+  row.appendChild(configBtn);
   row.appendChild(rm);
   row.appendChild(customTarget);
   row.appendChild(choiceWrap);
