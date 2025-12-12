@@ -22,8 +22,7 @@
     a.btn:hover, button.btn:hover { background:#181818; }
     textarea { resize:vertical; min-height:80px; }
 
-    .grid { display:grid; gap:16px; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items:start; }
-    @media (max-width:900px) { .grid { grid-template-columns:1fr; } }
+    .grid { display:grid; gap:16px; grid-template-columns: 1fr; align-items:start; }
 
     .panel { border:1px solid #262626; border-radius:14px; background:#101010; padding:14px 14px 16px; }
     .panel h2 { margin:0 0 8px; font-size:1rem; }
@@ -457,12 +456,14 @@ function addModifierRow(initial){
         const label = linked.length ? `${s} (${linked.join(', ')})` : s;
         return { key: s, label };
       });
-    }else if (kind === 'nature_ms' || kind === 'magic_weapon' || kind === 'magic_spell'){
+    }else if (kind === 'nature_ms'){
       items = natures.map(n=>{
         const linked = schools.filter(sc=> (sc.linked_intensities||[]).map(x=>x.toLowerCase()).includes(n.toLowerCase())).map(sc=>sc.name||sc.id);
         const label = linked.length ? `${n} (${linked.join(', ')})` : n;
         return { key:n, label };
       });
+    }else if (kind === 'magic_weapon' || kind === 'magic_spell'){
+      items = DEFAULT_NATURES.map(n=>({ key:n.toLowerCase(), label:n }));
     }else if (kind === 'school_ms'){
       items = (schools || []).map(sc=>({ key: sc.id, label: `${sc.name} (${sc.school_type||'simple'})` }));
     }else if (kind === 'char_skill'){
