@@ -359,7 +359,7 @@
               <button class="btn small" id="abi-open-add">Add ability</button>
             </summary>
             <div class="panel-body">
-              <div class="abi-hint">Tip: click the result in the modal to add it; click the ðŸ—‘ on an assigned ability to remove it.</div>
+              <div class="abi-hint">Tip: click the result in the modal to add it; click the × on an assigned ability to remove it.</div>
 
               <div class="abi-grid" style="margin-top:16px;">
                 <div class="abi-bucket">
@@ -910,6 +910,7 @@ let SAVE_TIMER = null;
 let CHAR = null;
 let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
 let ABILITY_CHOICES = {}; // per-ability user selections for choice-based modifiers
+let ITEM_CHOICES = {}; // per-item (inventory) user selections for choice-based modifiers
 let INVENTORIES = [];
 let LINKED_INV = null;
 let SELECTED_INV_ID = '';
@@ -1000,6 +1001,7 @@ const choiceClose = document.getElementById('choice-close');
 const choiceCancel = document.getElementById('choice-cancel');
 const choiceSave = document.getElementById('choice-save');
 const choiceBody = document.getElementById('choice-body');
+const choiceTitle = document.getElementById('choice-title');
 const arcSelectEl     = document.getElementById('arc-select');
 const arcApplyBtn     = document.getElementById('arc-apply');
 const arcStatusEl     = document.getElementById('arc-status');
@@ -1493,6 +1495,10 @@ function abilityChoiceState(ab, kind){
   const byAb = ABILITY_CHOICES[ab.id] || {};
   return normalizeChoiceEntry(byAb[kind]);
 }
+function itemChoiceState(itemId, kind){
+  const byItem = ITEM_CHOICES[itemId] || {};
+  return normalizeChoiceEntry(byItem[kind]);
+}
 function resolvedPassiveMods(ab){
   const mods = (ab.passive && ab.passive.modifiers) || [];
   const out = [];
@@ -1708,14 +1714,27 @@ function getEquippedInventoryModifiers(){
   const mods = [];
   for (const it of items){
     if (it.equipped === false) continue;
-    const allMods = [...(it.modifiers || []), ...((it.upgrades||[]).flatMap(u=>u.modifiers||[]) || [])];
+    const itemKey = itemChoiceKey(it);
+    const allMods = [
+      ...(it.modifiers || []).map(m=>({ ...m, __origin:'Item' })),
+      ...((it.upgrades||[]).flatMap(u=> (u.modifiers||[]).map(m=>({ ...m, __origin:`Upgrade: ${u.name || u.id || 'Upgrade'}` }))) || [])
+    ];
     for (const m of allMods){
       const target = (m.target || m.key || '').trim();
       if (!target) continue;
       const mode = (m.mode || 'add').toLowerCase();
       const value = Number(m.value || 0);
       const note = m.note ? ` (${m.note})` : '';
-      mods.push({ target, mode, value, origin: `[Item] ${it.name || 'Item'}${note}` });
+      const originPrefix = m.__origin || 'Item';
+      const origin = `[${originPrefix}] ${it.name || 'Item'}${note}`;
+      if (target.startsWith('choice:')){
+        const kind = target.replace('choice:','');
+        const picks = normalizeChoiceEntry(itemChoiceState(itemKey, kind)).picks;
+        if (!picks.length) continue;
+        picks.forEach(sel=> mods.push({ target: sel, mode, value, origin }));
+        continue;
+      }
+      mods.push({ target, mode, value, origin });
     }
   }
   return mods;
@@ -1841,6 +1860,7 @@ function renderInventoryUI(){
     invCatalogOpenBtn?.setAttribute('disabled','disabled');
     return;
   }
+  pruneItemChoices();
   invManagerEl.style.display = '';
   if (invOpenManagerBtn){
     invOpenManagerBtn.style.display = '';
@@ -1891,16 +1911,19 @@ function renderInventoryUI(){
         its.forEach(it=>{
           const row = document.createElement('div');
           row.className = 'item-row';
+          const hasChoice = itemHasChoice(it);
           row.innerHTML = `
             <div class="grow">
               <div><strong>${invEscapeHtml(it.alt_name || it.name || 'Item')}</strong> <span class="muted">x${it.quantity||1}</span></div>
-              <div class="muted">${it.kind||''}${it.variant?` Â· ${invEscapeHtml(it.variant)}`:''}</div>
+              <div class="muted">${it.kind||''}${it.variant?` - ${invEscapeHtml(it.variant)}`:''}</div>
             </div>
             <div class="pill">${Number(it.enc||0).toFixed(1)} enc</div>
             <button class="btn small toggle">${it.consumable ? 'Use' : (it.equipped!==false?'Unequip':'Equip')}</button>
+            ${hasChoice ? '<button class="btn small choices">Choices</button>' : ''}
             <button class="btn small open">Open</button>
           `;
           row.querySelector('.toggle').addEventListener('click', ()=> it.consumable ? useItemInline(it) : toggleEquipInline(it));
+          if (hasChoice) row.querySelector('.choices')?.addEventListener('click', ()=> openItemChoiceModal(it));
           row.querySelector('.open').addEventListener('click', ()=> openInvItemModal(it));
           list.appendChild(row);
         });
@@ -1971,6 +1994,33 @@ function invToggleModal(modal, backdrop, open){
     backdrop.classList.remove('open');
     backdrop.classList.add('hidden');
   }
+}
+
+function itemChoiceMods(it){
+  const mods = [];
+  (it.modifiers || []).forEach(m=>{
+    if (String(m.target||'').startsWith('choice:')) mods.push({ ...m, __source:'Item' });
+  });
+  (it.upgrades || []).forEach(u=>{
+    (u.modifiers || []).forEach(m=>{
+      if (String(m.target||'').startsWith('choice:')) mods.push({ ...m, __source:`Upgrade: ${u.name || u.id || 'Upgrade'}` });
+    });
+  });
+  return mods;
+}
+function itemHasChoice(it){
+  return itemChoiceMods(it).length > 0;
+}
+function itemChoiceKey(it){
+  const key = String(it?.item_id || it?.id || '').trim();
+  if (key) return key;
+  const name = String(it?.name || '').trim();
+  return name || '';
+}
+function pruneItemChoices(){
+  if (!LINKED_INV) return;
+  const ids = new Set((LINKED_INV.items || []).map(it=> itemChoiceKey(it)).filter(Boolean));
+  Object.keys(ITEM_CHOICES).forEach(id=>{ if (!ids.has(String(id))) delete ITEM_CHOICES[id]; });
 }
 
 async function invAddContainer(){
@@ -2396,6 +2446,7 @@ function openInvItemModal(it){
   const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
   const totalPaid = (Number(it.paid_unit||0) * Number(it.quantity||1)) || 0;
   const equipped = it.equipped !== false;
+  const hasChoice = itemHasChoice(it);
   invItemBody.innerHTML = `
     <div class="row" style="flex-wrap:wrap; gap:6px;">
       <span class="pill">Kind: <b>${invEscapeHtml(it.kind||'')}</b></span>
@@ -2428,6 +2479,17 @@ function openInvItemModal(it){
   altBtn.textContent = 'Set alt name';
   altToggle.appendChild(altBtn);
   invItemActions.appendChild(altToggle);
+
+  if (hasChoice){
+    const choiceBtn = document.createElement('button');
+    choiceBtn.className = 'btn small';
+    choiceBtn.textContent = 'Configure choices';
+    choiceBtn.addEventListener('click', async ()=>{
+      await openItemChoiceModal(it);
+      closeInvItemModal();
+    });
+    invItemActions.appendChild(choiceBtn);
+  }
 
   const altWrap = document.createElement('div');
   altWrap.className = 'row';
@@ -3914,6 +3976,7 @@ async function loadCharacter(){
   CHAR.stats.level = CHAR.level;
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   ABILITY_CHOICES = CHAR.ability_choices || {};
+  ITEM_CHOICES = CHAR.item_choices || {};
   SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
   if (!CHAR.archetype_id) CHAR.archetype_id = '';
   SELECTED_SPELL_LIST_ID = CHAR.spell_list_id || '';
@@ -4012,6 +4075,7 @@ async function saveNow(){
       selected_schools: Array.from(ADDED_SCHOOLS),
       abilities: CHAR.abilities || [],
       ability_choices: ABILITY_CHOICES || {},
+      item_choices: ITEM_CHOICES || {},
       inventory_id: SELECTED_INV_ID || '',
       spell_list_id: SELECTED_SPELL_LIST_ID || '',
       archetype_id: CHAR.archetype_id || '',
@@ -4239,15 +4303,13 @@ async function choiceItemsForKind(kind, restrict){
   return [];
 }
 
-// New choice modal with skill/nature -> school flow
-async function openChoiceModal(ab){
-  const mods = (ab.passive?.modifiers||[]).filter(m=> String(m.target||'').startsWith('choice:'));
+async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>{}, { titleText = 'Configure choices', entityLabel = '' } = {}){
   if (!mods.length) return false;
   try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
+  choiceTitle.textContent = titleText || 'Configure choices';
   choiceBody.innerHTML = '<div class="muted">Loading choices...</div>';
   choiceModal.classList.remove('hidden'); choiceModal.classList.add('open'); choiceBackdrop.classList.add('open');
 
-  const existing = ABILITY_CHOICES[ab.id] || {};
   const blocks = [];
   choiceBody.innerHTML = '';
 
@@ -4302,7 +4364,7 @@ async function openChoiceModal(ab){
         });
       });
       return Array.from(map.entries()).map(([key, schools])=>{
-        const label = `${key.replace(/^intensities\./i,'')} — Schools: ${Array.from(new Set(schools)).join(', ')}`;
+        const label = `${key.replace(/^intensities\./i,'')} - Schools: ${Array.from(new Set(schools)).join(', ')}`;
         return { key, label };
       }).sort((a,b)=> a.label.localeCompare(b.label));
     }
@@ -4337,11 +4399,12 @@ async function openChoiceModal(ab){
     const block = document.createElement('div');
     block.className = 'panel';
     const title = document.createElement('div');
-    title.innerHTML = `<strong>${kind.replace(/_/g,' ')}</strong> <span class="muted">(max ${max||'no limit'})</span>`;
+    const srcNote = m.__source ? `<div class="muted" style="font-size:0.85rem;">${m.__source}</div>` : '';
+    title.innerHTML = `<strong>${kind.replace(/_/g,' ')}</strong> <span class="muted">(max ${max||'no limit'})</span>${srcNote}`;
     block.appendChild(title);
 
     if (kind === 'skill_ms' || kind === 'nature_ms'){
-      const state = abilityChoiceState(ab, kind);
+      const state = normalizeChoiceEntry(existingMap[kind]);
       const baseOpts = buildMsBaseOptions(kind, restrict);
       const baseWrap = document.createElement('div');
       baseWrap.className = 'row';
@@ -4349,7 +4412,7 @@ async function openChoiceModal(ab){
       baseLabel.className = 'muted';
       baseLabel.textContent = kind === 'skill_ms' ? 'Select skill' : 'Select nature';
       const baseSelect = document.createElement('select');
-      baseSelect.innerHTML = '<option value=\"\">-- choose --</option>';
+      baseSelect.innerHTML = '<option value="">-- choose --</option>';
       baseOpts.forEach(opt=>{
         const o = document.createElement('option');
         o.value = opt.key; o.textContent = opt.label;
@@ -4368,15 +4431,19 @@ async function openChoiceModal(ab){
       schoolsWrap.style.gridTemplateColumns = 'repeat(auto-fit,minmax(220px,1fr))';
       schoolsWrap.style.gap = '8px';
 
+      const counter = document.createElement('div');
+      counter.className = 'muted';
+      counter.style.marginTop = '4px';
+
       const renderSchools = ()=>{
         schoolsWrap.innerHTML = '';
         const baseVal = baseSelect.value;
         if (!baseVal){
-          const hint = document.createElement('div'); hint.className='muted'; hint.textContent='Choose a base option to see linked schools.'; schoolsWrap.appendChild(hint); return;
+          const hint = document.createElement('div'); hint.className='muted'; hint.textContent='Choose a base option to see linked schools.'; schoolsWrap.appendChild(hint); counter.textContent='Selected 0'; return;
         }
         const schools = schoolsForMsBase(kind, baseVal, restrict);
         if (!schools.length){
-          const empty = document.createElement('div'); empty.className='muted'; empty.textContent='No schools linked to that choice.'; schoolsWrap.appendChild(empty); return;
+          const empty = document.createElement('div'); empty.className='muted'; empty.textContent='No schools linked to that choice.'; schoolsWrap.appendChild(empty); counter.textContent='Selected 0'; return;
         }
         const picked = new Set(state.picks || []);
         schools.forEach(opt=>{
@@ -4387,15 +4454,22 @@ async function openChoiceModal(ab){
           cb.checked = picked.has(opt.key);
           row.appendChild(cb);
           const span = document.createElement('span'); span.textContent = opt.label; row.appendChild(span);
+          cb.addEventListener('change', ()=>{
+            const checked = schoolsWrap.querySelectorAll('input[type="checkbox"][data-kind]:checked').length;
+            counter.textContent = `Selected ${checked}${max>0?` / ${max}`:''}`;
+          });
           schoolsWrap.appendChild(row);
         });
         const hint = document.createElement('div'); hint.className='muted'; hint.textContent = max > 0 ? `Select up to ${max} school(s).` : 'Select any number of schools.'; schoolsWrap.appendChild(hint);
+        const checked = schoolsWrap.querySelectorAll('input[type="checkbox"][data-kind]:checked').length;
+        counter.textContent = `Selected ${checked}${max>0?` / ${max}`:''}`;
       };
       baseSelect.addEventListener('change', ()=>{ state.picks = []; renderSchools(); });
       renderSchools();
 
       block.appendChild(baseWrap);
       block.appendChild(schoolsWrap);
+      block.appendChild(counter);
 
       blocks.push({
         kind,
@@ -4406,7 +4480,7 @@ async function openChoiceModal(ab){
             alert('Select a base option first.');
             return { ok:false };
           }
-          const checks = Array.from(schoolsWrap.querySelectorAll('input[type=\"checkbox\"][data-kind]'));
+          const checks = Array.from(schoolsWrap.querySelectorAll('input[type="checkbox"][data-kind]'));
           const selected = checks.filter(cb=>cb.checked).map(cb=>cb.value);
           if (!selected.length){
             alert('Select at least one school.');
@@ -4427,15 +4501,28 @@ async function openChoiceModal(ab){
     if (!items.length){
       const empty = document.createElement('div'); empty.className='muted'; empty.textContent='No options available.'; block.appendChild(empty);
     }else{
+      const grid = document.createElement('div');
+      grid.style.display = 'grid';
+      grid.style.gridTemplateColumns = 'repeat(auto-fit,minmax(240px,1fr))';
+      grid.style.gap = '6px';
+      const counter = document.createElement('div'); counter.className='muted'; counter.style.marginTop='6px';
+      const updateCounter = ()=>{
+        const checked = block.querySelectorAll('input[type="checkbox"][data-kind]:checked').length;
+        counter.textContent = `Selected ${checked}${max>0?` / ${max}`:''}`;
+      };
       items.forEach(opt=>{
         const row = document.createElement('label');
-        row.style.display='flex'; row.style.gap='8px'; row.style.alignItems='center'; row.style.margin='4px 0';
+        row.style.display='flex'; row.style.gap='8px'; row.style.alignItems='center'; row.style.margin='2px 0';
         const cb = document.createElement('input'); cb.type='checkbox'; cb.dataset.kind = kind; cb.value = opt.key;
-        if (normalizeChoiceEntry(existing[kind]).picks.includes(opt.key)) cb.checked = true;
+        if (normalizeChoiceEntry(existingMap[kind]).picks.includes(opt.key)) cb.checked = true;
+        cb.addEventListener('change', updateCounter);
         row.appendChild(cb);
         const span = document.createElement('span'); span.textContent = opt.label; row.appendChild(span);
-        block.appendChild(row);
+        grid.appendChild(row);
       });
+      block.appendChild(grid);
+      block.appendChild(counter);
+      updateCounter();
     }
     blocks.push({ kind, type:'simple', node: block, max });
     choiceBody.appendChild(block);
@@ -4455,7 +4542,7 @@ async function openChoiceModal(ab){
           selections[b.kind] = res.value;
           continue;
         }
-        const boxes = b.node.querySelectorAll('input[type=\"checkbox\"][data-kind]');
+        const boxes = b.node.querySelectorAll('input[type="checkbox"][data-kind]');
         const arr = [];
         boxes.forEach(box=>{ if (box.checked) arr.push(box.value); });
         if (b.max > 0 && arr.length > b.max){
@@ -4464,9 +4551,7 @@ async function openChoiceModal(ab){
         }
         selections[b.kind] = arr;
       }
-      ABILITY_CHOICES[ab.id] = selections;
-      queueSave();
-      recomputePassiveAgg(); renderStatistics(); updateDerived();
+      saveHandler(selections);
       choiceModal.classList.add('hidden'); choiceModal.classList.remove('open'); choiceBackdrop.classList.remove('open');
       resolve(true);
     };
@@ -4475,6 +4560,29 @@ async function openChoiceModal(ab){
     choiceBackdrop.onclick = (e)=>{ if (e.target===choiceBackdrop) close(); };
     choiceSave.onclick = save;
   });
+}
+
+// Ability choice modal wrapper
+async function openChoiceModal(ab){
+  const mods = (ab.passive?.modifiers||[]).filter(m=> String(m.target||'').startsWith('choice:'));
+  return openChoiceModalGeneric(mods, ABILITY_CHOICES[ab.id] || {}, (selections)=>{
+    ABILITY_CHOICES[ab.id] = selections;
+    queueSave();
+    recomputePassiveAgg(); renderStatistics(); updateDerived();
+  }, { titleText: `Configure: ${ab.name || 'Ability'}` });
+}
+
+// Inventory item choice modal wrapper
+async function openItemChoiceModal(it){
+  const mods = itemChoiceMods(it);
+  if (!mods.length) return false;
+  const key = itemChoiceKey(it);
+  return openChoiceModalGeneric(mods, ITEM_CHOICES[key] || {}, (selections)=>{
+    if (!key) return;
+    ITEM_CHOICES[key] = selections;
+    queueSave();
+    recomputePassiveAgg(); renderStatistics(); updateDerived();
+  }, { titleText: `Configure: ${it.alt_name || it.name || 'Item'}` });
 }
 
 async function addAbilityToChar(aid){
@@ -4524,7 +4632,7 @@ function renderAbilitiesBucket(el, list){
       <span class="tag">${a.source_category||''}</span>
       <div class="row" style="gap:6px; flex-wrap:wrap;">
         ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
-        <button class="btn small mod-remove" title="Remove">ðŸ—‘</button>
+        <button class="btn small mod-remove" title="Remove">×</button>
       </div>
     `;
     div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));
@@ -4581,5 +4689,3 @@ function wirePersonal(){
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
-
-
