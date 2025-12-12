@@ -2258,7 +2258,11 @@ def _modifiers_from_body(b: dict) -> list[dict]:
         except Exception:
             value = 0.0
         note = (m.get("note") or "").strip()
-        mods.append({"target": target, "mode": mode, "value": value, "note": note})
+        mod = {"target": target, "mode": mode, "value": value, "note": note}
+        choice = m.get("choice")
+        if isinstance(choice, dict):
+            mod["choice"] = choice
+        mods.append(mod)
     return mods
 
 def _weapon_from_body(b: dict) -> dict:
@@ -4321,6 +4325,8 @@ async def create_ability(request: Request, payload: dict = Body(...)):
         mods_in = passive_in.get("modifiers") or []
         modifiers = []
         for m in mods_in:
+            if not isinstance(m, dict):
+                continue
             target = (m.get("target") or "").strip()
             if not target: continue
             mode = (m.get("mode") or "add").strip().lower()
@@ -4330,7 +4336,10 @@ async def create_ability(request: Request, payload: dict = Body(...)):
             except Exception:
                 return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
             note = (m.get("note") or "").strip()
-            modifiers.append({"target":target,"mode":mode,"value":value,"note":note})
+            choice = m.get("choice") if isinstance(m.get("choice"), dict) else None
+            mod = {"target":target,"mode":mode,"value":value,"note":note}
+            if choice: mod["choice"] = choice
+            modifiers.append(mod)
         passive_block = {"description":pdesc,"modifiers":modifiers}
 
     aid = next_id_str("abilities", padding=4)
