@@ -444,14 +444,7 @@ function addModifierRow(initial){
   choiceWrap.appendChild(choiceRestrict);
   choiceWrap.style.display = 'none';
 
-  async function ensureDefaultRestrict(){
-    const targetVal = target.value || '';
-    if (!targetVal.startsWith('choice:')) return;
-    if ((choiceRestrict.value || '').trim()) return;
-    const kind = targetVal.replace('choice:','');
-    const keys = await choiceKeysForKind(kind);
-    if (keys.length) choiceRestrict.value = keys.join(', ');
-  }
+  async function ensureDefaultRestrict(){ /* no-op to keep creator's explicit choices */ }
 
   async function renderChoiceConfigurator(kind, wrap, restrictInput){
     const restrictSet = new Set((restrictInput.value || '').split(',').map(s=>s.trim()).filter(Boolean));
@@ -494,11 +487,6 @@ function addModifierRow(initial){
       items = (schools || []).map(sc=>({ key: sc.id, label: `${sc.name} (${sc.school_type||'simple'})` }));
     }else if (kind === 'char_skill'){
       items = DEFAULT_CHARACTERISTICS.map(c=>({ key:c.toLowerCase(), label:c }));
-    }
-
-    if (restrictSet.size === 0 && items.length){
-      items.forEach(item=> restrictSet.add(item.key));
-      restrictInput.value = Array.from(restrictSet).join(', ');
     }
 
     items.forEach(item=>{
@@ -606,7 +594,7 @@ arcReplSearch.addEventListener('input', ()=>{
   arcReplSearch._t = setTimeout(()=> renderReplaceOptions(arcReplSearch.value, arcReplSel.value), 200);
 });
 
-function buildPayload(){
+async function buildPayload(){
   const tags = (tagsEl.value || '').split(',')
     .map(t=>t.trim()).filter(Boolean);
 
@@ -641,7 +629,7 @@ function buildPayload(){
   let passive = null;
   if (typeEl.value === 'passive' || typeEl.value === 'mixed') {
     const mods = [];
-    modListEl.querySelectorAll('.mod-row').forEach(row=>{
+    for (const row of modListEl.querySelectorAll('.mod-row')){
       const targetSel = row.querySelector('.mod-target');
       const customTarget = row.querySelector('.mod-target-custom');
       const modeEl   = row.querySelector('.mod-mode');
@@ -670,11 +658,11 @@ function buildPayload(){
       const parsedValue = parseFloat(valueEl.value || '0');
       // For user-choice modifiers, the target already carries choice:<kind>
       const finalTarget = choice ? `choice:${choice.kind}` : resolvedTarget;
-      if (!finalTarget) return;
+      if (!finalTarget) continue;
       const modPayload = { target: finalTarget, mode: modeEl.value, value: parsedValue, note:'' };
       if (choice) modPayload.choice = choice;
       mods.push(modPayload);
-    });
+    }
     passive = {
       description: passiveDescEl.value || '',
       modifiers: mods,
@@ -695,7 +683,7 @@ function buildPayload(){
 btnSave.addEventListener('click', async ()=>{
   try{
     statusLine.textContent = 'Saving ability…';
-    const payload = buildPayload();
+    const payload = await buildPayload();
     const res = await api('/abilities', {
       method:'POST',
       headers:{ 'content-type':'application/json' },

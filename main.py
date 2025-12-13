@@ -2238,41 +2238,6 @@ def _as_list(x):
     if isinstance(x, str):  return [s for s in (v.strip() for v in x.split(",")) if s]
     return []
 
-DEFAULT_NATURES = ["Fire","Water","Earth","Lightning","Wind","Sun","Moon","Ki"]
-DEFAULT_CHARACTERISTICS = ["reflex","dexterity","body","wisdom","presence","magic","willpower","tech"]
-
-def _choice_default_restrict(kind: str | None) -> list[str]:
-    if not kind:
-        return []
-    k = str(kind).lower().strip()
-    if k == "char_skill":
-        return DEFAULT_CHARACTERISTICS[:]
-    if k in ("magic_weapon", "magic_spell"):
-        return [n.lower() for n in DEFAULT_NATURES]
-    # For MS-related kinds, look at schools collection to build a comprehensive list
-    if k in ("skill_ms", "nature_ms", "school_ms"):
-        try:
-            schools = list(get_col("schools").find({}, {"_id": 0, "id": 1, "linked_skill": 1, "linked_intensities": 1}))
-        except Exception:
-            schools = []
-        if k == "school_ms":
-            return [str(s.get("id") or "").strip() for s in schools if str(s.get("id") or "").strip()]
-        if k == "skill_ms":
-            seen = set()
-            for s in schools:
-                ls = (s.get("linked_skill") or "").strip()
-                if ls:
-                    seen.add(ls)
-            return sorted(seen)
-        if k == "nature_ms":
-            seen = {n.lower() for n in DEFAULT_NATURES}
-            for s in schools:
-                for n in (s.get("linked_intensities") or []):
-                    if n:
-                        seen.add(str(n).lower())
-            return sorted(seen)
-    return []
-
 def _normalize_choice(choice: dict | None) -> dict | None:
     """Ensure choice metadata keeps restrict fields populated regardless of client shape."""
     if not isinstance(choice, dict):
@@ -2294,8 +2259,6 @@ def _normalize_choice(choice: dict | None) -> dict | None:
         )
         if isinstance(txt, str):
             restrict_items = [s for s in (v.strip() for v in txt.split(",")) if s]
-    if not restrict_items:
-        restrict_items = _choice_default_restrict(out.get("kind"))
     out["restrict"] = restrict_items
     if "restrict_text" not in out:
         out["restrict_text"] = ",".join(restrict_items)
