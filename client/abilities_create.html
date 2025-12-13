@@ -330,15 +330,21 @@ function naturesFromSchools(schools){
   return Array.from(set).sort();
 }
 
+function skillChoiceKeys(){
+  const skillsGroup = PASSIVE_TARGET_GROUPS.find(g=> g.label === 'Skills');
+  if (!skillsGroup) return [];
+  return (skillsGroup.options || []).map(o=> o.value).filter(Boolean);
+}
+
 async function choiceKeysForKind(kind){
   const schools = await loadSchoolsCached();
   const skills = skillsFromSchools(schools);
   const natures = naturesFromSchools(schools);
-  if (kind === 'skill_ms') return skills;
-  if (kind === 'nature_ms') return natures;
-  if (kind === 'magic_weapon' || kind === 'magic_spell') return DEFAULT_NATURES.map(n=> n.toLowerCase());
-  if (kind === 'school_ms') return (schools || []).map(sc=> String(sc.id || '').trim()).filter(Boolean);
-  if (kind === 'char_skill') return DEFAULT_CHARACTERISTICS.map(c=> c.toLowerCase());
+  if (kind === 'skill_ms') return skillChoiceKeys();
+  if (kind === 'nature_ms') return natures.map(n=> `intensities.${n}`);
+  if (kind === 'magic_weapon' || kind === 'magic_spell') return DEFAULT_NATURES.map(n=> `intensities.${n}`);
+  if (kind === 'school_ms') return (schools || []).map(sc=> `schools.${String(sc.id || '').trim()}`).filter(Boolean);
+  if (kind === 'char_skill') return skillChoiceKeys();
   return [];
 }
 
@@ -642,11 +648,20 @@ async function buildPayload(){
       if (isChoice){
         const kind = (targetSel.value || '').replace('choice:','') || 'custom';
         let restrictList = (choiceRestrict?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+        const allKeys = (await choiceKeysForKind(kind)) || [];
+        if (!restrictList.length){
+          // default: all restricted until creator explicitly allows
+          restrictList = allKeys.slice();
+        }
+        const restrictSet = Array.from(new Set(restrictList.filter(Boolean)));
+        const restrictLower = new Set(restrictSet.map(x=> String(x).trim().toLowerCase()));
+        const allowed = allKeys.filter(k=> !restrictLower.has(String(k).trim().toLowerCase()));
         choice = {
           kind,
           max_choices: Math.max(0, Number(choiceMax?.value || 0)),
-          restrict: restrictList,
-          restrict_text: restrictList.join(', ')
+          restrict: restrictSet,
+          restrict_text: restrictSet.join(', '),
+          choices: allowed
         };
       }
 

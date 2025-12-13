@@ -2244,6 +2244,7 @@ def _normalize_choice(choice: dict | None) -> dict | None:
         return None
     out = dict(choice)
     restrict_items: list[str] = []
+    choices_items: list[str] = []
     for key in ("restrict", "choice_restrict", "restrict_list"):
         vals = out.get(key)
         if isinstance(vals, list):
@@ -2259,9 +2260,17 @@ def _normalize_choice(choice: dict | None) -> dict | None:
         )
         if isinstance(txt, str):
             restrict_items = [s for s in (v.strip() for v in txt.split(",")) if s]
+    if isinstance(out.get("choices"), list):
+        choices_items = [str(v).strip() for v in out.get("choices") if str(v).strip()]
+    elif isinstance(out.get("choices_text"), str):
+        choices_items = [s for s in (v.strip() for v in out.get("choices_text").split(",")) if s]
     out["restrict"] = restrict_items
+    if choices_items:
+        out["choices"] = choices_items
     if "restrict_text" not in out:
         out["restrict_text"] = ",".join(restrict_items)
+    if choices_items and "choices_text" not in out:
+        out["choices_text"] = ",".join(choices_items)
     return out
 def _modifiers_from_body(b: dict) -> list[dict]:
     """Normalize an optional modifiers list from payload."""
