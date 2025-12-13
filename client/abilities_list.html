@@ -653,7 +653,7 @@ arcReplSearch.addEventListener('input', ()=>{
   arcReplSearch._t = setTimeout(()=> renderReplaceOptions(arcReplSearch.value, arcReplSel.value), 200);
 });
 
-function buildPayloadFromForm(){
+async function buildPayloadFromForm(){
   const tags = (tagsEl.value || '').split(',')
     .map(t=>t.trim()).filter(Boolean);
 
@@ -688,7 +688,7 @@ function buildPayloadFromForm(){
   let passive = null;
   if (typeEl.value === 'passive' || typeEl.value === 'mixed') {
     const mods = [];
-    modListEl.querySelectorAll('.mod-row').forEach(row=>{
+    for (const row of modListEl.querySelectorAll('.mod-row')){
       const targetSel = row.querySelector('.mod-target');
       const customTarget = row.querySelector('.mod-target-custom');
       const modeEl   = row.querySelector('.mod-mode');
@@ -720,7 +720,7 @@ function buildPayloadFromForm(){
       const modPayload = { target: finalTarget, mode: modeEl.value, value: parsedValue, note:'' };
       if (choice) modPayload.choice = choice;
       mods.push(modPayload);
-    });
+    }
     passive = {
       description: passiveDescEl.value || '',
       modifiers: mods,
@@ -835,7 +835,7 @@ btnSave.addEventListener('click', async ()=>{
   }
   try{
     statusLine.textContent = 'Saving…';
-    const payload = buildPayloadFromForm();
+    const payload = await buildPayloadFromForm();
     const res = await api('/abilities/'+encodeURIComponent(currentAbilityId), {
       method:'PUT',
       headers:{ 'content-type':'application/json' },
