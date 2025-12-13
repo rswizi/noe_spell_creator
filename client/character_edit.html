@@ -1488,11 +1488,18 @@ function normalizeChoiceEntry(val){
   return { base, picks: picks.filter(Boolean) };
 }
 function normalizeRestrict(choice){
+  // Accept either the whole modifier or the nested choice object.
   if (!choice) return [];
+  const src = choice.choice || choice;
+  if (Array.isArray(src.restrict)) return src.restrict;
+  if (Array.isArray(src.choice_restrict)) return src.choice_restrict;
+  if (Array.isArray(src.restrict_list)) return src.restrict_list;
+  // Some older records stored restrict fields at the modifier level instead of inside choice
   if (Array.isArray(choice.restrict)) return choice.restrict;
   if (Array.isArray(choice.choice_restrict)) return choice.choice_restrict;
   if (Array.isArray(choice.restrict_list)) return choice.restrict_list;
-  const txt = choice.restrict_text || choice.choice_restrict || choice.restrict_list || choice.restrict || choice.restrict_string || '';
+  const txt = src.restrict_text || src.choice_restrict || src.restrict_list || src.restrict || src.restrict_string ||
+    choice.restrict_text || choice.choice_restrict || choice.restrict_list || choice.restrict || choice.restrict_string || '';
   if (typeof txt === 'string'){
     return String(txt).split(',').map(s=>s.trim()).filter(Boolean);
   }
@@ -4268,8 +4275,22 @@ function charKeyForSkillName(name){
   return hit ? hit.key : '';
 }
 async function choiceItemsForKind(kind, restrict){
-  const rset = new Set((restrict||[]).map(x=> String(x).toLowerCase()));
-  const isRestricted = (...cands)=> cands.some(c=> c && rset.has(String(c).toLowerCase()));
+  const rset = new Set((restrict||[]).map(x=> String(x).trim().toLowerCase()));
+  const isRestricted = (...cands)=>{
+    for (const c of cands){
+      if (c == null) continue;
+      const base = String(c).trim().toLowerCase();
+      if (!base) continue;
+      if (rset.has(base)) return true;
+      const noPrefix = base.replace(/^(skills|schools|intensities)\./,'');
+      if (rset.has(noPrefix)) return true;
+      const beforeParen = base.split('(')[0].trim();
+      if (beforeParen && rset.has(beforeParen)) return true;
+      const noDots = noPrefix.replace(/[\\.\\s]+/g,'');
+      if (noDots && rset.has(noDots)) return true;
+    }
+    return false;
+  };
   if (kind === 'skill_ms'){
     if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
     const skillsWithSchools = new Set(
@@ -4308,7 +4329,8 @@ async function choiceItemsForKind(kind, restrict){
     if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
     return (SCHOOLS||[]).map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||'simple'})` })).filter(o=>{
       const baseLabel = (o.label || '').split('(')[0].trim().toLowerCase();
-      return !isRestricted(o.label, o.key, baseLabel);
+      const rawId = String(o.key||'').replace(/^schools\./i,'');
+      return !isRestricted(o.label, o.key, baseLabel, rawId);
     });
   }
   return [];
@@ -4405,7 +4427,7 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
 
   for (const m of mods){
     const kind = String(m.target||'').replace('choice:','');
-    const restrict = normalizeRestrict(m.choice);
+    const restrict = normalizeRestrict(m);
     const max = Number(m.choice?.max_choices||0);
     const block = document.createElement('div');
     block.className = 'panel';
