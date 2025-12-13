@@ -505,7 +505,7 @@ function addModifierRow(initial){
   async function ensureDefaultRestrict(){ /* no-op to preserve creator input */ }
 
   async function renderChoiceConfigurator(kind, wrap, restrictInput){
-    const restrictSet = new Set((restrictInput.value || '').split(',').map(s=>s.trim()).filter(Boolean));
+    let restrictSet = new Set((restrictInput.value || '').split(',').map(s=>s.trim()).filter(Boolean));
     wrap.innerHTML = '';
 
     const header = document.createElement('div');
@@ -545,6 +545,21 @@ function addModifierRow(initial){
       items = (schools || []).map(sc=>({ key: sc.id, label: `${sc.name} (${sc.school_type||'simple'})` }));
     }else if (kind === 'char_skill'){
       items = skillChoiceItems();
+    }
+
+    const choiceAllowed = Array.isArray(initial?.choice?.choices)
+      ? initial.choice.choices.map(x=> String(x).trim()).filter(Boolean)
+      : (typeof initial?.choice?.choices_text === 'string' && initial.choice.choices_text.trim()
+        ? initial.choice.choices_text.split(',').map(s=>s.trim()).filter(Boolean)
+        : []);
+    const itemKeys = items.map(it=> String(it.key||'').trim());
+    if (choiceAllowed.length){
+      const allowSet = new Set(choiceAllowed.map(x=> x.toLowerCase()));
+      restrictSet = new Set(itemKeys.filter(k=> !allowSet.has(String(k).toLowerCase())));
+      restrictInput.value = Array.from(restrictSet).join(', ');
+    }else if (!restrictSet.size && itemKeys.length){
+      restrictSet = new Set(itemKeys);
+      restrictInput.value = Array.from(restrictSet).join(', ');
     }
 
     items.forEach(item=>{
