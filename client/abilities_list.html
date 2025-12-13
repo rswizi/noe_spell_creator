@@ -388,6 +388,11 @@ function skillChoiceKeys(){
   if (!skillsGroup) return [];
   return (skillsGroup.options || []).map(o=> o.value).filter(Boolean);
 }
+function skillChoiceItems(){
+  const skillsGroup = PASSIVE_TARGET_GROUPS.find(g=> g.label === 'Skills');
+  if (!skillsGroup) return [];
+  return (skillsGroup.options || []).map(o=>({ key:o.value, label:o.label }));
+}
 
 async function choiceKeysForKind(kind){
   const schools = await loadSchoolsCached();
@@ -539,7 +544,7 @@ function addModifierRow(initial){
     }else if (kind === 'school_ms'){
       items = (schools || []).map(sc=>({ key: sc.id, label: `${sc.name} (${sc.school_type||'simple'})` }));
     }else if (kind === 'char_skill'){
-      items = DEFAULT_CHARACTERISTICS.map(c=>({ key:c.toLowerCase(), label:c }));
+      items = skillChoiceItems();
     }
 
     items.forEach(item=>{
