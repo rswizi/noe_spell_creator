@@ -689,10 +689,6 @@ async function buildPayloadFromForm(){
       if (isChoice){
         const kind = (targetSel.value || '').replace('choice:','') || 'custom';
         let restrictList = (choiceRestrict?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
-        if (!restrictList.length){
-          const keys = await choiceKeysForKind(kind);
-          restrictList = keys;
-        }
         choice = {
           kind,
           max_choices: Math.max(0, Number(choiceMax?.value || 0)),
