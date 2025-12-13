@@ -424,7 +424,9 @@ function addModifierRow(initial){
   choiceRestrict.className = 'choice-restrict';
   choiceRestrict.value =
     Array.isArray(initial?.choice?.restrict) ? initial.choice.restrict.join(', ') :
-    (initial?.choice?.restrict_text || initial?.choice_restrict || initial?.restrict || '');
+    Array.isArray(initial?.choice?.restrict_list) ? initial.choice.restrict_list.join(', ') :
+    Array.isArray(initial?.choice_restrict) ? initial.choice_restrict.join(', ') :
+    (initial?.choice?.restrict_text || initial?.choice?.restrict_list || initial?.choice_restrict || initial?.restrict || '');
   choiceWrap.appendChild(choiceMax);
   choiceWrap.appendChild(choiceRestrict);
   choiceWrap.style.display = 'none';
