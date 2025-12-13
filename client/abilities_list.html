@@ -844,6 +844,11 @@ filterNameEl.addEventListener('input', ()=>{
   filterNameEl._t = setTimeout(loadAbilities, 250);
 });
 filterTypeEl.addEventListener('change', loadAbilities);
+filterNameEl.addEventListener('input', ()=>{
+  clearTimeout(filterNameEl._t);
+  filterNameEl._t = setTimeout(loadAbilities, 250);
+});
+filterTypeEl.addEventListener('change', loadAbilities);
 filterSourceEl.addEventListener('change', loadAbilities);
 
 btnSave.addEventListener('click', async ()=>{
@@ -852,14 +857,24 @@ btnSave.addEventListener('click', async ()=>{
     return;
   }
   try{
-    statusLine.textContent = 'Savingâ€¦';
+    statusLine.textContent = 'Saving…';
     const payload = await buildPayloadFromForm();
+    console.log('[AbilityEdit] Outgoing payload (choices)', JSON.stringify(payload.passive?.modifiers?.filter(m=>String(m.target||'').startsWith('choice:')), null, 2));
     const res = await api('/abilities/'+encodeURIComponent(currentAbilityId), {
       method:'PUT',
       headers:{ 'content-type':'application/json' },
       body: JSON.stringify(payload),
     });
-    statusLine.textContent = 'Saved '+res.ability.id;
+    try{
+      const check = await api('/abilities/'+encodeURIComponent(res.ability.id));
+      console.log('[AbilityEdit] Stored ability (choices)', JSON.stringify(check.ability?.passive?.modifiers?.filter(m=>String(m.target||'').startsWith('choice:')), null, 2));
+      const same = JSON.stringify(payload.passive?.modifiers||[]) === JSON.stringify(check.ability?.passive?.modifiers||[]);
+      console.log('[AbilityEdit] Choice payload match DB:', same ? 'OK' : 'MISMATCH');
+      statusLine.textContent = same ? 'Saved '+res.ability.id+' (choices OK)' : 'Saved '+res.ability.id+' (choices mismatch, see console)';
+    }catch(e){
+      console.warn('[AbilityEdit] Could not refetch ability for verification', e);
+      statusLine.textContent = 'Saved '+res.ability.id+' (verify console)';
+    }
     loadAbilities();
   }catch(err){
     statusLine.textContent = 'Error: '+err.message;

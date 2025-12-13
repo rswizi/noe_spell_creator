@@ -717,12 +717,23 @@ btnSave.addEventListener('click', async ()=>{
   try{
     statusLine.textContent = 'Saving ability…';
     const payload = await buildPayload();
+    console.log('[AbilityCreate] Outgoing payload (choices)', JSON.stringify(payload.passive?.modifiers?.filter(m=>String(m.target||'').startsWith('choice:')), null, 2));
     const res = await api('/abilities', {
       method:'POST',
       headers:{ 'content-type':'application/json' },
       body: JSON.stringify(payload),
     });
-    statusLine.textContent = 'Saved as ' + res.ability.id;
+    try{
+      const check = await api('/abilities/'+encodeURIComponent(res.ability.id));
+      console.log('[AbilityCreate] Stored ability (choices)', JSON.stringify(check.ability?.passive?.modifiers?.filter(m=>String(m.target||'').startsWith('choice:')), null, 2));
+      const same = JSON.stringify(payload.passive?.modifiers||[]) === JSON.stringify(check.ability?.passive?.modifiers||[]);
+      console.log('[AbilityCreate] Choice payload match DB:', same ? 'OK' : 'MISMATCH');
+      if (same) statusLine.textContent = 'Saved as ' + res.ability.id + ' (choices OK)';
+      else statusLine.textContent = 'Saved as ' + res.ability.id + ' (choices mismatch, see console)';
+    }catch(e){
+      console.warn('[AbilityCreate] Could not refetch ability for verification', e);
+      statusLine.textContent = 'Saved as ' + res.ability.id + ' (verify console)';
+    }
   }catch(err){
     statusLine.textContent = 'Error: ' + err.message;
   }
