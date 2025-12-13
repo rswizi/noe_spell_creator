@@ -2238,6 +2238,31 @@ def _as_list(x):
     if isinstance(x, str):  return [s for s in (v.strip() for v in x.split(",")) if s]
     return []
 
+def _normalize_choice(choice: dict | None) -> dict | None:
+    """Ensure choice metadata keeps restrict fields populated regardless of client shape."""
+    if not isinstance(choice, dict):
+        return None
+    out = dict(choice)
+    restrict_items: list[str] = []
+    for key in ("restrict", "choice_restrict", "restrict_list"):
+        vals = out.get(key)
+        if isinstance(vals, list):
+            restrict_items.extend([str(v).strip() for v in vals if str(v).strip()])
+    if not restrict_items:
+        txt = (
+            out.get("restrict_text")
+            or out.get("choice_restrict")
+            or out.get("restrict_list")
+            or out.get("restrict")
+            or out.get("restrict_string")
+            or ""
+        )
+        if isinstance(txt, str):
+            restrict_items = [s for s in (v.strip() for v in txt.split(",")) if s]
+    out["restrict"] = restrict_items
+    if "restrict_text" not in out:
+        out["restrict_text"] = ",".join(restrict_items)
+    return out
 def _modifiers_from_body(b: dict) -> list[dict]:
     """Normalize an optional modifiers list from payload."""
     mods_in = (b or {}).get("modifiers") or []
@@ -2259,8 +2284,8 @@ def _modifiers_from_body(b: dict) -> list[dict]:
             value = 0.0
         note = (m.get("note") or "").strip()
         mod = {"target": target, "mode": mode, "value": value, "note": note}
-        choice = m.get("choice")
-        if isinstance(choice, dict):
+        choice = _normalize_choice(m.get("choice") if isinstance(m.get("choice"), dict) else None)
+        if choice:
             mod["choice"] = choice
         mods.append(mod)
     return mods
@@ -4336,7 +4361,7 @@ async def create_ability(request: Request, payload: dict = Body(...)):
             except Exception:
                 return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
             note = (m.get("note") or "").strip()
-            choice = m.get("choice") if isinstance(m.get("choice"), dict) else None
+            choice = _normalize_choice(m.get("choice") if isinstance(m.get("choice"), dict) else None)
             mod = {"target":target,"mode":mode,"value":value,"note":note}
             if choice: mod["choice"] = choice
             modifiers.append(mod)
@@ -4476,7 +4501,7 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
             except Exception:
                 return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
             note = (m.get("note") or "").strip()
-            choice = m.get("choice") if isinstance(m.get("choice"), dict) else None
+            choice = _normalize_choice(m.get("choice") if isinstance(m.get("choice"), dict) else None)
             mod = {"target":target,"mode":mode,"value":value,"note":note}
             if choice:
                 mod["choice"] = choice
