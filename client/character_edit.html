@@ -1490,8 +1490,11 @@ function normalizeChoiceEntry(val){
 function normalizeRestrict(choice){
   if (!choice) return [];
   if (Array.isArray(choice.restrict)) return choice.restrict;
-  if (typeof choice.restrict_text === 'string'){
-    return choice.restrict_text.split(',').map(s=>s.trim()).filter(Boolean);
+  if (Array.isArray(choice.choice_restrict)) return choice.choice_restrict;
+  if (Array.isArray(choice.restrict_list)) return choice.restrict_list;
+  const txt = choice.restrict_text || choice.choice_restrict || choice.restrict_list || choice.restrict || choice.restrict_string || '';
+  if (typeof txt === 'string'){
+    return String(txt).split(',').map(s=>s.trim()).filter(Boolean);
   }
   return [];
 }

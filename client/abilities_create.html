@@ -422,7 +422,9 @@ function addModifierRow(initial){
   choiceRestrict.type = 'text';
   choiceRestrict.placeholder = 'Restrict list (comma-separated)';
   choiceRestrict.className = 'choice-restrict';
-  choiceRestrict.value = Array.isArray(initial?.choice?.restrict) ? initial.choice.restrict.join(', ') : (initial?.choice?.restrict_text || '');
+  choiceRestrict.value =
+    Array.isArray(initial?.choice?.restrict) ? initial.choice.restrict.join(', ') :
+    (initial?.choice?.restrict_text || initial?.choice_restrict || initial?.restrict || '');
   choiceWrap.appendChild(choiceMax);
   choiceWrap.appendChild(choiceRestrict);
   choiceWrap.style.display = 'none';
