@@ -650,12 +650,21 @@ function buildPayload(){
       const choiceRestrict = row.querySelector('.choice-restrict');
 
       const isChoice = (targetSel.value || '').startsWith('choice:');
-      const choice = isChoice ? {
-        kind: (targetSel.value || '').replace('choice:','') || 'custom',
-        max_choices: Math.max(0, Number(choiceMax?.value || 0)),
-        restrict: (choiceRestrict?.value || '').split(',').map(s=>s.trim()).filter(Boolean),
-        restrict_text: (choiceRestrict?.value || '').trim()
-      } : null;
+      let choice = null;
+      if (isChoice){
+        const kind = (targetSel.value || '').replace('choice:','') || 'custom';
+        let restrictList = (choiceRestrict?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+        if (!restrictList.length){
+          const keys = await choiceKeysForKind(kind);
+          restrictList = keys;
+        }
+        choice = {
+          kind,
+          max_choices: Math.max(0, Number(choiceMax?.value || 0)),
+          restrict: restrictList,
+          restrict_text: restrictList.join(', ')
+        };
+      }
 
       const resolvedTarget = targetSel.value === CUSTOM_TARGET_VALUE ? (customTarget.value || '').trim() : targetSel.value.trim();
       const parsedValue = parseFloat(valueEl.value || '0');
