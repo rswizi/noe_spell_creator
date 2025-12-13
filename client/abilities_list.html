@@ -383,6 +383,18 @@ function naturesFromSchools(schools){
   return Array.from(set).sort();
 }
 
+async function choiceKeysForKind(kind){
+  const schools = await loadSchoolsCached();
+  const skills = skillsFromSchools(schools);
+  const natures = naturesFromSchools(schools);
+  if (kind === 'skill_ms') return skills;
+  if (kind === 'nature_ms') return natures;
+  if (kind === 'magic_weapon' || kind === 'magic_spell') return DEFAULT_NATURES.map(n=> n.toLowerCase());
+  if (kind === 'school_ms') return (schools || []).map(sc=> String(sc.id || '').trim()).filter(Boolean);
+  if (kind === 'char_skill') return DEFAULT_CHARACTERISTICS.map(c=> c.toLowerCase());
+  return [];
+}
+
 let currentAbilityId = null;
 let ALL_ABILITIES = [];
 
@@ -479,6 +491,15 @@ function addModifierRow(initial){
   choiceWrap.appendChild(choiceRestrict);
   choiceWrap.style.display = 'none';
 
+  async function ensureDefaultRestrict(){
+    const targetVal = target.value || '';
+    if (!targetVal.startsWith('choice:')) return;
+    if ((choiceRestrict.value || '').trim()) return;
+    const kind = targetVal.replace('choice:','');
+    const keys = await choiceKeysForKind(kind);
+    if (keys.length) choiceRestrict.value = keys.join(', ');
+  }
+
   async function renderChoiceConfigurator(kind, wrap, restrictInput){
     const restrictSet = new Set((restrictInput.value || '').split(',').map(s=>s.trim()).filter(Boolean));
     wrap.innerHTML = '';
@@ -522,6 +543,11 @@ function addModifierRow(initial){
       items = DEFAULT_CHARACTERISTICS.map(c=>({ key:c.toLowerCase(), label:c }));
     }
 
+    if (restrictSet.size === 0 && items.length){
+      items.forEach(item=> restrictSet.add(item.key));
+      restrictInput.value = Array.from(restrictSet).join(', ');
+    }
+
     items.forEach(item=>{
       const chip = document.createElement('button');
       chip.type = 'button';
@@ -560,6 +586,9 @@ function addModifierRow(initial){
     if (!isChoice){
       choiceWrap.style.display = 'none';
     }
+    if (isChoice){
+      ensureDefaultRestrict();
+    }
   }
   target.addEventListener('change', ()=>{
     const useCustom = target.value === CUSTOM_TARGET_VALUE;
@@ -569,6 +598,7 @@ function addModifierRow(initial){
   });
   configBtn.addEventListener('click', async ()=>{
     const kind = (target.value || '').replace('choice:','');
+    await ensureDefaultRestrict();
     await renderChoiceConfigurator(kind, choiceWrap, choiceRestrict);
     choiceWrap.style.display = choiceWrap.style.display === 'none' ? 'grid' : 'none';
   });
