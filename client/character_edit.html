@@ -2895,7 +2895,7 @@ function renderSpellListSummary(){
   }
   const count = Array.isArray(LINKED_SPELL_LIST.spells) ? LINKED_SPELL_LIST.spells.length : (LINKED_SPELL_LIST.count || 0);
   const iv = currentIV();
-  slSummaryEl.textContent = `${LINKED_SPELL_LIST.name || 'Spell List'} Â· Spells: ${count} Â· MAG: ${iv.mag}`;
+  slSummaryEl.textContent = `${LINKED_SPELL_LIST.name || 'Spell List'} • Spells: ${count} • MAG: ${iv.mag}`;
 }
 
 function renderXpProgress(){
@@ -2908,7 +2908,7 @@ function renderXpProgress(){
   if (nextCap == null){
     xpProgressEl.textContent = `XP: ${xp} (level ${lvl} maxed)`;
   }else{
-    xpProgressEl.textContent = `XP: ${xp} (level ${lvl}) Â· Need ${toNext} more to reach level ${lvl+1}`;
+    xpProgressEl.textContent = `XP: ${xp} (level ${lvl}) • Need ${toNext} more to reach level ${lvl+1}`;
   }
 }
 
@@ -3294,7 +3294,7 @@ function renderAbilitySpellsBucket(){
     const costParts = [];
     if (sp.mp_cost != null) costParts.push(`MP: ${sp.mp_cost}`);
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
-    const cost = costParts.join(' Â· ');
+    const cost = costParts.join(' • ');
     const range = sp.range != null ? `Range: ${sp.range}` : '';
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
     const div = document.createElement('div');
@@ -3307,7 +3307,7 @@ function renderAbilitySpellsBucket(){
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
         ${effectsDesc ? `<div class="muted" style="font-size:.8rem">Effects: ${effectsDesc}</div>` : ''}
-        <div class="muted" style="font-size:.8rem">${cost} ${range?` â€¢ ${range}`:''} ${aoe?` â€¢ ${aoe}`:''}</div>
+        <div class="muted" style="font-size:.8rem">${cost} ${range?` • ${range}`:''} ${aoe?` • ${aoe}`:''}</div>
       </div>
       <span class="tag">${sp.category || ''}</span>
     `;
@@ -3483,7 +3483,7 @@ async function renderArchetypePanel(){
   }
   const arc = ARCHETYPES.find(a=>a.id===CHAR.archetype_id);
   const rank = CHAR.archetype_rank || _archetype_rank_for_level(Number(CHAR.level||1));
-  arcSummaryEl.textContent = `${arc?.name || CHAR.archetype_id} Â· Rank: ${rank}`;
+  arcSummaryEl.textContent = `${arc?.name || CHAR.archetype_id} • Rank: ${rank}`;
   COMPUTED_ARC_ABILITIES = (CHAR.computed_archetype_abilities || []).slice();
   if (!COMPUTED_ARC_ABILITIES.length){
     arcAbilitiesEl.innerHTML = '<div class="muted">No unlocked abilities yet.</div>';
