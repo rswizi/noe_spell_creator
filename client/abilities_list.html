@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NoE — Abilities Browser</title>
+  <title>NoE â€” Abilities Browser</title>
   <link rel="stylesheet" href="/static/style.css" />
   <style>
     :root { color-scheme: dark; }
@@ -79,7 +79,7 @@
           <h2>Search</h2>
           <div class="row">
             <label for="filter-name">Name</label>
-            <input id="filter-name" class="grow" placeholder="Search by name…" />
+            <input id="filter-name" class="grow" placeholder="Search by nameâ€¦" />
           </div>
           <div class="row">
             <label for="filter-type">Type</label>
@@ -181,7 +181,7 @@
           <h3>Description</h3>
           <textarea id="ab-description"></textarea>
 
-          <button class="btn" id="btn-save" type="button" style="margin-top:14px;">💾 Save Changes</button>
+          <button class="btn" id="btn-save" type="button" style="margin-top:14px;">ðŸ’¾ Save Changes</button>
           <div class="status-line" id="status-line">Select an ability to begin.</div>
         </div>
 
@@ -393,6 +393,10 @@ function skillChoiceItems(){
   if (!skillsGroup) return [];
   return (skillsGroup.options || []).map(o=>({ key:o.value, label:o.label }));
 }
+function parseCsvList(txt){
+  if (!txt || typeof txt !== 'string') return [];
+  return txt.split(',').map(s=>s.trim()).filter(Boolean);
+}
 
 async function choiceKeysForKind(kind){
   const schools = await loadSchoolsCached();
@@ -505,7 +509,6 @@ function addModifierRow(initial){
   async function ensureDefaultRestrict(){ /* no-op to preserve creator input */ }
 
   async function renderChoiceConfigurator(kind, wrap, restrictInput){
-    let restrictSet = new Set((restrictInput.value || '').split(',').map(s=>s.trim()).filter(Boolean));
     wrap.innerHTML = '';
 
     const header = document.createElement('div');
@@ -547,34 +550,51 @@ function addModifierRow(initial){
       items = skillChoiceItems();
     }
 
-    const choiceAllowed = Array.isArray(initial?.choice?.choices)
-      ? initial.choice.choices.map(x=> String(x).trim()).filter(Boolean)
-      : (typeof initial?.choice?.choices_text === 'string' && initial.choice.choices_text.trim()
-        ? initial.choice.choices_text.split(',').map(s=>s.trim()).filter(Boolean)
-        : []);
-    const itemKeys = items.map(it=> String(it.key||'').trim());
-    if (choiceAllowed.length){
-      const allowSet = new Set(choiceAllowed.map(x=> x.toLowerCase()));
-      restrictSet = new Set(itemKeys.filter(k=> !allowSet.has(String(k).toLowerCase())));
-      restrictInput.value = Array.from(restrictSet).join(', ');
-    }else if (!restrictSet.size && itemKeys.length){
-      restrictSet = new Set(itemKeys);
-      restrictInput.value = Array.from(restrictSet).join(', ');
+    const allKeys = items.map(it=> String(it.key||'').trim()).filter(Boolean);
+    choiceRestrict.dataset.allKeys = JSON.stringify(allKeys);
+
+    const savedAllowed = (()=> {
+      if (choiceRestrict.dataset.allowed){
+        try{ return JSON.parse(choiceRestrict.dataset.allowed) || []; }catch(e){}
+      }
+      if (Array.isArray(initial?.choice?.choices)) return initial.choice.choices;
+      if (typeof initial?.choice?.choices_text === 'string' && initial.choice.choices_text.trim()){
+        return parseCsvList(initial.choice.choices_text);
+      }
+      return [];
+    })().map(x=> String(x).trim()).filter(Boolean);
+
+    let allowedSet = new Set(savedAllowed.map(x=> x.toLowerCase()));
+
+    if (!allowedSet.size){
+      const restrictSetInit = new Set((restrictInput.value || '').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean));
+      if (restrictSetInit.size){
+        allowedSet = new Set(allKeys.filter(k=> !restrictSetInit.has(k.toLowerCase())).map(k=> k.toLowerCase()));
+      }
     }
+
+    const syncRestrictInput = ()=>{
+      const restrictKeys = allKeys.filter(k=> !allowedSet.has(k.toLowerCase()));
+      restrictInput.value = restrictKeys.join(', ');
+      choiceRestrict.dataset.allowed = JSON.stringify(Array.from(allowedSet));
+    };
+    syncRestrictInput();
 
     items.forEach(item=>{
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'chip';
-      const excluded = restrictSet.has(item.key);
-      chip.style.opacity = excluded ? 0.5 : 1;
-      chip.textContent = excluded ? `Excluded: ${item.label}` : item.label;
+      const keyLower = String(item.key||'').toLowerCase();
+      const allowed = allowedSet.has(keyLower);
+      chip.style.opacity = allowed ? 1 : 0.5;
+      chip.textContent = allowed ? item.label : `Excluded: ${item.label}`;
       chip.addEventListener('click', ()=>{
-        if (restrictSet.has(item.key)) restrictSet.delete(item.key);
-        else restrictSet.add(item.key);
-        restrictInput.value = Array.from(restrictSet).join(', ');
-        chip.style.opacity = restrictSet.has(item.key) ? 0.5 : 1;
-        chip.textContent = restrictSet.has(item.key) ? `Excluded: ${item.label}` : item.label;
+        if (allowedSet.has(keyLower)) allowedSet.delete(keyLower);
+        else allowedSet.add(keyLower);
+        const isAllowed = allowedSet.has(keyLower);
+        chip.style.opacity = isAllowed ? 1 : 0.5;
+        chip.textContent = isAllowed ? item.label : `Excluded: ${item.label}`;
+        syncRestrictInput();
       });
       listBox.appendChild(chip);
     });
@@ -714,20 +734,23 @@ async function buildPayloadFromForm(){
       let choice = null;
       if (isChoice){
         const kind = (targetSel.value || '').replace('choice:','') || 'custom';
-        let restrictList = (choiceRestrict?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
-        const allKeys = (await choiceKeysForKind(kind)) || [];
-        if (!restrictList.length){
-          restrictList = allKeys.slice(); // default: restrict everything until allowed
-        }
-        const restrictSet = Array.from(new Set(restrictList.filter(Boolean)));
-        const restrictLower = new Set(restrictSet.map(x=> String(x).trim().toLowerCase()));
-        const allowed = allKeys.filter(k=> !restrictLower.has(String(k).trim().toLowerCase()));
+        const allKeys = (()=> {
+          try{ return JSON.parse(choiceRestrict?.dataset?.allKeys || '[]'); }catch(e){ return []; }
+        })();
+        const allowedList = (()=>{
+          try{
+            const raw = choiceRestrict?.dataset?.allowed ? JSON.parse(choiceRestrict.dataset.allowed) : [];
+            return Array.isArray(raw) ? raw : [];
+          }catch(e){ return []; }
+        })().map(x=> String(x).trim()).filter(Boolean);
+        const allowedLower = new Set(allowedList.map(x=> x.toLowerCase()));
+        const restrictList = allKeys.filter(k=> !allowedLower.has(String(k).trim().toLowerCase()));
         choice = {
           kind,
           max_choices: Math.max(0, Number(choiceMax?.value || 0)),
-          restrict: restrictSet,
-          restrict_text: restrictSet.join(', '),
-          choices: allowed
+          restrict: restrictList,
+          restrict_text: restrictList.join(', '),
+          choices: allowedList
         };
       }
 
@@ -857,7 +880,7 @@ btnSave.addEventListener('click', async ()=>{
     return;
   }
   try{
-    statusLine.textContent = 'Saving�';
+    statusLine.textContent = 'Saving…';
     const payload = await buildPayloadFromForm();
     console.log('[AbilityEdit] Outgoing payload (choices)', JSON.stringify(payload.passive?.modifiers?.filter(m=>String(m.target||'').startsWith('choice:')), null, 2));
     const res = await api('/abilities/'+encodeURIComponent(currentAbilityId), {
