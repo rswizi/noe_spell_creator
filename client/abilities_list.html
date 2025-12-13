@@ -522,8 +522,18 @@ function addModifierRow(initial){
     maxBox.appendChild(choiceMax);
     wrap.appendChild(maxBox);
 
-    const listBox = document.createElement('div');
-    listBox.className = 'chip-list';
+    const searchBox = document.createElement('input');
+    searchBox.placeholder = 'Search options...';
+    searchBox.className = 'choice-search';
+    wrap.appendChild(searchBox);
+
+    const allowedBox = document.createElement('div');
+    allowedBox.className = 'chip-list';
+    wrap.appendChild(allowedBox);
+
+    const availBox = document.createElement('div');
+    availBox.className = 'chip-list';
+    wrap.appendChild(availBox);
 
     const schools = await loadSchoolsCached();
     const skills = skillsFromSchools(schools);
@@ -578,26 +588,67 @@ function addModifierRow(initial){
       restrictInput.value = restrictKeys.join(', ');
       choiceRestrict.dataset.allowed = JSON.stringify(Array.from(allowedSet));
     };
-    syncRestrictInput();
 
-    items.forEach(item=>{
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'chip';
-      const keyLower = String(item.key||'').toLowerCase();
-      const allowed = allowedSet.has(keyLower);
-      chip.style.opacity = allowed ? 1 : 0.5;
-      chip.textContent = allowed ? item.label : `Excluded: ${item.label}`;
-      chip.addEventListener('click', ()=>{
-        if (allowedSet.has(keyLower)) allowedSet.delete(keyLower);
-        else allowedSet.add(keyLower);
-        const isAllowed = allowedSet.has(keyLower);
-        chip.style.opacity = isAllowed ? 1 : 0.5;
-        chip.textContent = isAllowed ? item.label : `Excluded: ${item.label}`;
-        syncRestrictInput();
+    const renderAllowed = ()=>{
+      allowedBox.innerHTML = '';
+      const allowedItems = items.filter(it=> allowedSet.has(String(it.key||'').toLowerCase()));
+      if (!allowedItems.length){
+        const empty = document.createElement('div');
+        empty.className = 'muted';
+        empty.textContent = 'No allowed options yet.';
+        allowedBox.appendChild(empty);
+      }else{
+        allowedItems.forEach(it=>{
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'chip';
+          chip.textContent = it.label + ' (Allowed)';
+          chip.addEventListener('click', ()=>{
+            allowedSet.delete(String(it.key||'').toLowerCase());
+            syncRestrictInput();
+            renderAllowed(); renderAvailable();
+          });
+          allowedBox.appendChild(chip);
+        });
+      }
+    };
+
+    const renderAvailable = ()=>{
+      availBox.innerHTML = '';
+      const term = (searchBox.value || '').toLowerCase();
+      const filtered = items.filter(it=>{
+        if (allowedSet.has(String(it.key||'').toLowerCase())) return false;
+        if (!term) return true;
+        return (it.label||'').toLowerCase().includes(term) || String(it.key||'').toLowerCase().includes(term);
       });
-      listBox.appendChild(chip);
-    });
+      if (!filtered.length){
+        const empty = document.createElement('div');
+        empty.className = 'muted';
+        empty.textContent = 'No options available.';
+        availBox.appendChild(empty);
+      }else{
+        filtered.forEach(it=>{
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'chip';
+          chip.style.opacity = 0.7;
+          chip.textContent = it.label;
+          chip.addEventListener('click', ()=>{
+            allowedSet.add(String(it.key||'').toLowerCase());
+            syncRestrictInput();
+            renderAllowed(); renderAvailable();
+          });
+          availBox.appendChild(chip);
+        });
+      }
+    };
+
+    searchBox.addEventListener('input', ()=> renderAvailable());
+    syncRestrictInput();
+    renderAllowed();
+    renderAvailable();
+
+    const hint = document.createElement('div');
 
     if (!items.length){
       const empty = document.createElement('div');
