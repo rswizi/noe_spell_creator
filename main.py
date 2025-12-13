@@ -4465,6 +4465,8 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
         mods_in = passive_in.get("modifiers") or []
         modifiers = []
         for m in mods_in:
+            if not isinstance(m, dict):
+                continue
             target = (m.get("target") or "").strip()
             if not target: continue
             mode = (m.get("mode") or "add").strip().lower()
@@ -4474,7 +4476,11 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
             except Exception:
                 return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
             note = (m.get("note") or "").strip()
-            modifiers.append({"target":target,"mode":mode,"value":value,"note":note})
+            choice = m.get("choice") if isinstance(m.get("choice"), dict) else None
+            mod = {"target":target,"mode":mode,"value":value,"note":note}
+            if choice:
+                mod["choice"] = choice
+            modifiers.append(mod)
         passive_block = {"description":pdesc,"modifiers":modifiers}
 
     now = datetime.datetime.utcnow().isoformat()+"Z"
