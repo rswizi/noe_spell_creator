@@ -2293,6 +2293,14 @@ def _modifiers_from_body(b: dict) -> list[dict]:
             value = 0.0
         note = (m.get("note") or "").strip()
         mod = {"target": target, "mode": mode, "value": value, "note": note}
+        group = (m.get("group") or "").strip()
+        if group:
+            mod["group"] = group
+            try:
+                gmax = int(m.get("group_max_choices") or m.get("group_max") or 1)
+            except Exception:
+                gmax = 1
+            mod["group_max_choices"] = max(0, gmax)
         choice = _normalize_choice(m.get("choice") if isinstance(m.get("choice"), dict) else None)
         if choice:
             mod["choice"] = choice
@@ -4372,6 +4380,14 @@ async def create_ability(request: Request, payload: dict = Body(...)):
             note = (m.get("note") or "").strip()
             choice = _normalize_choice(m.get("choice") if isinstance(m.get("choice"), dict) else None)
             mod = {"target":target,"mode":mode,"value":value,"note":note}
+            group = (m.get("group") or "").strip()
+            if group:
+                mod["group"] = group
+                try:
+                    gmax = int(m.get("group_max_choices") or m.get("group_max") or 1)
+                except Exception:
+                    gmax = 1
+                mod["group_max_choices"] = max(0, gmax)
             if choice: mod["choice"] = choice
             modifiers.append(mod)
         passive_block = {"description":pdesc,"modifiers":modifiers}
@@ -4512,6 +4528,14 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
             note = (m.get("note") or "").strip()
             choice = _normalize_choice(m.get("choice") if isinstance(m.get("choice"), dict) else None)
             mod = {"target":target,"mode":mode,"value":value,"note":note}
+            group = (m.get("group") or "").strip()
+            if group:
+                mod["group"] = group
+                try:
+                    gmax = int(m.get("group_max_choices") or m.get("group_max") or 1)
+                except Exception:
+                    gmax = 1
+                mod["group_max_choices"] = max(0, gmax)
             if choice:
                 mod["choice"] = choice
             modifiers.append(mod)

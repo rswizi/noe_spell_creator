@@ -49,16 +49,12 @@
     .cost-grid input { width:100%; text-align:right; }
 
     .mod-list { display:grid; gap:8px; margin-top:6px; }
-    .mod-row { display:grid; grid-template-columns: 1.2fr 0.7fr 0.6fr 0.8fr 0.6fr; gap:8px; align-items:center; }
+    .mod-row { display:grid; grid-template-columns: 1.2fr 0.7fr 0.7fr 0.5fr; gap:8px; align-items:center; }
     .mod-row input, .mod-row select { width:100%; }
     .mod-row button { padding:4px 8px; font-size:.8rem; }
-    .mod-row .mod-target-custom { grid-column:1 / span 3; }
-    .mod-row .choice-wrap { grid-column:1 / -1; display:none; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:10px; align-items:start; padding:10px 12px; border:1px solid #222; border-radius:10px; background:#0c0c0f; }
-    .mod-row .choice-wrap .muted { grid-column:1 / -1; }
-    .mod-row .choice-actions { grid-column:1 / -1; display:flex; gap:8px; align-items:center; }
-    .chip-list { display:flex; flex-wrap:wrap; gap:6px; }
-    .chip { border:1px solid #333; padding:4px 8px; border-radius:999px; font-size:.85rem; display:flex; gap:6px; align-items:center; }
-    .chip input { width:auto; }
+    .mod-row .mod-target-custom { grid-column:1 / span 2; }
+    .mod-row .group-wrap { grid-column:1 / -1; display:grid; grid-template-columns: 1fr 0.5fr; gap:8px; align-items:center; }
+    .mod-row .group-wrap .muted { grid-column:1 / -1; }
 
     .status-line { margin-top:10px; font-size:.85rem; opacity:.9; }
   </style>
@@ -192,7 +188,7 @@
 
           <h3 style="margin-top:10px;">Modifiers</h3>
           <div class="muted" style="margin-bottom:4px;">
-            Pick from the dropdown (skills, characteristics, derived resources) or use a custom path if you need something special.
+            Pick from the dropdown (skills, characteristics, derived resources) or use a custom path if you need something special. Use groups to make options mutually exclusive (max choices defaults to 1).
           </div>
 
           <div id="mod-list" class="mod-list"></div>
@@ -298,15 +294,9 @@ const arcOrigRankEl= document.getElementById('ab-arc-orig-rank');
 const arcReplSel   = document.getElementById('ab-arc-repl');
 const arcReplSearch= document.getElementById('ab-arc-repl-search');
 
+const DEFAULT_NATURES = ['Fire','Water','Earth','Lightning','Wind','Sun','Moon','Ki'];
+const DEFAULT_CHARACTERISTICS = ['Reflex','Dexterity','Body','Wisdom','Presence','Magic','Willpower','Tech'];
 const CUSTOM_TARGET_VALUE = '__custom__';
-const CHOICE_OPTIONS = [
-  { value:'choice:skill_ms',     label:'[Choice] Skill-based MS' },
-  { value:'choice:nature_ms',    label:'[Choice] Nature-based MS' },
-  { value:'choice:school_ms',    label:'[Choice] MS' },
-  { value:'choice:magic_weapon', label:'[Choice] Magic damage on weapons (nature pick)' },
-  { value:'choice:magic_spell',  label:'[Choice] Magic damage on spells/animarma (nature pick)' },
-  { value:'choice:char_skill',   label:'[Choice] Skill linked to a characteristic' },
-];
 const PASSIVE_TARGET_GROUPS = (()=>{
   const characteristics = [
     { key:'reflex',    label:'Reflex' },
@@ -338,77 +328,25 @@ const PASSIVE_TARGET_GROUPS = (()=>{
     { key:'et', label:'Eclipse Threshold (ET)' },
     { key:'tx', label:'Max Toxicity (TX)' },
   ];
+  const skillGroups = characteristics.map(c=>({ value:`skills.by_char.${c.key}`, label:`Skills linked to ${c.label}` }));
+  const intensityOpts = DEFAULT_NATURES.map(n=>({ value:`intensities.${n}`, label:`Nature-based MS: ${n}` }));
+  const schoolByNature = DEFAULT_NATURES.map(n=>({ value:`schools.by_nature.${n}`, label:`MS for schools linked to ${n}` }));
+  const allSkillNames = Array.from(new Set(skills.flatMap(c=> c.skills || [])));
+  const schoolBySkill = allSkillNames.map(s=>({ value:`schools.by_skill.${s}`, label:`MS for schools using ${s}` }));
+  const magicDmgSpell = DEFAULT_NATURES.map(n=>({ value:`magic_damage.spell.${n}`, label:`Magic Damage on spells/animarma (${n})` }));
+  const magicDmgWeapon = DEFAULT_NATURES.map(n=>({ value:`magic_damage.weapon.${n}`, label:`Magic Damage on weapons (${n})` }));
   return [
     { label:'Characteristics', options: characteristics.map(c=>({ value:`char.${c.key}`, label:`${c.label} (modifier)` })) },
     { label:'Skills', options: skills.flatMap(c=> c.skills.map(s=>({ value:`skills.${c.key}.${s}`, label:`${s} (${c.label})` }))) },
+    { label:'Skill Groups', options: skillGroups },
+    { label:'Magic Schools by Nature', options: schoolByNature },
+    { label:'Magic Schools by Skill', options: schoolBySkill },
+    { label:'Intensities', options: intensityOpts },
+    { label:'Magic Damage', options: [...magicDmgSpell, ...magicDmgWeapon] },
     { label:'Derived / Resources', options: derived.map(d=>({ value:`derived.${d.key}`, label:d.label })) },
-    { label:'User choice (configurable)', options: CHOICE_OPTIONS },
     { label:'Custom', options:[{ value:CUSTOM_TARGET_VALUE, label:'Custom path...' }]},
   ];
 })();
-
-const DEFAULT_NATURES = ['Fire','Water','Earth','Lightning','Wind','Sun','Moon','Ki'];
-const DEFAULT_CHARACTERISTICS = ['Reflex','Dexterity','Body','Wisdom','Presence','Magic','Willpower','Tech'];
-let SCHOOLS_CACHE = null;
-
-async function loadSchoolsCached(){
-  if (SCHOOLS_CACHE) return SCHOOLS_CACHE;
-  try{
-    const res = await api('/schools');
-    SCHOOLS_CACHE = res.schools || [];
-  }catch(e){
-    SCHOOLS_CACHE = [];
-  }
-  return SCHOOLS_CACHE;
-}
-
-function skillsFromSchools(schools){
-  const set = new Set();
-  (schools || []).forEach(s=>{ if (s.linked_skill) set.add(s.linked_skill); });
-  if (set.size === 0){
-    const grp = PASSIVE_TARGET_GROUPS.find(g=>g.label==='Skills');
-    (grp?.options||[]).forEach(o=>{
-      const name = (o.label || '').split(' (')[0];
-      if (name) set.add(name);
-    });
-  }
-  return Array.from(set).sort();
-}
-
-function naturesFromSchools(schools){
-  const set = new Set(DEFAULT_NATURES);
-  (schools || []).forEach(s=>{
-    (s.linked_intensities || []).forEach(n=> set.add(n));
-  });
-  return Array.from(set).sort();
-}
-
-function skillChoiceKeys(){
-  const skillsGroup = PASSIVE_TARGET_GROUPS.find(g=> g.label === 'Skills');
-  if (!skillsGroup) return [];
-  return (skillsGroup.options || []).map(o=> o.value).filter(Boolean);
-}
-function skillChoiceItems(){
-  const skillsGroup = PASSIVE_TARGET_GROUPS.find(g=> g.label === 'Skills');
-  if (!skillsGroup) return [];
-  return (skillsGroup.options || []).map(o=>({ key:o.value, label:o.label }));
-}
-function parseCsvList(txt){
-  if (!txt || typeof txt !== 'string') return [];
-  return txt.split(',').map(s=>s.trim()).filter(Boolean);
-}
-
-async function choiceKeysForKind(kind){
-  const schools = await loadSchoolsCached();
-  const skills = skillsFromSchools(schools);
-  const natures = naturesFromSchools(schools);
-  if (kind === 'skill_ms') return skillChoiceKeys();
-  if (kind === 'nature_ms') return natures.map(n=> `intensities.${n}`);
-  if (kind === 'magic_weapon' || kind === 'magic_spell') return DEFAULT_NATURES.map(n=> `intensities.${n}`);
-  if (kind === 'school_ms') return (schools || []).map(sc=> `schools.${String(sc.id || '').trim()}`).filter(Boolean);
-  if (kind === 'char_skill') return skillChoiceKeys();
-  return [];
-}
 
 let currentAbilityId = null;
 let ALL_ABILITIES = [];
@@ -472,179 +410,52 @@ function addModifierRow(initial){
   value.step = '0.1';
   value.value = initial?.value ?? 0;
 
-  const configBtn = document.createElement('button');
-  configBtn.type = 'button';
-  configBtn.textContent = 'Configure';
-  configBtn.className = 'btn mod-config-btn';
-  configBtn.style.display = 'none';
-
   const rm = document.createElement('button');
   rm.type = 'button';
   rm.textContent = 'Remove';
   rm.className = 'btn';
   rm.addEventListener('click', ()=> row.remove());
 
-  // Choice configuration
-  const choiceWrap = document.createElement('div');
-  choiceWrap.className = 'choice-wrap';
-  const choiceMax = document.createElement('input');
-  choiceMax.type = 'number';
-  choiceMax.min = '0';
-  choiceMax.placeholder = 'Max choices (0 = unlimited)';
-  choiceMax.className = 'choice-max';
-  choiceMax.value = initial?.choice?.max_choices ?? 0;
-  const choiceRestrict = document.createElement('input');
-  choiceRestrict.type = 'text';
-  choiceRestrict.placeholder = 'Restrict list (comma-separated)';
-  choiceRestrict.className = 'choice-restrict';
-  choiceRestrict.value =
-    Array.isArray(initial?.choice?.restrict) ? initial.choice.restrict.join(', ') :
-    Array.isArray(initial?.choice?.restrict_list) ? initial.choice.restrict_list.join(', ') :
-    Array.isArray(initial?.choice_restrict) ? initial.choice_restrict.join(', ') :
-    (initial?.choice?.restrict_text || initial?.choice?.restrict_list || initial?.choice_restrict || initial?.restrict || '');
-  choiceWrap.appendChild(choiceMax);
-  choiceWrap.appendChild(choiceRestrict);
-  choiceWrap.style.display = 'none';
+  const groupWrap = document.createElement('div');
+  groupWrap.className = 'group-wrap';
+  const groupInput = document.createElement('input');
+  groupInput.className = 'mod-group';
+  groupInput.placeholder = 'Group (mutually exclusive, optional)';
+  groupInput.value = initial?.group || '';
+  const groupMax = document.createElement('input');
+  groupMax.className = 'mod-group-max';
+  groupMax.type = 'number';
+  groupMax.min = '0';
+  groupMax.placeholder = 'Max choices (0 = unlimited, default 1)';
+  const initialGroup = (initial?.group || '').trim();
+  const initialMax = initial?.group_max_choices ?? initial?.group_max ?? 1;
+  groupMax.value = initialGroup ? initialMax : 1;
+  groupMax.disabled = !initialGroup;
+  const groupHint = document.createElement('div');
+  groupHint.className = 'muted';
+  groupHint.textContent = 'Same group = pick limited options when applied.';
+  const syncGroupState = ()=>{
+    const hasGroup = !!groupInput.value.trim();
+    groupMax.disabled = !hasGroup;
+    if (hasGroup && !groupMax.value) groupMax.value = 1;
+  };
+  groupInput.addEventListener('input', syncGroupState);
+  groupWrap.appendChild(groupInput);
+  groupWrap.appendChild(groupMax);
+  groupWrap.appendChild(groupHint);
 
-  async function ensureDefaultRestrict(){ /* no-op to preserve creator input */ }
-
-  async function renderChoiceConfigurator(kind, wrap, restrictInput){
-    wrap.innerHTML = '';
-
-    const header = document.createElement('div');
-    header.innerHTML = `<strong>Configure: ${kind.replace('_',' ')}</strong>`;
-    wrap.appendChild(header);
-
-    const maxBox = document.createElement('div');
-    maxBox.style.display = 'flex';
-    maxBox.style.flexDirection = 'column';
-    maxBox.innerHTML = `<label class="muted">Max choices (0 = unlimited)</label>`;
-    maxBox.appendChild(choiceMax);
-    wrap.appendChild(maxBox);
-
-    const listBox = document.createElement('div');
-    listBox.className = 'chip-list';
-
-    const schools = await loadSchoolsCached();
-    const skills = skillsFromSchools(schools);
-    const natures = naturesFromSchools(schools);
-
-    let items = [];
-    if (kind === 'skill_ms'){
-      items = skills.map(s=>{
-        const linked = schools.filter(sc=> (sc.linked_skill||'').toLowerCase() === s.toLowerCase()).map(sc=>sc.name||sc.id);
-        const label = linked.length ? `${s} (${linked.join(', ')})` : s;
-        return { key: s, label };
-      });
-    }else if (kind === 'nature_ms'){
-      items = natures.map(n=>{
-        const linked = schools.filter(sc=> (sc.linked_intensities||[]).map(x=>x.toLowerCase()).includes(n.toLowerCase())).map(sc=>sc.name||sc.id);
-        const label = linked.length ? `${n} (${linked.join(', ')})` : n;
-        return { key:n, label };
-      });
-    }else if (kind === 'magic_weapon' || kind === 'magic_spell'){
-      items = DEFAULT_NATURES.map(n=>({ key:n.toLowerCase(), label:n }));
-    }else if (kind === 'school_ms'){
-      items = (schools || []).map(sc=>({ key: sc.id, label: `${sc.name} (${sc.school_type||'simple'})` }));
-    }else if (kind === 'char_skill'){
-      items = skillChoiceItems();
-    }
-
-    const allKeys = items.map(it=> String(it.key||'').trim()).filter(Boolean);
-    choiceRestrict.dataset.allKeys = JSON.stringify(allKeys);
-
-    const savedAllowed = (()=> {
-      if (choiceRestrict.dataset.allowed){
-        try{ return JSON.parse(choiceRestrict.dataset.allowed) || []; }catch(e){}
-      }
-      if (Array.isArray(initial?.choice?.choices)) return initial.choice.choices;
-      if (typeof initial?.choice?.choices_text === 'string' && initial.choice.choices_text.trim()){
-        return parseCsvList(initial.choice.choices_text);
-      }
-      return [];
-    })().map(x=> String(x).trim()).filter(Boolean);
-
-    let allowedSet = new Set(savedAllowed.map(x=> x.toLowerCase()));
-
-    if (!allowedSet.size){
-      const restrictSetInit = new Set((restrictInput.value || '').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean));
-      if (restrictSetInit.size){
-        allowedSet = new Set(allKeys.filter(k=> !restrictSetInit.has(k.toLowerCase())).map(k=> k.toLowerCase()));
-      }
-    }
-
-    const syncRestrictInput = ()=>{
-      const restrictKeys = allKeys.filter(k=> !allowedSet.has(k.toLowerCase()));
-      restrictInput.value = restrictKeys.join(', ');
-      choiceRestrict.dataset.allowed = JSON.stringify(Array.from(allowedSet));
-    };
-    syncRestrictInput();
-
-    items.forEach(item=>{
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'chip';
-      const keyLower = String(item.key||'').toLowerCase();
-      const allowed = allowedSet.has(keyLower);
-      chip.style.opacity = allowed ? 1 : 0.5;
-      chip.textContent = allowed ? item.label : `Excluded: ${item.label}`;
-      chip.addEventListener('click', ()=>{
-        if (allowedSet.has(keyLower)) allowedSet.delete(keyLower);
-        else allowedSet.add(keyLower);
-        const isAllowed = allowedSet.has(keyLower);
-        chip.style.opacity = isAllowed ? 1 : 0.5;
-        chip.textContent = isAllowed ? item.label : `Excluded: ${item.label}`;
-        syncRestrictInput();
-      });
-      listBox.appendChild(chip);
-    });
-
-    if (!items.length){
-      const empty = document.createElement('div');
-      empty.className = 'muted';
-      empty.textContent = 'No data found to configure.';
-      wrap.appendChild(empty);
-    }else{
-      wrap.appendChild(listBox);
-    }
-
-    const hint = document.createElement('div');
-    hint.className = 'muted';
-    hint.textContent = 'Click to toggle exclusions. Users will only see non-excluded entries.';
-    wrap.appendChild(hint);
-  }
-
-  function syncChoiceUI(){
-    const isChoice = (target.value || '').startsWith('choice:');
-    configBtn.style.display = isChoice ? '' : 'none';
-    if (!isChoice){
-      choiceWrap.style.display = 'none';
-    }
-    if (isChoice){
-      ensureDefaultRestrict();
-    }
-  }
   target.addEventListener('change', ()=>{
     const useCustom = target.value === CUSTOM_TARGET_VALUE;
     customTarget.style.display = useCustom ? '' : 'none';
     if (!useCustom) customTarget.value = '';
-    syncChoiceUI();
   });
-  configBtn.addEventListener('click', async ()=>{
-    const kind = (target.value || '').replace('choice:','');
-    await ensureDefaultRestrict();
-    await renderChoiceConfigurator(kind, choiceWrap, choiceRestrict);
-    choiceWrap.style.display = choiceWrap.style.display === 'none' ? 'grid' : 'none';
-  });
-  syncChoiceUI();
 
   row.appendChild(target);
   row.appendChild(mode);
   row.appendChild(value);
-  row.appendChild(configBtn);
   row.appendChild(rm);
   row.appendChild(customTarget);
-  row.appendChild(choiceWrap);
+  row.appendChild(groupWrap);
   modListEl.appendChild(row);
 }
 btnAddMod.addEventListener('click', ()=> addModifierRow());
@@ -727,39 +538,19 @@ async function buildPayloadFromForm(){
       const customTarget = row.querySelector('.mod-target-custom');
       const modeEl   = row.querySelector('.mod-mode');
       const valueEl  = row.querySelector('.mod-value');
-      const choiceMax    = row.querySelector('.choice-max');
-      const choiceRestrict = row.querySelector('.choice-restrict');
-
-      const isChoice = (targetSel.value || '').startsWith('choice:');
-      let choice = null;
-      if (isChoice){
-        const kind = (targetSel.value || '').replace('choice:','') || 'custom';
-        const allKeys = (()=> {
-          try{ return JSON.parse(choiceRestrict?.dataset?.allKeys || '[]'); }catch(e){ return []; }
-        })();
-        const allowedList = (()=>{
-          try{
-            const raw = choiceRestrict?.dataset?.allowed ? JSON.parse(choiceRestrict.dataset.allowed) : [];
-            return Array.isArray(raw) ? raw : [];
-          }catch(e){ return []; }
-        })().map(x=> String(x).trim()).filter(Boolean);
-        const allowedLower = new Set(allowedList.map(x=> x.toLowerCase()));
-        const restrictList = allKeys.filter(k=> !allowedLower.has(String(k).trim().toLowerCase()));
-        choice = {
-          kind,
-          max_choices: Math.max(0, Number(choiceMax?.value || 0)),
-          restrict: restrictList,
-          restrict_text: restrictList.join(', '),
-          choices: allowedList
-        };
-      }
+      const groupEl  = row.querySelector('.mod-group');
+      const groupMaxEl = row.querySelector('.mod-group-max');
 
       const resolvedTarget = targetSel.value === CUSTOM_TARGET_VALUE ? (customTarget.value || '').trim() : targetSel.value.trim();
       const parsedValue = parseFloat(valueEl.value || '0');
-      const finalTarget = choice ? `choice:${choice.kind}` : resolvedTarget;
-      if (!finalTarget) return;
-      const modPayload = { target: finalTarget, mode: modeEl.value, value: parsedValue, note:'' };
-      if (choice) modPayload.choice = choice;
+      if (!resolvedTarget) continue;
+      const modPayload = { target: resolvedTarget, mode: modeEl.value, value: parsedValue, note:'' };
+      const groupName = (groupEl?.value || '').trim();
+      if (groupName){
+        const gmax = Math.max(0, Number(groupMaxEl?.value || 1));
+        modPayload.group = groupName;
+        modPayload.group_max_choices = gmax || 1;
+      }
       mods.push(modPayload);
     }
     passive = {
@@ -880,9 +671,8 @@ btnSave.addEventListener('click', async ()=>{
     return;
   }
   try{
-    statusLine.textContent = 'Saving…';
+    statusLine.textContent = 'Saving.';
     const payload = await buildPayloadFromForm();
-    console.log('[AbilityEdit] Outgoing payload (choices)', JSON.stringify(payload.passive?.modifiers?.filter(m=>String(m.target||'').startsWith('choice:')), null, 2));
     const res = await api('/abilities/'+encodeURIComponent(currentAbilityId), {
       method:'PUT',
       headers:{ 'content-type':'application/json' },
@@ -890,10 +680,8 @@ btnSave.addEventListener('click', async ()=>{
     });
     try{
       const check = await api('/abilities/'+encodeURIComponent(res.ability.id));
-      console.log('[AbilityEdit] Stored ability (choices)', JSON.stringify(check.ability?.passive?.modifiers?.filter(m=>String(m.target||'').startsWith('choice:')), null, 2));
       const same = JSON.stringify(payload.passive?.modifiers||[]) === JSON.stringify(check.ability?.passive?.modifiers||[]);
-      console.log('[AbilityEdit] Choice payload match DB:', same ? 'OK' : 'MISMATCH');
-      statusLine.textContent = same ? 'Saved '+res.ability.id+' (choices OK)' : 'Saved '+res.ability.id+' (choices mismatch, see console)';
+      statusLine.textContent = same ? 'Saved '+res.ability.id : 'Saved '+res.ability.id+' (server differs)';
     }catch(e){
       console.warn('[AbilityEdit] Could not refetch ability for verification', e);
       statusLine.textContent = 'Saved '+res.ability.id+' (verify console)';

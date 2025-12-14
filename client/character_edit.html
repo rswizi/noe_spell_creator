@@ -909,7 +909,7 @@ let ROLE = 'user';
 let SAVE_TIMER = null;
 let CHAR = null;
 let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
-let ABILITY_CHOICES = {}; // per-ability user selections for choice-based modifiers
+let ABILITY_CHOICES = {}; // per-ability user selections for configurable modifiers (choices or groups)
 let ITEM_CHOICES = {}; // per-item (inventory) user selections for choice-based modifiers
 let INVENTORIES = [];
 let LINKED_INV = null;
@@ -1472,7 +1472,7 @@ function addSublimationFromForm(){
 
 /* ---------- PASSIVE AGGREGATION (char & skills) ---------- */
 function resetPassiveAgg(){
-  PASSIVE = { char:{}, skill:{}, school:{} };
+  PASSIVE = { char:{}, skill:{}, school:{}, magic_damage:{ spell:{}, weapon:{} } };
 }
 function ensureAgg(obj, key){
   if (!obj[key]) obj[key] = { set:[], mul:[], add:[], notes:[] };
@@ -1527,23 +1527,146 @@ function itemChoiceState(itemId, kind){
   const byItem = ITEM_CHOICES[itemId] || {};
   return normalizeChoiceEntry(byItem[kind]);
 }
+function abilityGroupSelections(ab){
+  const byAb = ABILITY_CHOICES[ab.id] || {};
+  return byAb._groups || {};
+}
+function setAbilityGroupSelections(abId, data){
+  if (!ABILITY_CHOICES[abId]) ABILITY_CHOICES[abId] = {};
+  ABILITY_CHOICES[abId]._groups = data || {};
+}
+function abilityGroups(ab){
+  const mods = (ab?.passive?.modifiers || []);
+  const map = new Map();
+  mods.forEach((m, idx)=>{
+    const name = (m.group || '').trim();
+    if (!name) return;
+    const max = Math.max(0, Number(m.group_max_choices ?? m.group_max ?? m.choice?.max_choices ?? 1) || 1);
+    const entry = map.get(name) || { name, max, options: [] };
+    if (!entry.max && max) entry.max = max;
+    entry.options.push({ idx, mod: m });
+    map.set(name, entry);
+  });
+  return Array.from(map.values());
+}
+function resolveGroupSelections(ab){
+  const groups = abilityGroups(ab);
+  const stored = abilityGroupSelections(ab);
+  const active = new Set();
+  const selections = {};
+  groups.forEach(g=>{
+    const allowed = g.options.map(o=> o.idx);
+    const limit = g.max > 0 ? g.max : allowed.length;
+    const saved = Array.isArray(stored[g.name]) ? stored[g.name] : [];
+    let picks = saved.map(x=> Number(x)).filter(i=> allowed.includes(i));
+    if (!picks.length){
+      picks = allowed.slice(0, limit);
+    }else if (limit > 0 && picks.length > limit){
+      picks = picks.slice(0, limit);
+    }
+    selections[g.name] = picks;
+    picks.forEach(i=> active.add(i));
+  });
+  if (ab?.id && JSON.stringify(stored) !== JSON.stringify(selections)){
+    setAbilityGroupSelections(ab.id, selections);
+  }
+  return { active, selections, groups };
+}
+function prettyTargetLabel(target){
+  const t = String(target||'').trim();
+  if (!t) return '(unknown target)';
+  const cm = t.match(/^char\\.(.+)$/i);
+  if (cm){
+    const key = cm[1].toLowerCase();
+    const hit = CHARACS.find(c=> c.key === key);
+    return hit ? `${hit.name} (Characteristic)` : t;
+  }
+  const sm = t.match(/^skills\\.([^.]+)\\.(.+)$/i);
+  if (sm){
+    const ckey = sm[1].toLowerCase();
+    const sk = sm[2];
+    const hit = CHARACS.find(c=> c.key === ckey);
+    return hit ? `${sk} (${hit.name})` : `Skill: ${sk}`;
+  }
+  const im = t.match(/^intensities\\.(.+)$/i);
+  if (im) return `Intensity: ${im[1]}`;
+  const sch = t.match(/^schools\\.(.+)$/i);
+  if (sch){
+    const raw = sch[1];
+    const found = (SCHOOLS||[]).find(s=> String(s.id||'').toLowerCase() === String(raw).toLowerCase());
+    return found ? `${found.name} (School)` : `School: ${raw}`;
+  }
+  const md = t.match(/^magic_damage\\.(spell|weapon)\\.(.+)$/i);
+  if (md) return `${md[2]} magic damage (${md[1]})`;
+  const sg = t.match(/^skills\\.by_char\\.(.+)$/i);
+  if (sg) return `Skills linked to ${sg[1]}`;
+  const sn = t.match(/^schools\\.by_nature\\.(.+)$/i);
+  if (sn) return `Schools linked to ${sn[1]}`;
+  const ss = t.match(/^schools\\.by_skill\\.(.+)$/i);
+  if (ss) return `Schools using ${ss[1]}`;
+  return t;
+}
+function expandedTargets(mod){
+  const baseTarget = String(mod.target || mod.key || '').trim();
+  if (!baseTarget) return [];
+  const out = [];
+  const push = (t)=> out.push({ ...mod, target: t });
+  const sg = baseTarget.match(/^skills\\.by_char\\.(.+)$/i);
+  if (sg){
+    const key = sg[1].toLowerCase();
+    const hit = CHARACS.find(c=> c.key === key);
+    if (hit){
+      (hit.skills || []).forEach(sk=> push(`skills.${key}.${sk}`));
+      return out;
+    }
+  }
+  const schN = baseTarget.match(/^schools\\.by_nature\\.(.+)$/i);
+  if (schN){
+    const nature = schN[1];
+    const matches = (SCHOOLS || []).filter(s=> (s.linked_intensities || []).some(n=> String(n).toLowerCase() === String(nature).toLowerCase()));
+    if (matches.length){
+      matches.forEach(s=> push(`schools.${s.id}`));
+      return out;
+    }
+  }
+  const schS = baseTarget.match(/^schools\\.by_skill\\.(.+)$/i);
+  if (schS){
+    const skill = schS[1];
+    const matches = (SCHOOLS || []).filter(s=> String(s.linked_skill || '').toLowerCase() === String(skill).toLowerCase());
+    if (matches.length){
+      matches.forEach(s=> push(`schools.${s.id}`));
+      return out;
+    }
+  }
+  const md = baseTarget.match(/^magic_damage\\.(spell|weapon)\\.(.+)$/i);
+  if (md){
+    push(`magic_damage.${md[1].toLowerCase()}.${md[2]}`);
+    return out;
+  }
+  push(baseTarget);
+  return out;
+}
 function resolvedPassiveMods(ab){
   const mods = (ab.passive && ab.passive.modifiers) || [];
   const out = [];
-  for (const m of mods){
-    const t = (m.target || m.key || '').trim();
-    if (!t) continue;
-    if (t.startsWith('choice:')){
-      const kind = t.replace('choice:','');
-      const picks = Array.from(new Set(abilityChoiceSelections(ab, kind)));
-      if (!picks.length) continue;
-      picks.forEach(sel=>{
-        out.push({ ...m, target: sel });
-      });
-      continue;
+  const { active: activeGroups } = resolveGroupSelections(ab);
+  mods.forEach((m, idx)=>{
+    const grouped = (m.group || '').trim();
+    if (grouped && !activeGroups.has(idx)) return;
+    const expanded = expandedTargets(m);
+    for (const em of expanded){
+      const t = (em.target || em.key || '').trim();
+      if (!t) continue;
+      if (t.startsWith('choice:')){
+        const kind = t.replace('choice:','');
+        const picks = Array.from(new Set(abilityChoiceSelections(ab, kind)));
+        if (!picks.length) continue;
+        picks.forEach(sel=> out.push({ ...em, target: sel }));
+        continue;
+      }
+      out.push(em);
     }
-    out.push(m);
-  }
+  });
   return out;
 }
 function recomputePassiveAgg(){
@@ -1596,6 +1719,42 @@ function recomputePassiveAgg(){
       if (sch){
         const key = sch[1].toLowerCase();
         const agg = ensureAgg(PASSIVE.school, key);
+        (agg[mode]||agg.add).push({v:val, origin});
+        agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+        continue;
+      }
+      const schNat = t.match(/^schools\.by_nature\.(.+)$/i);
+      if (schNat){
+        const nature = schNat[1];
+        const matches = (SCHOOLS || []).filter(s=> (s.linked_intensities || []).some(n=> String(n).toLowerCase() === String(nature).toLowerCase()));
+        matches.forEach(s=>{
+          const key = String(s.id || '').toLowerCase();
+          const agg = ensureAgg(PASSIVE.school, key);
+          (agg[mode]||agg.add).push({v:val, origin});
+          agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+        });
+        continue;
+      }
+      const schSkill = t.match(/^schools\.by_skill\.(.+)$/i);
+      if (schSkill){
+        const skillName = schSkill[1];
+        const matches = (SCHOOLS || []).filter(s=> String(s.linked_skill || '').toLowerCase() === String(skillName).toLowerCase());
+        matches.forEach(s=>{
+          const key = String(s.id || '').toLowerCase();
+          const agg = ensureAgg(PASSIVE.school, key);
+          (agg[mode]||agg.add).push({v:val, origin});
+          agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+        });
+        continue;
+      }
+
+      const md = t.match(/^magic_damage\.(spell|weapon)\.(.+)$/i);
+      if (md){
+        const kind = md[1].toLowerCase();
+        const nature = md[2].toLowerCase();
+        const bucket = PASSIVE.magic_damage[kind] || {};
+        PASSIVE.magic_damage[kind] = bucket;
+        const agg = ensureAgg(bucket, nature);
         (agg[mode]||agg.add).push({v:val, origin});
         agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
         continue;
@@ -1686,6 +1845,41 @@ function recomputePassiveAgg(){
       agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
       continue;
     }
+    const schNat = t.match(/^schools\.by_nature\.(.+)$/i);
+    if (schNat){
+      const nature = schNat[1];
+      const matches = (SCHOOLS || []).filter(s=> (s.linked_intensities || []).some(n=> String(n).toLowerCase() === String(nature).toLowerCase()));
+      matches.forEach(s=>{
+        const key = String(s.id || '').toLowerCase();
+        const agg = ensureAgg(PASSIVE.school, key);
+        (agg[mode]||agg.add).push({v:val, origin});
+        agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      });
+      continue;
+    }
+    const schSkill = t.match(/^schools\.by_skill\.(.+)$/i);
+    if (schSkill){
+      const skillName = schSkill[1];
+      const matches = (SCHOOLS || []).filter(s=> String(s.linked_skill || '').toLowerCase() === String(skillName).toLowerCase());
+      matches.forEach(s=>{
+        const key = String(s.id || '').toLowerCase();
+        const agg = ensureAgg(PASSIVE.school, key);
+        (agg[mode]||agg.add).push({v:val, origin});
+        agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      });
+      continue;
+    }
+    const md = t.match(/^magic_damage\.(spell|weapon)\.(.+)$/i);
+    if (md){
+      const kind = md[1].toLowerCase();
+      const nature = md[2].toLowerCase();
+      const bucket = PASSIVE.magic_damage[kind] || {};
+      PASSIVE.magic_damage[kind] = bucket;
+      const agg = ensureAgg(bucket, nature);
+      (agg[mode]||agg.add).push({v:val, origin});
+      agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      continue;
+    }
   }
 }
 function applyOps(base, agg){
@@ -1748,21 +1942,24 @@ function getEquippedInventoryModifiers(){
       ...((it.upgrades||[]).flatMap(u=> (u.modifiers||[]).map(m=>({ ...m, __origin:`Upgrade: ${u.name || u.id || 'Upgrade'}` }))) || [])
     ];
     for (const m of allMods){
-      const target = (m.target || m.key || '').trim();
-      if (!target) continue;
-      const mode = (m.mode || 'add').toLowerCase();
-      const value = Number(m.value || 0);
-      const note = m.note ? ` (${m.note})` : '';
       const originPrefix = m.__origin || 'Item';
+      const note = m.note ? ` (${m.note})` : '';
       const origin = `[${originPrefix}] ${it.name || 'Item'}${note}`;
-      if (target.startsWith('choice:')){
-        const kind = target.replace('choice:','');
-        const picks = normalizeChoiceEntry(itemChoiceState(itemKey, kind)).picks;
-        if (!picks.length) continue;
-        picks.forEach(sel=> mods.push({ target: sel, mode, value, origin }));
-        continue;
-      }
-      mods.push({ target, mode, value, origin });
+      const expanded = expandedTargets(m);
+      expanded.forEach(em=>{
+        const target = (em.target || em.key || '').trim();
+        if (!target) return;
+        const mode = (em.mode || m.mode || 'add').toLowerCase();
+        const value = Number(em.value ?? m.value ?? 0);
+        if (target.startsWith('choice:')){
+          const kind = target.replace('choice:','');
+          const picks = normalizeChoiceEntry(itemChoiceState(itemKey, kind)).picks;
+          if (!picks.length) return;
+          picks.forEach(sel=> mods.push({ target: sel, mode, value, origin }));
+          return;
+        }
+        mods.push({ target, mode, value, origin });
+      });
     }
   }
   return mods;
@@ -4266,7 +4463,7 @@ async function resolveAssignedAbilities(){
   ASSIGNED = ids.map(id=> byId[id]).filter(Boolean); // preserve order and duplicates
 }
 function abilityHasChoice(ab){
-  return !!((ab?.passive?.modifiers||[]).find(m=> String(m.target||'').startsWith('choice:')));
+  return !!((ab?.passive?.modifiers||[]).find(m=> String(m.target||'').startsWith('choice:') || (m.group || '').trim()));
 }
 function skillOptionsList(){
   const out = [];
@@ -4361,6 +4558,111 @@ async function choiceItemsForKind(kind, restrict, allowed){
     });
   }
   return [];
+}
+
+async function openGroupModal(ab){
+  const groups = abilityGroups(ab);
+  if (!groups.length) return false;
+  try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
+  const stored = abilityGroupSelections(ab);
+
+  choiceTitle.textContent = `Configure: ${ab.name || 'Ability'}`;
+  choiceBody.innerHTML = '';
+  choiceModal.classList.remove('hidden'); choiceModal.classList.add('open'); choiceBackdrop.classList.add('open');
+
+  const blocks = [];
+  groups.forEach(g=>{
+    const allowedIdx = g.options.map(o=> o.idx);
+    const max = g.max || 1;
+    const block = document.createElement('div');
+    block.className = 'panel';
+    const maxLabel = max > 0 ? `max ${max}` : 'no limit';
+    block.innerHTML = `<strong>${g.name}</strong> <span class=\"muted\">(${maxLabel})</span>`;
+    const list = document.createElement('div');
+    list.style.display = 'grid';
+    list.style.gridTemplateColumns = 'repeat(auto-fit,minmax(240px,1fr))';
+    list.style.gap = '6px';
+    const counter = document.createElement('div');
+    counter.className = 'muted';
+    counter.style.marginTop = '6px';
+
+    const savedArr = Array.isArray(stored[g.name]) ? stored[g.name] : [];
+    let selected = new Set(savedArr.map(x=> Number(x)).filter(i=> allowedIdx.includes(i)));
+    if (!selected.size){
+      const limit = max > 0 ? max : allowedIdx.length;
+      allowedIdx.slice(0, limit).forEach(i=> selected.add(i));
+    }
+
+    const updateCounter = ()=>{
+      const checked = list.querySelectorAll(`input[data-group=\"${g.name}\"]:checked`).length;
+      counter.textContent = `Selected ${checked}${max>0?` / ${max}`:''}`;
+    };
+
+    g.options.forEach(opt=>{
+      const row = document.createElement('label');
+      row.style.display = 'flex';
+      row.style.gap = '8px';
+      row.style.alignItems = 'center';
+      row.style.margin = '2px 0';
+      const input = document.createElement('input');
+      input.type = max === 1 ? 'radio' : 'checkbox';
+      input.name = `group-${g.name}`;
+      input.dataset.group = g.name;
+      input.value = String(opt.idx);
+      input.checked = selected.has(opt.idx);
+      input.addEventListener('change', ()=>{
+        const checked = list.querySelectorAll(`input[data-group=\"${g.name}\"]:checked`);
+        if (max === 1){
+          checked.forEach(cb=>{ if (cb !== input) cb.checked = false; });
+        }else if (max > 0 && checked.length > max){
+          input.checked = false;
+        }
+        updateCounter();
+      });
+      row.appendChild(input);
+      const span = document.createElement('span');
+      span.textContent = `${prettyTargetLabel(opt.mod.target)} (${(opt.mod.mode||'add')} ${opt.mod.value>=0?'+':''}${opt.mod.value})`;
+      row.appendChild(span);
+      list.appendChild(row);
+    });
+
+    block.appendChild(list);
+    block.appendChild(counter);
+    updateCounter();
+    blocks.push({ group:g.name, max, node:list, counter });
+    choiceBody.appendChild(block);
+  });
+
+  return new Promise(resolve=>{
+    const close = ()=>{
+      choiceModal.classList.add('hidden'); choiceModal.classList.remove('open'); choiceBackdrop.classList.remove('open');
+      resolve(false);
+    };
+    const save = ()=>{
+      const selections = {};
+      for (const b of blocks){
+        const picks = Array.from(b.node.querySelectorAll('input[data-group]')).filter(cb=> cb.checked).map(cb=> Number(cb.value));
+        if (!picks.length){
+          alert(`Select at least one option for ${b.group}.`);
+          return;
+        }
+        if (b.max > 0 && picks.length > b.max){
+          alert(`Select at most ${b.max} option(s) for ${b.group}.`);
+          return;
+        }
+        selections[b.group] = picks;
+      }
+      setAbilityGroupSelections(ab.id, selections);
+      queueSave();
+      recomputePassiveAgg(); renderStatistics(); updateDerived();
+      choiceModal.classList.add('hidden'); choiceModal.classList.remove('open'); choiceBackdrop.classList.remove('open');
+      resolve(true);
+    };
+    choiceClose.onclick = close;
+    choiceCancel.onclick = close;
+    choiceBackdrop.onclick = (e)=>{ if (e.target===choiceBackdrop) close(); };
+    choiceSave.onclick = save;
+  });
 }
 
 async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>{}, { titleText = 'Configure choices', entityLabel = '' } = {}){
@@ -4625,12 +4927,23 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
 
 // Ability choice modal wrapper
 async function openChoiceModal(ab){
-  const mods = (ab.passive?.modifiers||[]).filter(m=> String(m.target||'').startsWith('choice:'));
-  return openChoiceModalGeneric(mods, ABILITY_CHOICES[ab.id] || {}, (selections)=>{
-    ABILITY_CHOICES[ab.id] = selections;
-    queueSave();
-    recomputePassiveAgg(); renderStatistics(); updateDerived();
-  }, { titleText: `Configure: ${ab.name || 'Ability'}` });
+  const choiceMods = (ab.passive?.modifiers||[]).filter(m=> String(m.target||'').startsWith('choice:'));
+  const hasGroups = abilityGroups(ab).length > 0;
+  let opened = false;
+  if (hasGroups){
+    const res = await openGroupModal(ab);
+    opened = opened || res;
+  }
+  if (choiceMods.length){
+    const res = await openChoiceModalGeneric(choiceMods, ABILITY_CHOICES[ab.id] || {}, (selections)=>{
+      const existing = ABILITY_CHOICES[ab.id] || {};
+      ABILITY_CHOICES[ab.id] = { ...existing, ...selections, _groups: existing._groups || {} };
+      queueSave();
+      recomputePassiveAgg(); renderStatistics(); updateDerived();
+    }, { titleText: `Configure: ${ab.name || 'Ability'}` });
+    opened = opened || res;
+  }
+  return opened;
 }
 
 // Inventory item choice modal wrapper
