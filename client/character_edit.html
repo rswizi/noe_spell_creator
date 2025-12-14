@@ -989,7 +989,6 @@ const abiFilterTypeEl = document.getElementById('abi-filter-type');
 const abiFilterSrcEl  = document.getElementById('abi-filter-source');
 const abiSearchBtn = document.getElementById('abi-search-btn');
 const abiResultsEl = document.getElementById('abi-results');
-const listArchetypeEl = document.getElementById('abi-list-archetype');
 const listPassiveEl   = document.getElementById('abi-list-passive');
 const listActiveEl    = document.getElementById('abi-list-active');
 const listSpellEl     = document.getElementById('abi-list-spells');
@@ -5073,6 +5072,7 @@ async function removeAbilityFromChar(aid){
 }
 
 function renderAbilitiesBucket(el, list){
+  if (!el) return;
   el.innerHTML = '';
   if (!list.length){ el.innerHTML = '<div class="muted">--</div>'; return; }
   for (const a of list){
@@ -5103,11 +5103,9 @@ function renderAbilitiesBucket(el, list){
 
 function renderAbilitiesTab(){
   const docs = ASSIGNED.slice();
-  const archetype = docs.filter(a=>(a.source_category||'').toLowerCase()==='archetype');
-  const passive   = docs.filter(a=> (a.source_category||'').toLowerCase()!=='archetype' && ((a.type||'').toLowerCase()!=='active'));
-  const active    = docs.filter(a=> (a.source_category||'').toLowerCase()!=='archetype' && ((a.type||'').toLowerCase()==='active'));
+  const passive   = docs.filter(a=> ((a.type||'').toLowerCase()!=='active'));
+  const active    = docs.filter(a=> ((a.type||'').toLowerCase()==='active'));
 
-  renderAbilitiesBucket(listArchetypeEl, archetype);
   renderAbilitiesBucket(listPassiveEl,   passive);
   renderAbilitiesBucket(listActiveEl,    active);
   renderAbilitySpellsBucket();
