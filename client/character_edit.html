@@ -360,6 +360,7 @@
             </summary>
             <div class="panel-body">
               <div class="abi-hint">Tip: click the result in the modal to add it; click the × on an assigned ability to remove it.</div>
+              <div class="abi-hint" id="talent-counter">Talents: -- / --</div>
 
               <div class="abi-grid" style="margin-top:16px;">
                 <div class="abi-bucket">
@@ -872,6 +873,7 @@ const TARGET_GROUPS = [
     { value:'derived.enc', label:'Encumbrance' },
     { value:'derived.et', label:'Eclipse Threshold (ET)' },
     { value:'derived.tx', label:'Max Toxicity (TX)' },
+    { value:'derived.talent_max', label:'Talent Max' },
   ]},
   { label:'Custom', options:[{ value:'__custom__', label:'Custom path...' }]}
 ];
@@ -938,6 +940,7 @@ let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, spcap:null, enc:null
 let ARCHETYPES = [];
 let COMPUTED_ARC_ABILITIES = [];
 let UPGRADE_META = {};
+let TALENT_MAX = 1;
 
 /* Passive bonus aggregations (recomputed whenever ASSIGNED changes) */
 let PASSIVE = {
@@ -995,6 +998,7 @@ const listArchetypeEl = document.getElementById('abi-list-archetype');
 const listPassiveEl   = document.getElementById('abi-list-passive');
 const listActiveEl    = document.getElementById('abi-list-active');
 const listSpellEl     = document.getElementById('abi-list-spells');
+const talentCounterEl = document.getElementById('talent-counter');
 const choiceModal = document.getElementById('choice-modal');
 const choiceBackdrop = document.getElementById('choice-backdrop');
 const choiceClose = document.getElementById('choice-close');
@@ -4002,7 +4006,8 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
     et: [`Base = ${base.et}`],
     tx: [`Base = ${base.tx}`],
     enc:[`Base = ${base.enc}`],
-    spcap:[]
+    spcap:[],
+    talent_max:[`Base = ${base.talent_max ?? 0}`]
   };
   notes.enc.unshift(`Current enc = ${Number(currentEnc||0).toFixed(1)}`);
   if (base._notes){
@@ -4049,7 +4054,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
 
   const map = {
     'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo',
-    'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap'
+    'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap','derived.talent_max':'talent_max'
   };
   for (const m of allMods){
     if (map[m.target]){
@@ -4075,6 +4080,8 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   for (const op of spcapOps.mul){ const before = out.spcap; out.spcap = Math.round(before * op.v); notes.spcap.push(`*${op.v} (from ${before}) -> ${op.origin}`); }
   for (const op of spcapOps.add){ out.spcap = out.spcap + op.v; notes.spcap.push(`${op.v>=0?'+':''}${op.v} -> ${op.origin}`); }
 
+  TALENT_MAX = out.talent_max ?? base.talent_max ?? TALENT_MAX;
+
   // Tooltips with breakdown
   hpEl.title = notes.hp.join('\n');   setNotesList('mods-derived-hp', notes.hp);
   enEl.title = notes.en.join('\n');   setNotesList('mods-derived-en', notes.en);
@@ -4094,6 +4101,29 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
 function milestone(key){
   // milestone uses the **adjusted** characteristic mod (>=0)
   return Math.max(0, charAdjMod(key).mod);
+}
+function baseTalentMax(lvl){
+  const levelVal = 1 + Math.floor((Math.max(1, lvl) - 1) / 10);
+  return levelVal + milestone('tech') + milestone('wisdom');
+}
+function talentMax(){
+  return TALENT_MAX || baseTalentMax(Math.max(1, Math.floor(Number(levelEl.value)||1)));
+}
+function talentCount(){
+  return (ASSIGNED || []).filter(a=> (a.source_category || '').toLowerCase() === 'talent').length;
+}
+function updateTalentCounter(){
+  if (!talentCounterEl) return;
+  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const base = 1 + Math.floor((lvl - 1) / 10);
+  const msTec = milestone('tech');
+  const msWis = milestone('wisdom');
+  const max = talentMax();
+  const count = talentCount();
+  const over = count > max;
+  talentCounterEl.textContent = `Talents: ${count} / ${max}`;
+  talentCounterEl.style.color = over ? '#f66' : '';
+  talentCounterEl.title = `Base ${base} + TEC milestone ${msTec} + WIS milestone ${msWis}`;
 }
 function skillTotalAdjustedFor(key, name){
   return skillAdjTotal(key, name).total;
@@ -4123,6 +4153,7 @@ function updateDerived(){
   const etTech = 1 + Math.floor(lvl/10) + msTEC;
   base._notes = Object.assign(base._notes || {}, { et: [`Alt (TEC): ${etTech}`] });
   base.tx = 2 + msBOD + (2 * msTEC);
+  base.talent_max = baseTalentMax(lvl);
 
   // Apply passive modifiers to derived
   const final = applyPassiveModifiersToDerived(base, invEnc);
@@ -4183,6 +4214,7 @@ function updateDerived(){
   txEl.textContent = maxVals.tx ?? final.tx;
   updatePointCounters();
   renderAddedSchools();
+  updateTalentCounter();
 }
 
 /* LOAD & SAVE */
@@ -5030,6 +5062,7 @@ function renderAbilitiesTab(){
   renderAbilitiesBucket(listPassiveEl,   passive);
   renderAbilitiesBucket(listActiveEl,    active);
   renderAbilitySpellsBucket();
+  updateTalentCounter();
 }
 
 function fillPersonal(){
