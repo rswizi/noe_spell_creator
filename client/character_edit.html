@@ -1476,6 +1476,17 @@ function ensureAgg(obj, key){
   if (!obj[key]) obj[key] = { set:[], mul:[], add:[], notes:[] };
   return obj[key];
 }
+function modEffectiveValue(mod){
+  const base = Number(mod?.value || 0);
+  const step = Math.max(0, Number(mod?.level_step || 0));
+  const inc = Number(mod?.level_increment || 1);
+  if (step > 0){
+    const lvl = Math.max(1, Math.floor(Number(CHAR?.level || levelEl?.value || 1)));
+    const extra = Math.floor((lvl - 1) / step) * inc;
+    return base + extra;
+  }
+  return base;
+}
 function normalizeChoiceEntry(val){
   if (!val) return { base:'', picks:[] };
   if (Array.isArray(val)) return { base:'', picks: val.filter(Boolean) };
@@ -1687,7 +1698,7 @@ function recomputePassiveAgg(){
     for (const m of mods){
       const t = (m.target || m.key || '').trim();
       const mode = ((m.mode||'add')+'').toLowerCase();
-      const val = Number(m.value||0);
+      const val = modEffectiveValue(m);
       const note = m.note ? ` (${m.note})` : '';
       const origin = `${ab.name}${note}`;
       if (!t) continue;
@@ -1771,7 +1782,7 @@ function recomputePassiveAgg(){
   for (const m of getEquippedInventoryModifiers()){
     const t = (m.target||'').trim();
     const mode = (m.mode||'add').toLowerCase();
-    const val = Number(m.value||0);
+    const val = modEffectiveValue(m);
     const origin = m.origin || 'Inventory';
     if (!t) continue;
     const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
@@ -1814,7 +1825,7 @@ function recomputePassiveAgg(){
   for (const m of subMods){
     const t = (m.target||'').trim();
     const mode = (m.mode||'add').toLowerCase();
-    const val = Number(m.value||0);
+    const val = modEffectiveValue(m);
     const origin = m.origin || 'Sublimation';
     if (!t) continue;
     const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
@@ -1958,14 +1969,16 @@ function getEquippedInventoryModifiers(){
         if (!target) return;
         const mode = (em.mode || m.mode || 'add').toLowerCase();
         const value = Number(em.value ?? m.value ?? 0);
+        const level_step = Number(em.level_step ?? m.level_step ?? 0);
+        const level_increment = Number(em.level_increment ?? m.level_increment ?? 1);
         if (target.startsWith('choice:')){
           const kind = target.replace('choice:','');
           const picks = normalizeChoiceEntry(itemChoiceState(itemKey, kind)).picks;
           if (!picks.length) return;
-          picks.forEach(sel=> mods.push({ target: sel, mode, value, origin }));
+          picks.forEach(sel=> mods.push({ target: sel, mode, value, level_step, level_increment, origin }));
           return;
         }
-        mods.push({ target, mode, value, origin });
+        mods.push({ target, mode, value, level_step, level_increment, origin });
       });
     }
   }
@@ -4032,7 +4045,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
       allMods.push({
         target:(m.target || m.key || '').toLowerCase().trim(),
         mode:(m.mode||'add').toLowerCase(),
-        val:Number(m.value||0),
+        val:modEffectiveValue(m),
         origin:`${ab.name}${m.note?` (${m.note})`:''}`
       });
     }
@@ -4041,7 +4054,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
     allMods.push({
       target:(m.target||'').toLowerCase(),
       mode:(m.mode||'add').toLowerCase(),
-      val:Number(m.value||0),
+      val:modEffectiveValue(m),
       origin:m.origin
     });
   }
@@ -4050,7 +4063,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
     allMods.push({
       target:(m.target||'').toLowerCase(),
       mode:(m.mode||'add').toLowerCase(),
-      val:Number(m.value||0),
+      val:modEffectiveValue(m),
       origin:m.origin
     });
   }
