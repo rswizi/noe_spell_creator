@@ -1545,9 +1545,8 @@ function abilityGroups(ab){
   mods.forEach((m, idx)=>{
     const name = (m.group || '').trim();
     if (!name) return;
-    const max = Math.max(0, Number(m.group_max_choices ?? m.group_max ?? m.choice?.max_choices ?? 1) || 1);
+    const max = 1; // groups are mutually exclusive
     const entry = map.get(name) || { name, max, options: [] };
-    if (!entry.max && max) entry.max = max;
     entry.options.push({ idx, mod: m });
     map.set(name, entry);
   });
@@ -4567,6 +4566,18 @@ async function choiceItemsForKind(kind, restrict, allowed){
       return !isRestricted(o.charKey, skillName, norm, o.key, o.label);
     });
   }
+  const charGroup = kind.match(/^skills\\.by_char\\.(.+)$/i);
+  if (charGroup){
+    const key = charGroup[1].toLowerCase();
+    const hit = CHARACS.find(c=> c.key === key);
+    if (!hit) return [];
+    return (hit.skills || []).map(sk=>({ key:`skills.${key}.${sk}`, label:`${sk} (${hit.name||hit.label||key})` })).filter(o=>{
+      const skillName = (o.label || '').split('(')[0].trim();
+      const norm = normSkillKey(skillName);
+      if (!isAllowed(o.key, o.label, key, norm, skillName)) return false;
+      return !isRestricted(o.key, o.label, key, norm, skillName);
+    });
+  }
   if (kind === 'nature_ms' || kind === 'magic_weapon' || kind === 'magic_spell'){
     if (kind === 'nature_ms' && !SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
     const linkedNatures = new Set();
@@ -4582,6 +4593,32 @@ async function choiceItemsForKind(kind, restrict, allowed){
   }
   if (kind === 'intensity_any'){
     return INTENSITIES.map(n=>({ key:`intensities.${n}`, label:n })).filter(o=> !isRestricted(o.key, o.label));
+  }
+  const schoolSkill = kind.match(/^schools\\.by_skill\\.(.+)$/i);
+  if (schoolSkill){
+    if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
+    const skillName = schoolSkill[1];
+    return (SCHOOLS||[]).filter(s=> String(s.linked_skill || '').toLowerCase() === String(skillName).toLowerCase())
+      .map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||'simple'})` }))
+      .filter(o=>{
+        const baseLabel = (o.label || '').split('(')[0].trim().toLowerCase();
+        const rawId = String(o.key||'').replace(/^schools\\./i,'');
+        if (!isAllowed(o.key, baseLabel, rawId)) return false;
+        return !isRestricted(o.label, o.key, baseLabel, rawId);
+      });
+  }
+  const schoolNature = kind.match(/^schools\\.by_nature\\.(.+)$/i);
+  if (schoolNature){
+    if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
+    const nature = schoolNature[1];
+    return (SCHOOLS||[]).filter(s=> (s.linked_intensities || []).some(n=> String(n).toLowerCase() === String(nature).toLowerCase()))
+      .map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||'simple'})` }))
+      .filter(o=>{
+        const baseLabel = (o.label || '').split('(')[0].trim().toLowerCase();
+        const rawId = String(o.key||'').replace(/^schools\\./i,'');
+        if (!isAllowed(o.key, baseLabel, rawId)) return false;
+        return !isRestricted(o.label, o.key, baseLabel, rawId);
+      });
   }
   if (kind === 'school_ms' || kind === 'school_any'){
     if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
