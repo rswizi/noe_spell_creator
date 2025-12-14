@@ -301,14 +301,6 @@ async function checkMe(){
   }
 }
 
-  try{
-    const me = await api('/auth/me');
-    loginChip.textContent = me.username + ' (' + me.role + ')';
-  }catch(e){
-    loginChip.textContent = 'Not logged in.';
-  }
-}
-
 // modifiers UI
 function addModifierRow(initial){
   const row = document.createElement('div');
