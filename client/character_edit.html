@@ -1578,34 +1578,34 @@ function prettyTargetLabel(target){
     const base = prettyTargetLabel(inner);
     return base.startsWith('[Choice]') ? base : `[Choice] ${base}`;
   }
-  const cm = t.match(/^char\\.(.+)$/i);
+  const cm = t.match(/^char\.(.+)$/i);
   if (cm){
     const key = cm[1].toLowerCase();
     const hit = CHARACS.find(c=> c.key === key);
     return hit ? `${hit.name} (Characteristic)` : t;
   }
-  const sm = t.match(/^skills\\.([^.]+)\\.(.+)$/i);
+  const sm = t.match(/^skills\.([^.]+)\.(.+)$/i);
   if (sm){
     const ckey = sm[1].toLowerCase();
     const sk = sm[2];
     const hit = CHARACS.find(c=> c.key === ckey);
     return hit ? `${sk} (${hit.name})` : `Skill: ${sk}`;
   }
-  const im = t.match(/^intensities\\.(.+)$/i);
+  const im = t.match(/^intensities\.(.+)$/i);
   if (im) return `Intensity: ${im[1]}`;
-  const sch = t.match(/^schools\\.(.+)$/i);
+  const sch = t.match(/^schools\.(.+)$/i);
   if (sch){
     const raw = sch[1];
     const found = (SCHOOLS||[]).find(s=> String(s.id||'').toLowerCase() === String(raw).toLowerCase());
     return found ? `${found.name} (School)` : `School: ${raw}`;
   }
-  const md = t.match(/^magic_damage\\.(spell|weapon)\\.(.+)$/i);
+  const md = t.match(/^magic_damage\.(spell|weapon)\.(.+)$/i);
   if (md) return `${md[2]} magic damage (${md[1]})`;
-  const sg = t.match(/^skills\\.by_char\\.(.+)$/i);
+  const sg = t.match(/^skills\.by_char\.(.+)$/i);
   if (sg) return `Skills linked to ${sg[1]}`;
-  const sn = t.match(/^schools\\.by_nature\\.(.+)$/i);
+  const sn = t.match(/^schools\.by_nature\.(.+)$/i);
   if (sn) return `Schools linked to ${sn[1]}`;
-  const ss = t.match(/^schools\\.by_skill\\.(.+)$/i);
+  const ss = t.match(/^schools\.by_skill\.(.+)$/i);
   if (ss) return `Schools using ${ss[1]}`;
   if (t === 'skill_ms') return 'Magic School (by skill)';
   if (t === 'nature_ms') return 'Magic School (by nature)';
@@ -1619,7 +1619,7 @@ function expandedTargets(mod){
   if (!baseTarget) return [];
   const out = [];
   const push = (t)=> out.push({ ...mod, target: t });
-  const sg = baseTarget.match(/^skills\\.by_char\\.(.+)$/i);
+  const sg = baseTarget.match(/^skills\.by_char\.(.+)$/i);
   if (sg){
     const key = sg[1].toLowerCase();
     const hit = CHARACS.find(c=> c.key === key);
@@ -1628,7 +1628,7 @@ function expandedTargets(mod){
       return out;
     }
   }
-  const schN = baseTarget.match(/^schools\\.by_nature\\.(.+)$/i);
+  const schN = baseTarget.match(/^schools\.by_nature\.(.+)$/i);
   if (schN){
     const nature = schN[1];
     const matches = (SCHOOLS || []).filter(s=> (s.linked_intensities || []).some(n=> String(n).toLowerCase() === String(nature).toLowerCase()));
@@ -1637,7 +1637,7 @@ function expandedTargets(mod){
       return out;
     }
   }
-  const schS = baseTarget.match(/^schools\\.by_skill\\.(.+)$/i);
+  const schS = baseTarget.match(/^schools\.by_skill\.(.+)$/i);
   if (schS){
     const skill = schS[1];
     const matches = (SCHOOLS || []).filter(s=> String(s.linked_skill || '').toLowerCase() === String(skill).toLowerCase());
@@ -1646,7 +1646,7 @@ function expandedTargets(mod){
       return out;
     }
   }
-  const md = baseTarget.match(/^magic_damage\\.(spell|weapon)\\.(.+)$/i);
+  const md = baseTarget.match(/^magic_damage\.(spell|weapon)\.(.+)$/i);
   if (md){
     push(`magic_damage.${md[1].toLowerCase()}.${md[2]}`);
     return out;
@@ -4571,7 +4571,7 @@ async function choiceItemsForKind(kind, restrict, allowed){
       return !isRestricted(o.charKey, skillName, norm, o.key, o.label);
     });
   }
-  const charGroup = kind.match(/^skills\\.by_char\\.(.+)$/i);
+  const charGroup = kind.match(/^skills\.by_char\.(.+)$/i);
   if (charGroup){
     const key = charGroup[1].toLowerCase();
     const hit = CHARACS.find(c=> c.key === key);
@@ -4599,7 +4599,7 @@ async function choiceItemsForKind(kind, restrict, allowed){
   if (kind === 'intensity_any'){
     return INTENSITIES.map(n=>({ key:`intensities.${n}`, label:n })).filter(o=> !isRestricted(o.key, o.label));
   }
-  const schoolSkill = kind.match(/^schools\\.by_skill\\.(.+)$/i);
+  const schoolSkill = kind.match(/^schools\.by_skill\.(.+)$/i);
   if (schoolSkill){
     if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
     const skillName = schoolSkill[1];
@@ -4607,12 +4607,12 @@ async function choiceItemsForKind(kind, restrict, allowed){
       .map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||'simple'})` }))
       .filter(o=>{
         const baseLabel = (o.label || '').split('(')[0].trim().toLowerCase();
-        const rawId = String(o.key||'').replace(/^schools\\./i,'');
+        const rawId = String(o.key||'').replace(/^schools\./i,'');
         if (!isAllowed(o.key, baseLabel, rawId)) return false;
         return !isRestricted(o.label, o.key, baseLabel, rawId);
       });
   }
-  const schoolNature = kind.match(/^schools\\.by_nature\\.(.+)$/i);
+  const schoolNature = kind.match(/^schools\.by_nature\.(.+)$/i);
   if (schoolNature){
     if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
     const nature = schoolNature[1];
@@ -4620,7 +4620,7 @@ async function choiceItemsForKind(kind, restrict, allowed){
       .map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||'simple'})` }))
       .filter(o=>{
         const baseLabel = (o.label || '').split('(')[0].trim().toLowerCase();
-        const rawId = String(o.key||'').replace(/^schools\\./i,'');
+        const rawId = String(o.key||'').replace(/^schools\./i,'');
         if (!isAllowed(o.key, baseLabel, rawId)) return false;
         return !isRestricted(o.label, o.key, baseLabel, rawId);
       });
