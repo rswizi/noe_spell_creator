@@ -359,20 +359,15 @@
               <button class="btn small" id="abi-open-add">Add ability</button>
             </summary>
             <div class="panel-body">
-              <div class="abi-hint">Tip: click the result in the modal to add it; click the × on an assigned ability to remove it.</div>
               <div class="abi-hint" id="talent-counter">Talents: -- / --</div>
 
               <div class="abi-grid" style="margin-top:16px;">
                 <div class="abi-bucket">
-                  <h3>Archetype</h3>
-                  <div id="abi-list-archetype" class="abi-list"></div>
-                </div>
-                <div class="abi-bucket">
-                  <h3>Passive (non-Archetype)</h3>
+                  <h3>Passive</h3>
                   <div id="abi-list-passive" class="abi-list"></div>
                 </div>
                 <div class="abi-bucket">
-                  <h3>Active (non-Archetype)</h3>
+                  <h3>Active</h3>
                   <div id="abi-list-active" class="abi-list"></div>
                 </div>
                 <div class="abi-bucket">
@@ -1578,6 +1573,11 @@ function resolveGroupSelections(ab){
 function prettyTargetLabel(target){
   const t = String(target||'').trim();
   if (!t) return '(unknown target)';
+  if (t.startsWith('choice:')){
+    const inner = t.replace(/^choice:/,'');
+    const base = prettyTargetLabel(inner);
+    return base.startsWith('[Choice]') ? base : `[Choice] ${base}`;
+  }
   const cm = t.match(/^char\\.(.+)$/i);
   if (cm){
     const key = cm[1].toLowerCase();
@@ -1607,6 +1607,11 @@ function prettyTargetLabel(target){
   if (sn) return `Schools linked to ${sn[1]}`;
   const ss = t.match(/^schools\\.by_skill\\.(.+)$/i);
   if (ss) return `Schools using ${ss[1]}`;
+  if (t === 'skill_ms') return 'Magic School (by skill)';
+  if (t === 'nature_ms') return 'Magic School (by nature)';
+  if (t === 'char_skill') return 'Skill linked to characteristic';
+  if (t === 'school_any' || t === 'school_ms') return 'Magic School';
+  if (t === 'intensity_any') return 'Intensity';
   return t;
 }
 function expandedTargets(mod){
@@ -4999,13 +5004,20 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
 
 // Ability choice modal wrapper
 async function openChoiceModal(ab){
-  const choiceMods = (ab.passive?.modifiers||[]).filter(m=> String(m.target||'').startsWith('choice:'));
   const hasGroups = abilityGroups(ab).length > 0;
   let opened = false;
   if (hasGroups){
     const res = await openGroupModal(ab);
     opened = opened || res;
   }
+  const { active: activeGroups } = resolveGroupSelections(ab);
+  const choiceMods = (ab.passive?.modifiers||[]).map((m, idx)=>({ ...m, __idx: idx }))
+    .filter(m=> {
+      if (!String(m.target||'').startsWith('choice:')) return false;
+      const grouped = (m.group || '').trim();
+      if (!grouped) return true;
+      return activeGroups.has(m.__idx);
+    });
   if (choiceMods.length){
     const res = await openChoiceModalGeneric(choiceMods, ABILITY_CHOICES[ab.id] || {}, (selections)=>{
       const existing = ABILITY_CHOICES[ab.id] || {};
