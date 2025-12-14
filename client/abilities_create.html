@@ -273,7 +273,7 @@ const PASSIVE_TARGET_GROUPS = (()=>{
     { key:'tx', label:'Max Toxicity (TX)' },
   ];
   const skillGroups = characteristics.map(c=>({ value:`skills.by_char.${c.key}`, label:`Skills linked to ${c.label}` }));
-  const intensityOpts = DEFAULT_NATURES.map(n=>({ value:`intensities.${n}`, label:`Nature-based MS: ${n}` }));
+  const intensityOpts = DEFAULT_NATURES.map(n=>({ value:`intensities.${n}`, label:`Intensity: ${n}` }));
   const schoolByNature = DEFAULT_NATURES.map(n=>({ value:`schools.by_nature.${n}`, label:`MS for schools linked to ${n}` }));
   const allSkillNames = Array.from(new Set(skills.flatMap(c=> c.skills || [])));
   const schoolBySkill = allSkillNames.map(s=>({ value:`schools.by_skill.${s}`, label:`MS for schools using ${s}` }));
@@ -288,6 +288,7 @@ const PASSIVE_TARGET_GROUPS = (()=>{
     { label:'Intensities', options: intensityOpts },
     { label:'Magic Damage', options: [...magicDmgSpell, ...magicDmgWeapon] },
     { label:'Derived / Resources', options: derived.map(d=>({ value:`derived.${d.key}`, label:d.label })) },
+    { label:'Choice', options:[{ value:'choice:intensity_any', label:'[Choice] Pick one Intensity' }]},
     { label:'Custom', options:[{ value:CUSTOM_TARGET_VALUE, label:'Custom path...' }]},
   ];
 })();

@@ -4548,6 +4548,9 @@ async function choiceItemsForKind(kind, restrict, allowed){
       return !isRestricted(o.label, o.key, base);
     });
   }
+  if (kind === 'intensity_any'){
+    return INTENSITIES.map(n=>({ key:`intensities.${n}`, label:n })).filter(o=> !isRestricted(o.key, o.label));
+  }
   if (kind === 'school_ms'){
     if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
     return (SCHOOLS||[]).map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||'simple'})` })).filter(o=>{
