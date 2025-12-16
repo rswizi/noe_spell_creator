@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Inventory - Item Creator</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      font-family: "Poppins", "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(92,120,255,.08), transparent 35%),
+                  radial-gradient(circle at 80% 0%, rgba(255,105,180,.08), transparent 30%),
+                  #0b0c10;
+      color: #f5f7fb;
+    }
+    .page { min-height: 100vh; padding: 18px; }
+    .wrap { max-width: 1380px; margin: 0 auto; }
+    .topbar { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+    .topbar h1 { margin:0; font-size: 22px; letter-spacing: .2px; }
+    .chip { padding:6px 10px; border:1px solid #2b2f3a; border-radius:10px; background:#12141c; font-size:.9rem; }
+    .actions { display:flex; gap:8px; margin-left:auto; }
+
+    .grid { display:grid; gap:12px; grid-template-columns: 1.2fr 1fr 0.9fr; align-items:start; }
+    @media (max-width: 1100px){ .grid { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: rgba(16,18,25,.82);
+      border:1px solid #1e2230;
+      box-shadow: 0 10px 40px rgba(0,0,0,.28);
+      border-radius: 14px;
+      padding: 14px 14px 16px;
+    }
+    .panel h2 { margin:0 0 8px; font-size: 1rem; text-transform: uppercase; letter-spacing: .4px; }
+    .panel h3 { margin:10px 0 6px; font-size: .95rem; }
+    label { font-size:.88rem; opacity:.9; display:block; margin-bottom:4px; }
+    input, select, textarea, button.btn, a.btn {
+      border-radius:10px; border:1px solid #2b3040; background:#0f1118; color:#f5f7fb;
+      padding:9px 10px; font:inherit;
+    }
+    input:focus, select:focus, textarea:focus { outline:1px solid #4c8dff; border-color:#4c8dff; }
+    textarea { width:100%; resize: vertical; min-height: 90px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .muted { opacity:.78; }
+    .pill { padding:3px 8px; border:1px solid #2b3040; border-radius:999px; font-size:.75rem; }
+    .split { display:grid; gap:10px; grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .toolbar button { padding:6px 8px; font-size:.85rem; }
+    .rt-area { border:1px solid #2b3040; border-radius:10px; min-height:120px; padding:10px; background:#0f1118; }
+    .rt-area:focus { outline:1px solid #4c8dff; border-color:#4c8dff; }
+    .badge { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#111927; border:1px solid #1e2432; font-size:.85rem; }
+    .tag { display:inline-flex; align-items:center; gap:6px; padding:5px 8px; border-radius:8px; background:#161d2b; border:1px solid #273144; font-size:.85rem; }
+    .tag button { background:transparent; border:0; color:#ff7676; cursor:pointer; font-size:1rem; padding:0 4px; }
+    .upgrade-row { border:1px solid #252c3b; border-radius:10px; padding:10px; margin-top:8px; background:#0e121c; }
+    .upgrade-row .muted { font-size:.9rem; }
+    .list { max-height: 520px; overflow:auto; }
+    .list .item { padding:10px; border:1px solid #1f2533; border-radius:10px; margin-bottom:10px; background:#101521; }
+    .item .title { font-weight:600; }
+    .item .meta { font-size:.85rem; opacity:.8; }
+    .item-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+    .table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    .table th, .table td { padding:6px 6px; border-bottom:1px solid #1e2431; }
+    .table th { text-align:left; font-weight:600; }
+    .mod-row { display:grid; gap:8px; grid-template-columns: 1.2fr 0.9fr 0.6fr 0.7fr 1fr auto; align-items:center; }
+    .mod-row .custom { grid-column:1 / span 2; }
+    .mod-row .note { grid-column:1 / span 2; }
+    .mod-row .group { grid-column:1 / span 2; display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:6px; }
+    .toggle { display:flex; gap:8px; align-items:center; }
+    .toggle input { width:auto; }
+    .hero { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .hero input[type="text"] { font-size:1rem; padding:10px 12px; }
+  </style>
+</head>
+<body>
+  <div class="page"><div class="wrap">
+    <div class="topbar">
+      <h1>Item Creator / Editor</h1>
+      <span id="state-chip" class="chip">Ready</span>
+      <div class="actions">
+        <a class="btn btn-secondary" href="inventory_manage.html">Back</a>
+        <button id="btn-new" class="btn btn-secondary" type="button">+ Create New</button>
+        <button id="btn-save" class="btn" type="button">Save</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>Basics</h2>
+        <div class="hero">
+          <div style="flex:1; min-width:240px;">
+            <label>Name</label>
+            <input id="fld-name" type="text" placeholder="ex: Sunforged Glaive" />
+          </div>
+          <div>
+            <label>Type</label>
+            <select id="fld-type">
+              <option value="weapon">Weapon</option>
+              <option value="equipment">Equipment</option>
+              <option value="tool">Tool</option>
+              <option value="object">Object</option>
+            </select>
+          </div>
+          <div>
+            <label>Quality</label>
+            <select id="fld-quality"></select>
+          </div>
+        </div>
+
+        <div class="split" style="margin-top:10px;">
+          <div>
+            <label>Encumbrance</label>
+            <input id="fld-enc" type="number" step="0.1" value="0" />
+          </div>
+          <div>
+            <label>Base Price</label>
+            <input id="fld-price" type="number" value="0" />
+            <div class="muted" style="font-size:.85rem;">Tools auto-fill from tier.</div>
+          </div>
+        </div>
+
+        <div id="section-tool" class="split" style="margin-top:10px; display:none;">
+          <div>
+            <label>Tool Tier</label>
+            <select id="fld-tier">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="special">Special</option>
+            </select>
+          </div>
+          <div>
+            <label>Creation Method</label>
+            <select id="fld-method">
+              <option value="crafting">Crafting</option>
+              <option value="alchemy">Alchemy</option>
+            </select>
+          </div>
+          <div class="toggle" style="grid-column:1 / -1;">
+            <input type="checkbox" id="fld-tool-consumable" />
+            <label for="fld-tool-consumable" style="margin:0;">Consumable tool</label>
+          </div>
+        </div>
+
+        <div id="section-object" class="toggle" style="margin-top:8px; display:none;">
+          <input type="checkbox" id="fld-obj-consumable" />
+          <label for="fld-obj-consumable" style="margin:0;">Consumable object</label>
+        </div>
+
+        <div id="section-weapon" style="margin-top:12px; display:none;">
+          <h3>Weapon Stats</h3>
+          <div class="split">
+            <div>
+              <label>Skill</label>
+              <select id="fld-skill">
+                <option>Technicity</option>
+                <option>Accuracy</option>
+                <option>Brutality</option>
+                <option>Aura</option>
+              </select>
+            </div>
+            <div>
+              <label>Range</label>
+              <input id="fld-range" type="number" value="1" min="0" step="1" />
+            </div>
+            <div>
+              <label>Hands</label>
+              <select id="fld-hands">
+                <option value="1">One hand</option>
+                <option value="2">Two hands</option>
+              </select>
+            </div>
+          </div>
+          <div class="split" style="margin-top:8px;">
+            <div>
+              <label>Damage (Xd6 + Y + Milestone)</label>
+              <div class="row" style="gap:8px;">
+                <input id="fld-dice" type="number" min="1" value="2" style="width:90px" />
+                <span class="muted">d6 +</span>
+                <input id="fld-flat" type="number" value="2" style="width:90px" />
+                <span class="muted">+</span>
+                <select id="fld-ms">
+                  <option value="REF">Milestone REF</option>
+                  <option value="DEX">Milestone DEX</option>
+                  <option value="BODY">Milestone BODY</option>
+                  <option value="WIS">Milestone WIS</option>
+                  <option value="PRE">Milestone PRE</option>
+                  <option value="MAG">Milestone MAG</option>
+                  <option value="WILL">Milestone WILL</option>
+                  <option value="TECH">Milestone TECH</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label>Linked Nature (optional)</label>
+              <select id="fld-nature">
+                <option value="">None (choose on sheet)</option>
+                <option>Fire</option><option>Water</option><option>Earth</option><option>Lightning</option>
+                <option>Wind</option><option>Sun</option><option>Moon</option><option>Ki</option>
+              </select>
+            </div>
+            <div class="toggle" style="align-self:flex-end;">
+              <input type="checkbox" id="fld-animarma" />
+              <label for="fld-animarma" style="margin:0;">Animarma variant (+100 Jelly)</label>
+            </div>
+          </div>
+        </div>
+
+        <div id="section-equipment" style="margin-top:12px; display:none;">
+          <h3>Equipment</h3>
+          <div class="split">
+            <div>
+              <label>Location</label>
+              <select id="fld-location">
+                <option value="head">Head</option>
+                <option value="arms">Arms</option>
+                <option value="legs">Legs</option>
+                <option value="accessory">Accessory</option>
+                <option value="chest">Chest</option>
+                <option value="special">Special</option>
+              </select>
+            </div>
+            <div id="eq-hands-wrap">
+              <label>Hands (special only)</label>
+              <select id="fld-eq-hands">
+                <option value="1">One hand</option>
+                <option value="2">Two hands</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <label>Description (rich text)</label>
+          <div class="toolbar row" style="margin-bottom:6px;">
+            <button class="btn small" type="button" data-cmd="bold"><b>B</b></button>
+            <button class="btn small" type="button" data-cmd="italic"><i>I</i></button>
+            <button class="btn small" type="button" data-cmd="underline"><u>U</u></button>
+            <button class="btn small" type="button" data-cmd="insertUnorderedList">List</button>
+            <span class="muted" id="desc-status" style="margin-left:auto;">Plain text saved as HTML.</span>
+          </div>
+          <div id="fld-desc" class="rt-area" contenteditable="true" aria-label="Description"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Options</h2>
+
+        <div id="section-attributes" style="margin-bottom:10px; display:none;">
+          <h3>Attributes (tooltip describes effect)</h3>
+          <div id="attr-list" class="row" style="gap:6px;"></div>
+        </div>
+
+        <h3>Pre-installed Upgrades</h3>
+        <div class="row" style="gap:8px;">
+          <select id="upgrade-picker" style="flex:1; min-width:260px;">
+            <option value="">Select compatible upgrade...</option>
+          </select>
+          <button id="btn-add-upgrade" class="btn small" type="button">+ Add</button>
+        </div>
+        <div id="upgrade-summary" style="margin-top:8px;"></div>
+
+        <h3 style="margin-top:14px;">Craftomancy</h3>
+        <div class="row" style="gap:6px;">
+          <input id="craft-search" placeholder="Search green spells..." style="flex:1; min-width:220px;" />
+          <button id="craft-search-btn" class="btn small" type="button">Search</button>
+        </div>
+        <div class="row" style="margin-top:6px; gap:8px;">
+          <select id="craft-results" style="flex:1; min-width:260px;">
+            <option value="">No spell selected</option>
+          </select>
+          <button id="btn-clear-craft" class="btn btn-secondary small" type="button">Clear</button>
+        </div>
+        <div id="craft-meta" class="muted" style="margin-top:6px; font-size:.9rem;">
+          Link a green (approved) spell; category scales with item quality.
+        </div>
+        <table class="table" style="margin-top:8px;">
+          <thead><tr><th>Quality</th><th>Spell Category</th><th>Cost Bonus</th></tr></thead>
+          <tbody id="craft-table"></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>Modifiers</h2>
+        <div class="muted" style="margin-bottom:6px;">Uses the same selector as abilities. Add group / choice limits and quality-based scaling.</div>
+        <div id="mod-list"></div>
+        <button id="btn-add-mod" class="btn small" type="button" style="margin-top:8px;">+ Modifier</button>
+
+        <div class="panel" style="margin-top:14px; background:#0c1019;">
+          <h3>Price & Summary</h3>
+          <div class="row" style="gap:10px; flex-wrap:wrap;">
+            <span class="badge">Base <span id="sum-base">0</span></span>
+            <span class="badge">Quality delta <span id="sum-quality">0</span></span>
+            <span class="badge">Craftomancy <span id="sum-craft">0</span></span>
+            <span class="badge">Animarma <span id="sum-anim">0</span></span>
+            <span class="badge" style="background:#102033;border-color:#2453ff;">Total <strong id="sum-total">0</strong></span>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:14px; background:#0c1019;">
+          <h3>Load / Delete</h3>
+          <div class="row" style="gap:8px;">
+            <input id="search-library" placeholder="Search existing..." style="flex:1; min-width:200px;" />
+            <select id="library-type" style="width:160px;">
+              <option value="weapon">Weapons</option>
+              <option value="equipment">Equipment</option>
+              <option value="tool">Tools</option>
+              <option value="object">Objects</option>
+            </select>
+            <button id="btn-refresh" class="btn small" type="button">Refresh</button>
+          </div>
+          <div id="library" class="list" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+<script>
+const API_BASE = "";
+const token = localStorage.getItem("auth_token") || "";
+const authHeaders = () => token ? { "Authorization":"Bearer " + token } : {};
+
+const QUALITY_DIFF = {
+  "Very Mediocre": -300,
+  "Mediocre": -100,
+  "Adequate": 0,
+  "Good": 167,
+  "Very Good": 1390,
+  "Excellent": 5280,
+  "Legendary": 15300,
+  "Mythical": 38760,
+  "Epic": 128000,
+  "Divine": 614400,
+  "Unreal": 921600,
+};
+const CRAFTO_MAP = {
+  "Very Mediocre": { cat:"Novice", price:200 },
+  "Mediocre":      { cat:"Apprentice", price:300 },
+  "Adequate":      { cat:"Disciple", price:400 },
+  "Good":          { cat:"Adept", price:500 },
+  "Very Good":     { cat:"Mage", price:750 },
+  "Excellent":     { cat:"Magister", price:875 },
+  "Legendary":     { cat:"High Mage", price:1600 },
+  "Mythical":      { cat:"Master", price:2500 },
+  "Epic":          { cat:"Grand Master", price:6000 },
+  "Divine":        { cat:"Archmage", price:14000 },
+  "Unreal":        { cat:"Supreme Archmage", price:32000 },
+};
+const TIER_TABLE = {
+  "1":{ price:50 }, "2":{ price:100 }, "3":{ price:200 }, "4":{ price:1000 },
+  "5":{ price:2000 }, "special":{ price:10000 },
+};
+const ATTRIBUTES = [
+  ["Ferm","Harder to disarm; disarm time fixed to 1 full turn."],
+  ["Hemorrhage","On hit, target resists or becomes Slightly Bleeding (True)."],
+  ["Toxin","On hit, target resists or becomes Slightly Poisoned (True)."],
+  ["Freeze","On hit, target resists or becomes Entangled (True) until removed."],
+  ["Stun","On hit, target resists or becomes Stunned (True)."],
+  ["Super Stun","On hit, target resists or becomes Hindered (True)."],
+  ["Suffocation","On hit, target resists or becomes Slightly Magically Obstructed (True)."],
+  ["Hideable","Can be hidden under clothes or other items."],
+  ["Protection","Block 100% of wide area damage on successful roll."],
+  ["Magazine (X)","After X attacks, spend an Action to reload."],
+  ["Magical Threshold","Increase ET by 1 per quality level starting Adequate."],
+  ["Shooting","Shooting weapon; attacks are projectiles."],
+  ["Versatile","Choose one or two hands each turn; +2 neutral damage with two hands."],
+  ["Heavy Strike","Heavy Attack ignores special attack penalty."],
+  ["Destruction","Critical injury threshold reduced by 2."],
+  ["Speed","Gain 1 MO on a successful hit."],
+  ["Fast Strike","Use fast attack with accuracy/technicity without special penalty."],
+  ["Reach","Reach +1; optional circular attack at range 2 if melee empty."],
+  ["Defense","+1 to Defensive Acts when in hand."],
+  ["Grappling","Pull yourself to a hit target (range 4) on attack success."],
+  ["Throwing","No special attack disadvantage when throwing; weapon pierces target."],
+  ["Free Hand","Hands count as free with -1; inhibited if dual wielded."],
+  ["Magical Hand","Can be used simultaneously with Magical Threshold weapons."],
+  ["Melee Shot","No disadvantage on shot if threatened."],
+  ["Large Strike","Deal damage in Cross (5); not immune to own damage."],
+  ["Boomerang","Throw at half range; returns after hit/obstacle."],
+  ["Knockback","Force opponent back a square on hit."],
+  ["Armor Piercing","Deals double damage to SP."],
+  ["Handy","No free hand needed for special attack."],
+  ["Lound","Disadvantage on Stealth Checks when wearing."],
+  ["Acuity","+1 to attack rolls with this weapon."],
+  ["Silver Plating","Very effective against certain monsters/creatures."],
+];
+const PASSIVE_TARGET_GROUPS = (()=> {
+  const characteristics = [
+    { key:"reflex",    label:"Reflex" },
+    { key:"dexterity", label:"Dexterity" },
+    { key:"body",      label:"Body" },
+    { key:"wisdom",    label:"Wisdom" },
+    { key:"presence",  label:"Presence" },
+    { key:"magic",     label:"Magic" },
+    { key:"willpower", label:"Willpower" },
+    { key:"tech",      label:"Tech" },
+  ];
+  const skills = [
+    { key:"reflex",    label:"Reflex",    skills:["Technicity","Dodge","Counter","Reactivity"] },
+    { key:"dexterity", label:"Dexterity", skills:["Accuracy","Evasion","Stealth","Acrobatics"] },
+    { key:"body",      label:"Body",      skills:["Brutality","Blocking","Resistance","Athletics"] },
+    { key:"wisdom",    label:"Wisdom",    skills:["Survival","Education","Perception","Psychology","Investigation"] },
+    { key:"presence",  label:"Presence",  skills:["Taming","Charm","Charisma","Deception","Persuasion"] },
+    { key:"magic",     label:"Magic",     skills:["Aura","Incantation","Enchantment","Restoration","Potential"] },
+    { key:"willpower", label:"Willpower", skills:["Intimidation","Spirit","Instinct","Absorption"] },
+    { key:"tech",      label:"Tech",      skills:["Crafting","Sleight of hand","Alchemy","Medicine","Engineering"] },
+  ];
+  const derived = [
+    { key:"hp", label:"HP" }, { key:"en", label:"EN" }, { key:"fo", label:"FO" },
+    { key:"mo", label:"MO" }, { key:"spcap", label:"SP cap (10% HP)" },
+    { key:"enc", label:"Encumbrance" }, { key:"et", label:"Eclipse Threshold (ET)" },
+    { key:"tx", label:"Max Toxicity (TX)" }, { key:"talent_max", label:"Talent Max" },
+  ];
+  const DEFAULT_NATURES = ["Fire","Water","Earth","Lightning","Wind","Sun","Moon","Ki"];
+  const intensityOpts = DEFAULT_NATURES.map(n=>({ value:`intensities.${n}`, label:`Intensity: ${n}` }));
+  const skillGroups = characteristics.map(c=>({ value:`choice:skills.by_char.${c.key}`, label:`[Choice] Skills linked to ${c.label}` }));
+  const schoolByNature = DEFAULT_NATURES.map(n=>({ value:`choice:schools.by_nature.${n}`, label:`[Choice] MS for schools linked to ${n}` }));
+  const allSkillNames = Array.from(new Set(skills.flatMap(c=> c.skills || [])));
+  const schoolBySkill = allSkillNames.map(s=>({ value:`choice:schools.by_skill.${s}`, label:`[Choice] MS for schools using ${s}` }));
+  const magicDmgSpell = DEFAULT_NATURES.map(n=>({ value:`magic_damage.spell.${n}`, label:`Magic Damage on spells/animarma (${n})` }));
+  const magicDmgWeapon = DEFAULT_NATURES.map(n=>({ value:`magic_damage.weapon.${n}`, label:`Magic Damage on weapons (${n})` }));
+  return [
+    { label:"Characteristics", options: characteristics.map(c=>({ value:`char.${c.key}`, label:`${c.label} (modifier)` })) },
+    { label:"Skills", options: skills.flatMap(c=> c.skills.map(s=>({ value:`skills.${c.key}.${s}`, label:`${s} (${c.label})` }))) },
+    { label:"Skill Groups (choice)", options: skillGroups },
+    { label:"Magic Schools by Nature (choice)", options: schoolByNature },
+    { label:"Magic Schools by Skill (choice)", options: [...schoolBySkill, { value:"choice:school_any", label:"[Choice] Pick schools (any)" }] },
+    { label:"Intensities", options: intensityOpts },
+    { label:"Magic Damage", options: [...magicDmgSpell, ...magicDmgWeapon] },
+    { label:"Derived / Resources", options: derived.map(d=>({ value:`derived.${d.key}`, label:d.label })) },
+    { label:"Custom", options:[{ value:"__custom__", label:"Custom path..." }]},
+  ];
+})();
+
+const ENDPOINTS = {
+  weapon: "/weapons",
+  equipment: "/equipment",
+  tool: "/tools",
+  object: "/objects",
+};
+
+let STATE = {
+  id: null,
+  type: "weapon",
+  craftSpell: null,
+  upgrades: [],
+  attributes: new Set(),
+};
+let CACHE = { weapon:[], equipment:[], tool:[], object:[] };
+let UPGRADE_CACHE = [];
+
+function setStateChip(text, tone="default"){
+  const chip = document.querySelector("#state-chip");
+  chip.textContent = text;
+  chip.style.borderColor = tone === "error" ? "#ff6b6b" : "#2b2f3a";
+}
+
+function renderQualitySelect(){
+  const sel = document.querySelector("#fld-quality");
+  sel.innerHTML = "";
+  Object.keys(QUALITY_DIFF).forEach(q=>{
+    const opt = document.createElement("option");
+    opt.value = q; opt.textContent = q;
+    if (q === "Adequate") opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function renderAttrList(){
+  const wrap = document.querySelector("#attr-list"); wrap.innerHTML = "";
+  ATTRIBUTES.forEach(([name, tip])=>{
+    const tag = document.createElement("div");
+    tag.className = "tag";
+    tag.title = tip;
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = name;
+    cb.checked = STATE.attributes.has(name);
+    cb.addEventListener("change", ()=>{ cb.checked ? STATE.attributes.add(name) : STATE.attributes.delete(name); });
+    tag.appendChild(cb);
+    const span = document.createElement("span"); span.textContent = name;
+    tag.appendChild(span);
+    wrap.appendChild(tag);
+  });
+}
+
+function execCmd(cmd){ document.execCommand(cmd, false); }
+
+function richTextValue(){ return (document.querySelector("#fld-desc").innerHTML || "").trim(); }
+function setRichText(html){ document.querySelector("#fld-desc").innerHTML = html || ""; }
+
+function buildDamage(){
+  const dice = Math.max(1, Number(document.querySelector("#fld-dice").value || 1));
+  const flat = Number(document.querySelector("#fld-flat").value || 0);
+  const ms = document.querySelector("#fld-ms").value || "REF";
+  const die = document.querySelector("#fld-animarma").checked ? "ID" : "d6";
+  const milestone = document.querySelector("#fld-animarma").checked ? "MAG" : ms;
+  return `${dice}${die}+${flat}+M(${milestone})`;
+}
+
+function qualityPrice(base){
+  const q = document.querySelector("#fld-quality").value;
+  const diff = QUALITY_DIFF[q] ?? 0;
+  return Math.max(0, Number(base||0) + diff);
+}
+
+function craftPrice(){
+  if (!STATE.craftSpell) return 0;
+  const q = document.querySelector("#fld-quality").value;
+  return CRAFTO_MAP[q]?.price || 0;
+}
+
+function animarmaPrice(){
+  return (document.querySelector("#fld-animarma").checked && document.querySelector("#fld-type").value === "weapon") ? 100 : 0;
+}
+
+function computeBase(){
+  if (document.querySelector("#fld-type").value === "tool"){
+    const tier = document.querySelector("#fld-tier").value || "1";
+    return TIER_TABLE[tier]?.price || 0;
+  }
+  return Number(document.querySelector("#fld-price").value || 0);
+}
+
+function syncPriceSummary(){
+  const base = computeBase();
+  document.querySelector("#fld-price").value = base;
+  document.querySelector("#sum-base").textContent = base;
+  document.querySelector("#sum-quality").textContent = QUALITY_DIFF[document.querySelector("#fld-quality").value] ?? 0;
+  document.querySelector("#sum-craft").textContent = craftPrice();
+  document.querySelector("#sum-anim").textContent = animarmaPrice();
+  const total = base + (QUALITY_DIFF[document.querySelector("#fld-quality").value] ?? 0) + craftPrice() + animarmaPrice();
+  document.querySelector("#sum-total").textContent = total;
+}
+
+function syncTypeVisibility(){
+  const t = document.querySelector("#fld-type").value;
+  STATE.type = t;
+  document.querySelector("#section-weapon").style.display = t === "weapon" ? "block" : "none";
+  document.querySelector("#section-equipment").style.display = t === "equipment" ? "block" : "none";
+  document.querySelector("#section-tool").style.display = t === "tool" ? "grid" : "none";
+  document.querySelector("#section-object").style.display = t === "object" ? "flex" : "none";
+  document.querySelector("#section-attributes").style.display = (t === "weapon" || t === "equipment") ? "block" : "none";
+  document.querySelector("#eq-hands-wrap").style.display = (document.querySelector("#fld-location").value === "special" && t === "equipment") ? "block" : "none";
+  renderUpgradePicker();
+  renderAttrList();
+  syncPriceSummary();
+}
+
+async function loadUpgrades(){
+  try{
+    const r = await fetch("/upgrades", { headers: authHeaders() });
+    const j = await r.json();
+    if (j.status === "success"){
+      UPGRADE_CACHE = j.upgrades || [];
+      renderUpgradePicker();
+    }
+  }catch(e){ console.warn("Upgrades load failed", e); }
+}
+
+function compatibleUpgrade(u){
+  const t = document.querySelector("#fld-type").value;
+  if (t === "weapon") return u.kind === "weapon";
+  if (t === "equipment"){
+    if (u.kind !== "equipment") return false;
+    const loc = (document.querySelector("#fld-location").value || "").toLowerCase();
+    if (u.slot && u.slot !== loc) return false;
+    return true;
+  }
+  return true;
+}
+
+function renderUpgradePicker(){
+  const picker = document.querySelector("#upgrade-picker");
+  picker.innerHTML = `<option value="">Select compatible upgrade...</option>`;
+  UPGRADE_CACHE.filter(compatibleUpgrade).forEach(u=>{
+    const opt = document.createElement("option");
+    const slot = u.slot ? " | " + u.slot : "";
+    opt.value = u.id;
+    opt.textContent = `${u.name} (${u.kind}${slot})`;
+    picker.appendChild(opt);
+  });
+}
+
+function renderUpgradeSummary(){
+  const wrap = document.querySelector("#upgrade-summary");
+  if (!STATE.upgrades.length){ wrap.innerHTML = `<div class="muted">No upgrades yet.</div>`; return; }
+  wrap.innerHTML = "";
+  STATE.upgrades.forEach(id=>{
+    const upg = UPGRADE_CACHE.find(u=>u.id === id);
+    const row = document.createElement("div");
+    row.className = "upgrade-row";
+    row.innerHTML = `
+      <div class="row" style="justify-content:space-between; align-items:flex-start;">
+        <div>
+          <div><strong>${upg?.name || id}</strong> <span class="muted">${upg?.kind || ""}${upg?.slot ? " | "+upg.slot : ""}</span></div>
+          <div class="muted">${upg?.description || ""}</div>
+          <div class="muted">Mods: ${(upg?.modifiers||[]).map(m=>`${m.target||m.key}:${m.mode||"add"}:${m.value||0}`).join(", ") || "-"}</div>
+        </div>
+        <button class="btn btn-secondary small" type="button">Remove</button>
+      </div>
+    `;
+    row.querySelector("button").addEventListener("click", ()=>{
+      STATE.upgrades = STATE.upgrades.filter(x=>x !== id);
+      renderUpgradeSummary();
+    });
+    wrap.appendChild(row);
+  });
+}
+
+function addUpgrade(){
+  const val = document.querySelector("#upgrade-picker").value;
+  if (!val) return;
+  if (!STATE.upgrades.includes(val)){
+    STATE.upgrades.push(val);
+    renderUpgradeSummary();
+  }
+  document.querySelector("#upgrade-picker").value = "";
+}
+
+function craftTable(){
+  const tb = document.querySelector("#craft-table"); tb.innerHTML = "";
+  Object.entries(CRAFTO_MAP).forEach(([q, meta])=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${q}</td><td>${meta.cat}</td><td>${meta.price}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+async function searchCraft(){
+  const term = (document.querySelector("#craft-search").value || "").trim();
+  document.querySelector("#craft-results").innerHTML = `<option value="">Searching...</option>`;
+  try{
+    const url = term ? `/spells?status=green&q=${encodeURIComponent(term)}` : `/spells?status=green`;
+    const r = await fetch(url, { headers: authHeaders() });
+    const j = await r.json();
+    const spells = j.spells || [];
+    const sel = document.querySelector("#craft-results");
+    sel.innerHTML = `<option value="">${spells.length ? "Select spell..." : "No spells"}</option>`;
+    spells.slice(0,60).forEach(s=>{
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = `${s.name} (${s.school_name || s.school || ""})`;
+      opt.dataset.name = s.name;
+      sel.appendChild(opt);
+    });
+  }catch(e){
+    document.querySelector("#craft-results").innerHTML = `<option value="">Search failed</option>`;
+  }
+}
+
+function onSelectCraft(){
+  const sel = document.querySelector("#craft-results");
+  const id = sel.value;
+  if (!id){ STATE.craftSpell = null; document.querySelector("#craft-meta").textContent = "No spell linked."; syncPriceSummary(); return; }
+  const name = sel.selectedOptions[0]?.dataset?.name || sel.selectedOptions[0]?.textContent || id;
+  STATE.craftSpell = { id, name };
+  const q = document.querySelector("#fld-quality").value;
+  const meta = CRAFTO_MAP[q] || { cat:"?", price:0 };
+  document.querySelector("#craft-meta").textContent = `Linked to ${name} - ${meta.cat} at current quality (${q}), +${meta.price} Jelly.`;
+  syncPriceSummary();
+}
+
+function clearCraft(){ document.querySelector("#craft-results").value = ""; STATE.craftSpell=null; document.querySelector("#craft-meta").textContent="Craftomancy cleared."; syncPriceSummary(); }
+
+function addModRow(initial={}){
+  const row = document.createElement("div");
+  row.className = "mod-row";
+
+  const target = document.createElement("select");
+  const placeholder = document.createElement("option");
+  placeholder.value = ""; placeholder.textContent = "Target..."; placeholder.disabled = true; placeholder.selected = true;
+  target.appendChild(placeholder);
+  let matched = false;
+  PASSIVE_TARGET_GROUPS.forEach(group=>{
+    const og = document.createElement("optgroup"); og.label = group.label;
+    group.options.forEach(o=>{
+      const opt = document.createElement("option"); opt.value=o.value; opt.textContent=o.label;
+      if (initial.target === o.value){ opt.selected=true; matched=true; placeholder.selected=false; }
+      og.appendChild(opt);
+    });
+    target.appendChild(og);
+  });
+
+  const custom = document.createElement("input");
+  custom.className = "custom";
+  custom.placeholder = "Custom path (ex: derived.hp)";
+  custom.value = matched ? "" : (initial.target || "");
+  custom.style.display = matched ? "none" : "";
+  target.addEventListener("change", ()=>{
+    const isCustom = target.value === "__custom__";
+    custom.style.display = isCustom ? "" : "none";
+    if (!isCustom) custom.value = "";
+  });
+
+  const mode = document.createElement("select");
+  ["add","mul","set"].forEach(m=>{
+    const opt = document.createElement("option");
+    opt.value = m; opt.textContent = m;
+    if ((initial.mode||"add") === m) opt.selected = true;
+    mode.appendChild(opt);
+  });
+
+  const value = document.createElement("input");
+  value.type = "number"; value.step = "0.1"; value.value = initial.value ?? 0;
+
+  const qStep = document.createElement("input");
+  qStep.type = "number"; qStep.step = "0.1"; qStep.placeholder = "+ per quality"; qStep.value = initial.quality_step ?? "";
+
+  const note = document.createElement("input");
+  note.className = "note"; note.placeholder = "Note";
+  note.value = initial.note || "";
+
+  const group = document.createElement("div"); group.className = "group";
+  const groupName = document.createElement("input"); groupName.placeholder = "Group key";
+  groupName.value = initial.group || "";
+  const groupMax = document.createElement("input"); groupMax.type="number"; groupMax.placeholder="Max choices (0=inf)"; groupMax.value = initial.group_max_choices ?? "";
+  group.appendChild(groupName); group.appendChild(groupMax);
+
+  const rm = document.createElement("button");
+  rm.className = "btn btn-secondary small";
+  rm.type="button"; rm.textContent = "Remove";
+  rm.addEventListener("click", ()=> row.remove());
+
+  row.appendChild(target);
+  row.appendChild(custom);
+  row.appendChild(mode);
+  row.appendChild(value);
+  row.appendChild(qStep);
+  row.appendChild(note);
+  row.appendChild(group);
+  row.appendChild(rm);
+  document.querySelector("#mod-list").appendChild(row);
+}
+
+function collectModifiers(){
+  const mods = [];
+  document.querySelector("#mod-list").querySelectorAll(".mod-row").forEach(row=>{
+    const targetSel = row.querySelector("select");
+    const custom = row.querySelector(".custom");
+    const target = targetSel.value === "__custom__" ? (custom.value||"").trim() : (targetSel.value || custom.value || "").trim();
+    if (!target) return;
+    const mode = row.querySelectorAll("select")[1]?.value || "add";
+    const value = parseFloat(row.querySelector('input[type="number"]').value || "0");
+    const qStep = parseFloat(row.querySelectorAll('input[type="number"]')[1]?.value || "0");
+    const noteInput = row.querySelector(".note");
+    let note = noteInput.value || "";
+    if (qStep){ note = `${note ? note+" " : ""}(+${qStep}/quality)`; }
+    const g = row.querySelector(".group")?.children || [];
+    const groupName = g[0]?.value || "";
+    const groupMax = parseInt(g[1]?.value || "0", 10);
+    const mod = { target, mode, value, note };
+    if (groupName){ mod.group = groupName; mod.group_max_choices = Math.max(0, groupMax); }
+    mods.push(mod);
+  });
+  return mods;
+}
+
+function buildPayload(){
+  const type = document.querySelector("#fld-type").value;
+  const name = (document.querySelector("#fld-name").value || "Unnamed").trim();
+  const desc = richTextValue();
+  const priceBase = computeBase();
+  const enc = Number(document.querySelector("#fld-enc").value || 0);
+  const mods = collectModifiers();
+  const upgrades = STATE.upgrades.slice();
+
+  if (type === "weapon"){
+    let description = desc;
+    if (STATE.craftSpell){
+      const meta = CRAFTO_MAP[document.querySelector("#fld-quality").value] || { cat:"?", price:0 };
+      description += `<p><strong>Craftomancy:</strong> ${STATE.craftSpell.name} (${meta.cat}, +${meta.price} Jelly)</p>`;
+    }
+    const payload = {
+      name,
+      price: priceBase,
+      enc,
+      skill: document.querySelector("#fld-skill").value,
+      damage: buildDamage(),
+      range: document.querySelector("#fld-range").value,
+      hands: Number(document.querySelector("#fld-hands").value || 1),
+      description,
+      effects: Array.from(STATE.attributes),
+      upgrades,
+      modifiers: mods,
+      nature: document.querySelector("#fld-nature").value,
+      is_animarma: document.querySelector("#fld-animarma").checked,
+    };
+    return payload;
+  }
+
+  if (type === "equipment"){
+    const slot = document.querySelector("#fld-location").value;
+    const payload = {
+      category: "special",
+      name,
+      price: priceBase,
+      enc,
+      slot: slot === "special" ? "" : slot,
+      damage: "",
+      range: "",
+      hands: slot === "special" ? Number(document.querySelector("#fld-eq-hands").value || 1) : 0,
+      effects: Array.from(STATE.attributes),
+      description: desc,
+      upgrades,
+      modifiers: mods,
+    };
+    return payload;
+  }
+
+  if (type === "tool"){
+    const tier = document.querySelector("#fld-tier").value;
+    const payload = {
+      name,
+      tier,
+      enc,
+      method: document.querySelector("#fld-method").value,
+      description: desc,
+      consumable: document.querySelector("#fld-tool-consumable").checked,
+      modifiers: mods,
+    };
+    return payload;
+  }
+
+  return {
+    name,
+    price: priceBase,
+    enc,
+    description: desc,
+    consumable: document.querySelector("#fld-obj-consumable").checked,
+    modifiers: mods,
+  };
+}
+
+function fillFromPayload(item){
+  STATE.id = item.id || null;
+  document.querySelector("#fld-name").value = item.name || "";
+  document.querySelector("#fld-enc").value = item.enc ?? 0;
+  document.querySelector("#fld-price").value = item.price ?? 0;
+  setRichText(item.description || "");
+  STATE.upgrades = (item.upgrades || []).slice();
+  STATE.attributes = new Set(item.effects || []);
+  renderAttrList();
+  renderUpgradeSummary();
+  const type = document.querySelector("#library-type").value;
+  document.querySelector("#fld-type").value = type;
+  syncTypeVisibility();
+
+  if (type === "weapon"){
+    document.querySelector("#fld-skill").value = item.skill || "Technicity";
+    document.querySelector("#fld-range").value = item.range ?? 1;
+    document.querySelector("#fld-hands").value = item.hands ?? 1;
+    document.querySelector("#fld-nature").value = item.nature || "";
+    document.querySelector("#fld-animarma").checked = !!item.is_animarma;
+    const dmg = item.damage || "2d6+2+M(REF)";
+    const diceMatch = dmg.match(/^(\\d+)/); document.querySelector("#fld-dice").value = diceMatch ? diceMatch[1] : 2;
+    const flatMatch = dmg.match(/\\+(\\d+)/); document.querySelector("#fld-flat").value = flatMatch ? flatMatch[1] : 2;
+    const msMatch = dmg.match(/M\\(([^)]+)\\)/i); document.querySelector("#fld-ms").value = (msMatch?.[1] || "REF").toUpperCase();
+  } else if (type === "equipment"){
+    document.querySelector("#fld-location").value = item.slot || "special";
+    document.querySelector("#fld-eq-hands").value = item.hands ?? 1;
+  } else if (type === "tool"){
+    document.querySelector("#fld-tier").value = item.tier || "1";
+    document.querySelector("#fld-method").value = item.method || "crafting";
+    document.querySelector("#fld-tool-consumable").checked = !!item.consumable;
+  } else if (type === "object"){
+    document.querySelector("#fld-obj-consumable").checked = !!item.consumable;
+  }
+
+  setStateChip(item.id ? `Editing ${item.id}` : "New item");
+  syncPriceSummary();
+}
+
+async function saveItem(){
+  const type = document.querySelector("#fld-type").value;
+  const payload = buildPayload();
+  const endpoint = ENDPOINTS[type];
+  const isUpdate = Boolean(STATE.id);
+  const url = isUpdate ? `${endpoint}/${encodeURIComponent(STATE.id)}` : endpoint;
+  document.querySelector("#btn-save").disabled = true;
+  setStateChip("Saving...");
+  try{
+    const r = await fetch(url, {
+      method: isUpdate ? "PUT" : "POST",
+      headers: { "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success") throw new Error(j.message || "Save failed");
+    setStateChip(isUpdate ? "Updated" : "Created");
+    await loadLibrary(type);
+  }catch(err){
+    console.error(err);
+    setStateChip(err.message || "Save failed", "error");
+    alert(err.message || "Save failed");
+  }finally{
+    document.querySelector("#btn-save").disabled = false;
+  }
+}
+
+async function deleteItem(id, type){
+  if (!id) return;
+  if (!confirm(`Delete ${id}?`)) return;
+  const endpoint = ENDPOINTS[type];
+  try{
+    const r = await fetch(`${endpoint}/${encodeURIComponent(id)}`, { method:"DELETE", headers: authHeaders() });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success") throw new Error(j.message || "Delete failed");
+    setStateChip(`Deleted ${id}`);
+    STATE.id = null;
+    await loadLibrary(type);
+  }catch(err){
+    setStateChip(err.message || "Delete failed", "error");
+    alert(err.message || "Delete failed");
+  }
+}
+
+function renderLibrary(type){
+  const list = CACHE[type] || [];
+  const q = (document.querySelector("#search-library").value || "").toLowerCase();
+  const box = document.querySelector("#library");
+  const filtered = q ? list.filter(i=> (i.name||"").toLowerCase().includes(q)) : list;
+  if (!filtered.length){ box.innerHTML = `<div class="muted">No ${type} found.</div>`; return; }
+  box.innerHTML = "";
+  filtered.slice(0,120).forEach(i=>{
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `
+      <div class="title">${i.name || i.id}</div>
+      <div class="meta">${i.id || ""} - ${i.price ?? ""} Jelly - enc ${i.enc ?? 0}</div>
+      <div class="muted" style="margin-top:4px;">${(i.description || "").slice(0,140)}</div>
+      <div class="item-actions">
+        <button class="btn small">Load</button>
+        <button class="btn btn-secondary small">Delete</button>
+      </div>
+    `;
+    div.querySelectorAll("button")[0].addEventListener("click", ()=> fillFromPayload(i));
+    div.querySelectorAll("button")[1].addEventListener("click", ()=> deleteItem(i.id, type));
+    box.appendChild(div);
+  });
+}
+
+async function loadLibrary(type){
+  document.querySelector("#library").innerHTML = `<div class="muted">Loading ${type}...</div>`;
+  try{
+    const r = await fetch(ENDPOINTS[type], { headers: authHeaders() });
+    const j = await r.json();
+    CACHE[type] = j[type+"s"] || j.equipment || [];
+  }catch(e){
+    console.warn("Failed to load", type, e);
+    CACHE[type] = [];
+  }
+  renderLibrary(type);
+}
+
+function resetForm(){
+  STATE = { id:null, type: document.querySelector("#fld-type").value, craftSpell:null, upgrades:[], attributes:new Set() };
+  document.querySelector("#fld-name").value = "";
+  document.querySelector("#fld-enc").value = 0;
+  document.querySelector("#fld-price").value = 0;
+  document.querySelector("#fld-tier").value = "1";
+  document.querySelector("#fld-method").value = "crafting";
+  document.querySelector("#fld-tool-consumable").checked = false;
+  document.querySelector("#fld-obj-consumable").checked = false;
+  document.querySelector("#fld-range").value = 1;
+  document.querySelector("#fld-hands").value = 1;
+  document.querySelector("#fld-eq-hands").value = 1;
+  document.querySelector("#fld-dice").value = 2;
+  document.querySelector("#fld-flat").value = 2;
+  document.querySelector("#fld-ms").value = "REF";
+  document.querySelector("#fld-nature").value = "";
+  document.querySelector("#fld-animarma").checked = false;
+  setRichText("");
+  document.querySelector("#mod-list").innerHTML = "";
+  addModRow({});
+  renderAttrList();
+  renderUpgradeSummary();
+  setStateChip("New item");
+  syncPriceSummary();
+}
+
+function onReady(){
+  renderQualitySelect();
+  craftTable();
+  addModRow({});
+  renderAttrList();
+  syncTypeVisibility();
+  syncPriceSummary();
+  loadUpgrades();
+  loadLibrary(document.querySelector("#library-type").value);
+
+  document.querySelectorAll("[data-cmd]").forEach(btn=>{
+    btn.addEventListener("click", ()=> execCmd(btn.dataset.cmd));
+  });
+
+  document.querySelector("#fld-type").addEventListener("change", syncTypeVisibility);
+  ["fld-tier","fld-quality","fld-price","fld-animarma"].forEach(id=> document.getElementById(id).addEventListener("input", syncPriceSummary));
+  document.getElementById("fld-tier").addEventListener("change", syncPriceSummary);
+  document.getElementById("fld-location").addEventListener("change", syncTypeVisibility);
+
+  document.querySelector("#btn-add-upgrade").addEventListener("click", addUpgrade);
+  document.querySelector("#btn-add-mod").addEventListener("click", ()=> addModRow({}));
+  document.querySelector("#btn-save").addEventListener("click", saveItem);
+  document.querySelector("#btn-new").addEventListener("click", resetForm);
+  document.querySelector("#btn-refresh").addEventListener("click", ()=> loadLibrary(document.querySelector("#library-type").value));
+  document.querySelector("#library-type").addEventListener("change", (e)=>{ STATE.id=null; loadLibrary(e.target.value); });
+  document.querySelector("#search-library").addEventListener("input", ()=> renderLibrary(document.querySelector("#library-type").value));
+
+  document.querySelector("#craft-search-btn").addEventListener("click", searchCraft);
+  document.querySelector("#craft-results").addEventListener("change", onSelectCraft);
+  document.querySelector("#btn-clear-craft").addEventListener("click", clearCraft);
+
+  document.querySelector("#fld-tier").addEventListener("change", ()=>{ const base=TIER_TABLE[document.querySelector("#fld-tier").value]?.price||0; document.querySelector("#fld-price").value = base; syncPriceSummary(); });
+}
+
+document.addEventListener("DOMContentLoaded", onReady);
+</script>
+</body>
+</html>
