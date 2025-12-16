@@ -22,8 +22,7 @@
     .chip { padding:6px 10px; border:1px solid #2b2f3a; border-radius:10px; background:#12141c; font-size:.9rem; }
     .actions { display:flex; gap:8px; margin-left:auto; }
 
-    .grid { display:grid; gap:12px; grid-template-columns: 1.2fr 1fr 0.9fr; align-items:start; }
-    @media (max-width: 1100px){ .grid { grid-template-columns: 1fr; } }
+    .grid { display:grid; gap:12px; grid-template-columns: 1fr; align-items:start; }
 
     .panel {
       background: rgba(16,18,25,.82);
@@ -69,6 +68,16 @@
     .toggle input { width:auto; }
     .hero { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
     .hero input[type="text"] { font-size:1rem; padding:10px 12px; }
+    .alert-soft {
+      margin-top:6px;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid #3b2a2a;
+      background:#161018;
+      color:#ffb48a;
+      font-size:.9rem;
+    }
+    #attr-table td:last-child { text-align:right; }
   </style>
 </head>
 <body>
@@ -205,6 +214,13 @@
               <label for="fld-animarma" style="margin:0;">Animarma variant (+100 Jelly)</label>
             </div>
           </div>
+          <div class="split" id="magazine-wrap" style="margin-top:8px; display:none;">
+            <div>
+              <label>Magazine Size</label>
+              <input id="fld-magazine" type="number" min="0" value="0" />
+              <div class="muted" style="font-size:.85rem;">Shown when the Magazine attribute is selected.</div>
+            </div>
+          </div>
         </div>
 
         <div id="section-equipment" style="margin-top:12px; display:none;">
@@ -243,12 +259,21 @@
           <div id="fld-desc" class="rt-area" contenteditable="true" aria-label="Description"></div>
         </div>
       </div>
-      <div class="panel">
+        <div class="panel">
         <h2>Options</h2>
 
         <div id="section-attributes" style="margin-bottom:10px; display:none;">
           <h3>Attributes (tooltip describes effect)</h3>
-          <div id="attr-list" class="row" style="gap:6px;"></div>
+          <div class="row" style="gap:8px; margin-bottom:6px;">
+            <select id="attr-picker" style="flex:1; min-width:220px;">
+              <option value="">Select attribute...</option>
+            </select>
+            <button id="btn-add-attr" class="btn small" type="button">Add</button>
+          </div>
+          <table class="table" id="attr-table">
+            <thead><tr><th style="width:32%;">Attribute</th><th>Description</th><th style="width:90px;">Remove</th></tr></thead>
+            <tbody id="attr-body"><tr><td colspan="3" class="muted">No attributes selected.</td></tr></tbody>
+          </table>
         </div>
 
         <h3>Pre-installed Upgrades</h3>
@@ -274,10 +299,7 @@
         <div id="craft-meta" class="muted" style="margin-top:6px; font-size:.9rem;">
           Link a green (approved) spell; category scales with item quality.
         </div>
-        <table class="table" style="margin-top:8px;">
-          <thead><tr><th>Quality</th><th>Spell Category</th><th>Cost Bonus</th></tr></thead>
-          <tbody id="craft-table"></tbody>
-        </table>
+        <div id="craft-alert" class="alert-soft" style="display:none;" role="alert"></div>
       </div>
 
       <div class="panel">
@@ -292,6 +314,7 @@
             <span class="badge">Base <span id="sum-base">0</span></span>
             <span class="badge">Quality delta <span id="sum-quality">0</span></span>
             <span class="badge">Craftomancy <span id="sum-craft">0</span></span>
+            <span class="badge">Upgrades <span id="sum-upgrades">0</span></span>
             <span class="badge">Animarma <span id="sum-anim">0</span></span>
             <span class="badge" style="background:#102033;border-color:#2453ff;">Total <strong id="sum-total">0</strong></span>
           </div>
@@ -346,10 +369,13 @@ const CRAFTO_MAP = {
   "Divine":        { cat:"Archmage", price:14000 },
   "Unreal":        { cat:"Supreme Archmage", price:32000 },
 };
+const CRAFT_CATEGORY_ORDER = ["Novice","Apprentice","Disciple","Adept","Mage","Magister","High Mage","Master","Grand Master","Archmage","Supreme Archmage"];
 const TIER_TABLE = {
   "1":{ price:50 }, "2":{ price:100 }, "3":{ price:200 }, "4":{ price:1000 },
   "5":{ price:2000 }, "special":{ price:10000 },
 };
+const UPGRADE_FEES = [7,14,28,200,400,1440,3968,10240,30000];
+const MAG_ATTR = "Magazine (X)";
 const ATTRIBUTES = [
   ["Ferm","Harder to disarm; disarm time fixed to 1 full turn."],
   ["Hemorrhage","On hit, target resists or becomes Slightly Bleeding (True)."],
@@ -467,20 +493,67 @@ function renderQualitySelect(){
 }
 
 function renderAttrList(){
-  const wrap = document.querySelector("#attr-list"); wrap.innerHTML = "";
-  ATTRIBUTES.forEach(([name, tip])=>{
-    const tag = document.createElement("div");
-    tag.className = "tag";
-    tag.title = tip;
-    const cb = document.createElement("input");
-    cb.type = "checkbox"; cb.value = name;
-    cb.checked = STATE.attributes.has(name);
-    cb.addEventListener("change", ()=>{ cb.checked ? STATE.attributes.add(name) : STATE.attributes.delete(name); });
-    tag.appendChild(cb);
-    const span = document.createElement("span"); span.textContent = name;
-    tag.appendChild(span);
-    wrap.appendChild(tag);
+  const picker = document.querySelector("#attr-picker");
+  const body = document.querySelector("#attr-body");
+  if (!picker || !body) return;
+
+  // Picker options exclude already selected attributes
+  picker.innerHTML = `<option value="">Select attribute...</option>`;
+  ATTRIBUTES.forEach(([name])=>{
+    if (STATE.attributes.has(name)) return;
+    const opt = document.createElement("option");
+    opt.value = name; opt.textContent = name;
+    picker.appendChild(opt);
   });
+
+  // Table of selected attributes
+  const selected = Array.from(STATE.attributes);
+  if (!selected.length){
+    body.innerHTML = `<tr><td colspan="3" class="muted">No attributes selected.</td></tr>`;
+    return;
+  }
+  body.innerHTML = "";
+  selected.forEach(name=>{
+    const tip = ATTRIBUTES.find(([n])=> n === name)?.[1] || "";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${name}</td>
+      <td class="muted">${tip}</td>
+      <td><button class="btn btn-secondary small" type="button">Remove</button></td>
+    `;
+    tr.querySelector("button")?.addEventListener("click", ()=>{
+      STATE.attributes.delete(name);
+      renderAttrList();
+    });
+    body.appendChild(tr);
+  });
+
+  updateMagazineVisibility();
+}
+
+function addAttribute(){
+  const picker = document.querySelector("#attr-picker");
+  if (!picker) return;
+  const val = picker.value;
+  if (!val) return;
+  STATE.attributes.add(val);
+  picker.value = "";
+  renderAttrList();
+}
+
+function hasMagazineAttribute(){
+  return STATE.attributes.has(MAG_ATTR);
+}
+
+function updateMagazineVisibility(){
+  const wrap = document.querySelector("#magazine-wrap");
+  const input = document.querySelector("#fld-magazine");
+  if (!wrap || !input) return;
+  const show = document.querySelector("#fld-type").value === "weapon" && hasMagazineAttribute();
+  wrap.style.display = show ? "grid" : "none";
+  if (!show){
+    input.value = 0;
+  }
 }
 
 function execCmd(cmd){ document.execCommand(cmd, false); }
@@ -509,6 +582,16 @@ function craftPrice(){
   return CRAFTO_MAP[q]?.price || 0;
 }
 
+function upgradePrice(){
+  const count = STATE.upgrades.length;
+  let total = 0;
+  for (let i=0; i<count; i++){
+    const fee = UPGRADE_FEES[i] ?? UPGRADE_FEES[UPGRADE_FEES.length-1] ?? 0;
+    total += fee;
+  }
+  return total;
+}
+
 function animarmaPrice(){
   return (document.querySelector("#fld-animarma").checked && document.querySelector("#fld-type").value === "weapon") ? 100 : 0;
 }
@@ -527,9 +610,11 @@ function syncPriceSummary(){
   document.querySelector("#sum-base").textContent = base;
   document.querySelector("#sum-quality").textContent = QUALITY_DIFF[document.querySelector("#fld-quality").value] ?? 0;
   document.querySelector("#sum-craft").textContent = craftPrice();
+  document.querySelector("#sum-upgrades").textContent = upgradePrice();
   document.querySelector("#sum-anim").textContent = animarmaPrice();
-  const total = base + (QUALITY_DIFF[document.querySelector("#fld-quality").value] ?? 0) + craftPrice() + animarmaPrice();
+  const total = base + (QUALITY_DIFF[document.querySelector("#fld-quality").value] ?? 0) + craftPrice() + upgradePrice() + animarmaPrice();
   document.querySelector("#sum-total").textContent = total;
+  updateCraftAlert();
 }
 
 function syncTypeVisibility(){
@@ -544,6 +629,7 @@ function syncTypeVisibility(){
   renderUpgradePicker();
   renderAttrList();
   syncPriceSummary();
+  updateMagazineVisibility();
 }
 
 async function loadUpgrades(){
@@ -602,6 +688,7 @@ function renderUpgradeSummary(){
     row.querySelector("button").addEventListener("click", ()=>{
       STATE.upgrades = STATE.upgrades.filter(x=>x !== id);
       renderUpgradeSummary();
+      syncPriceSummary();
     });
     wrap.appendChild(row);
   });
@@ -613,17 +700,33 @@ function addUpgrade(){
   if (!STATE.upgrades.includes(val)){
     STATE.upgrades.push(val);
     renderUpgradeSummary();
+    syncPriceSummary();
   }
   document.querySelector("#upgrade-picker").value = "";
 }
 
-function craftTable(){
-  const tb = document.querySelector("#craft-table"); tb.innerHTML = "";
-  Object.entries(CRAFTO_MAP).forEach(([q, meta])=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${q}</td><td>${meta.cat}</td><td>${meta.price}</td>`;
-    tb.appendChild(tr);
-  });
+function craftCategoryRank(cat){
+  const key = String(cat || "").toLowerCase();
+  return CRAFT_CATEGORY_ORDER.findIndex(c=> c.toLowerCase() === key);
+}
+
+function allowedCraftCategory(){
+  const q = document.querySelector("#fld-quality").value;
+  return CRAFTO_MAP[q]?.cat || "";
+}
+
+function updateCraftAlert(){
+  const el = document.querySelector("#craft-alert");
+  if (!el){ return; }
+  el.style.display = "none";
+  const spellCat = STATE.craftSpell?.category || "";
+  const allowed = allowedCraftCategory();
+  const allowedRank = craftCategoryRank(allowed);
+  const spellRank = craftCategoryRank(spellCat);
+  if (spellCat && allowed && allowedRank >= 0 && spellRank >= 0 && spellRank > allowedRank){
+    el.textContent = `${spellCat} spell exceeds ${allowed} limit for ${document.querySelector("#fld-quality").value} quality.`;
+    el.style.display = "block";
+  }
 }
 
 async function searchCraft(){
@@ -639,8 +742,11 @@ async function searchCraft(){
     spells.slice(0,60).forEach(s=>{
       const opt = document.createElement("option");
       opt.value = s.id;
-      opt.textContent = `${s.name} (${s.school_name || s.school || ""})`;
+      const metaBits = [s.school_name || s.school || ""].filter(Boolean);
+      if (s.category) metaBits.push(s.category);
+      opt.textContent = metaBits.length ? `${s.name} (${metaBits.join(" • ")})` : s.name;
       opt.dataset.name = s.name;
+      opt.dataset.category = s.category || "";
       sel.appendChild(opt);
     });
   }catch(e){
@@ -651,16 +757,31 @@ async function searchCraft(){
 function onSelectCraft(){
   const sel = document.querySelector("#craft-results");
   const id = sel.value;
-  if (!id){ STATE.craftSpell = null; document.querySelector("#craft-meta").textContent = "No spell linked."; syncPriceSummary(); return; }
+  if (!id){
+    STATE.craftSpell = null;
+    document.querySelector("#craft-meta").textContent = "No spell linked.";
+    updateCraftAlert();
+    syncPriceSummary();
+    return;
+  }
   const name = sel.selectedOptions[0]?.dataset?.name || sel.selectedOptions[0]?.textContent || id;
-  STATE.craftSpell = { id, name };
+  const category = sel.selectedOptions[0]?.dataset?.category || "";
+  STATE.craftSpell = { id, name, category };
   const q = document.querySelector("#fld-quality").value;
   const meta = CRAFTO_MAP[q] || { cat:"?", price:0 };
-  document.querySelector("#craft-meta").textContent = `Linked to ${name} - ${meta.cat} at current quality (${q}), +${meta.price} Jelly.`;
+  const catNote = category ? ` (${category})` : "";
+  document.querySelector("#craft-meta").textContent = `Linked to ${name}${catNote} - ${meta.cat} at current quality (${q}), +${meta.price} Jelly.`;
+  updateCraftAlert();
   syncPriceSummary();
 }
 
-function clearCraft(){ document.querySelector("#craft-results").value = ""; STATE.craftSpell=null; document.querySelector("#craft-meta").textContent="Craftomancy cleared."; syncPriceSummary(); }
+function clearCraft(){
+  document.querySelector("#craft-results").value = "";
+  STATE.craftSpell=null;
+  document.querySelector("#craft-meta").textContent="Craftomancy cleared.";
+  updateCraftAlert();
+  syncPriceSummary();
+}
 
 function addModRow(initial={}){
   const row = document.createElement("div");
@@ -765,6 +886,7 @@ function buildPayload(){
   const upgrades = STATE.upgrades.slice();
 
   if (type === "weapon"){
+    const magSize = hasMagazineAttribute() ? Number(document.querySelector("#fld-magazine").value || 0) : 0;
     let description = desc;
     if (STATE.craftSpell){
       const meta = CRAFTO_MAP[document.querySelector("#fld-quality").value] || { cat:"?", price:0 };
@@ -784,6 +906,7 @@ function buildPayload(){
       modifiers: mods,
       nature: document.querySelector("#fld-nature").value,
       is_animarma: document.querySelector("#fld-animarma").checked,
+      magazine_size: magSize,
     };
     return payload;
   }
@@ -851,6 +974,7 @@ function fillFromPayload(item){
     document.querySelector("#fld-hands").value = item.hands ?? 1;
     document.querySelector("#fld-nature").value = item.nature || "";
     document.querySelector("#fld-animarma").checked = !!item.is_animarma;
+    document.querySelector("#fld-magazine").value = item.magazine_size ?? item.magazine ?? 0;
     const dmg = item.damage || "2d6+2+M(REF)";
     const diceMatch = dmg.match(/^(\\d+)/); document.querySelector("#fld-dice").value = diceMatch ? diceMatch[1] : 2;
     const flatMatch = dmg.match(/\\+(\\d+)/); document.querySelector("#fld-flat").value = flatMatch ? flatMatch[1] : 2;
@@ -969,6 +1093,7 @@ function resetForm(){
   document.querySelector("#fld-ms").value = "REF";
   document.querySelector("#fld-nature").value = "";
   document.querySelector("#fld-animarma").checked = false;
+  document.querySelector("#fld-magazine").value = 0;
   setRichText("");
   document.querySelector("#mod-list").innerHTML = "";
   addModRow({});
@@ -980,7 +1105,6 @@ function resetForm(){
 
 function onReady(){
   renderQualitySelect();
-  craftTable();
   addModRow({});
   renderAttrList();
   syncTypeVisibility();
@@ -995,10 +1119,12 @@ function onReady(){
   document.querySelector("#fld-type").addEventListener("change", syncTypeVisibility);
   ["fld-tier","fld-quality","fld-price","fld-animarma"].forEach(id=> document.getElementById(id).addEventListener("input", syncPriceSummary));
   document.getElementById("fld-tier").addEventListener("change", syncPriceSummary);
+  document.getElementById("fld-quality").addEventListener("change", syncPriceSummary);
   document.getElementById("fld-location").addEventListener("change", syncTypeVisibility);
 
   document.querySelector("#btn-add-upgrade").addEventListener("click", addUpgrade);
   document.querySelector("#btn-add-mod").addEventListener("click", ()=> addModRow({}));
+  document.querySelector("#btn-add-attr").addEventListener("click", addAttribute);
   document.querySelector("#btn-save").addEventListener("click", saveItem);
   document.querySelector("#btn-new").addEventListener("click", resetForm);
   document.querySelector("#btn-refresh").addEventListener("click", ()=> loadLibrary(document.querySelector("#library-type").value));
