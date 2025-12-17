@@ -869,7 +869,7 @@ function collectModifiers(){
     const g = row.querySelector(".group")?.children || [];
     const groupName = g[0]?.value || "";
     const groupMax = parseInt(g[1]?.value || "0", 10);
-    const mod = { target, mode, value, note };
+    const mod = { target, mode, value, note, quality_step: Number.isFinite(qStep) ? qStep : 0 };
     if (groupName){ mod.group = groupName; mod.group_max_choices = Math.max(0, groupMax); }
     mods.push(mod);
   });

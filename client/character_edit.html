@@ -800,6 +800,7 @@ const SUB_TYPES = [
   { key:'clarity', label:'Clarity' },
   { key:'endurance', label:'Endurance' },
 ];
+const QUALITY_ORDER = ['Very Mediocre','Mediocre','Adequate','Good','Very Good','Excellent','Legendary','Mythical','Epic','Divine','Unreal'];
 
 function _archetypeRankForLevel(lvl){
   const thresholds = [[80,12],[70,11],[60,10],[50,9],[40,8],[30,7],[20,6],[10,5],[1,4]];
@@ -883,6 +884,17 @@ function investVal(v, fb=0){
   return numOr(v, fb);
 }
 const lc = (s)=> String(s||'').toLowerCase();
+function qualityStepDelta(q){
+  const baseIdx = QUALITY_ORDER.findIndex(x=> lc(x) === 'adequate');
+  const idx = QUALITY_ORDER.findIndex(x=> lc(x) === lc(q));
+  if (idx === -1 || baseIdx === -1) return 0;
+  return idx - baseIdx;
+}
+function qualityStepFromNote(note){
+  if (!note) return 0;
+  const m = String(note).match(/([+-]?\d+(?:\.\d+)?)\s*(?:per\s+quality|\/\s*quality)/i);
+  return m ? Number(m[1]) || 0 : 0;
+}
 const MAX_LEVEL = 100;
 function xpForLevel(level){
   const lvl = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level||1)));
@@ -1968,7 +1980,10 @@ function getEquippedInventoryModifiers(){
         const target = (em.target || em.key || '').trim();
         if (!target) return;
         const mode = (em.mode || m.mode || 'add').toLowerCase();
-        const value = Number(em.value ?? m.value ?? 0);
+        const baseValue = numOr(em.value ?? m.value, 0);
+        const quality_step = numOr(em.quality_step ?? m.quality_step ?? qualityStepFromNote(em.note || m.note), 0);
+        const qualityDelta = quality_step ? qualityStepDelta(it.quality) : 0;
+        const value = baseValue + (quality_step * qualityDelta);
         const level_step = Number(em.level_step ?? m.level_step ?? 0);
         const level_increment = Number(em.level_increment ?? m.level_increment ?? 1);
         if (target.startsWith('choice:')){
