@@ -5,6 +5,17 @@
   <title>Import Effects (Admin/Moderator)</title>
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    .rich-editor { border:1px solid #333; border-radius:12px; background:#0f0f0f; }
+    .rich-toolbar { display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px; border-bottom:1px solid #1f1f1f; }
+    .rich-toolbar button { padding:6px 8px; font-size:.9rem; border-radius:8px; border:1px solid #2d2d2d; background:#161616; color:#f3f3f3; cursor:pointer; }
+    .rich-toolbar button:hover { background:#1f1f1f; }
+    .rich-toolbar button:active { background:#222; }
+    .rich-area { min-height:130px; padding:10px; outline:none; }
+    .rich-area:empty:before { content: attr(data-placeholder); color:#777; }
+    .rich-area table { width:100%; border-collapse:collapse; margin-top:6px; }
+    .rich-area th, .rich-area td { border:1px solid #333; padding:6px; }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -45,11 +56,20 @@
         </div>
       </div>
 
-      <label style="margin-top:14px;">Paste Effects (raw text)</label>
-      <textarea id="raw" rows="14" placeholder="Format each entry as:
+      <label style="margin-top:14px;">Paste Effects (rich text supported; pasted formatting kept)</label>
+      <div id="raw-editor" class="rich-editor">
+        <div class="rich-toolbar">
+          <button type="button" data-cmd="bold" title="Bold">Bold</button>
+          <button type="button" data-cmd="italic" title="Italic">Italic</button>
+          <button type="button" data-cmd="underline" title="Underline">Underline</button>
+          <button type="button" data-cmd="table" title="Insert 2x2 table">Table</button>
+          <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+        </div>
+        <div class="rich-area" contenteditable="true" data-placeholder="Format each entry as:
 Name: Description (can span multiple lines)
 MP (can be negative, e.g. -2)
-EN (can be negative, e.g. -1)"></textarea>
+EN (can be negative, e.g. -1)"></div>
+      </div>
 
       <div style="display:flex; gap:10px; margin-top:10px;">
         <button class="btn" id="parse-btn">Parse</button>
@@ -93,6 +113,41 @@ if (!token || (role !== "admin" && role !== "moderator")) {
   window.location.href = "home.html";
 }
 
+function setupRichTextEditor(containerId, placeholder=''){
+  const container = document.getElementById(containerId);
+  if (!container) throw new Error('Missing rich text container '+containerId);
+  const area = container.querySelector('.rich-area');
+  if (!area) throw new Error('Missing rich text area in '+containerId);
+  if (placeholder) area.setAttribute('data-placeholder', placeholder);
+
+  const normalizeHtml = (html)=>{
+    const text = (area.textContent || '').replace(/\u00a0/g, ' ').trim();
+    const raw = (html || '').trim();
+    if (!text) return '';
+    return raw;
+  };
+
+  container.querySelectorAll('[data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.preventDefault();
+      area.focus();
+      const cmd = btn.dataset.cmd;
+      if (cmd === 'table'){
+        const tbl = '<table class="rte-table"><tbody><tr><td>Cell 1</td><td>Cell 2</td></tr><tr><td>Cell 3</td><td>Cell 4</td></tr></tbody></table>';
+        document.execCommand('insertHTML', false, tbl);
+      }else{
+        document.execCommand(cmd, false, null);
+      }
+    });
+  });
+
+  return {
+    el: area,
+    getHTML: ()=> normalizeHtml(area.innerHTML),
+    setHTML: (html='')=>{ area.innerHTML = html || ''; },
+  };
+}
+
 function authHeaders(extra = {}) {
   return { "Authorization": `Bearer ${token}`, "Content-Type": "application/json", ...extra };
 }
@@ -103,6 +158,11 @@ const schoolTypeSelect = $("#school-type");
 const rangeTypeSelect  = $("#range-type");
 const aoeTypeSelect    = $("#aoe-type");
 const upgradeCheckbox  = $("#upgrade");
+
+const rawEditor = setupRichTextEditor('raw-editor', `Format each entry as:
+Name: Description (can span multiple lines)
+MP (can be negative, e.g. -2)
+EN (can be negative, e.g. -1)`);
 
 // Table preview model
 let PREVIEW = []; // [{name, description, mp_cost, en_cost}]
@@ -227,7 +287,13 @@ $("#parse-btn").addEventListener("click", ()=>{
   if (!schoolName) return alert("Please fill School Name first.");
 
   try{
-    PREVIEW = parseRawBlock($("#raw").value);
+    const rawHtml = rawEditor.getHTML();
+    const text = rawHtml
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/\u00a0/g, " ");
+    PREVIEW = parseRawBlock(text);
     $("#errors").textContent = "";
     renderPreview();
     $("#preview-card").style.display = "block";
