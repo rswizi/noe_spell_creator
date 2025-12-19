@@ -149,7 +149,7 @@ function renderSpellDetailsHTML(sp, costs) {
   const effectLines = Object.entries(counts).map(([eid, n])=>{
     const e = EFFECTS_BY_ID[String(eid)] || { name: `[${eid}]` };
     const mult = n > 1 ? ` [x${n}]` : "";
-    const desc = e.description ? `: ${escapeHtml(e.description)}` : "";
+    const desc = e.description ? `: ${e.description}` : "";
     return `<div><b>${escapeHtml(e.name || String(eid))}${mult}</b>${desc}</div>`;
   }).join("");
 

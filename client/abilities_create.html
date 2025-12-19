@@ -48,6 +48,16 @@
     .mod-row .group-wrap .muted { grid-column:1 / -1; }
 
     .status-line { margin-top:10px; font-size:.85rem; opacity:.9; }
+
+    .rich-editor { border:1px solid #333; border-radius:12px; background:#0f0f0f; }
+    .rich-toolbar { display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px; border-bottom:1px solid #1f1f1f; }
+    .rich-toolbar button { padding:6px 8px; font-size:.9rem; border-radius:8px; border:1px solid #2d2d2d; background:#161616; color:#f3f3f3; cursor:pointer; }
+    .rich-toolbar button:hover { background:#1f1f1f; }
+    .rich-toolbar button:active { background:#222; }
+    .rich-area { min-height:130px; padding:10px; outline:none; }
+    .rich-area:empty:before { content: attr(data-placeholder); color:#777; }
+    .rich-area table { width:100%; border-collapse:collapse; margin-top:6px; }
+    .rich-area th, .rich-area td { border:1px solid #333; padding:6px; }
   </style>
 </head>
 <body>
@@ -121,7 +131,16 @@
       </div>
 
           <h3>General Description</h3>
-          <textarea id="ab-description" placeholder="Lore + global explanation of what this ability does."></textarea>
+          <div id="ab-description-editor" class="rich-editor">
+            <div class="rich-toolbar">
+              <button type="button" data-cmd="bold" title="Bold">Bold</button>
+              <button type="button" data-cmd="italic" title="Italic">Italic</button>
+              <button type="button" data-cmd="underline" title="Underline">Underline</button>
+              <button type="button" data-cmd="table" title="Insert 2x2 table">Table</button>
+              <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+            </div>
+            <div class="rich-area" contenteditable="true" data-placeholder="Lore + global explanation of what this ability does."></div>
+          </div>
 
           <!-- SAVE BUTTON HERE => ALWAYS VISIBLE -->
           <button class="btn" id="btn-save" type="button" style="margin-top:14px;">💾 Save Ability</button>
@@ -131,7 +150,16 @@
         <div class="panel" id="panel-passive">
           <h2>Passive Part <span class="pill">always on</span></h2>
           <h3>Passive Description</h3>
-          <textarea id="passive-desc" placeholder="Describe the permanent effect (bonuses, resistances, triggers…)."></textarea>
+          <div id="passive-desc-editor" class="rich-editor">
+            <div class="rich-toolbar">
+              <button type="button" data-cmd="bold" title="Bold">Bold</button>
+              <button type="button" data-cmd="italic" title="Italic">Italic</button>
+              <button type="button" data-cmd="underline" title="Underline">Underline</button>
+              <button type="button" data-cmd="table" title="Insert 2x2 table">Table</button>
+              <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+            </div>
+            <div class="rich-area" contenteditable="true" data-placeholder="Describe the permanent effect (bonuses, resistances, triggers...)."></div>
+          </div>
 
           <h3 style="margin-top:10px;">Modifiers (optional)</h3>
           <div class="muted" style="margin-bottom:4px;">
@@ -203,6 +231,41 @@ async function api(path,opt={}){
   return data;
 }
 
+function setupRichTextEditor(containerId, placeholder=''){
+  const container = document.getElementById(containerId);
+  if (!container) throw new Error('Missing rich text container '+containerId);
+  const area = container.querySelector('.rich-area');
+  if (!area) throw new Error('Missing rich text area in '+containerId);
+  if (placeholder) area.setAttribute('data-placeholder', placeholder);
+
+  const normalizeHtml = (html)=>{
+    const text = (area.textContent || '').replace(/\u00a0/g, ' ').trim();
+    const raw = (html || '').trim();
+    if (!text) return '';
+    return raw;
+  };
+
+  container.querySelectorAll('[data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.preventDefault();
+      area.focus();
+      const cmd = btn.dataset.cmd;
+      if (cmd === 'table'){
+        const tbl = '<table class=\"rte-table\"><tbody><tr><td>Cell 1</td><td>Cell 2</td></tr><tr><td>Cell 3</td><td>Cell 4</td></tr></tbody></table>';
+        document.execCommand('insertHTML', false, tbl);
+      }else{
+        document.execCommand(cmd, false, null);
+      }
+    });
+  });
+
+  return {
+    el: area,
+    getHTML: ()=> normalizeHtml(area.innerHTML),
+    setHTML: (html='')=>{ area.innerHTML = html || ''; },
+  };
+}
+
 const loginChip    = document.getElementById('login-chip');
 const statusLine   = document.getElementById('status-line');
 const nameEl       = document.getElementById('ab-name');
@@ -215,11 +278,11 @@ const arcReplSel   = document.getElementById('ab-arc-repl');
 const arcReplSearch= document.getElementById('ab-arc-repl-search');
 const sourceRefEl  = document.getElementById('ab-source-ref');
 const tagsEl       = document.getElementById('ab-tags');
-const descEl       = document.getElementById('ab-description');
+const descEditor   = setupRichTextEditor('ab-description-editor', 'Lore + global explanation of what this ability does.');
 
 const panelActive  = document.getElementById('panel-active');
 const panelPassive = document.getElementById('panel-passive');
-const passiveDescEl= document.getElementById('passive-desc');
+const passiveEditor= setupRichTextEditor('passive-desc-editor', 'Describe the permanent effect (bonuses, resistances, triggers...).');
 const modListEl    = document.getElementById('mod-list');
 const btnAddMod    = document.getElementById('btn-add-mod');
 
@@ -536,7 +599,7 @@ async function buildPayload(){
     source_category: sourceCatEl.value,
     source_ref: sourceRefEl.value || '',
     tags,
-    description: descEl.value || '',
+    description: descEditor.getHTML(),
   };
 
   let active = null;
@@ -588,7 +651,7 @@ async function buildPayload(){
       mods.push(modPayload);
     }
     passive = {
-      description: passiveDescEl.value || '',
+      description: passiveEditor.getHTML(),
       modifiers: mods,
     };
   }

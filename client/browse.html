@@ -284,12 +284,15 @@ async function openSpellDetails(spellId) {
         const li = document.createElement('li');
         const en = (ef.en_cost != null) ? ` [EN ${ef.en_cost}]` : '';
         const mp = (ef.mp_cost != null) ? ` [MP ${ef.mp_cost}]` : '';
-        li.textContent = `${ef.name || ef.title || 'Effect'}: ${ef.description || ''}${mp}${en}`;
+        const nameSafe = escapeHtml(ef.name || ef.title || 'Effect');
+        const suffix = escapeHtml(`${mp}${en}`);
+        const descHtml = ef.description || '';
+        li.innerHTML = `${nameSafe}: ${descHtml}${suffix}`;
         ul.appendChild(li);
       });
     } else {
       const li = document.createElement('li');
-      li.textContent = '—';
+      li.textContent = '-';
       ul.appendChild(li);
     }
 

@@ -276,7 +276,13 @@ function addEffectRow(prefillId="") {
   desc.className = "effect-desc";
   const setDesc = () => {
     const eff = EFFECTS_BY_ID[String(sel.value)];
-    desc.textContent = eff ? (eff.description || "(No description)") : "";
+    if (eff && eff.description) {
+      desc.innerHTML = eff.description;
+    } else if (eff) {
+      desc.textContent = "(No description)";
+    } else {
+      desc.textContent = "";
+    }
   };
   setDesc();
 

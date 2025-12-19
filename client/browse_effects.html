@@ -18,6 +18,16 @@
     .modal-close:hover { color:#fff; }
     label small { opacity:.7; margin-left:8px; }
     input[type="number"] { width:120px; }
+
+    .rich-editor { border:1px solid #333; border-radius:12px; background:#0f0f0f; }
+    .rich-toolbar { display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px; border-bottom:1px solid #1f1f1f; }
+    .rich-toolbar button { padding:6px 8px; font-size:.9rem; border-radius:8px; border:1px solid #2d2d2d; background:#161616; color:#f3f3f3; cursor:pointer; }
+    .rich-toolbar button:hover { background:#1f1f1f; }
+    .rich-toolbar button:active { background:#222; }
+    .rich-area { min-height:130px; padding:10px; outline:none; }
+    .rich-area:empty:before { content: attr(data-placeholder); color:#777; }
+    .rich-area table { width:100%; border-collapse:collapse; margin-top:6px; }
+    .rich-area th, .rich-area td { border:1px solid #333; padding:6px; }
   </style>
 </head>
 <body>
@@ -56,9 +66,17 @@
         <label>Name
           <input id="ef-name" type="text" />
         </label>
-        <label>Description
-          <textarea id="ef-desc" rows="5" style="width:100%;"></textarea>
-        </label>
+        <label>Description</label>
+        <div id="ef-desc-editor" class="rich-editor" style="margin-bottom:10px;">
+          <div class="rich-toolbar">
+            <button type="button" data-cmd="bold" title="Bold">Bold</button>
+            <button type="button" data-cmd="italic" title="Italic">Italic</button>
+            <button type="button" data-cmd="underline" title="Underline">Underline</button>
+            <button type="button" data-cmd="table" title="Insert 2x2 table">Table</button>
+            <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+          </div>
+          <div class="rich-area" contenteditable="true" data-placeholder="Effect description (rich text supported)"></div>
+        </div>
 
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
           <label>MP Cost <small>(integer)</small>
@@ -104,6 +122,41 @@ if (!token || (role !== "admin" && role !== "moderator")) {
   window.location.href = "home.html";
 }
 
+function setupRichTextEditor(containerId, placeholder=''){
+  const container = document.getElementById(containerId);
+  if (!container) throw new Error('Missing rich text container '+containerId);
+  const area = container.querySelector('.rich-area');
+  if (!area) throw new Error('Missing rich text area in '+containerId);
+  if (placeholder) area.setAttribute('data-placeholder', placeholder);
+
+  const normalizeHtml = (html)=>{
+    const text = (area.textContent || '').replace(/\u00a0/g, ' ').trim();
+    const raw = (html || '').trim();
+    if (!text) return '';
+    return raw;
+  };
+
+  container.querySelectorAll('[data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.preventDefault();
+      area.focus();
+      const cmd = btn.dataset.cmd;
+      if (cmd === 'table'){
+        const tbl = '<table class="rte-table"><tbody><tr><td>Cell 1</td><td>Cell 2</td></tr><tr><td>Cell 3</td><td>Cell 4</td></tr></tbody></table>';
+        document.execCommand('insertHTML', false, tbl);
+      }else{
+        document.execCommand(cmd, false, null);
+      }
+    });
+  });
+
+  return {
+    el: area,
+    getHTML: ()=> normalizeHtml(area.innerHTML),
+    setHTML: (html='')=>{ area.innerHTML = html || ''; },
+  };
+}
+
 const $ = s => document.querySelector(s);
 const listEl = $("#list");
 const nameEl = $("#filter-name");
@@ -113,7 +166,7 @@ const schoolEl = $("#filter-school");
 const modal = $("#edit-modal");
 const statusEl = $("#edit-status");
 const nameInput = $("#ef-name");
-const descInput = $("#ef-desc");
+const descEditor = setupRichTextEditor('ef-desc-editor', 'Effect description (rich text supported)');
 const mpInput = $("#ef-mp");
 const enInput = $("#ef-en");
 const schoolInput = $("#ef-school");
@@ -200,7 +253,7 @@ window.editEffect = function(id) {
   currentEditId = ef.id;
   $("#edit-title").textContent = `Edit Effect [${ef.id}]`;
   nameInput.value = ef.name || "";
-  descInput.value = ef.description || "";
+  descEditor.setHTML(ef.description || "");
   mpInput.value = Number(ef.mp_cost ?? 0);
   enInput.value = Number(ef.en_cost ?? 0);
   schoolInput.value = ef.school || "";
@@ -235,7 +288,7 @@ $("#edit-save").addEventListener("click", async () => {
   statusEl.textContent = "Saving and recomputing spells…";
   const payload = {
     name: nameInput.value.trim(),
-    description: descInput.value.trim(),
+    description: descEditor.getHTML(),
     mp_cost: Number(mpInput.value),
     en_cost: Number(enInput.value),
     school: schoolInput.value
