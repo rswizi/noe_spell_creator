@@ -2,234 +2,575 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Manage Upgrades</title>
+  <title>Upgrade Creator</title>
   <link rel="stylesheet" href="/static/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    .grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-    .card { border:1px solid #222; border-radius:12px; padding:12px; background:#0b0b0b; }
-    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    input, select { width:100%; }
-    .mod-row{display:grid;grid-template-columns:1fr 0.8fr 0.6fr 1fr auto;gap:6px;align-items:center}
+    :root { color-scheme: dark; }
+    body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#07090f; color:#f7f7fb; }
+    .page { min-height:100vh; display:grid; place-items:start center; }
+    .wrap { width:100%; max-width:1180px; padding:24px 16px 40px; }
+    .topbar { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+    .topbar h1 { margin:0; font-size:22px; letter-spacing:0.02em; }
+    .topbar .right { margin-left:auto; }
+    .pill { border:1px solid #2f3d5c; border-radius:999px; padding:4px 9px; font-size:.85rem; background:#0d1424; color:#d8e4ff; }
+    .muted { opacity:.82; font-size:.92rem; }
+
+    a.btn, button.btn, input, select, textarea {
+      border-radius:12px; border:1px solid #273044; background:#0d1220; color:#f5f5fa;
+      padding:9px 11px; font:inherit;
+    }
+    a.btn:hover, button.btn:hover { background:#131a2c; }
+    .btn.secondary { background:transparent; border-color:#3a4257; color:#d5d9e6; }
+    textarea { resize:vertical; }
+
+    .grid { display:grid; gap:16px; grid-template-columns: 1.1fr 0.9fr; align-items:start; }
+    @media (max-width:950px){ .grid { grid-template-columns:1fr; } }
+
+    .panel { border:1px solid #1e2536; border-radius:16px; background:#0a0f1a; padding:14px 16px 16px; box-shadow:0 8px 22px rgba(0,0,0,.35); }
+    .panel h2 { margin:0 0 10px; font-size:1.05rem; }
+    .panel h3 { margin:10px 0 6px; font-size:.98rem; }
+
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+    .row label { min-width:120px; font-size:.92rem; opacity:.85; }
+    .row .grow { flex:1 1 auto; }
+
+    .pill-check { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #2e3c55; border-radius:12px; background:#0e1422; cursor:pointer; user-select:none; }
+    .pill-check input { accent-color:#4da3ff; }
+
+    .rich-editor { border:1px solid #273044; border-radius:14px; background:#0c111d; }
+    .rich-toolbar { display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px; border-bottom:1px solid #1c2333; }
+    .rich-toolbar button { padding:6px 8px; font-size:.9rem; border-radius:8px; border:1px solid #2d354a; background:#141a2a; color:#f3f3f3; cursor:pointer; }
+    .rich-toolbar button:hover { background:#1b2336; }
+    .rich-area { min-height:140px; padding:10px; outline:none; }
+    .rich-area:empty:before { content: attr(data-placeholder); color:#6f788d; }
+    .rich-area table { width:100%; border-collapse:collapse; margin-top:6px; }
+    .rich-area th, .rich-area td { border:1px solid #273044; padding:6px; }
+
+    .mod-row { display:grid; gap:8px; grid-template-columns: 1.2fr 1fr 0.7fr 0.6fr 1fr auto; align-items:center; padding:8px 10px; border:1px dashed #1f283d; border-radius:12px; background:#0c111c; }
+    .mod-row .custom { grid-column:1 / span 2; }
+    .mod-row .note { grid-column:1 / span 2; }
+    .mod-row .group { grid-column:1 / span 2; display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:6px; }
+    .badge { display:inline-block; border:1px solid #33425f; border-radius:999px; padding:3px 9px; font-size:.82rem; background:#101728; color:#d6e2ff; }
+
+    .effect-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
+    .card-list { display:grid; gap:12px; }
+    .upg-card { border:1px solid #1f2738; border-radius:14px; padding:12px; background:#0c111c; }
+    .upg-card h4 { margin:0 0 6px; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Upgrades (Moderator)</h1>
-    <div class="card">
-      <div class="row">
-        <label class="muted">Kind</label>
-        <select id="kind">
-          <option value="weapon">Weapon</option>
-          <option value="equipment">Equipment</option>
-        </select>
-        <label class="muted">Slot (equipment)</label>
-        <select id="slot">
-          <option value="">Any</option>
-          <option>head</option>
-          <option>arms</option>
-          <option>legs</option>
-          <option>accessory</option>
-          <option>chest</option>
-        </select>
-        <label class="muted">Exclusive group (optional)</label>
-        <input id="exclusive" placeholder="exclusive key (only one per group)">
-        <label class="muted">Targets (comma, optional)</label>
-        <input id="targets" placeholder="ex: Technicity, Accuracy">
-        <label class="muted">Name</label>
-        <input id="name" placeholder="Name">
-        <label class="muted">Description</label>
-        <input id="desc" placeholder="Short description">
-        <label class="row" style="gap:6px;">
-          <input type="checkbox" id="unique"> <span class="muted">Unique</span>
-        </label>
-        <div class="row" style="width:100%;justify-content:space-between;align-items:center;">
-          <strong>Modifiers</strong>
-          <button id="mod-add" class="btn small" type="button">+ Modifier</button>
-        </div>
-        <div id="mod-list" style="width:100%;"></div>
-        <button id="create" class="btn">Create / Update</button>
-        <span id="status" class="muted"></span>
-        <input id="editing" type="hidden" value="">
-      </div>
+  <div class="page"><div class="wrap">
+    <div class="topbar">
+      <h1>Upgrade Creator</h1>
+      <span class="muted right" id="login-chip"></span>
+      <a class="btn secondary" href="inventory_manage.html">↩ Back</a>
     </div>
 
-    <div class="card" style="margin-top:12px;">
-      <div class="row" style="justify-content:space-between;">
-        <h3>Existing</h3>
+    <div class="grid">
+      <div class="panel">
+        <h2>Basics</h2>
         <div class="row">
-          <label class="muted">Filter kind</label>
-          <select id="filter-kind"><option value="">Any</option><option value="weapon">Weapon</option><option value="equipment">Equipment</option></select>
-          <label class="muted">Slot</label>
-          <select id="filter-slot"><option value="">Any</option><option>head</option><option>arms</option><option>legs</option><option>accessory</option><option>chest</option></select>
-          <button class="btn small" id="refresh">Refresh</button>
+          <label>Name</label>
+          <input id="up-name" class="grow" placeholder="Ex: Silver-Lined Stock" />
+        </div>
+
+        <div class="row" style="gap:8px;">
+          <label style="min-width:140px;">Item Types</label>
+          <label class="pill-check"><input type="checkbox" value="weapon" class="chk-kind" />Weapons</label>
+          <label class="pill-check"><input type="checkbox" value="equipment" class="chk-kind" />Equipment</label>
+          <label class="pill-check"><input type="checkbox" value="object" class="chk-kind" />Objects</label>
+          <label class="pill-check"><input type="checkbox" value="tool" class="chk-kind" />Tools</label>
+        </div>
+
+        <div class="row" style="gap:8px; align-items:flex-start;">
+          <label style="min-width:140px;">Equipment Slots</label>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <label class="pill-check"><input type="checkbox" value="head" class="chk-slot" />Head</label>
+            <label class="pill-check"><input type="checkbox" value="arms" class="chk-slot" />Arm</label>
+            <label class="pill-check"><input type="checkbox" value="legs" class="chk-slot" />Leg</label>
+            <label class="pill-check"><input type="checkbox" value="chest" class="chk-slot" />Chest</label>
+            <label class="pill-check"><input type="checkbox" value="accessory" class="chk-slot" />Accessory</label>
+            <label class="pill-check"><input type="checkbox" value="special" class="chk-slot" />Special</label>
+          </div>
+        </div>
+
+        <div class="row">
+          <label>Exclusive group (optional)</label>
+          <input id="up-exclusive" class="grow" placeholder="Exclusive key (only one per group)" />
+        </div>
+
+        <h3>Description</h3>
+        <div id="desc-editor" class="rich-editor">
+          <div class="rich-toolbar">
+            <button type="button" data-cmd="bold" title="Bold">Bold</button>
+            <button type="button" data-cmd="italic" title="Italic">Italic</button>
+            <button type="button" data-cmd="underline" title="Underline">Underline</button>
+            <button type="button" data-cmd="table" title="Insert 2x2 table">Table</button>
+            <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+          </div>
+          <div class="rich-area" contenteditable="true" data-placeholder="Explain what the upgrade does..."></div>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <label class="row" style="gap:6px; margin:0;">
+            <input type="checkbox" id="up-unique" /> <span class="muted">Unique</span>
+          </label>
         </div>
       </div>
-      <div id="list" class="grid"></div>
+
+      <div class="panel">
+        <h2>Modifiers on Holder</h2>
+        <div class="muted" style="margin-bottom:8px;">Same selector as items/abilities. Supports groups, max choices, and quality scaling.</div>
+        <div id="mod-holder"></div>
+        <button id="btn-add-holder" class="btn small" type="button" style="margin-top:8px;">+ Add modifier</button>
+      </div>
     </div>
 
-    <div style="margin-top:16px;">
-      <a class="btn btn-secondary" href="inventory_manage.html">← Back</a>
+    <div class="panel" style="margin-top:14px;">
+      <h2>Modifiers on Item</h2>
+      <div class="muted" style="margin-bottom:10px;">These affect the item itself (attributes, damage, loudness, etc.).</div>
+      <div class="effect-grid">
+        <label>Encumbrance delta
+          <input id="fx-enc" type="number" step="0.1" placeholder="0" />
+        </label>
+        <label>Magic damage (+X)
+          <input id="fx-magic" type="number" step="1" placeholder="0" />
+        </label>
+        <label>Status attribute
+          <select id="fx-status">
+            <option value="">-- choose --</option>
+            <option value="Hemorrhage">Hemorrhage</option>
+            <option value="Toxin">Toxin</option>
+            <option value="Stun">Stun</option>
+            <option value="Freeze">Freeze</option>
+          </select>
+        </label>
+        <label class="pill-check"><input type="checkbox" id="fx-loud" /> Loud attribute</label>
+        <label class="pill-check"><input type="checkbox" id="fx-neutral" /> Add neutral damage</label>
+        <label class="pill-check"><input type="checkbox" id="fx-acuity" /> Adds Acuity attribute</label>
+        <label class="pill-check"><input type="checkbox" id="fx-mag3" /> Magazine size +3</label>
+        <label class="pill-check"><input type="checkbox" id="fx-silver" /> Silver Plating attribute</label>
+        <label class="pill-check"><input type="checkbox" id="fx-range4" /> Range +4 if Shooting</label>
+        <label class="pill-check"><input type="checkbox" id="fx-defense" /> Adds Defense attribute</label>
+      </div>
     </div>
-  </div>
+
+    <div class="panel" style="margin-top:14px;">
+      <h2>Actions</h2>
+      <div class="row" style="gap:10px; flex-wrap:wrap;">
+        <button id="btn-save" class="btn" type="button">💾 Save Upgrade</button>
+        <button id="btn-reset" class="btn secondary" type="button">Reset Form</button>
+        <span id="status-line" class="muted">Ready.</span>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px;">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <h2>Existing Upgrades</h2>
+        <div class="row" style="gap:8px;">
+          <select id="filter-kind">
+            <option value="">Any type</option>
+            <option value="weapon">Weapons</option>
+            <option value="equipment">Equipment</option>
+          </select>
+          <button id="btn-refresh" class="btn small" type="button">Refresh</button>
+        </div>
+      </div>
+      <div id="list" class="card-list"></div>
+    </div>
+  </div></div>
 
 <script>
+const API_BASE = "";
 const token = localStorage.getItem("auth_token") || "";
-const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+const authHeaders = () => token ? { "Authorization": "Bearer " + token, "X-Auth-Token": token } : {};
 const $ = s => document.querySelector(s);
 
-const MOD_TARGETS = [
-  "char.reflex","char.dexterity","char.body","char.wisdom","char.presence","char.magic","char.willpower","char.tech",
-  "skills.reflex.Technicity","skills.reflex.Dodge","skills.reflex.Counter","skills.reflex.Reactivity",
-  "skills.dexterity.Accuracy","skills.dexterity.Evasion","skills.dexterity.Stealth","skills.dexterity.Acrobatics",
-  "skills.body.Brutality","skills.body.Blocking","skills.body.Resistance","skills.body.Athletics",
-  "skills.wisdom.Survival","skills.wisdom.Education","skills.wisdom.Perception","skills.wisdom.Psychology","skills.wisdom.Investigation",
-  "skills.presence.Taming","skills.presence.Charm","skills.presence.Charisma","skills.presence.Deception","skills.presence.Persuasion",
-  "skills.magic.Aura","skills.magic.Incantation","skills.magic.Enchantment","skills.magic.Restoration","skills.magic.Potential",
-  "skills.willpower.Intimidation","skills.willpower.Spirit","skills.willpower.Instinct","skills.willpower.Absorption",
-  "skills.tech.Crafting","skills.tech.Sleight of hand","skills.tech.Alchemy","skills.tech.Medicine","skills.tech.Engineering",
-  "derived.hp","derived.en","derived.fo","derived.mo","derived.spcap","derived.enc","derived.et","derived.tx",
-  "__custom__"
-];
-
-function modsToString(mods){
-  return (mods||[]).map(m=>`${m.target}:${m.mode||"add"}:${m.value||0}`).join(", ");
+function requireAuth(){
+  if (!token){ alert("Please log in."); window.location.href="home.html"; }
 }
 
-function addModRow(container, initial={}){
-  const row=document.createElement("div");
-  row.className="mod-row";
-  const sel=document.createElement("select");
-  MOD_TARGETS.forEach(t=>{
-    const o=document.createElement("option");
-    o.value=t; o.textContent = t==="__custom__" ? "Custom..." : t;
-    if (t === (initial.target||"")) o.selected = true;
-    sel.appendChild(o);
+function setupRichTextEditor(containerId, placeholder=''){
+  const container = document.getElementById(containerId);
+  const area = container.querySelector('.rich-area');
+  if (placeholder) area.setAttribute('data-placeholder', placeholder);
+  const normalize = html => {
+    const text = (area.textContent || '').replace(/\u00a0/g,' ').trim();
+    const raw = (html||'').trim();
+    if (!text) return '';
+    return raw;
+  };
+  container.querySelectorAll('[data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', ev=>{
+      ev.preventDefault();
+      area.focus();
+      const cmd = btn.dataset.cmd;
+      if (cmd === 'table'){
+        const tbl = '<table class="rte-table"><tbody><tr><td>Cell 1</td><td>Cell 2</td></tr><tr><td>Cell 3</td><td>Cell 4</td></tr></tbody></table>';
+        document.execCommand('insertHTML', false, tbl);
+      }else{
+        document.execCommand(cmd, false, null);
+      }
+    });
   });
-  const custom=document.createElement("input");
-  custom.placeholder="Custom target";
-  custom.value = (!MOD_TARGETS.includes(initial.target) ? (initial.target||"") : "");
-  custom.style.display = sel.value === "__custom__" ? "" : "none";
-  sel.addEventListener("change", ()=>{
-    custom.style.display = sel.value === "__custom__" ? "" : "none";
-    if (sel.value !== "__custom__") custom.value = "";
+  return {
+    el: area,
+    getHTML: ()=> normalize(area.innerHTML),
+    setHTML: (html='')=>{ area.innerHTML = html || ''; }
+  };
+}
+
+const descEditor = setupRichTextEditor('desc-editor', 'Explain the upgrade...');
+
+// ----- Modifier selector (same as item/ability) -----
+const DEFAULT_NATURES = ['Fire','Water','Earth','Lightning','Wind','Sun','Moon','Ki'];
+const PASSIVE_TARGET_GROUPS = (()=> {
+  const characteristics = [
+    { key:'reflex',    label:'Reflex' },
+    { key:'dexterity', label:'Dexterity' },
+    { key:'body',      label:'Body' },
+    { key:'wisdom',    label:'Wisdom' },
+    { key:'presence',  label:'Presence' },
+    { key:'magic',     label:'Magic' },
+    { key:'willpower', label:'Willpower' },
+    { key:'tech',      label:'Tech' },
+  ];
+  const skills = [
+    { key:'reflex',    label:'Reflex',    skills:['Technicity','Dodge','Counter','Reactivity'] },
+    { key:'dexterity', label:'Dexterity', skills:['Accuracy','Evasion','Stealth','Acrobatics'] },
+    { key:'body',      label:'Body',      skills:['Brutality','Blocking','Resistance','Athletics'] },
+    { key:'wisdom',    label:'Wisdom',    skills:['Survival','Education','Perception','Psychology','Investigation'] },
+    { key:'presence',  label:'Presence',  skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
+    { key:'magic',     label:'Magic',     skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
+    { key:'willpower', label:'Willpower', skills:['Intimidation','Spirit','Instinct','Absorption'] },
+    { key:'tech',      label:'Tech',      skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
+  ];
+  const derived = [
+    { key:'hp', label:'HP' },
+    { key:'en', label:'EN' },
+    { key:'fo', label:'FO' },
+    { key:'mo', label:'MO' },
+    { key:'spcap', label:'SP cap (10% HP)' },
+    { key:'enc', label:'Encumbrance' },
+    { key:'et', label:'Eclipse Threshold (ET)' },
+    { key:'tx', label:'Max Toxicity (TX)' },
+    { key:'talent_max', label:'Talent Max' },
+  ];
+  const skillGroups = characteristics.map(c=>({ value:`choice:skills.by_char.${c.key}`, label:`[Choice] Skills linked to ${c.label}` }));
+  const intensityOpts = DEFAULT_NATURES.map(n=>({ value:`intensities.${n}`, label:`Intensity: ${n}` }));
+  const schoolByNature = DEFAULT_NATURES.map(n=>({ value:`choice:schools.by_nature.${n}`, label:`[Choice] MS for schools linked to ${n}` }));
+  const allSkillNames = Array.from(new Set(skills.flatMap(c=> c.skills || [])));
+  const schoolBySkill = allSkillNames.map(s=>({ value:`choice:schools.by_skill.${s}`, label:`[Choice] MS for schools using ${s}` }));
+  const magicDmgSpell = DEFAULT_NATURES.map(n=>({ value:`magic_damage.spell.${n}`, label:`Magic Damage on spells/animarma (${n})` }));
+  const magicDmgWeapon = DEFAULT_NATURES.map(n=>({ value:`magic_damage.weapon.${n}`, label:`Magic Damage on weapons (${n})` }));
+  const choiceOpts = [
+    { value:'choice:skill_ms', label:'[Choice] MS by linked skill (any)' },
+    { value:'choice:nature_ms', label:'[Choice] MS by linked nature (any)' },
+    { value:'choice:char_skill', label:'[Choice] Skill linked to characteristic (any)' },
+    { value:'choice:intensity_any', label:'[Choice] Pick one Intensity' },
+  ];
+  const schoolChoice = [{ value:'choice:school_any', label:'[Choice] Pick schools (any)' }];
+  return [
+    { label:'Characteristics', options: characteristics.map(c=>({ value:`char.${c.key}`, label:`${c.label} (modifier)` })) },
+    { label:'Skills', options: skills.flatMap(c=> c.skills.map(s=>({ value:`skills.${c.key}.${s}`, label:`${s} (${c.label})` }))) },
+    { label:'Skill Groups (choice)', options: skillGroups.concat(choiceOpts) },
+    { label:'Magic Schools by Nature (choice)', options: schoolByNature },
+    { label:'Magic Schools by Skill (choice)', options: schoolBySkill.concat(schoolChoice) },
+    { label:'Intensities', options: intensityOpts },
+    { label:'Magic Damage', options: magicDmgSpell.concat(magicDmgWeapon) },
+    { label:'Derived / Resources', options: derived.map(d=>({ value:`derived.${d.key}`, label:d.label })) },
+    { label:'Custom', options:[{ value:'__custom__', label:'Custom path...' }]},
+  ];
+})();
+
+function addModifierRow(container, initial={}){
+  const row = document.createElement('div');
+  row.className = 'mod-row';
+
+  const target = document.createElement('select');
+  const placeholder = document.createElement('option');
+  placeholder.textContent = 'Target...'; placeholder.value=''; placeholder.disabled=true; placeholder.selected=true;
+  target.appendChild(placeholder);
+  let matched = false;
+  PASSIVE_TARGET_GROUPS.forEach(group=>{
+    const og = document.createElement('optgroup');
+    og.label = group.label;
+    group.options.forEach(o=>{
+      const opt = document.createElement('option');
+      opt.value = o.value; opt.textContent = o.label;
+      if (initial.target === o.value){ opt.selected=true; matched=true; placeholder.selected=false; }
+      og.appendChild(opt);
+    });
+    target.appendChild(og);
   });
-  const mode=document.createElement("select");
-  ["add","mul","set"].forEach(m=>{
-    const o=document.createElement("option");
-    o.value=m; o.textContent=m;
-    if ((initial.mode||"add")===m) o.selected=true;
-    mode.appendChild(o);
+
+  const custom = document.createElement('input');
+  custom.className = 'custom';
+  custom.placeholder = 'Custom path (ex: derived.hp)';
+  custom.value = matched ? '' : (initial.target || '');
+  custom.style.display = matched ? 'none' : '';
+  target.addEventListener('change', ()=>{
+    const isCustom = target.value === '__custom__';
+    custom.style.display = isCustom ? '' : 'none';
+    if (!isCustom) custom.value = '';
   });
-  const val=document.createElement("input");
-  val.type="number"; val.step="0.1"; val.value = initial.value ?? 0;
-  const note=document.createElement("input");
-  note.placeholder="Note"; note.value = initial.note || "";
-  const rm=document.createElement("button");
-  rm.className="btn btn-secondary small";
-  rm.type="button"; rm.textContent="Remove";
-  rm.onclick=()=>row.remove();
-  row.appendChild(sel); row.appendChild(custom); row.appendChild(mode); row.appendChild(val); row.appendChild(note); row.appendChild(rm);
+
+  const mode = document.createElement('select');
+  ['add','mul','set'].forEach(m=>{
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    if ((initial.mode||'add') === m) opt.selected = true;
+    mode.appendChild(opt);
+  });
+
+  const value = document.createElement('input');
+  value.type = 'number'; value.step = '0.1'; value.value = initial.value ?? 0;
+
+  const qStep = document.createElement('input');
+  qStep.type = 'number'; qStep.step = '0.1'; qStep.placeholder = '+ per quality'; qStep.value = initial.quality_step ?? '';
+
+  const note = document.createElement('input');
+  note.className = 'note'; note.placeholder = 'Note';
+  note.value = initial.note || '';
+
+  const group = document.createElement('div'); group.className='group';
+  const groupName = document.createElement('input'); groupName.placeholder='Group key'; groupName.value = initial.group || '';
+  const groupMax  = document.createElement('input'); groupMax.type='number'; groupMax.placeholder='Max choices (0=∞)'; groupMax.value = initial.group_max_choices ?? '';
+  group.appendChild(groupName); group.appendChild(groupMax);
+
+  const rm = document.createElement('button');
+  rm.className = 'btn secondary'; rm.type='button'; rm.textContent='Remove';
+  rm.addEventListener('click', ()=> row.remove());
+
+  row.appendChild(target);
+  row.appendChild(custom);
+  row.appendChild(mode);
+  row.appendChild(value);
+  row.appendChild(qStep);
+  row.appendChild(note);
+  row.appendChild(group);
+  row.appendChild(rm);
   container.appendChild(row);
 }
 
-function setModifiers(container, mods){
-  container.innerHTML = "";
-  if (mods && mods.length){ mods.forEach(m=>addModRow(container, m)); }
-  else addModRow(container, {});
-}
 function collectModifiers(container){
-  const mods=[];
-  container.querySelectorAll(".mod-row").forEach(row=>{
-    const sel=row.querySelector("select");
-    const custom=row.querySelector("input[placeholder='Custom target']");
-    const target = sel.value === "__custom__" ? (custom.value||"").trim() : sel.value;
+  const mods = [];
+  container.querySelectorAll('.mod-row').forEach(row=>{
+    const targetSel = row.querySelector('select');
+    const custom = row.querySelector('.custom');
+    const target = targetSel.value === '__custom__' ? (custom.value||'').trim() : (targetSel.value || custom.value || '').trim();
     if (!target) return;
-    const mode = row.querySelectorAll("select")[1]?.value || "add";
-    const val = parseFloat(row.querySelector("input[type='number']").value||"0");
-    const note = row.querySelector("input[placeholder='Note']").value || "";
-    mods.push({ target, mode, value: val, note });
+    const mode = row.querySelectorAll('select')[1]?.value || 'add';
+    const nums = row.querySelectorAll('input[type=\"number\"]');
+    const val = parseFloat(nums[0]?.value || '0');
+    const qStep = parseFloat(nums[1]?.value || '0');
+    const note = row.querySelector('.note')?.value || '';
+    const g = row.querySelector('.group')?.children || [];
+    const groupName = g[0]?.value || '';
+    const groupMax = parseInt(g[1]?.value || '0', 10);
+    const mod = { target, mode, value: val, note };
+    if (!Number.isNaN(qStep) && qStep) mod.quality_step = qStep;
+    if (groupName){ mod.group = groupName; mod.group_max_choices = Math.max(0, groupMax); }
+    mods.push(mod);
   });
   return mods;
 }
 
-async function loadList(){
-  const kind = $("#filter-kind").value || "";
-  const slot = $("#filter-slot").value || "";
-  const qs = [];
-  if (kind) qs.push("kind="+encodeURIComponent(kind));
-  if (slot) qs.push("slot="+encodeURIComponent(slot));
-  const r = await fetch(`/upgrades${qs.length ? "?"+qs.join("&") : ""}`, { headers: authHeaders() });
-  const j = await r.json();
-  const box = $("#list"); box.innerHTML = "";
-  if (j.status !== "success"){ box.textContent = j.message || "Error"; return; }
-  (j.upgrades||[]).forEach(u=>{
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div><b>${u.name}</b> (${u.kind}${u.slot ? " · "+u.slot : ""}) ${u.unique ? "· Unique" : ""}</div>
-      <div class="muted">${u.description || ""}</div>
-      <div class="muted">Exclusive: ${u.exclusive_group || "—"} · Targets: ${(u.targets||[]).join(", ") || "—"}</div>
-      <div class="muted">Mods: ${modsToString(u.modifiers)}</div>
-      <div class="row" style="margin-top:6px; gap:6px;">
-        <button class="btn small edit">Edit</button>
-        <button class="btn btn-secondary small del">Delete</button>
-      </div>
-    `;
-    card.querySelector(".edit").addEventListener("click", ()=>{
-      $("#editing").value = u.id;
-      $("#kind").value = u.kind;
-      $("#slot").value = u.slot || "";
-      $("#name").value = u.name;
-      $("#unique").checked = !!u.unique;
-      $("#desc").value = u.description || "";
-      $("#exclusive").value = u.exclusive_group || "";
-      $("#targets").value = (u.targets||[]).join(", ");
-      setModifiers(document.getElementById("mod-list"), u.modifiers || []);
-      $("#status").textContent = `Editing ${u.id}`;
-    });
-    card.querySelector(".del").addEventListener("click", async ()=>{
-      if (!confirm(`Delete upgrade ${u.name}?`)) return;
-      const r2 = await fetch(`/upgrades/${encodeURIComponent(u.id)}`, { method:"DELETE", headers: authHeaders() });
-      const j2 = await r2.json();
-      if (j2.status !== "success"){ alert(j2.message || "Delete failed"); return; }
-      loadList();
-    });
-    box.appendChild(card);
-  });
+function clearModifiers(container){
+  container.innerHTML = '';
+  addModifierRow(container, {});
+}
+
+// ----- Item effects -----
+function collectItemEffects(){
+  const effects = [];
+  const enc = parseFloat($("#fx-enc").value || "0");
+  if (enc) effects.push({ type:'encumbrance', value: enc });
+  const magic = parseFloat($("#fx-magic").value || "0");
+  if (magic) effects.push({ type:'magic_damage', value: magic });
+  const status = $("#fx-status").value;
+  if (status) effects.push({ type:'status_attribute', value: status });
+  if ($("#fx-loud").checked) effects.push({ type:'loud' });
+  if ($("#fx-neutral").checked) effects.push({ type:'neutral_damage' });
+  if ($("#fx-acuity").checked) effects.push({ type:'acuity' });
+  if ($("#fx-mag3").checked) effects.push({ type:'magazine_plus_3' });
+  if ($("#fx-silver").checked) effects.push({ type:'silver_plating' });
+  if ($("#fx-range4").checked) effects.push({ type:'range_plus4_if_shooting' });
+  if ($("#fx-defense").checked) effects.push({ type:'defense_attribute' });
+  return effects;
+}
+
+function setItemEffects(effects=[]){
+  const byType = {};
+  effects.forEach(e=>{ if (e?.type) byType[e.type] = e; });
+  $("#fx-enc").value = byType.encumbrance?.value ?? "";
+  $("#fx-magic").value = byType.magic_damage?.value ?? "";
+  $("#fx-status").value = byType.status_attribute?.value || "";
+  $("#fx-loud").checked = !!byType.loud;
+  $("#fx-neutral").checked = !!byType.neutral_damage;
+  $("#fx-acuity").checked = !!byType.acuity;
+  $("#fx-mag3").checked = !!byType.magazine_plus_3;
+  $("#fx-silver").checked = !!byType.silver_plating;
+  $("#fx-range4").checked = !!byType.range_plus4_if_shooting;
+  $("#fx-defense").checked = !!byType.defense_attribute;
+}
+
+// ----- CRUD -----
+let CURRENT_ID = "";
+let UPGRADE_CACHE = [];
+
+function selectedKinds(){
+  const vals = Array.from(document.querySelectorAll('.chk-kind')).filter(c=>c.checked).map(c=>c.value);
+  return vals.length ? vals : ['equipment'];
+}
+function selectedSlots(){
+  return Array.from(document.querySelectorAll('.chk-slot')).filter(c=>c.checked).map(c=>c.value);
+}
+
+function resolveKind(kinds){
+  if (kinds.includes('weapon') && !kinds.includes('equipment')) return 'weapon';
+  return 'equipment';
+}
+
+function buildPayload(){
+  const kinds = selectedKinds();
+  const slots = selectedSlots();
+  const holderMods = collectModifiers(document.getElementById('mod-holder'));
+  const itemEffects = collectItemEffects();
+  const kind = resolveKind(kinds);
+  return {
+    name: $("#up-name").value || "",
+    kind,
+    item_types: kinds,
+    slot: kind === 'equipment' && slots.length === 1 ? slots[0] : "",
+    slots: slots,
+    description: descEditor.getHTML(),
+    description_html: descEditor.getHTML(),
+    unique: $("#up-unique").checked,
+    exclusive_group: $("#up-exclusive").value || "",
+    holder_modifiers: holderMods,
+    modifiers: holderMods, // compatibility
+    item_effects: itemEffects
+  };
 }
 
 async function saveUpgrade(){
-  const body = {
-    kind: $("#kind").value,
-    slot: $("#slot").value,
-    name: $("#name").value,
-    description: $("#desc").value,
-    unique: $("#unique").checked,
-    exclusive_group: $("#exclusive").value,
-    targets: ($("#targets").value || "").split(",").map(s=>s.trim()).filter(Boolean),
-    modifiers: collectModifiers(document.getElementById("mod-list")),
-  };
-  const editing = $("#editing").value;
-  const path = editing ? `/upgrades/${encodeURIComponent(editing)}` : "/upgrades";
-  const method = editing ? "PUT" : "POST";
-  const r = await fetch(path, {
-    method,
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(body)
+  try{
+    $("#status-line").textContent = "Saving...";
+    const payload = buildPayload();
+    const path = CURRENT_ID ? `/upgrades/${encodeURIComponent(CURRENT_ID)}` : "/upgrades";
+    const method = CURRENT_ID ? "PUT" : "POST";
+    const res = await fetch(path, {
+      method,
+      headers: { "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify(payload)
+    });
+    const j = await res.json();
+    if (j.status !== "success") throw new Error(j.message || "Save failed");
+    CURRENT_ID = j.upgrade?.id || CURRENT_ID;
+    $("#status-line").textContent = `Saved ${CURRENT_ID || ""}`;
+    await loadList();
+  }catch(e){
+    console.error(e);
+    $("#status-line").textContent = e.message || "Error";
+  }
+}
+
+function resetForm(){
+  CURRENT_ID = "";
+  $("#up-name").value = "";
+  document.querySelectorAll('.chk-kind').forEach(c=> c.checked=false);
+  document.querySelector('.chk-kind[value=\"equipment\"]').checked = true;
+  document.querySelectorAll('.chk-slot').forEach(c=> c.checked=false);
+  $("#up-exclusive").value = "";
+  $("#up-unique").checked = false;
+  descEditor.setHTML("");
+  clearModifiers(document.getElementById('mod-holder'));
+  setItemEffects([]);
+  $("#status-line").textContent = "Ready.";
+}
+
+function populateForm(u){
+  CURRENT_ID = u.id;
+  $("#up-name").value = u.name || "";
+  const kinds = u.item_types || (u.kind ? [u.kind] : []);
+  document.querySelectorAll('.chk-kind').forEach(c=> c.checked = kinds.includes(c.value));
+  const slots = u.slots || (u.slot ? [u.slot] : []);
+  document.querySelectorAll('.chk-slot').forEach(c=> c.checked = slots.includes(c.value));
+  $("#up-exclusive").value = u.exclusive_group || "";
+  $("#up-unique").checked = !!u.unique;
+  descEditor.setHTML(u.description_html || u.description || "");
+  clearModifiers(document.getElementById('mod-holder'));
+  (u.holder_modifiers || u.modifiers || []).forEach(m=> addModifierRow(document.getElementById('mod-holder'), m));
+  if (!(u.holder_modifiers || u.modifiers || []).length) addModifierRow(document.getElementById('mod-holder'), {});
+  setItemEffects(u.item_effects || []);
+  $("#status-line").textContent = `Editing ${u.id || ""}`;
+}
+
+function renderList(upgrades){
+  const box = $("#list");
+  if (!upgrades.length){ box.innerHTML = '<div class="muted">No upgrades found.</div>'; return; }
+  box.innerHTML = upgrades.map(u=>{
+    const kinds = (u.item_types || [u.kind || '']).filter(Boolean).map(k=>`<span class="badge">${k}</span>`).join(" ");
+    const slots = (u.slots || (u.slot?[u.slot]:[])).map(s=>`<span class="badge">${s}</span>`).join(" ");
+    const effects = (u.item_effects||[]).map(e=> e.type.replace(/_/g,' ')+(e.value!=null?`: ${e.value}`:"")).join(" • ");
+    return `
+      <div class="upg-card">
+        <h4>${u.name || "(unnamed)"} ${kinds ? `<span style="margin-left:6px;">${kinds}</span>` : ""}</h4>
+        <div class="muted" style="margin-bottom:6px;">${slots || "Any slot"}</div>
+        ${u.description_html || u.description ? `<div class="muted" style="margin-bottom:6px;">${u.description_html || u.description}</div>` : ''}
+        ${effects ? `<div class="muted small">Item effects: ${effects}</div>` : ''}
+        <div class="row" style="gap:6px; margin-top:8px;">
+          <button class="btn small" data-id="${u.id}" data-action="edit">Edit</button>
+          <button class="btn secondary small" data-id="${u.id}" data-action="delete">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+  box.querySelectorAll('button[data-action]').forEach(btn=>{
+    const id = btn.dataset.id;
+    const action = btn.dataset.action;
+    btn.addEventListener('click', async ()=>{
+      if (action === 'edit'){
+        const found = UPGRADE_CACHE.find(u=>u.id===id);
+        if (found) populateForm(found);
+      }else if (action === 'delete'){
+        if (!confirm('Delete this upgrade?')) return;
+        try{
+          const r = await fetch(`/upgrades/${encodeURIComponent(id)}`, { method:'DELETE', headers: authHeaders() });
+          const j = await r.json();
+          if (j.status === 'success') { resetForm(); loadList(); }
+          else alert(j.message || 'Delete failed');
+        }catch(e){ alert('Delete failed'); }
+      }
+    });
   });
-  const j = await r.json();
-  if (j.status !== "success"){ $("#status").textContent = j.message || "Save failed"; return; }
-  $("#status").textContent = "Saved.";
-  $("#editing").value = "";
-  loadList();
+}
+
+async function loadList(){
+  try{
+    const k = $("#filter-kind").value || "";
+    const qs = k ? `?kind=${encodeURIComponent(k)}` : "";
+    const r = await fetch(`/upgrades${qs}`, { headers: authHeaders() });
+    const j = await r.json();
+    if (j.status !== "success") throw new Error(j.message || "Load failed");
+    UPGRADE_CACHE = j.upgrades || [];
+    renderList(UPGRADE_CACHE);
+  }catch(e){
+    console.error(e);
+    $("#list").innerHTML = `<div class="muted" style="color:#ff7a7a;">${e.message || "Error"}</div>`;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", ()=>{
-  $("#create").addEventListener("click", saveUpgrade);
-  $("#refresh").addEventListener("click", loadList);
-  $("#mod-add").addEventListener("click", ()=> addModRow(document.getElementById("mod-list"), {}));
-  setModifiers(document.getElementById("mod-list"), []);
+  requireAuth();
+  document.querySelector('.chk-kind[value=\"equipment\"]').checked = true;
+  clearModifiers(document.getElementById('mod-holder'));
+  $("#btn-add-holder").addEventListener('click', ()=> addModifierRow(document.getElementById('mod-holder'), {}));
+  $("#btn-save").addEventListener('click', saveUpgrade);
+  $("#btn-reset").addEventListener('click', resetForm);
+  $("#btn-refresh").addEventListener('click', loadList);
   loadList();
 });
 </script>

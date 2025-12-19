@@ -2756,28 +2756,61 @@ def bulk_create_equipment(request: Request, payload: dict = Body(...)):
 # ---------- Upgrades Catalog ----------
 def _upgrade_from_body(body: dict) -> dict:
     kind = (body.get("kind") or "").strip().lower()
+    # allow UI to send broader item_types but still enforce core kind
+    item_types_in = body.get("item_types") or body.get("target_types") or []
+    if isinstance(item_types_in, str):
+        item_types = [x.strip().lower() for x in item_types_in.split(",") if x.strip()]
+    else:
+        item_types = [str(x).strip().lower() for x in item_types_in if str(x).strip()]
+    # default kind based on selection
+    if not kind:
+        kind = "weapon" if "weapon" in item_types else "equipment"
+
     if kind not in ("weapon","equipment"):
         raise HTTPException(status_code=400, detail="kind must be weapon|equipment")
     slot = (body.get("slot") or "").strip().lower()
-    if kind == "equipment" and slot and slot not in EQUIPMENT_SLOTS:
-        raise HTTPException(status_code=400, detail="slot must be one of head/arms/legs/accessory/chest")
+    slots_in = body.get("slots") or []
+    slots = [str(s).strip().lower() for s in slots_in if str(s).strip()]
+    if kind == "equipment":
+        valid_slots = set(EQUIPMENT_SLOTS)
+        if slot and slot not in valid_slots:
+            raise HTTPException(status_code=400, detail="slot must be one of head/arms/legs/accessory/chest")
+        slots = [s for s in slots if s in valid_slots]
+    else:
+        slot = ""
+        slots = []
+
     name, key = _eq_norm_name(body.get("name"), "Upgrade")
     unique = bool(body.get("unique", False))
-    modifiers = _modifiers_from_body(body)
+
+    holder_mods = _modifiers_from_body(body.get("holder_modifiers") if isinstance(body.get("holder_modifiers"), list) else body)
+    modifiers = holder_mods or _modifiers_from_body(body)
     targets = body.get("targets")
     if isinstance(targets, str):
         targets = [t.strip() for t in targets.split(",") if t.strip()]
     if targets and not isinstance(targets, list):
         targets = []
     exclusive_group = (body.get("exclusive_group") or body.get("exclusive") or "").strip().lower()
+
+    item_effects = body.get("item_effects")
+    if not isinstance(item_effects, list):
+        item_effects = []
+
+    desc_html = (body.get("description_html") or body.get("description") or "").strip()
+
     return {
         "kind": kind,
         "slot": slot,
+        "slots": slots,
+        "item_types": item_types,
         "name": name,
         "name_key": key,
         "unique": unique,
-        "description": (body.get("description") or "").strip(),
+        "description": desc_html,
+        "description_html": desc_html,
         "modifiers": modifiers,
+        "holder_modifiers": holder_mods,
+        "item_effects": item_effects,
         "targets": targets or [],
         "exclusive_group": exclusive_group,
         "created_at": datetime.datetime.utcnow().isoformat()+"Z",
@@ -2815,6 +2848,8 @@ def update_upgrade(uid: str, request: Request, body: dict = Body(...)):
     if not before:
         raise HTTPException(status_code=404, detail="Not found")
     doc = _upgrade_from_body(body)
+    if "created_at" in before:
+        doc["created_at"] = before.get("created_at")
     if col.find_one({"id": {"$ne": uid}, "name_key": doc["name_key"], "kind": doc["kind"], "slot": doc.get("slot","")}):
         raise HTTPException(status_code=409, detail="Duplicate upgrade")
     doc["updated_at"] = datetime.datetime.utcnow().isoformat()+"Z"
