@@ -271,6 +271,7 @@
           <span class="pill" id="skill-counter">Skills: -- / --</span>
           <span class="pill" id="stat-counter">Characteristics: -- / --</span>
           <span class="pill" id="skill-cap">Max per skill: --</span>
+          <span class="pill" id="stat-cap">Max per characteristic: --</span>
         </div>
 
         <div class="stats-grid" id="stats-grid"><!-- injected --></div>
@@ -989,6 +990,7 @@ const txEl = document.getElementById('tx-val');
 const skillCounterEl = document.getElementById('skill-counter');
 const statCounterEl = document.getElementById('stat-counter');
 const skillCapEl = document.getElementById('skill-cap');
+const statCapEl = document.getElementById('stat-cap');
 const overrideToggle = document.getElementById('override-derived');
 const overrideInputsWrap = document.getElementById('override-inputs');
 const ovHpEl = document.getElementById('ov-hp');
@@ -1343,13 +1345,14 @@ function updatePointCounters(){
   const capStatInvest = statInvestCap(lvl);
   const capStatTotal = statTotalCap(lvl);
   if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkill} / ${poolSkill}`;
-  if (statCounterEl){
-    statCounterEl.textContent = `Characteristics: ${usedStat} / ${poolStat} (max invest per stat: ${capStatInvest}, base total cap: ${capStatTotal})`;
-    statCounterEl.title = `You can invest up to ${capStatInvest} per stat (base total ${capStatTotal}); modifiers may push higher.`;
-  }
+  if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStat} / ${poolStat}`;
   if (skillCapEl){
     skillCapEl.textContent = `Max per skill (invest): ${capSkillInvest}`;
     skillCapEl.title = 'Cap applies to invested points; bonuses can raise totals beyond this.';
+  }
+  if (statCapEl){
+    statCapEl.textContent = `Max per characteristic (invest): ${capStatInvest}`;
+    statCapEl.title = `Invest cap excludes the starting 4; base total cap is ${capStatTotal}. Modifiers can exceed caps.`;
   }
 }
 
