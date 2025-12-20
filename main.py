@@ -2820,7 +2820,10 @@ def _upgrade_from_body(body: dict) -> dict:
     name, key = _eq_norm_name(body.get("name"), "Upgrade")
     unique = bool(body.get("unique", False))
 
-    holder_mods = _modifiers_from_body(body.get("holder_modifiers") if isinstance(body.get("holder_modifiers"), list) else body)
+    holder_src = body
+    if isinstance(body.get("holder_modifiers"), list):
+        holder_src = {"modifiers": body.get("holder_modifiers")}
+    holder_mods = _modifiers_from_body(holder_src)
     modifiers = holder_mods or _modifiers_from_body(body)
     targets = body.get("targets")
     if isinstance(targets, str):
