@@ -1918,11 +1918,63 @@ function recomputePassiveAgg(){
       PASSIVE.magic_damage[kind] = bucket;
       const agg = ensureAgg(bucket, nature);
       (agg[mode]||agg.add).push({v:val, origin});
+        agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+        continue;
+      }
+    }
+  }
+  for (const m of getSpellEffectModifiers()){
+    const t = (m.target||'').trim();
+    const mode = (m.mode||'add').toLowerCase();
+    const val = modEffectiveValue(m);
+    const origin = m.origin || 'Spell';
+    if (!t) continue;
+    const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
+    if (cm){
+      const key = cm[1].toLowerCase();
+      const agg = ensureAgg(PASSIVE.char, key);
+      (agg[mode]||agg.add).push({v:val, origin});
+      agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      continue;
+    }
+    const sm = t.match(/^skills\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)\.(.+)$/i);
+    if (sm){
+      const ckey = sm[1].toLowerCase();
+      const skName = sm[2];
+      const k = `${ckey}|${skName}`;
+      const agg = ensureAgg(PASSIVE.skill, k);
+      (agg[mode]||agg.add).push({v:val, origin});
+      agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      continue;
+    }
+    const im = t.match(/^intensities\.(.+)$/i);
+    if (im){
+      const skName = im[1];
+      const agg = ensureAgg(PASSIVE.intensity, skName);
+      (agg[mode]||agg.add).push({v:val, origin});
+      agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      continue;
+    }
+    const sch = t.match(/^schools\.(.+)$/i);
+    if (sch){
+      const skName = sch[1];
+      const agg = ensureAgg(PASSIVE.school, skName);
+      (agg[mode]||agg.add).push({v:val, origin});
+      agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      continue;
+    }
+    const md = t.match(/^magic_damage\.(spell|weapon)\.(.+)$/i);
+    if (md){
+      const kind = md[1].toLowerCase();
+      const nature = md[2].toLowerCase();
+      const bucket = PASSIVE.magic_damage[kind] || {};
+      PASSIVE.magic_damage[kind] = bucket;
+      const agg = ensureAgg(bucket, nature);
+      (agg[mode]||agg.add).push({v:val, origin});
       agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
       continue;
     }
   }
-}
 function applyOps(base, agg){
   if (!agg) return { value: base, notes: [`Base = ${base}`] };
   const notes = [`Base = ${base}`];
@@ -2007,6 +2059,39 @@ function getEquippedInventoryModifiers(){
         mods.push({ target, mode, value, level_step, level_increment, origin });
       });
     }
+  }
+  return mods;
+}
+
+function getSpellEffectModifiers(){
+  const mods = [];
+  const meta = SPELLLIST_META.spell_meta || {};
+  const allowedStatus = new Set(["known","learnt",""]);
+  if (!Object.keys(EFFECTS_BY_ID).length && !EFFECTS_PROMISE){
+    ensureEffectsLoaded().catch(()=>{});
+  }
+  for (const sp of SPELLLIST_SPELLS){
+    const status = (meta[sp.id]?.status || "known");
+    if (!allowedStatus.has(status)) continue;
+    const effects = sp.effects || [];
+    effects.forEach(eid=>{
+      const key = String(eid||'').toLowerCase();
+      const eff = EFFECTS_BY_ID[key] || {};
+      const mlist = Array.isArray(eff.modifiers) ? eff.modifiers : [];
+      mlist.forEach(m=>{
+        const origin = `Spell: ${sp.name || sp.id}${eff.name ? ` / ${eff.name}` : ""}`;
+        expandedTargets(m).forEach(em=>{
+          const target = (em.target || em.key || '').trim();
+          if (!target) return;
+          const merged = { ...m, ...em };
+          const mode = (merged.mode || 'add').toLowerCase();
+          const value = modEffectiveValue(merged);
+          const level_step = Number(merged.level_step || 0);
+          const level_increment = Number(merged.level_increment ?? 1);
+          mods.push({ target, mode, value, level_step, level_increment, origin });
+        });
+      });
+    });
   }
   return mods;
 }
@@ -3828,16 +3913,18 @@ async function reloadSpellListData(){
   if (!SELECTED_SPELL_LIST_ID){
     SPELLLIST_SPELLS=[]; SPELLLIST_META={};
     if (CHAR && CHAR.stats) setAddedSchools(CHAR.stats.selected_schools || []);
-    renderSpellRows(); renderAddedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); renderSchoolSpellCounters(); return;
+    renderSpellRows(); renderAddedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); renderSchoolSpellCounters(); recomputePassiveAgg(); renderStatistics(); updateDerived(); return;
   }
   await loadSpellListMeta(SELECTED_SPELL_LIST_ID);
   SPELLLIST_SPELLS = await fetchSpellListSpells(SELECTED_SPELL_LIST_ID);
+  await ensureEffectsLoaded();
   renderSpellListSummary();
   await fetchSchools();
   renderAddedSchools();
   renderSpellRows();
   renderAbilitySpellsBucket();
   renderSchoolSpellCounters();
+  recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
 }
 
 async function loadArchetypesList(){
@@ -4213,6 +4300,14 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
     }
   }
   for (const m of getEquippedInventoryModifiers()){
+    allMods.push({
+      target:(m.target||'').toLowerCase(),
+      mode:(m.mode||'add').toLowerCase(),
+      val:modEffectiveValue(m),
+      origin:m.origin
+    });
+  }
+  for (const m of getSpellEffectModifiers()){
     allMods.push({
       target:(m.target||'').toLowerCase(),
       mode:(m.mode||'add').toLowerCase(),

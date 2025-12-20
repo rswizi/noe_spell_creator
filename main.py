@@ -374,6 +374,29 @@ def list_schools():
     out.sort(key=lambda x: x["name"].lower())
     return {"schools": out}
 
+def _clean_modifiers(raw):
+    mods = []
+    if not isinstance(raw, list):
+        return mods
+    for m in raw:
+        if not isinstance(m, dict):
+            continue
+        tgt = str(m.get("target") or m.get("key") or "").strip()
+        if not tgt:
+            continue
+        mod = {
+            "target": tgt,
+            "mode": (m.get("mode") or "add"),
+            "value": m.get("value", 0),
+        }
+        if m.get("note"): mod["note"] = m.get("note")
+        if m.get("group"): mod["group"] = m.get("group")
+        if m.get("quality_step") is not None: mod["quality_step"] = m.get("quality_step")
+        if m.get("level_step") is not None: mod["level_step"] = m.get("level_step")
+        if m.get("level_increment") is not None: mod["level_increment"] = m.get("level_increment")
+        mods.append(mod)
+    return mods
+
 @app.get("/effects")
 def get_effects(name: str | None = Query(default=None), school: str | None = Query(default=None)):
     col = get_col("effects")
@@ -480,7 +503,8 @@ async def bulk_create_effects(request: Request):
                             "description": desc,
                             "mp_cost": mp,
                             "en_cost": en,
-                            "school": school["id"]
+                            "school": school["id"],
+                            "modifiers": _clean_modifiers(e.get("modifiers") or [])
                         }}
                     )
                     updated.append(name_match["id"])
@@ -498,7 +522,15 @@ async def bulk_create_effects(request: Request):
                     # else fall through to create as a new effect
 
             eff_id = next_id_str("effects", padding=4)
-            rec = {"id": eff_id, "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school["id"]}
+            rec = {
+                "id": eff_id,
+                "name": name,
+                "description": desc,
+                "mp_cost": mp,
+                "en_cost": en,
+                "school": school["id"],
+                "modifiers": _clean_modifiers(e.get("modifiers") or [])
+            }
             eff_col.insert_one(rec)
             created.append(eff_id)
 
@@ -1178,9 +1210,10 @@ async def admin_update_effect(effect_id: str, request: Request):
         return JSONResponse({"status":"error","message":"MP/EN must be integers"}, status_code=400)
 
     school = str(body.get("school", old.get("school",""))).strip() or old.get("school","")
+    modifiers = _clean_modifiers(body.get("modifiers") or old.get("modifiers") or [])
 
     col.update_one({"id": effect_id}, {"$set": {
-        "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school
+        "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school, "modifiers": modifiers
     }})
     try:
         username, _ = require_auth(request, ["admin","moderator"])
@@ -1202,6 +1235,8 @@ async def admin_update_effect(effect_id: str, request: Request):
     _chg("EN", int(old.get("en_cost",0)), en)
     if (old.get("description","") != desc):
         effect_changes.append("Description: (updated)")
+    if (old.get("modifiers") or []) != modifiers:
+        effect_changes.append("Modifiers updated")
 
     header = [f"Edited Effect [{effect_id}]", ""] + ([*effect_changes, ""] if effect_changes else ["No direct field changes",""])
 
@@ -1890,12 +1925,14 @@ def spell_list_spells(list_id: str, request: Request):
     spells = list(sp_col.find({"id": {"$in": ids}}, {"_id":0}))
     school_map = {s["id"]: s.get("name", s["id"]) for s in sch_col.find({}, {"_id":0,"id":1,"name":1})}
     all_eff_ids = {str(eid) for sp in spells for eid in (sp.get("effects") or [])}
-    eff_docs = list(eff_col.find({"id": {"$in": list(all_eff_ids)}}, {"_id":0,"id":1,"school":1}))
+    eff_docs = list(eff_col.find({"id": {"$in": list(all_eff_ids)}}, {"_id":0}))
     eff_school = {d["id"]: str(d.get("school") or "") for d in eff_docs}
+    eff_by_id = {d["id"]: d for d in eff_docs}
     out = []
     for sp in spells:
         sch_ids = sorted({eff_school.get(str(eid), "") for eid in (sp.get("effects") or []) if eff_school.get(str(eid), "")})
         sp["schools"] = [{"id": sid, "name": school_map.get(sid, sid)} for sid in sch_ids]
+        sp["effects_detail"] = [eff_by_id.get(str(eid)) for eid in (sp.get("effects") or []) if eff_by_id.get(str(eid))]
         out.append(sp)
     return {"status":"success","spells": out}
 
