@@ -1577,6 +1577,24 @@ function setAbilityGroupSelections(abId, data){
   if (!ABILITY_CHOICES[abId]) ABILITY_CHOICES[abId] = {};
   ABILITY_CHOICES[abId]._groups = data || {};
 }
+
+function collapseAbilityReplacements(assigned){
+  // Drop older abilities that are explicitly replaced by a newer one present on the character.
+  const present = new Set((assigned || []).map(a=> String(a.id||'').trim()).filter(Boolean));
+  const toRemove = new Set();
+  (assigned || []).forEach(ab=>{
+    const oldId = String(ab?.archetype_replaces || '').trim();
+    if (oldId && present.has(oldId)){
+      toRemove.add(oldId);
+    }
+  });
+  if (!toRemove.size) return assigned;
+  // prune character ability ids and stale choices
+  CHAR.abilities = (CHAR.abilities || []).map(id=> String(id||'').trim()).filter(id=> id && !toRemove.has(id));
+  toRemove.forEach(id=>{ if (ABILITY_CHOICES[id]) delete ABILITY_CHOICES[id]; });
+  queueSave();
+  return (assigned || []).filter(ab=> !toRemove.has(String(ab.id||'').trim()));
+}
 function abilityGroups(ab){
   const mods = (ab?.passive?.modifiers || []);
   const map = new Map();
@@ -4778,7 +4796,9 @@ async function resolveAssignedAbilities(){
   const bulk = await api('/abilities/bulk'+qs);
   const byId = {};
   (bulk.abilities||[]).forEach(a=>{ if (a && a.id) byId[a.id] = a; });
-  ASSIGNED = ids.map(id=> byId[id]).filter(Boolean); // preserve order and duplicates
+  let assigned = ids.map(id=> byId[id]).filter(Boolean); // preserve order and duplicates
+  assigned = collapseAbilityReplacements(assigned);
+  ASSIGNED = assigned;
 }
 function abilityHasChoice(ab){
   return !!((ab?.passive?.modifiers||[]).find(m=> String(m.target||'').startsWith('choice:') || (m.group || '').trim()));
