@@ -1339,11 +1339,18 @@ function updatePointCounters(){
   const poolStat = statPointPool(lvl);
   const usedSkill = totalSkillInvest();
   const usedStat = totalStatInvest();
-  const capSkill = skillMaxForLevel(lvl);
+  const capSkillInvest = skillMaxForLevel(lvl);
+  const capStatInvest = statInvestCap(lvl);
   const capStatTotal = statTotalCap(lvl);
   if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkill} / ${poolSkill}`;
-  if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStat} / ${poolStat} (max per stat: ${capStatTotal})`;
-  if (skillCapEl) skillCapEl.textContent = `Max per skill: ${capSkill}`;
+  if (statCounterEl){
+    statCounterEl.textContent = `Characteristics: ${usedStat} / ${poolStat} (max invest per stat: ${capStatInvest}, base total cap: ${capStatTotal})`;
+    statCounterEl.title = `You can invest up to ${capStatInvest} per stat (base total ${capStatTotal}); modifiers may push higher.`;
+  }
+  if (skillCapEl){
+    skillCapEl.textContent = `Max per skill (invest): ${capSkillInvest}`;
+    skillCapEl.title = 'Cap applies to invested points; bonuses can raise totals beyond this.';
+  }
 }
 
 /* ---------- Sublimations helpers ---------- */
