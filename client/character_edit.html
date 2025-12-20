@@ -64,6 +64,22 @@
     .num { width:90px; } /* Base numeric inputs stay comfortable; size specific rows below */
     .total { font-weight:600; }
     .hdr { display:flex; align-items:center; gap:10px; }
+    .hdr-left { display:flex; align-items:center; gap:10px; }
+    .hdr-right { margin-left:auto; }
+    .xp-card{
+      display:grid;
+      gap:6px;
+      min-width:260px;
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid #2a2a3c;
+      background: linear-gradient(135deg, rgba(197,53,53,0.12), rgba(30,30,42,0.65));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .xp-top{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .xp-bar{ width:100%; height:12px; border-radius:999px; background:#1a1a24; border:1px solid #2f2f42; overflow:hidden; }
+    .xp-bar-fill{ height:100%; display:flex; align-items:center; justify-content:center; font-size:.75rem; background:linear-gradient(90deg, #c53535, #f04a4a); color:#fff; min-width:16px; }
+    .xp-meta{ font-size:.9rem; opacity:.9; }
     .skills { display:grid; gap:8px; margin-top:10px; }
     .skill-line { display:grid; grid-template-columns: minmax(120px, 1fr) 78px 58px; gap:8px; align-items:center; }
     .skill-line input.num { width:40px; max-width:40px; } /* tighter inputs for skill rows */
@@ -184,9 +200,24 @@
     <div class="panel" style="margin-bottom:12px;">
       <details open class="panel">
         <summary class="hdr">
-          <strong>Name</strong>
-          <span class="muted">(autosaves)</span>
-          <span class="muted status" id="status">Loaded.</span>
+          <div class="hdr-left">
+            <strong>Name</strong>
+            <span class="muted">(autosaves)</span>
+            <span class="muted status" id="status">Loaded.</span>
+          </div>
+          <div class="hdr-right xp-card">
+            <div class="xp-top">
+              <span class="k">Level</span>
+              <input id="level" type="number" class="num" min="1" value="1" />
+              <button class="btn small" id="xp-add-btn" title="Add XP">+ XP</button>
+              <button class="btn small" id="level-set-btn" title="Set level">Set</button>
+              <button class="btn small" id="xp-ledger-btn" title="Open XP ledger">???</button>
+            </div>
+            <div class="xp-bar" aria-label="XP progress">
+              <div class="xp-bar-fill" id="xp-bar-fill"><span id="xp-bar-text">--</span></div>
+            </div>
+            <div class="xp-meta" id="xp-progress">XP: --</div>
+          </div>
         </summary>
           <div class="panel-body">
             <div class="avatar-card">
@@ -220,13 +251,8 @@
               <strong>Derived Stats</strong>
               <span class="muted">(auto from Level, Milestones & skills)</span>
               <span class="grow"></span>
-              <span class="k">Level</span>
-              <input id="level" type="number" class="num" min="1" value="1" />
-              <button class="btn small" id="xp-add-btn">Add XP</button>
-              <button class="btn small" id="level-set-btn">Set level</button>
             </summary>
             <div class="panel-body">
-              <div class="row muted" id="xp-progress" style="gap:8px;"></div>
               <div class="derived-grid">
                 <div class="kv"><div class="k">HP</div> <div class="val badge mod-toggle" id="hp-val" data-target="mods-derived-hp" title="">--</div>
                 <ul class="mod-list" id="mods-derived-hp" style="display:none"></ul></div>
@@ -777,6 +803,18 @@
   </div>
 </div>
 
+<!-- XP Ledger modal -->
+<div id="xp-ledger-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="xp-ledger-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="xp-ledger-title">
+  <div class="modal-card" style="max-width:640px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="xp-ledger-title">XP Ledger</div>
+      <button class="modal-close" id="xp-ledger-close" aria-label="Close">&times;</button>
+    </header>
+    <div id="xp-ledger-body" class="list" style="margin-top:10px; display:grid; gap:8px; font-size:.92rem;"></div>
+  </div>
+</div>
+
 <script>
 /* --- auth helper --- */
 function getToken(){ return localStorage.getItem('auth_token') || ''; }
@@ -949,6 +987,7 @@ const setAddedSchools = (arr=[])=>{
   renderSchoolSpellCounters();
 };
 let XP = 0;
+let XP_LEDGER = [];
 let SCHOOLS = [];
 let SUBLIMATIONS = [];
 let SUB_HIDDEN = {};
@@ -1105,9 +1144,16 @@ const cntSchComplexEl = document.getElementById('cnt-sch-complex');
 const cntSpSimpleEl = document.getElementById('cnt-sp-simple');
 const cntSpComplexEl = document.getElementById('cnt-sp-complex');
 const slSchoolsEl = document.getElementById('sl-schools');
+const xpBarFillEl = document.getElementById('xp-bar-fill');
+const xpBarTextEl = document.getElementById('xp-bar-text');
 const xpProgressEl = document.getElementById('xp-progress');
 const xpAddBtn = document.getElementById('xp-add-btn');
 const levelSetBtn = document.getElementById('level-set-btn');
+const xpLedgerBtn = document.getElementById('xp-ledger-btn');
+const xpLedgerModal = document.getElementById('xp-ledger-modal');
+const xpLedgerBackdrop = document.getElementById('xp-ledger-backdrop');
+const xpLedgerClose = document.getElementById('xp-ledger-close');
+const xpLedgerBody = document.getElementById('xp-ledger-body');
 const slSchoolsStatusEl = document.getElementById('sl-schools-status');
 const slAddMenuBtn = document.getElementById('sl-add-menu-btn');
 const slAddMenu = document.getElementById('sl-add-menu');
@@ -3400,17 +3446,60 @@ function renderSpellListSummary(){
   slSummaryEl.textContent = `${LINKED_SPELL_LIST.name || 'Spell List'} • Spells: ${count} • MAG: ${iv.mag}`;
 }
 
-function renderXpProgress(){
-  if (!xpProgressEl) return;
-  const lvl = Math.max(1, Math.floor(Number(CHAR.level)||1));
-  const xp = Math.max(0, Math.floor(Number(XP)||0));
-  const nextCap = lvl >= MAX_LEVEL ? null : xpForLevel(lvl+1);
-  const curCap = xpForLevel(lvl);
-  const toNext = nextCap == null ? 0 : Math.max(0, nextCap - xp);
-  if (nextCap == null){
-    xpProgressEl.textContent = `XP: ${xp} (level ${lvl} maxed)`;
+
+function renderXpLedger(){
+  if (!xpLedgerBody) return;
+  if (!XP_LEDGER.length){
+    xpLedgerBody.innerHTML = '<div class="muted">No XP changes recorded yet.</div>';
+    return;
+  }
+  xpLedgerBody.innerHTML = '';
+  XP_LEDGER.forEach(ent=>{
+    const delta = Math.floor(Number(ent.delta)||0);
+    const sign = delta >= 0 ? '+' : '';
+    const ts = ent.ts ? new Date(ent.ts).toLocaleString() : '';
+    const row = document.createElement('div');
+    row.className = 'home-card';
+    row.innerHTML = `
+      <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px;">
+        <div>
+          <div><strong>${ent.kind || 'XP change'}</strong></div>
+          <div class="muted">${ts}</div>
+          ${ent.note ? `<div class="muted">${ent.note}</div>` : ''}
+        </div>
+        <div style="text-align:right;">
+          <div><strong>? ${sign}${delta}</strong></div>
+          <div class="muted">XP ${ent.xp} · Lv ${ent.level}</div>
+        </div>
+      </div>
+    `;
+    xpLedgerBody.appendChild(row);
+  });
+}
+
+function logXpChange(kind, delta, note=''){
+  const entry = {
+    ts: new Date().toISOString(),
+    kind: kind || 'XP change',
+    delta: Math.floor(Number(delta)||0),
+    xp: XP,
+    level: CHAR.level
+  };
+  if (note) entry.note = note;
+  XP_LEDGER = [entry, ...(XP_LEDGER||[])].slice(0, 100);
+  CHAR.xp_ledger = XP_LEDGER;
+  renderXpLedger();
+}
+
+function toggleXpLedger(open){
+  if (!xpLedgerModal || !xpLedgerBackdrop) return;
+  if (open){
+    renderXpLedger();
+    xpLedgerModal.classList.remove('hidden'); xpLedgerModal.classList.add('open');
+    xpLedgerBackdrop.classList.add('open');
   }else{
-    xpProgressEl.textContent = `XP: ${xp} (level ${lvl}) • Need ${toNext} more to reach level ${lvl+1}`;
+    xpLedgerModal.classList.add('hidden'); xpLedgerModal.classList.remove('open');
+    xpLedgerBackdrop.classList.remove('open');
   }
 }
 
@@ -3680,6 +3769,7 @@ async function applyManualAdd(){
 function addXp(amount){
   const inc = Math.max(0, Math.floor(Number(amount)||0));
   if (!inc) return;
+  const prevXp = XP;
   XP = Math.max(0, XP + inc);
   CHAR.xp = XP;
   const lvl = levelFromXp(XP);
@@ -3690,11 +3780,13 @@ function addXp(amount){
   renderSublimations();
   updatePointCounters();
   updateDerived();
+  logXpChange('Add XP', XP - prevXp, `Added ${inc} XP`);
   queueSave();
 }
 
 function setLevelManual(lvl){
   const val = Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(lvl)||1)));
+  const prevXp = XP;
   CHAR.level = val;
   CHAR.stats.level = CHAR.level;
   levelEl.value = val;
@@ -3704,6 +3796,7 @@ function setLevelManual(lvl){
   renderSublimations();
   updatePointCounters();
   updateDerived();
+  logXpChange('Set level', XP - prevXp, `Set level to ${val}`);
   queueSave();
 }
 
@@ -4527,6 +4620,7 @@ async function loadCharacter(){
   if (!CHAR.stats.intensities) CHAR.stats.intensities = makeDefaultStats().intensities;
   setAddedSchools(CHAR.stats.selected_schools || []);
   XP = numOr(CHAR.xp, 0);
+  XP_LEDGER = Array.isArray(CHAR.xp_ledger) ? CHAR.xp_ledger.slice() : [];
   const storedLevel = numOr(CHAR.level ?? CHAR.stats?.level, 0);
   const levelFromData = storedLevel || levelFromXp(XP) || 1;
   CHAR.level = Math.max(1, Math.min(MAX_LEVEL, Math.floor(levelFromData)));
@@ -4632,9 +4726,7 @@ async function saveNow(){
       stats: { ...CHAR.stats, level: CHAR.level, selected_schools: Array.from(ADDED_SCHOOLS) },
       selected_schools: Array.from(ADDED_SCHOOLS),
       abilities: CHAR.abilities || [],
-      ability_choices: ABILITY_CHOICES || {},
-      item_choices: ITEM_CHOICES || {},
-      inventory_id: SELECTED_INV_ID || '',
+      ability_choices: ABILITY_CHOICES || {},\r\n      item_choices: ITEM_CHOICES || {},\r\n      xp_ledger: XP_LEDGER || [],\r\n      inventory_id: SELECTED_INV_ID || '',
       spell_list_id: SELECTED_SPELL_LIST_ID || '',
       archetype_id: CHAR.archetype_id || '',
       sublimations: SUBLIMATIONS,
@@ -4762,6 +4854,9 @@ levelSetBtn?.addEventListener('click', ()=>{
   const val = Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(raw)||1)));
   setLevelManual(val);
 });
+xpLedgerBtn?.addEventListener('click', ()=> toggleXpLedger(true));
+xpLedgerClose?.addEventListener('click', ()=> toggleXpLedger(false));
+xpLedgerBackdrop?.addEventListener('click', (e)=>{ if (e.target===xpLedgerBackdrop) toggleXpLedger(false); });
 slSearchBtn.addEventListener('click', renderSpellSearch);
 slSearchQ.addEventListener('keydown', (e)=>{ if (e.key==='Enter') renderSpellSearch(); });
 
@@ -5451,3 +5546,10 @@ function wirePersonal(){
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
+
+
+
+
+
+
+
