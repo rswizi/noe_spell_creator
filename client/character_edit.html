@@ -2106,7 +2106,13 @@ function getEquippedInventoryModifiers(){
     const itemKey = itemChoiceKey(it);
     const allMods = [
       ...(it.modifiers || []).map(m=>({ ...m, __origin:'Item' })),
-      ...((it.upgrades||[]).flatMap(u=> (u.modifiers||[]).map(m=>({ ...m, __origin:`Upgrade: ${u.name || u.id || 'Upgrade'}` }))) || [])
+      ...((it.upgrades||[]).flatMap(u=>{
+        const upgId = u?.id || u?.key || u;
+        const meta = (window.UPGRADE_META || {})[upgId] || {};
+        const pool = resolveUpgradeModifiers(u, meta);
+        const name = meta?.name || u?.name || upgId || 'Upgrade';
+        return (pool || []).map(m=>({ ...m, __origin:`Upgrade: ${name}` }));
+      }) || [])
     ];
     for (const m of allMods){
       const originPrefix = m.__origin || 'Item';
@@ -2456,11 +2462,26 @@ function itemChoiceMods(it){
     if (String(m.target||'').startsWith('choice:')) mods.push({ ...m, __source:'Item' });
   });
   (it.upgrades || []).forEach(u=>{
-    (u.modifiers || []).forEach(m=>{
+    const pool = (Array.isArray(u.holder_modifiers) && u.holder_modifiers.length) ? u.holder_modifiers : (u.modifiers || []);
+    pool.forEach(m=>{
       if (String(m.target||'').startsWith('choice:')) mods.push({ ...m, __source:`Upgrade: ${u.name || u.id || 'Upgrade'}` });
     });
   });
   return mods;
+}
+function resolveUpgradeModifiers(u, meta){
+  const holder = (Array.isArray(u?.holder_modifiers) && u.holder_modifiers.length) ? u.holder_modifiers : [];
+  if (holder.length) return holder;
+  const mods = Array.isArray(u?.modifiers) ? u.modifiers : [];
+  if (mods.length) return mods;
+  const metaHolder = (Array.isArray(meta?.holder_modifiers) && meta.holder_modifiers.length) ? meta.holder_modifiers : [];
+  if (metaHolder.length) return metaHolder;
+  return Array.isArray(meta?.modifiers) ? meta.modifiers : [];
+}
+function upgradeChoiceMods(u, meta){
+  const name = meta?.name || u?.name || u?.id || 'Upgrade';
+  const mods = resolveUpgradeModifiers(u, meta);
+  return (mods || []).filter(m=> String(m.target||'').startsWith('choice:')).map(m=> ({ ...m, __source:`Upgrade: ${name}` }));
 }
 function itemHasChoice(it){
   return itemChoiceMods(it).length > 0;
@@ -2788,21 +2809,51 @@ async function fetchUpgrades(kind, slot){
   return ups;
 }
 
+function normalizeItemKind(it){
+  return String(it?.kind || it?.__kind || it?.type || '').trim().toLowerCase();
+}
+function normalizeItemSlot(it){
+  return String(it?.equipment_slot || it?.slot || '').trim().toLowerCase();
+}
+function upgradeMatchesItem(upg, it){
+  const itemKind = normalizeItemKind(it);
+  if (itemKind){
+    const kinds = [
+      ...(Array.isArray(upg?.item_types) ? upg.item_types : []),
+      upg?.kind
+    ].map(k=> String(k || '').trim().toLowerCase()).filter(Boolean);
+    if (kinds.length && !kinds.includes(itemKind)) return false;
+    if (!kinds.length && upg?.kind && String(upg.kind).toLowerCase() !== itemKind) return false;
+  }
+  if (itemKind === 'equipment'){
+    const itemSlot = normalizeItemSlot(it);
+    const slotReq = String(upg?.slot || '').trim().toLowerCase();
+    const slots = (Array.isArray(upg?.slots) ? upg.slots : []).map(s=> String(s || '').trim().toLowerCase()).filter(Boolean);
+    if (slotReq && (!itemSlot || slotReq !== itemSlot)) return false;
+    if (slots.length){
+      if (!itemSlot) return false;
+      if (!slots.includes(itemSlot)) return false;
+    }
+  }
+  return true;
+}
+
 async function loadUpgradeOptions(labelEl, selectEl, it){
   if (!labelEl || !selectEl) return;
   labelEl.textContent = "Install upgrade (loading...)";
   selectEl.innerHTML = "";
   try{
-    const slot = it.equipment_slot || it.slot || "";
-    const ups = await fetchUpgrades(it.kind, slot);
-    if (!ups.length){
+    const kind = normalizeItemKind(it);
+    const ups = await fetchUpgrades(kind, "");
+    const filtered = ups.filter(u=> upgradeMatchesItem(u, it));
+    if (!filtered.length){
       labelEl.textContent = "Install upgrade (none available)";
       const o = document.createElement("option"); o.textContent = "-- none --"; selectEl.appendChild(o);
       return;
     }
     labelEl.textContent = "Install upgrade";
     selectEl.innerHTML = '<option value=\"\">-- select upgrade --</option>';
-    ups.forEach(u=>{
+    filtered.forEach(u=>{
       const o = document.createElement("option");
       o.value = u.id;
       const ttxt = (u.targets && u.targets.length) ? ` - target: ${u.targets.join("/")}` : "";
@@ -3088,10 +3139,13 @@ function openInvItemModal(it){
             closeInvItemModal();
           }catch(e){ alert(e.message); }
         });
+        const choiceMods = upgradeChoiceMods(u, meta);
         const edit = document.createElement("button");
         edit.className = "btn small";
-        edit.textContent = "Edit";
-        edit.addEventListener("click", ()=>{ window.open(`upgrades_home.html?id=${encodeURIComponent(upgId)}`, "_blank"); });
+        edit.textContent = "Configure";
+        edit.disabled = !choiceMods.length;
+        edit.title = choiceMods.length ? "Configure upgrade choices" : "No configurable choices";
+        edit.addEventListener("click", ()=> openUpgradeChoiceModal(it, u));
         btns.appendChild(rem);
         btns.appendChild(edit);
         row.appendChild(btns);
@@ -5438,6 +5492,21 @@ async function openItemChoiceModal(it){
     queueSave();
     recomputePassiveAgg(); renderStatistics(); updateDerived();
   }, { titleText: `Configure: ${it.alt_name || it.name || 'Item'}` });
+}
+
+async function openUpgradeChoiceModal(it, upgrade){
+  const upgId = upgrade?.id || upgrade?.key || upgrade;
+  const meta = (window.UPGRADE_META || {})[upgId] || {};
+  const mods = upgradeChoiceMods(upgrade, meta);
+  if (!mods.length) return false;
+  const key = itemChoiceKey(it);
+  if (!key) return false;
+  return openChoiceModalGeneric(mods, ITEM_CHOICES[key] || {}, (selections)=>{
+    const existing = ITEM_CHOICES[key] || {};
+    ITEM_CHOICES[key] = { ...existing, ...selections };
+    queueSave();
+    recomputePassiveAgg(); renderStatistics(); updateDerived();
+  }, { titleText: `Configure: ${meta.name || upgrade?.name || 'Upgrade'}` });
 }
 
 async function addAbilityToChar(aid){
