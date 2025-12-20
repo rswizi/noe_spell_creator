@@ -25,6 +25,14 @@
     .modal.hidden{ display:none; }
     .modal-card { width:min(760px, 96vw); background:#0b0b0b; border:1px solid #222; border-radius:14px; padding:16px; }
     .modal-close { float:right; font-size:22px; border:none; background:transparent; color:#ccc; cursor:pointer; }
+    .info-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); margin:10px 0; }
+    .info-grid .cell { border:1px solid #1c2637; border-radius:10px; padding:8px; background:#0c111a; }
+    .info-grid .label { font-size:.85rem; opacity:.75; }
+    .pill-soft { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:10px; background:#111827; border:1px solid #1f2b3f; }
+    .upg-list { display:grid; gap:10px; }
+    .upg-row { border:1px solid #1c2637; border-radius:10px; padding:8px; background:#0c111a; }
+    .upg-row h4 { margin:0 0 4px; font-size:1rem; }
+    .btn-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     @media (min-width: 1100px){
       .container-wide { max-width: 1100px; margin: 0 auto; }
       .searchbar { grid-template-columns: 2fr 1fr; align-items:end; }
@@ -165,6 +173,10 @@ let PRICE_MOD = 1;
 
 const KIND_PLURAL = { object: "objects", weapon: "weapons", equipment: "equipment", tool: "tools" };
 const QUALITIES = ["Adequate","Good","Very Good","Excellent","Legendary","Mythical","Epic","Divine","Unreal"];
+const QUALITY_SLOTS = { "Adequate":1,"Good":2,"Very Good":3,"Excellent":4,"Legendary":5,"Mythical":6,"Epic":7,"Divine":8,"Unreal":9 };
+
+function slotsForQuality(q){ return QUALITY_SLOTS[q] || 0; }
+function debounce(fn, ms=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
 
 
 function broadcastInventoryUpdate(){
@@ -276,6 +288,7 @@ function renderInventory(){
       for (const it of items){
         const row = document.createElement("div");
         row.className = "item-row";
+        row.title = buildModifierSummary(it) || "";
         const displayName = it.alt_name ? `${escapeHtml(it.alt_name)} <span class="muted">(${escapeHtml(it.name||"Item")})</span>` : escapeHtml(it.name||"Item");
         const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
         const equipped = it.equipped !== false;
@@ -673,110 +686,193 @@ async function disposeItem(item_id){
 /* ------- Item Details Modal (incl. upgrades/quality/alt name) ------- */
 function openItemModal(it){
   const equipped = it.equipped !== false;
-  $("#item-title").textContent = it.alt_name ? `${it.alt_name} (${it.name || "Item"})` : (it.name || "Item");
-  const totalEnc  = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
-  const totalPaid = (Number(it.paid_unit||0) * Number(it.quantity||1)) || 0;
+  const qty = Number(it.quantity || 1);
+  const encUnit = Number(it.enc || 0);
+  const encTotal = encUnit * qty;
+  const paidUnit = Number(it.paid_unit ?? it.base_price ?? 0) || 0;
+  const totalPaid = paidUnit * qty;
 
-  $("#item-body").innerHTML = `
-    <div class="row" style="flex-wrap:wrap; gap:6px;">
-      <span class="pill">Kind: <b>${escapeHtml(it.kind || "object")}</b></span>
-      ${it.subcategory ? `<span class="pill">Sub: <b>${escapeHtml(it.subcategory)}</b></span>` : "" }
-      ${it.quality ? `<span class="pill">Quality: <b>${escapeHtml(it.quality)}</b></span>` : "" }
-      ${it.variant ? `<span class="pill">Variant: <b>${escapeHtml(it.variant)}</b></span>` : "" }
-      <span class="pill">${equipped ? "Equipped" : "Unequipped"}</span>
-    </div>
-    <div class="row" style="flex-wrap:wrap; gap:6px;">
-      <span class="pill">Quantity: <b>${it.quantity||1}</b></span>
-      <span class="pill">Enc (unit): <b>${Number(it.enc||0).toFixed(1)}</b></span>
-      <span class="pill">Enc (total): <b>${totalEnc.toFixed(1)}</b></span>
-      <span class="pill">Base price (unit): <b>${Number(it.base_price||0)}</b></span>
-      <span class="pill">Paid (unit): <b>${Number(it.paid_unit||0)}</b></span>
-      <span class="pill">Paid (total): <b>${totalPaid}</b></span>
-    </div>
-    ${Array.isArray(it.modifiers) && it.modifiers.length ? `<div class="row" style="flex-wrap:wrap; gap:6px;">
-      <span class="pill">Mods:</span>
-      ${it.modifiers.map(m=>`<span class="pill">${escapeHtml(m.mode||"add") } ${escapeHtml(m.value||0)} -> ${escapeHtml(m.target||"")}</span>`).join(" ")}
-    </div>` : ""}
-    ${Array.isArray(it.upgrades) && it.upgrades.length
-      ? `<div class="row" style="flex-wrap:wrap; gap:6px;">Upgrades: ${it.upgrades.map(u=>`<span class="pill">${escapeHtml(u.name||u)}${u.target?` ? ${escapeHtml(u.target)}`:""}</span>`).join(" ")}</div>`
-      : ""
-    }
-
-    <div class="muted" style="margin-top:8px;">Ref ID: ${escapeHtml(it.ref_id || "")}</div>
-    <div class="muted">Item ID: ${escapeHtml(it.item_id || "")}</div>
-  `;
-
+  const titleText = it.alt_name ? `${it.alt_name} (${it.name || "Item"})` : (it.name || "Item");
+  $("#item-title").textContent = titleText;
+  const body = $("#item-body");
+  body.innerHTML = "";
   const actions = $("#item-actions");
   actions.innerHTML = "";
 
-  const altToggle = document.createElement("div");
-  altToggle.className = "row";
-  altToggle.style.marginTop = "8px";
-  altToggle.style.gap = "6px";
-  const altBtn = document.createElement("button");
-  altBtn.className = "btn small";
-  altBtn.textContent = "Set alt name";
-  altToggle.appendChild(altBtn);
-  actions.appendChild(altToggle);
+  const nameRow = document.createElement("div");
+  nameRow.className = "row";
+  nameRow.style.gap = "6px";
+  const nameInput = document.createElement("input");
+  nameInput.placeholder = "Display name (sets alt name)";
+  nameInput.value = it.alt_name || it.name || "";
+  nameInput.style.flex = "1";
+  const commitName = debounce(async ()=>{ await saveAltName(it.item_id, nameInput.value || ""); }, 500);
+  nameInput.addEventListener("input", commitName);
+  nameInput.addEventListener("blur", ()=>commitName());
+  nameRow.appendChild(nameInput);
+  body.appendChild(nameRow);
 
-  const altWrap = document.createElement("div");
-  altWrap.className = "row";
-  altWrap.style.marginTop = "8px";
-  altWrap.style.display = "none";
-  altWrap.innerHTML = `
-    <input id="alt-name" value="${escapeAttr(it.alt_name || "")}" style="flex:1; min-width:200px;">
-    <button class="btn small" id="save-alt">Save</button>
-  `;
-  altBtn.addEventListener("click", ()=>{ altWrap.style.display = altWrap.style.display === "none" ? "" : "none"; });
-  actions.appendChild(altWrap);
-
-  document.getElementById("save-alt").addEventListener("click", async ()=>{
-    const alt = document.getElementById("alt-name").value || "";
-    const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(it.item_id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ alt_name: alt })
-    });
-    const j = await r.json().catch(()=>({}));
-    if (j.status !== "success"){ alert(j.message || "Save failed"); return; }
-    applyInventory(j.inventory);
-    closeItemModal();
+  const info = document.createElement("div");
+  info.className = "info-grid";
+  const totalPrice = Number.isFinite(totalPaid) ? totalPaid : 0;
+  const cells = [
+    { label: "Type", value: it.kind || "object" },
+    { label: "Quality", value: it.quality || "—" },
+    { label: "Enc (unit)", value: encUnit.toFixed(1) },
+    { label: "Enc (total)", value: encTotal.toFixed(1) },
+    { label: "Quantity", value: qty },
+    { label: "Total price", value: totalPrice.toFixed(0) }
+  ];
+  cells.forEach(c=>{
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.innerHTML = `<div class="label">${escapeHtml(c.label)}</div><div><strong>${escapeHtml(c.value)}</strong></div>`;
+    info.appendChild(cell);
   });
+  body.appendChild(info);
 
-  if (it.consumable){
-    const useRow = document.createElement("div");
-    useRow.className = "row";
-    useRow.style.marginTop = "8px";
-    const useBtn = document.createElement("button");
-    useBtn.className = "btn small";
-    useBtn.textContent = "Use";
-    if ((Number(it.quantity)||0) <= 0) useBtn.disabled = true;
-    useBtn.addEventListener("click", async ()=>{
-      await useItem(it.item_id);
-      closeItemModal();
-    });
-    useRow.appendChild(document.createTextNode("Consumable item"));
-    useRow.appendChild(useBtn);
-    actions.appendChild(useRow);
-  }else{
-    const equipRow = document.createElement("div");
-    equipRow.className = "row";
-    equipRow.style.marginTop = "8px";
-    const equipBtn = document.createElement("button");
-    equipBtn.className = "btn small";
-    equipBtn.textContent = equipped ? "Unequip" : "Equip";
-    equipBtn.addEventListener("click", async ()=>{
-      await toggleEquip(it.item_id, !equipped);
-      closeItemModal();
-    });
-    equipRow.appendChild(document.createTextNode(equipped ? "Item is equipped" : "Item is not equipped"));
-    equipRow.appendChild(equipBtn);
-    actions.appendChild(equipRow);
+  const modLine = buildModifierSummary(it);
+  if (modLine){
+    const mods = document.createElement("div");
+    mods.className = "muted";
+    mods.textContent = `Applies: ${modLine}`;
+    body.appendChild(mods);
   }
 
-  const sellRow = document.createElement("div");
-  sellRow.className = "row";
-  sellRow.style.marginTop = "8px";
+  if (it.kind === "weapon" || it.kind === "equipment"){
+    const upSection = document.createElement("div");
+    upSection.className = "list";
+    upSection.style.marginTop = "10px";
+
+    const capLabel = `${(it.upgrades || []).length} / ${slotsForQuality(it.quality) || 0}`;
+    const upHead = document.createElement("div");
+    upHead.className = "row";
+    upHead.style.alignItems = "center";
+    upHead.style.gap = "10px";
+    upHead.innerHTML = `<h3 style="margin:0;">Upgrades</h3><span class="pill-soft">${capLabel}</span>`;
+    upSection.appendChild(upHead);
+
+    const installRow = document.createElement("div");
+    installRow.className = "row";
+    installRow.style.gap = "8px";
+    const ulabel = document.createElement("label"); ulabel.className = "muted"; ulabel.textContent = "Install upgrade";
+    const uselect = document.createElement("select"); uselect.id = "up-select";
+    uselect.innerHTML = '<option value="">-- select upgrade --</option>';
+    const ubtn = document.createElement("button"); ubtn.className = "btn small"; ubtn.textContent = "Install";
+    installRow.appendChild(ulabel); installRow.appendChild(uselect); installRow.appendChild(ubtn);
+    upSection.appendChild(installRow);
+
+    loadUpgradeOptions(ulabel, uselect, it);
+    ubtn.addEventListener("click", async ()=>{
+      const sel = uselect.value;
+      if (!sel){ alert("Select an upgrade first."); return; }
+      let target = "";
+      const meta = (window.UPGRADE_META || {})[sel];
+      if (meta && Array.isArray(meta.targets) && meta.targets.length){
+        const choice = prompt(`Select target for ${meta.name || "upgrade"} (${meta.targets.join(", ")})`, meta.targets[0]);
+        if (!choice || !meta.targets.includes(choice)){ alert("Invalid target."); return; }
+        const existing = (it.upgrades || []).filter(u=>u.target===choice).length;
+        if (existing >= 2){ alert("Target already has two upgrades."); return; }
+        target = choice;
+      }
+      await installUpgrade(it.item_id, sel, target);
+      closeItemModal();
+    });
+
+    const upList = document.createElement("div");
+    upList.className = "upg-list";
+    const ups = it.upgrades || [];
+    if (!ups.length){
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = "No upgrades installed.";
+      upList.appendChild(empty);
+    }else{
+      ups.forEach(u=>{
+        const meta = (window.UPGRADE_META || {})[u.id] || {};
+        const title = meta.name || u.name || u.id || "Upgrade";
+        const desc = u.description_html || u.description || meta.description_html || meta.description || "";
+
+        const row = document.createElement("div");
+        row.className = "upg-row";
+
+        const head = document.createElement("div");
+        head.className = "row";
+        head.style.justifyContent = "space-between";
+        head.style.alignItems = "center";
+        head.innerHTML = `<h4 style="margin:0;">${escapeHtml(title)}</h4>${u.target ? `<span class="pill-soft">Target: ${escapeHtml(u.target)}</span>` : ""}`;
+        row.appendChild(head);
+
+        if (desc){
+          const dd = document.createElement("div");
+          dd.className = "muted";
+          dd.innerHTML = desc;
+          row.appendChild(dd);
+        }
+
+        const btns = document.createElement("div");
+        btns.className = "btn-row";
+        const rem = document.createElement("button");
+        rem.className = "btn btn-secondary small";
+        rem.textContent = "Remove";
+        rem.addEventListener("click", async ()=>{
+          await removeUpgrade(it.item_id, u.id, u.target || "");
+          closeItemModal();
+        });
+        const edit = document.createElement("button");
+        edit.className = "btn small";
+        edit.textContent = "Edit";
+        edit.addEventListener("click", ()=>{ window.open(`upgrades_home.html?id=${encodeURIComponent(u.id)}`, "_blank"); });
+        btns.appendChild(rem);
+        btns.appendChild(edit);
+        row.appendChild(btns);
+        upList.appendChild(row);
+      });
+    }
+
+    upSection.appendChild(upList);
+    body.appendChild(upSection);
+  }
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "btn-row";
+
+  const equipBtn = document.createElement("button");
+  equipBtn.className = "btn small";
+  equipBtn.textContent = equipped ? "Unequip" : "Equip";
+  equipBtn.addEventListener("click", async ()=>{
+    await toggleEquip(it.item_id, !equipped);
+    closeItemModal();
+  });
+  btnRow.appendChild(equipBtn);
+
+  const moveWrap = document.createElement("div");
+  moveWrap.className = "row";
+  moveWrap.style.gap = "6px";
+  const moveSel = document.createElement("select");
+  const stowedId = it.stowed_container_id || (it.container_id !== SELF_CONTAINER_ID ? it.container_id : "");
+  (INV.containers || []).filter(c=>c.id !== SELF_CONTAINER_ID).forEach(c=>{
+    const o = document.createElement("option");
+    o.value = c.id; o.textContent = c.name;
+    moveSel.appendChild(o);
+  });
+  if (stowedId){ moveSel.value = stowedId; }
+  const moveBtn = document.createElement("button");
+  moveBtn.className = "btn small";
+  moveBtn.textContent = "Move";
+  if (!moveSel.children.length){
+    moveSel.disabled = true;
+    moveBtn.disabled = true;
+    moveBtn.title = "Add another container to move items.";
+  }
+  moveBtn.addEventListener("click", async ()=>{
+    await moveItem(it.item_id, moveSel.value || "");
+    closeItemModal();
+  });
+  moveWrap.appendChild(moveSel);
+  moveWrap.appendChild(moveBtn);
+  btnRow.appendChild(moveWrap);
+
   const sellBtn = document.createElement("button");
   sellBtn.className = "btn small";
   sellBtn.textContent = "Sell";
@@ -789,6 +885,8 @@ function openItemModal(it){
     await sellItem(it.item_id, price);
     closeItemModal();
   });
+  btnRow.appendChild(sellBtn);
+
   const disposeBtn = document.createElement("button");
   disposeBtn.className = "btn btn-secondary small";
   disposeBtn.textContent = "Dispose";
@@ -797,74 +895,42 @@ function openItemModal(it){
     await disposeItem(it.item_id);
     closeItemModal();
   });
-  sellRow.appendChild(sellBtn);
-  sellRow.appendChild(disposeBtn);
-  actions.appendChild(sellRow);
+  btnRow.appendChild(disposeBtn);
 
-  // Only for weapons/equipment: show Upgrade Quality + Install Upgrade
-  if (it.kind === "weapon" || it.kind === "equipment"){
-    const wrap = document.createElement("div");
-    wrap.className = "row";
-    wrap.style.marginTop = "10px";
+  const qBtn = document.createElement("button");
+  qBtn.className = "btn small";
+  qBtn.textContent = "Improve Quality";
+  qBtn.addEventListener("click", async ()=>{
+    const to = prompt("Upgrade quality to", it.quality || QUALITIES[0]);
+    if (!to || to === it.quality) return;
+    if (!QUALITIES.includes(to)){ alert("Enter a valid quality name."); return; }
+    await upgradeQuality(it.item_id, to);
+    closeItemModal();
+  });
+  btnRow.appendChild(qBtn);
 
-    // Quality selector
-    const qlab = document.createElement("label");
-    qlab.className = "muted"; qlab.textContent = "Upgrade quality to";
-    const qsel = document.createElement("select"); qsel.id = "qual-target";
-    for (const q of QUALITIES){
-      const o = document.createElement("option");
-      o.value = q; o.textContent = q;
-      if (it.quality && it.quality === q) o.disabled = true;
-      qsel.appendChild(o);
-    }
-    const qbtn = document.createElement("button");
-    qbtn.className = "btn small";
-    qbtn.textContent = "Upgrade Quality";
-    qbtn.addEventListener("click", async ()=>{
-      const to = qsel.value;
-      if (!to || to === it.quality){ alert("Select a higher/different quality."); return; }
-      await upgradeQuality(it.item_id, to);
+  actions.appendChild(btnRow);
+
+  if (it.consumable){
+    const useRow = document.createElement("div");
+    useRow.className = "btn-row";
+    const useBtn = document.createElement("button");
+    useBtn.className = "btn small";
+    useBtn.textContent = "Use";
+    if ((Number(it.quantity)||0) <= 0) useBtn.disabled = true;
+    useBtn.addEventListener("click", async ()=>{
+      await useItem(it.item_id);
       closeItemModal();
     });
-    wrap.appendChild(qlab);
-    wrap.appendChild(qsel);
-    wrap.appendChild(qbtn);
-    actions.appendChild(wrap);
-
-    const upRow = document.createElement("div");
-    upRow.className = "row";
-    upRow.style.marginTop = "8px";
-    const ulabel = document.createElement("label"); ulabel.className = "muted"; ulabel.textContent = "Install upgrade";
-    const uselect = document.createElement("select"); uselect.id = "up-select";
-    uselect.innerHTML = '<option value="">-- select upgrade --</option>';
-    const ubtn = document.createElement("button"); ubtn.className = "btn small"; ubtn.textContent = "Install";
-    upRow.appendChild(ulabel); upRow.appendChild(uselect); upRow.appendChild(ubtn);
-    actions.appendChild(upRow);
-
-    loadUpgradeOptions(ulabel, uselect, it);
-    ubtn.addEventListener("click", async ()=>{
-      const sel = uselect.value;
-      if (!sel){ alert("Select an upgrade first."); return; }
-      let target = "";
-      const meta = UPGRADE_META[sel];
-      if (meta && Array.isArray(meta.targets) && meta.targets.length){
-        const choice = prompt(`Select target for ${meta.name || 'upgrade'} (${meta.targets.join(', ')})`, meta.targets[0]);
-        if (!choice || !meta.targets.includes(choice)){ alert("Invalid target."); return; }
-        const existing = (it.upgrades || []).filter(u=>u.target===choice).length;
-        if (existing >= 2){ alert("Target already has two upgrades."); return; }
-        target = choice;
-      }
-      await installUpgrade(it.item_id, sel, target);
-      closeItemModal();
-    });
+    useRow.appendChild(useBtn);
+    actions.appendChild(useRow);
   }
 
   if (it.alchemy_tool){
     const tier = alchemyTierFromPrice(it.base_price);
     const cost = 50 * tier;
     const refillRow = document.createElement("div");
-    refillRow.className = "row";
-    refillRow.style.marginTop = "8px";
+    refillRow.className = "btn-row";
     const refillBtn = document.createElement("button");
     refillBtn.className = "btn small";
     refillBtn.textContent = `Refill (+1, ${cost} Jelly)`;
@@ -872,10 +938,11 @@ function openItemModal(it){
       await refillAlchemy(it.item_id);
       closeItemModal();
     });
-    refillRow.appendChild(document.createTextNode(`Alchemy tool (tier ${tier})`));
     refillRow.appendChild(refillBtn);
     actions.appendChild(refillRow);
   }
+
+  $("#item-modal").classList.remove("hidden");
 }
 
 
@@ -892,7 +959,6 @@ async function saveAltName(item_id, alt_name){
   });
   const j = await r.json();
   if (j.status !== "success"){ alert(j.message || "Save failed"); return; }
-  closeItemModal();
   applyInventory(j.inventory);
 }
 
@@ -908,10 +974,10 @@ async function upgradeQuality(item_id, to){
   applyInventory(j.inventory);
 }
 
-async function installUpgrade(item_id, upgrade){
+async function installUpgrade(item_id, upgrade, targetOverride=""){
   const meta = (window.UPGRADE_META || {})[upgrade] || null;
-  let target = "";
-  if (meta && Array.isArray(meta.targets) && meta.targets.length){
+  let target = targetOverride || "";
+  if (!target && meta && Array.isArray(meta.targets) && meta.targets.length){
     const counts = {};
     const current = (INV?.items || []).find(i=>i.item_id===item_id);
     const existing = current?.upgrades || [];
@@ -935,6 +1001,17 @@ async function installUpgrade(item_id, upgrade){
   const j = await r.json();
   if (j.status !== "success"){ alert(j.message || "Install failed"); return; }
   closeItemModal();
+  applyInventory(j.inventory);
+}
+
+async function removeUpgrade(item_id, upgrade_id, target=""){
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/remove_upgrade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ upgrade_id, target })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Remove failed"); return; }
   applyInventory(j.inventory);
 }
 
@@ -985,6 +1062,30 @@ async function loadUpgradeOptions(labelEl, selectEl, it){
 }
 
 /* ------- utils ------- */
+function buildModifierSummary(it){
+  const out = [];
+  const mods = Array.isArray(it?.modifiers) ? it.modifiers : [];
+  mods.forEach(m=>{
+    const mode = m.mode || "add";
+    const val = m.value ?? "";
+    const tgt = m.target || "";
+    out.push(`${mode} ${val}${tgt ? " -> " + tgt : ""}`);
+  });
+  const ups = Array.isArray(it?.upgrades) ? it.upgrades : [];
+  ups.forEach(u=>{
+    const pool = Array.isArray(u.holder_modifiers) && u.holder_modifiers.length
+      ? u.holder_modifiers
+      : (Array.isArray(u.modifiers) ? u.modifiers : []);
+    pool.forEach(m=>{
+      const mode = m.mode || "add";
+      const val = m.value ?? "";
+      const tgt = m.target || "";
+      out.push(`${mode} ${val}${tgt ? " -> " + tgt : ""}`);
+    });
+  });
+  return out.join(", ");
+}
+
 function escapeHtml(s){
   return String(s ?? "")
     .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
@@ -994,4 +1095,3 @@ function escapeAttr(s){ return escapeHtml(s).replaceAll('"',"&quot;"); }
 </script>
 </body>
 </html>
-

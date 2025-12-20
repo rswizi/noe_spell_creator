@@ -128,6 +128,14 @@
   .item-row .pill { white-space:nowrap; }
   .inv-summary { display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); align-items:center; }
   .inv-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .info-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); margin:10px 0; }
+  .info-grid .cell { border:1px solid #242436; border-radius:10px; padding:8px; background:#12121c; }
+  .info-grid .label { font-size:.85rem; opacity:.75; }
+  .pill-soft { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:10px; background:#111827; border:1px solid #1f2b3f; }
+  .upg-list { display:grid; gap:10px; }
+  .upg-row { border:1px solid #242436; border-radius:10px; padding:8px; background:#12121c; }
+  .upg-row h4 { margin:0 0 4px; font-size:1rem; }
+  .btn-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:3000; display:none; }
     .modal{ position:fixed; inset:0; display:none; z-index:3001; align-items:center; justify-content:center; padding:16px; }
     .modal.open, .modal-backdrop.open{ display:flex; }
@@ -884,12 +892,15 @@ function investVal(v, fb=0){
   return numOr(v, fb);
 }
 const lc = (s)=> String(s||'').toLowerCase();
+const QUALITY_SLOTS = { "Adequate":1,"Good":2,"Very Good":3,"Excellent":4,"Legendary":5,"Mythical":6,"Epic":7,"Divine":8,"Unreal":9 };
+function slotsForQuality(q){ return QUALITY_SLOTS[q] || 0; }
 function qualityStepDelta(q){
   const baseIdx = QUALITY_ORDER.findIndex(x=> lc(x) === 'adequate');
   const idx = QUALITY_ORDER.findIndex(x=> lc(x) === lc(q));
   if (idx === -1 || baseIdx === -1) return 0;
   return idx - baseIdx;
 }
+function debounce(fn, ms=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
 function qualityStepFromNote(note){
   if (!note) return 0;
   const m = String(note).match(/([+-]?\d+(?:\.\d+)?)\s*(?:per\s+quality|\/\s*quality)/i);
@@ -2171,6 +2182,7 @@ function renderInventoryUI(){
         its.forEach(it=>{
           const row = document.createElement('div');
           row.className = 'item-row';
+          row.title = buildModifierSummary(it) || "";
           const hasChoice = itemHasChoice(it);
           row.innerHTML = `
             <div class="grow">
@@ -2241,6 +2253,29 @@ function invEscapeHtml(s){
     .replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
 function escapeHtml(s){ return invEscapeHtml(s); }
+function buildModifierSummary(it){
+  const out = [];
+  const mods = Array.isArray(it?.modifiers) ? it.modifiers : [];
+  mods.forEach(m=>{
+    const mode = m.mode || "add";
+    const val = m.value ?? "";
+    const tgt = m.target || "";
+    out.push(`${mode} ${val}${tgt ? " -> " + tgt : ""}`);
+  });
+  const ups = Array.isArray(it?.upgrades) ? it.upgrades : [];
+  ups.forEach(u=>{
+    const pool = Array.isArray(u.holder_modifiers) && u.holder_modifiers.length
+      ? u.holder_modifiers
+      : (Array.isArray(u.modifiers) ? u.modifiers : []);
+    pool.forEach(m=>{
+      const mode = m.mode || "add";
+      const val = m.value ?? "";
+      const tgt = m.target || "";
+      out.push(`${mode} ${val}${tgt ? " -> " + tgt : ""}`);
+    });
+  });
+  return out.join(", ");
+}
 function invToggleModal(modal, backdrop, open){
   if (!modal || !backdrop) return;
   if (open){
@@ -2517,7 +2552,19 @@ async function invBuyItem(kind, ref_id, quantity, container_id, currency, opts =
     LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
     invToggleModal(invCatalogModal, invCatalogBackdrop, false);
   }
-  
+
+async function saveInvAltName(item_id, alt_name){
+  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}`, {
+    method:"PATCH",
+    headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify({ alt_name })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ throw new Error(j.message || "Save failed"); }
+  LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+  return j.inventory;
+}
+
   async function upgradeQuality(item_id, to){
   const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}/upgrade_quality`, {
     method: "POST",
@@ -2529,7 +2576,25 @@ async function invBuyItem(kind, ref_id, quantity, container_id, currency, opts =
   return j.inventory;
 }
 
-async function installUpgrade(item_id, upgrade_id, target){
+async function installUpgrade(item_id, upgrade_id, targetOverride=""){
+  const meta = (window.UPGRADE_META || {})[upgrade_id] || null;
+  let target = targetOverride || "";
+  if (!target && meta && Array.isArray(meta.targets) && meta.targets.length){
+    const counts = {};
+    const current = (LINKED_INV?.items || []).find(i=>i.item_id===item_id);
+    const existing = current?.upgrades || [];
+    existing.forEach(u=>{ if(u.target){ counts[u.target]=(counts[u.target]||0)+1; } });
+    const options = meta.targets.map(t=>`${t} (${counts[t]||0}/2)`).join(", ");
+    const choice = prompt(`Select target for ${meta.name || "upgrade"} [${options}]`, meta.targets[0]);
+    if (!choice) return null;
+    if (!meta.targets.includes(choice)){
+      alert("Invalid target."); return null;
+    }
+    if ((counts[choice]||0) >= 2){
+      alert("Target already has two upgrades."); return null;
+    }
+    target = choice;
+  }
   const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}/install_upgrade`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -2537,6 +2602,17 @@ async function installUpgrade(item_id, upgrade_id, target){
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ throw new Error(j.message || "Install failed"); }
+  return j.inventory;
+}
+
+async function removeUpgrade(item_id, upgrade_id, target=""){
+  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}/remove_upgrade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ upgrade_id, target })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ throw new Error(j.message || "Remove failed"); }
   return j.inventory;
 }
 
@@ -2569,12 +2645,17 @@ async function loadUpgradeOptions(labelEl, selectEl, it){
     selectEl.innerHTML = '<option value=\"\">-- select upgrade --</option>';
     ups.forEach(u=>{
       const o = document.createElement("option");
-      o.value = u.id; o.textContent = `${u.name || u.id} (${u.kind || ''})`;
+      o.value = u.id;
+      const ttxt = (u.targets && u.targets.length) ? ` - target: ${u.targets.join("/")}` : "";
+      const excl = u.exclusive_group ? ` - excl:${u.exclusive_group}` : "";
+      o.textContent = `${u.name}${u.slot ? ` (${u.slot})` : ""}${ttxt}${excl}`;
       selectEl.appendChild(o);
     });
   }catch(e){
     labelEl.textContent = "Install upgrade (load failed)";
-    const o = document.createElement("option"); o.textContent = "-- error --"; selectEl.appendChild(o);
+    const o = document.createElement("option");
+    o.textContent = "Error loading upgrades";
+    selectEl.appendChild(o);
   }
 }
 
@@ -2702,182 +2783,252 @@ async function deleteContainer(containerId){
 }
 
 function openInvItemModal(it){
-  invItemTitle.textContent = it.alt_name ? `${it.alt_name} (${it.name || 'Item'})` : (it.name || 'Item');
-  const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
-  const totalPaid = (Number(it.paid_unit||0) * Number(it.quantity||1)) || 0;
   const equipped = it.equipped !== false;
+  const qty = Number(it.quantity || 1);
+  const encUnit = Number(it.enc || 0);
+  const encTotal = encUnit * qty;
+  const paidUnit = Number(it.paid_unit ?? it.base_price ?? 0) || 0;
+  const totalPaid = paidUnit * qty;
+  const titleText = it.alt_name ? `${it.alt_name} (${it.name || 'Item'})` : (it.name || 'Item');
+  invItemTitle.textContent = titleText;
+  invItemBody.innerHTML = "";
+  invItemActions.innerHTML = "";
   const hasChoice = itemHasChoice(it);
-  invItemBody.innerHTML = `
-    <div class="row" style="flex-wrap:wrap; gap:6px;">
-      <span class="pill">Kind: <b>${invEscapeHtml(it.kind||'')}</b></span>
-      ${it.subcategory ? `<span class="pill">Sub: <b>${invEscapeHtml(it.subcategory)}</b></span>` : ''}
-      ${it.quality ? `<span class="pill">Quality: <b>${invEscapeHtml(it.quality)}</b></span>` : ''}
-      ${it.variant ? `<span class="pill">Variant: <b>${invEscapeHtml(it.variant)}</b></span>` : ''}
-      <span class="pill">${equipped ? 'Equipped' : 'Unequipped'}</span>
-    </div>
-    <div class="row" style="flex-wrap:wrap; gap:6px;">
-      <span class="pill">Qty: <b>${it.quantity||1}</b></span>
-      <span class="pill">Enc (unit): <b>${Number(it.enc||0).toFixed(1)}</b></span>
-      <span class="pill">Enc (total): <b>${totalEnc.toFixed(1)}</b></span>
-      <span class="pill">Base price: <b>${Number(it.base_price||0)}</b></span>
-      <span class="pill">Paid (unit): <b>${Number(it.paid_unit||0)}</b></span>
-      <span class="pill">Paid (total): <b>${totalPaid}</b></span>
-    </div>
-    ${Array.isArray(it.modifiers) && it.modifiers.length ? `<div class="row" style="flex-wrap:wrap; gap:6px;">
-      <span class="pill">Mods:</span>
-      ${it.modifiers.map(m=>`<span class="pill">${invEscapeHtml(m.mode||'add')} ${invEscapeHtml(m.value||0)} -> ${invEscapeHtml(m.target||'')}</span>`).join(' ')}
-    </div>` : ''}
-  `;
-  invItemActions.innerHTML = '';
 
-  const altToggle = document.createElement('div');
-  altToggle.className = 'row';
-  altToggle.style.marginTop = '8px';
-  altToggle.style.gap = '6px';
-  const altBtn = document.createElement('button');
-  altBtn.className = 'btn small';
-  altBtn.textContent = 'Set alt name';
-  altToggle.appendChild(altBtn);
-  invItemActions.appendChild(altToggle);
+  const nameRow = document.createElement("div");
+  nameRow.className = "row";
+  nameRow.style.gap = "6px";
+  const nameInput = document.createElement("input");
+  nameInput.placeholder = "Display name (sets alt name)";
+  nameInput.value = it.alt_name || it.name || "";
+  nameInput.style.flex = "1";
+  const commitName = debounce(async ()=>{
+    try{ await saveInvAltName(it.item_id, nameInput.value || ""); }catch(e){ console.warn(e); }
+  }, 500);
+  nameInput.addEventListener("input", commitName);
+  nameInput.addEventListener("blur", ()=>commitName());
+  nameRow.appendChild(nameInput);
+  invItemBody.appendChild(nameRow);
 
-  if (hasChoice){
-    const choiceBtn = document.createElement('button');
-    choiceBtn.className = 'btn small';
-    choiceBtn.textContent = 'Configure choices';
-    choiceBtn.addEventListener('click', async ()=>{
-      await openItemChoiceModal(it);
-      closeInvItemModal();
-    });
-    invItemActions.appendChild(choiceBtn);
+  const info = document.createElement("div");
+  info.className = "info-grid";
+  const totalPrice = Number.isFinite(totalPaid) ? totalPaid : 0;
+  const cells = [
+    { label: "Type", value: it.kind || "object" },
+    { label: "Quality", value: it.quality || "—" },
+    { label: "Enc (unit)", value: encUnit.toFixed(1) },
+    { label: "Enc (total)", value: encTotal.toFixed(1) },
+    { label: "Quantity", value: qty },
+    { label: "Total price", value: totalPrice.toFixed(0) }
+  ];
+  cells.forEach(c=>{
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.innerHTML = `<div class="label">${invEscapeHtml(c.label)}</div><div><strong>${invEscapeHtml(c.value)}</strong></div>`;
+    info.appendChild(cell);
+  });
+  invItemBody.appendChild(info);
+
+  const modLine = buildModifierSummary(it);
+  if (modLine){
+    const mods = document.createElement("div");
+    mods.className = "muted";
+    mods.textContent = `Applies: ${modLine}`;
+    invItemBody.appendChild(mods);
   }
 
-  const altWrap = document.createElement('div');
-  altWrap.className = 'row';
-  altWrap.style.marginTop = '8px';
-  altWrap.style.display = 'none';
-  altWrap.innerHTML = `
-    <input id="inv-alt-name" value="${invEscapeHtml(it.alt_name||'')}" style="flex:1; min-width:200px;">
-    <button class="btn small" id="inv-save-alt">Save</button>
-  `;
-  altBtn.addEventListener('click', ()=>{
-    altWrap.style.display = altWrap.style.display === 'none' ? '' : 'none';
-  });
-  altWrap.querySelector('#inv-save-alt').addEventListener('click', async ()=>{
-    const alt = document.getElementById('inv-alt-name').value || '';
-    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}`, {
-      method:"PATCH",
-      headers:{ "Content-Type":"application/json", ...authHeaders() },
-      body: JSON.stringify({ alt_name: alt })
+  if (hasChoice){
+    const choiceHint = document.createElement("div");
+    choiceHint.className = "muted";
+    choiceHint.textContent = "This item has configurable choices.";
+    invItemBody.appendChild(choiceHint);
+  }
+
+  if (it.kind === "weapon" || it.kind === "equipment"){
+    const upSection = document.createElement("div");
+    upSection.className = "home-card";
+    const capLabel = `${(it.upgrades || []).length} / ${slotsForQuality(it.quality) || 0}`;
+    const upHead = document.createElement("div");
+    upHead.className = "row";
+    upHead.style.alignItems = "center";
+    upHead.style.gap = "10px";
+    upHead.innerHTML = `<h3 style="margin:0;">Upgrades</h3><span class="pill-soft">${capLabel}</span>`;
+    upSection.appendChild(upHead);
+
+    const installRow = document.createElement("div");
+    installRow.className = "row";
+    installRow.style.gap = "8px";
+    const ulabel = document.createElement("label"); ulabel.className = "muted"; ulabel.textContent = "Install upgrade";
+    const uselect = document.createElement("select"); uselect.id = "inv-up-select";
+    uselect.innerHTML = '<option value="">-- select upgrade --</option>';
+    const ubtn = document.createElement("button"); ubtn.className = "btn small"; ubtn.textContent = "Install";
+    installRow.appendChild(ulabel); installRow.appendChild(uselect); installRow.appendChild(ubtn);
+    upSection.appendChild(installRow);
+
+    loadUpgradeOptions(ulabel, uselect, it);
+    ubtn.addEventListener("click", async ()=>{
+      const sel = uselect.value;
+      if (!sel){ alert("Select an upgrade first."); return; }
+      let target = "";
+      const meta = (window.UPGRADE_META || {})[sel];
+      if (meta && Array.isArray(meta.targets) && meta.targets.length){
+        const choice = prompt(`Select target for ${meta.name || "upgrade"} (${meta.targets.join(", ")})`, meta.targets[0]);
+        if (!choice || !meta.targets.includes(choice)){ alert("Invalid target."); return; }
+        const existing = (it.upgrades || []).filter(u=>u.target===choice).length;
+        if (existing >= 2){ alert("Target already has two upgrades."); return; }
+        target = choice;
+      }
+      try{
+        const inv = await installUpgrade(it.item_id, sel, target);
+        if (inv){ LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave(); }
+        closeInvItemModal();
+      }catch(e){ alert(e.message); }
     });
-    const j = await r.json().catch(()=>({}));
-    if (j.status !== "success"){ alert(j.message || "Save failed"); return; }
-    LINKED_INV = j.inventory; renderInventoryUI(); closeInvItemModal();
-  });
-  invItemActions.appendChild(altWrap);
+
+    const upList = document.createElement("div");
+    upList.className = "upg-list";
+    const ups = it.upgrades || [];
+    if (!ups.length){
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = "No upgrades installed.";
+      upList.appendChild(empty);
+    }else{
+      ups.forEach(u=>{
+        const upgId = u.id || u.key || u;
+        const meta = (window.UPGRADE_META || {})[upgId] || {};
+        const title = meta.name || u.name || upgId || "Upgrade";
+        const desc = u.description_html || u.description || meta.description_html || meta.description || "";
+
+        const row = document.createElement("div");
+        row.className = "upg-row";
+
+        const head = document.createElement("div");
+        head.className = "row";
+        head.style.justifyContent = "space-between";
+        head.style.alignItems = "center";
+        head.innerHTML = `<h4 style="margin:0;">${invEscapeHtml(title)}</h4>${u.target ? `<span class="pill-soft">Target: ${invEscapeHtml(u.target)}</span>` : ""}`;
+        row.appendChild(head);
+
+        if (desc){
+          const dd = document.createElement("div");
+          dd.className = "muted";
+          dd.innerHTML = desc;
+          row.appendChild(dd);
+        }
+
+        const btns = document.createElement("div");
+        btns.className = "btn-row";
+        const rem = document.createElement("button");
+        rem.className = "btn btn-secondary small";
+        rem.textContent = "Remove";
+        rem.addEventListener("click", async ()=>{
+          try{
+            const inv = await removeUpgrade(it.item_id, upgId, u.target || "");
+            LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+            closeInvItemModal();
+          }catch(e){ alert(e.message); }
+        });
+        const edit = document.createElement("button");
+        edit.className = "btn small";
+        edit.textContent = "Edit";
+        edit.addEventListener("click", ()=>{ window.open(`upgrades_home.html?id=${encodeURIComponent(upgId)}`, "_blank"); });
+        btns.appendChild(rem);
+        btns.appendChild(edit);
+        row.appendChild(btns);
+        upList.appendChild(row);
+      });
+    }
+
+    upSection.appendChild(upList);
+    invItemBody.appendChild(upSection);
+  }
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "btn-row";
 
   if (it.consumable){
-    const useBtn = document.createElement('button');
-    useBtn.className = 'btn small';
-    useBtn.textContent = 'Use';
+    const useBtn = document.createElement("button");
+    useBtn.className = "btn small";
+    useBtn.textContent = "Use";
     if ((Number(it.quantity)||0) <= 0) useBtn.disabled = true;
-    useBtn.addEventListener('click', async ()=>{
+    useBtn.addEventListener("click", async ()=>{
       await useItemInline(it);
       closeInvItemModal();
     });
-    invItemActions.appendChild(useBtn);
+    btnRow.appendChild(useBtn);
   }else{
-    const equipBtn = document.createElement('button');
-    equipBtn.className = 'btn small';
-    equipBtn.textContent = it.equipped===false ? 'Equip' : 'Unequip';
-    equipBtn.addEventListener('click', async ()=>{
+    const equipBtn = document.createElement("button");
+    equipBtn.className = "btn small";
+    equipBtn.textContent = equipped ? "Unequip" : "Equip";
+    equipBtn.addEventListener("click", async ()=>{
       await toggleEquipInline(it);
       closeInvItemModal();
     });
-    invItemActions.appendChild(equipBtn);
+    btnRow.appendChild(equipBtn);
   }
 
-  if (it.alchemy_tool){
-    const refillBtn = document.createElement('button');
-    refillBtn.className = 'btn small';
-    const tier = alchemyTierFromPrice(it.base_price);
-    const cost = 50 * tier;
-    refillBtn.textContent = `Refill (+1, ${cost} Jelly)`;
-    refillBtn.addEventListener('click', async ()=>{
-      await refillAlchemyInline(it);
-      closeInvItemModal();
-    });
-    invItemActions.appendChild(refillBtn);
-  }
-
-  // Move controls (inside modal)
-  const moveWrap = document.createElement('div');
-  moveWrap.className = 'row';
-  moveWrap.style.marginTop = '10px';
-  moveWrap.style.gap = '6px';
-  moveWrap.style.display = 'none';
-  const moveSelect = document.createElement('select');
+  const moveWrap = document.createElement("div");
+  moveWrap.className = "row";
+  moveWrap.style.gap = "6px";
+  const moveSel = document.createElement("select");
+  const stowedId = it.stowed_container_id || (it.container_id !== SELF_CONTAINER_ID ? it.container_id : "");
   const allowed = (LINKED_INV?.containers || []).filter(cc=> it.equipped!==false ? true : cc.id !== SELF_CONTAINER_ID);
-  const currentTarget = it.equipped!==false ? (it.stowed_container_id || it.container_id || SELF_CONTAINER_ID) : (it.container_id || '');
   allowed.forEach(cc=>{
-    const o=document.createElement('option');
+    const o=document.createElement("option");
     o.value = cc.id;
     o.textContent = cc.name || cc.id;
-    if (cc.id === currentTarget) o.selected = true;
-    moveSelect.appendChild(o);
+    moveSel.appendChild(o);
   });
-  const moveBtn = document.createElement('button');
-  moveBtn.className = 'btn small';
-  moveBtn.textContent = 'Move';
-  moveBtn.addEventListener('click', ()=>{
-    const dest = moveSelect.value;
+  if (stowedId){ moveSel.value = stowedId; }
+  const moveBtn = document.createElement("button");
+  moveBtn.className = "btn small";
+  moveBtn.textContent = "Move";
+  if (!moveSel.children.length){
+    moveSel.disabled = true;
+    moveBtn.disabled = true;
+    moveBtn.title = "Add another container to move items.";
+  }
+  moveBtn.addEventListener("click", async ()=>{
+    const dest = moveSel.value;
     if (!dest) return;
-    moveItemToContainer(it, dest);
+    await moveItemToContainer(it, dest);
     closeInvItemModal();
   });
-  moveWrap.appendChild(moveSelect);
+  moveWrap.appendChild(moveSel);
   moveWrap.appendChild(moveBtn);
+  btnRow.appendChild(moveWrap);
 
-  const moveToggle = document.createElement('button');
-  moveToggle.className = 'btn small';
-  moveToggle.style.marginTop = '8px';
-  moveToggle.textContent = 'Move';
-  moveToggle.addEventListener('click', ()=>{
-    moveWrap.style.display = moveWrap.style.display === 'none' ? '' : 'none';
-  });
-  invItemActions.appendChild(moveToggle);
-  invItemActions.appendChild(moveWrap);
-
-  const sellBtn = document.createElement('button');
-  sellBtn.className = 'btn small';
-  sellBtn.textContent = 'Sell';
-  sellBtn.addEventListener('click', async ()=>{
+  const sellBtn = document.createElement("button");
+  sellBtn.className = "btn small";
+  sellBtn.textContent = "Sell";
+  sellBtn.addEventListener("click", async ()=>{
     const fallback = Number(it.base_price ?? it.paid_unit ?? 0) || 0;
-    const ask = prompt('Sell price per unit (blank to cancel)', fallback);
+    const ask = prompt("Sell price per unit (blank to cancel)", fallback);
     if (ask === null) return;
     const price = Number(ask);
-    if (!Number.isFinite(price) || price < 0){ alert('Enter a valid price'); return; }
+    if (!Number.isFinite(price) || price < 0){ alert("Enter a valid price"); return; }
     await sellItemInline(it, price);
     closeInvItemModal();
   });
-  invItemActions.appendChild(sellBtn);
+  btnRow.appendChild(sellBtn);
 
-  const disposeBtn = document.createElement('button');
-  disposeBtn.className = 'btn btn-secondary small';
-  disposeBtn.textContent = 'Dispose';
-  disposeBtn.addEventListener('click', async ()=>{
-    if (!confirm('Dispose this item? This removes it with no revenue.')) return;
+  const disposeBtn = document.createElement("button");
+  disposeBtn.className = "btn btn-secondary small";
+  disposeBtn.textContent = "Dispose";
+  disposeBtn.addEventListener("click", async ()=>{
+    if (!confirm("Dispose this item? This removes it with no revenue.")) return;
     await disposeItemInline(it);
     closeInvItemModal();
   });
-  invItemActions.appendChild(disposeBtn);
+  btnRow.appendChild(disposeBtn);
 
-  // Upgrade quality
-  if (it.kind === 'weapon' || it.kind === 'equipment'){
-    const qualityBtn = document.createElement('button');
-    qualityBtn.className = 'btn small';
-    qualityBtn.textContent = 'Improve quality';
-    qualityBtn.addEventListener('click', async ()=>{
-      const target = prompt('Target quality? (e.g., Good, Excellent, ...)', (it.quality || '').toString());
+  if (it.kind === "weapon" || it.kind === "equipment"){
+    const qBtn = document.createElement("button");
+    qBtn.className = "btn small";
+    qBtn.textContent = "Improve quality";
+    qBtn.addEventListener("click", async ()=>{
+      const target = prompt("Target quality? (e.g., Good, Excellent, ...)", (it.quality || "").toString());
       if (!target) return;
       try{
         const inv = await upgradeQuality(it.item_id, target);
@@ -2887,46 +3038,42 @@ function openInvItemModal(it){
         alert(e.message);
       }
     });
-    invItemActions.appendChild(qualityBtn);
+    btnRow.appendChild(qBtn);
   }
 
-  // Install upgrade
-  const upWrap = document.createElement('div');
-  upWrap.className = 'row';
-  upWrap.style.marginTop = '8px';
-  upWrap.innerHTML = `
-    <label class="muted" id="inv-up-label">Install upgrade</label>
-    <select id="inv-up-select" style="min-width:220px;"></select>
-    <button class="btn small" id="inv-up-apply">Install</button>
-  `;
-  if (it.kind === 'weapon' || it.kind === 'equipment'){
-    invItemActions.appendChild(upWrap);
-    loadUpgradeOptions(upWrap.querySelector('#inv-up-label'), upWrap.querySelector('#inv-up-select'), it);
-    upWrap.querySelector('#inv-up-apply').addEventListener('click', async ()=>{
-      const sel = upWrap.querySelector('#inv-up-select').value;
-      if (!sel){ alert('Select an upgrade first.'); return; }
-      let target = "";
-      const meta = UPGRADE_META[sel];
-      if (meta && Array.isArray(meta.targets) && meta.targets.length){
-        const choice = prompt(`Select target for ${meta.name || 'upgrade'} (${meta.targets.join(', ')})`, meta.targets[0]);
-        if (!choice || !meta.targets.includes(choice)){ alert('Invalid target.'); return; }
-        const existing = (it.upgrades || []).filter(u=>u.target===choice).length;
-        if (existing >= 2){ alert('Target already has two upgrades.'); return; }
-        target = choice;
-      }
-      try{
-        const inv = await installUpgrade(it.item_id, sel, target);
-        LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
-        closeInvItemModal();
-      }catch(e){
-        alert(e.message);
-      }
+  if (hasChoice){
+    const choiceBtn = document.createElement("button");
+    choiceBtn.className = "btn small";
+    choiceBtn.textContent = "Configure choices";
+    choiceBtn.addEventListener("click", async ()=>{
+      await openItemChoiceModal(it);
+      closeInvItemModal();
     });
+    btnRow.appendChild(choiceBtn);
   }
 
-  invItemModal.classList.remove('hidden');
-  invItemModal.classList.add('open');
-  invItemBackdrop.classList.add('open');
+  invItemActions.appendChild(btnRow);
+
+  if (it.alchemy_tool){
+    const refillRow = document.createElement("div");
+    refillRow.className = "btn-row";
+    const refillBtn = document.createElement("button");
+    refillBtn.className = "btn small";
+    const tier = alchemyTierFromPrice(it.base_price);
+    const cost = 50 * tier;
+    refillBtn.textContent = `Refill (+1, ${cost} Jelly)`;
+    refillBtn.addEventListener("click", async ()=>{
+      await refillAlchemyInline(it);
+      closeInvItemModal();
+    });
+    refillRow.appendChild(refillBtn);
+    invItemActions.appendChild(refillRow);
+  }
+
+  invItemModal.classList.remove("hidden");
+  invItemModal.classList.add("open");
+  invItemBackdrop.classList.remove("hidden");
+  invItemBackdrop.classList.add("open");
 }
 
 function closeInvItemModal(){

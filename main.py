@@ -3657,6 +3657,45 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
     return {"status": "success", "inventory": inv2, "transaction": tx}
 
+@app.post("/inventories/{inv_id}/items/{item_id}/remove_upgrade")
+def remove_upgrade(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    items = inv.get("items") or []
+    it = next((x for x in items if x.get("item_id") == item_id), None)
+    if not it:
+        raise HTTPException(404, "Item not found")
+    if it.get("kind") not in ("weapon", "equipment"):
+        raise HTTPException(400, "Only weapons/equipment can remove upgrades")
+
+    upg_id = (payload.get("upgrade_id") or payload.get("upgrade") or "").strip()
+    target = (payload.get("target") or "").strip()
+    if not upg_id:
+        raise HTTPException(400, "Missing upgrade id")
+
+    existing = it.get("upgrades") or []
+    idx = next((i for i, u in enumerate(existing) if u.get("id") == upg_id and (not target or (u.get("target") or "") == target)), -1)
+    if idx < 0:
+        raise HTTPException(404, "Upgrade not found on item")
+
+    new_upgrades = existing[:idx] + existing[idx+1:]
+    quality = it.get("quality") or "Adequate"
+    new_variant = _compose_variant(quality, new_upgrades)
+
+    db.inventories.update_one(
+        {"id": inv_id, "owner": user, "items.item_id": item_id},
+        {"$set": {
+            "items.$.upgrades": new_upgrades,
+            "items.$.variant": new_variant
+        }}
+    )
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2}
+
 
 def _pop_inventory_item(inv: dict, item_id: str):
     containers = _ensure_self_container(inv.get("containers") or [])
