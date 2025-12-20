@@ -4765,7 +4765,10 @@ function renderSearchResults(arr){
 }
 
 async function resolveAssignedAbilities(){
-  const ids = (CHAR.abilities||[]);
+  // Normalize ability ids and drop empties so we don't hit the bulk endpoint with invalid ids.
+  const ids = (CHAR.abilities||[]).map(id=> String(id||'').trim()).filter(Boolean);
+  CHAR.abilities = ids;
+  Object.keys(ABILITY_CHOICES).forEach(id=>{ if (!ids.includes(String(id))) delete ABILITY_CHOICES[id]; });
   if (!ids.length){ ASSIGNED = []; return; }
   const uniqueIds = Array.from(new Set(ids));
   const qs = '?ids=' + encodeURIComponent(uniqueIds.join(','));
@@ -5321,10 +5324,11 @@ async function openItemChoiceModal(it){
 
 async function addAbilityToChar(aid){
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
-  CHAR.abilities.push(aid);
+  const key = String(aid);
+  CHAR.abilities.push(key);
   queueSave();
   await resolveAssignedAbilities();
-  const ab = ASSIGNED.find(x=>x.id===aid);
+  const ab = ASSIGNED.find(x=> String(x.id) === key);
   if (ab && abilityHasChoice(ab)){
     await openChoiceModal(ab);
   }
@@ -5335,11 +5339,12 @@ async function addAbilityToChar(aid){
 }
 
 async function removeAbilityFromChar(aid){
-  const arr = CHAR.abilities || [];
-  const idx = arr.indexOf(aid);
+  const target = String(aid||'').trim();
+  const arr = (CHAR.abilities || []).map(id=> String(id||'').trim()).filter(Boolean);
+  const idx = arr.indexOf(target);
   if (idx >= 0) arr.splice(idx, 1);
   CHAR.abilities = arr;
-   if (ABILITY_CHOICES[aid]) delete ABILITY_CHOICES[aid];
+  if (ABILITY_CHOICES[target]) delete ABILITY_CHOICES[target];
   queueSave();
   await resolveAssignedAbilities();
   recomputePassiveAgg();
