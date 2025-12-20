@@ -283,6 +283,43 @@ async function api(path,opt={}){
   return data;
 }
 
+// Delete helper with fallbacks for environments that disallow HTTP DELETE
+async function deleteAbilityById(id){
+  const target = String(id||'').trim();
+  if (!target) throw new Error('Missing ability id');
+  // Try standard DELETE first
+  try{
+    await api('/abilities/'+encodeURIComponent(target), { method:'DELETE' });
+    return;
+  }catch(err){
+    // Some deployments block DELETE (405). Try JSON fallback endpoints.
+    const msg = (err && err.message) || '';
+    const isMethodNotAllowed = /405/.test(msg);
+    if (!isMethodNotAllowed){
+      throw err;
+    }
+  }
+  // Fallback 1: POST to a delete helper endpoint
+  try{
+    await api('/abilities/delete', {
+      method:'POST',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify({ id: target })
+    });
+    return;
+  }catch(err){ /* keep going */ }
+  // Fallback 2: soft-delete via PUT flag
+  try{
+    await api('/abilities/'+encodeURIComponent(target), {
+      method:'PUT',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify({ deleted: true })
+    });
+  }catch(err){
+    throw err;
+  }
+}
+
 function setupRichTextEditor(containerId, placeholder=''){
   const container = document.getElementById(containerId);
   if (!container) throw new Error('Missing rich text container '+containerId);
@@ -854,7 +891,7 @@ btnDelete?.addEventListener('click', async ()=>{
   if (!confirm) return;
   try{
     statusLine.textContent = 'Deleting...';
-    await api('/abilities/'+encodeURIComponent(currentAbilityId), { method:'DELETE' });
+    await deleteAbilityById(currentAbilityId);
     statusLine.textContent = 'Deleted.';
     currentAbilityId = null;
     // clear form
