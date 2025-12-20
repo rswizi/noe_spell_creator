@@ -4676,6 +4676,35 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
     existing.pop("_id", None)
     return {"status":"success","ability": existing}
 
+def _delete_ability_and_references(aid: str):
+    """Delete an ability and clean up common references on characters."""
+    col = get_col("abilities")
+    res = col.delete_one({"id": aid})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Ability not found")
+    # Remove from character ability arrays and clear related choices
+    chars = get_col("characters")
+    unset_field = {f"ability_choices.{aid}": ""}
+    chars.update_many({}, {"$pull": {"abilities": aid}, "$unset": unset_field})
+    return {"status": "success", "deleted": aid}
+
+@app.delete("/abilities/{aid}")
+async def delete_ability(aid: str, request: Request):
+    username, role = require_auth(request, roles=["moderator", "admin"])
+    return _delete_ability_and_references(aid)
+
+@app.post("/abilities/delete")
+async def delete_ability_fallback(request: Request):
+    username, role = require_auth(request, roles=["moderator", "admin"])
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    aid = (body.get("id") or "").strip()
+    if not aid:
+        raise HTTPException(400, "id required")
+    return _delete_ability_and_references(aid)
+
 
 # --- Admin: delete user ---
 @app.delete("/admin/users/{target_username}")
