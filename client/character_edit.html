@@ -2377,6 +2377,10 @@ function renderInventoryUI(){
             </div>
           `;
           row.querySelector('.toggle').addEventListener('click', ()=> it.consumable ? useItemInline(it) : toggleEquipInline(it));
+          const descTip = (it.description || it.desc || it.description_html || '').toString().trim();
+          if (descTip){
+            row.querySelector('strong')?.setAttribute('title', descTip);
+          }
           if (hasChoice) row.querySelector('.choices')?.addEventListener('click', ()=> openItemChoiceModal(it));
           row.querySelector('.open').addEventListener('click', ()=> openInvItemModal(it));
           list.appendChild(row);
@@ -3097,6 +3101,14 @@ function openInvItemModal(it){
     info.appendChild(cell);
   });
   invItemBody.appendChild(info);
+
+  const descText = (it.description || it.desc || it.description_html || '').toString().trim();
+  if (descText){
+    const desc = document.createElement("div");
+    desc.className = "muted";
+    desc.innerHTML = descText;
+    invItemBody.appendChild(desc);
+  }
 
   const modLine = buildModifierSummary(it);
   if (modLine){
