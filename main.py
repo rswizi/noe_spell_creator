@@ -3490,8 +3490,8 @@ def deposit_funds(request: Request, inv_id: str, payload: dict = Body(...)):
     currency = (payload.get("currency") or _pick_currency(inv)).strip()
     amount = int(payload.get("amount") or 0)
     note = (payload.get("note") or "Deposit").strip()
-    if amount <= 0:
-        raise HTTPException(400, "Amount must be positive")
+    if amount == 0:
+        raise HTTPException(400, "Amount must be non-zero")
 
     cur = inv.get("currencies", {})
     cur[currency] = int(cur.get(currency, 0)) + amount
