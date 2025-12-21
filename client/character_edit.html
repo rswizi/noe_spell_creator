@@ -189,6 +189,7 @@
       <h1 id="title">Edit Character</h1>
       <span id="login-chip" class="muted right"></span>
       <a class="btn" href="characters.html">Back to My Characters</a>
+      <a class="btn" href="portal.html">A Portal</a>
       <a class="btn" href="character_admin.html" id="admin-link" style="display:none">All Characters</a>
       <button class="btn" id="delete-char" style="border-color:#7a1b1b; background:linear-gradient(135deg, rgba(197,53,53,0.35), rgba(60,10,14,0.9)); color:#fff;">Delete</button>
       <label class="row" style="gap:6px; margin-left:8px;">
@@ -208,10 +209,10 @@
           <div class="hdr-right xp-card">
             <div class="xp-top">
               <span class="k">Level</span>
-              <input id="level" type="number" class="num" min="1" value="1" />
+              <input id="level" type="text" class="num" value="1" readonly />
               <button class="btn small" id="xp-add-btn" title="Add XP">+ XP</button>
               <button class="btn small" id="level-set-btn" title="Set level">Set</button>
-              <button class="btn small" id="xp-ledger-btn" title="Open XP ledger">???</button>
+              <button class="btn small" id="xp-ledger-btn" title="Open XP ledger">Ledger</button>
             </div>
             <div class="xp-bar" aria-label="XP progress">
               <div class="xp-bar-fill" id="xp-bar-fill"><span id="xp-bar-text">--</span></div>
@@ -3521,7 +3522,7 @@ function renderXpLedger(){
           ${ent.note ? `<div class="muted">${ent.note}</div>` : ''}
         </div>
         <div style="text-align:right;">
-          <div><strong>? ${sign}${delta}</strong></div>
+          <div><strong>XP ${sign}${delta}</strong></div>
           <div class="muted">XP ${ent.xp} - Lv ${ent.level}</div>
         </div>
       </div>
