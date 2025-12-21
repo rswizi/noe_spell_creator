@@ -482,6 +482,9 @@ async def bulk_create_effects(request: Request):
         for e in effects:
             name = (e.get("name") or "").strip()
             desc = (e.get("description") or "").strip()
+            tags = _normalize_tags(e.get("tags"))
+            if not tags:
+                tags = ["phb"]
             try:
                 mp   = int(e.get("mp_cost"))
                 en   = int(e.get("en_cost"))
@@ -504,7 +507,8 @@ async def bulk_create_effects(request: Request):
                             "mp_cost": mp,
                             "en_cost": en,
                             "school": school["id"],
-                            "modifiers": _clean_modifiers(e.get("modifiers") or [])
+                            "modifiers": _clean_modifiers(e.get("modifiers") or []),
+                            "tags": tags
                         }}
                     )
                     updated.append(name_match["id"])
@@ -529,7 +533,8 @@ async def bulk_create_effects(request: Request):
                 "mp_cost": mp,
                 "en_cost": en,
                 "school": school["id"],
-                "modifiers": _clean_modifiers(e.get("modifiers") or [])
+                "modifiers": _clean_modifiers(e.get("modifiers") or []),
+                "tags": tags
             }
             eff_col.insert_one(rec)
             created.append(eff_id)
@@ -1211,9 +1216,13 @@ async def admin_update_effect(effect_id: str, request: Request):
 
     school = str(body.get("school", old.get("school",""))).strip() or old.get("school","")
     modifiers = _clean_modifiers(body.get("modifiers") or old.get("modifiers") or [])
+    tags_in = body.get("tags", None)
+    tags = _normalize_tags(tags_in) if tags_in is not None else (old.get("tags") or [])
+    if not tags:
+        tags = ["phb"]
 
     col.update_one({"id": effect_id}, {"$set": {
-        "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school, "modifiers": modifiers
+        "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school, "modifiers": modifiers, "tags": tags
     }})
     try:
         username, _ = require_auth(request, ["admin","moderator"])
@@ -3159,6 +3168,15 @@ def _tags_filter(tags: str) -> dict:
         return {}
     regexes = [re.compile(rf"^{re.escape(t)}$", re.IGNORECASE) for t in raw]
     return {"tags": {"$in": regexes}}
+
+def _normalize_tags(val):
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return [t.strip() for t in val.split(",") if t.strip()]
+    if isinstance(val, list):
+        return [str(t).strip() for t in val if str(t).strip()]
+    return []
 
 def _validate_upgrades(kind: str, subcat: str | None, quality: str, existing: list[dict], add: list[dict]) -> tuple[list[dict], int, list[dict]]:
     """Validate and compute fees. Returns (new_upgrades_list, total_fee, steps)"""

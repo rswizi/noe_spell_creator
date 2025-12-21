@@ -92,6 +92,9 @@
           <label>School
             <select id="ef-school"></select>
           </label>
+          <label>Tags
+            <input id="ef-tags" type="text" placeholder="Comma-separated tags" />
+          </label>
         </div>
 
         <div style="margin-top:12px;">
@@ -183,6 +186,7 @@ const descEditor = setupRichTextEditor('ef-desc-editor', 'Effect description (ri
 const mpInput = $("#ef-mp");
 const enInput = $("#ef-en");
 const schoolInput = $("#ef-school");
+const tagsInput = $("#ef-tags");
 const modListEl = document.getElementById("mod-list");
 const modAddBtn = document.getElementById("mod-add");
 
@@ -273,6 +277,7 @@ window.editEffect = function(id) {
   mpInput.value = Number(ef.mp_cost ?? 0);
   enInput.value = Number(ef.en_cost ?? 0);
   schoolInput.value = ef.school || "";
+  tagsInput.value = (ef.tags || []).join(", ");
   setModifiers(modListEl, ef.modifiers || []);
   openModal();
 };
@@ -309,6 +314,7 @@ $("#edit-save").addEventListener("click", async () => {
     mp_cost: Number(mpInput.value),
     en_cost: Number(enInput.value),
     school: schoolInput.value,
+    tags: tagsInput.value.trim(),
     modifiers: collectModifiers(modListEl)
   };
   const r = await fetch(`${API_BASE}/admin/effects/${encodeURIComponent(currentEditId)}`, {

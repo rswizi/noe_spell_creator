@@ -54,6 +54,10 @@
           <input id="replace-duplicates" type="checkbox" />
           <label for="replace-duplicates" style="margin:0;">Replace duplicates</label>
         </div>
+        <div>
+          <label for="effect-tags">Effect Tags</label>
+          <input id="effect-tags" placeholder="Comma-separated tags" />
+        </div>
       </div>
 
       <label style="margin-top:14px;">Paste Effects (rich text supported; pasted formatting kept)</label>
@@ -158,6 +162,7 @@ const schoolTypeSelect = $("#school-type");
 const rangeTypeSelect  = $("#range-type");
 const aoeTypeSelect    = $("#aoe-type");
 const upgradeCheckbox  = $("#upgrade");
+const effectTagsInput  = $("#effect-tags");
 
 const rawEditor = setupRichTextEditor('raw-editor', `Format each entry as:
 Name: Description (can span multiple lines)
@@ -315,6 +320,7 @@ $("#confirm-btn").addEventListener("click", async ()=>{
 
   const replaceDupes = document.querySelector("#replace-duplicates").checked;
 
+  const tags = (effectTagsInput.value || "").split(",").map(t=>t.trim()).filter(Boolean);
   const payload = {
     school_name: school_name,
     school_type: schoolTypeSelect.value,
@@ -326,7 +332,8 @@ $("#confirm-btn").addEventListener("click", async ()=>{
       name: e.name,
       description: e.description || "",
       mp_cost: Number(e.mp_cost),
-      en_cost: Number(e.en_cost)
+      en_cost: Number(e.en_cost),
+      tags: tags
     }))
   };
 
