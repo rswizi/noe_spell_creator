@@ -140,7 +140,9 @@
   .container-card { border:1px solid #2a2a38; border-radius:12px; padding:12px; margin-bottom:10px; background: linear-gradient(135deg, #12121a, #0f0f17); box-shadow: inset 0 1px 0 rgba(255,255,255,0.02); }
   .container-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
   .items { display:grid; gap:8px; }
-  .item-row { display:grid; grid-template-columns: 1fr auto auto auto; gap:8px; align-items:center; padding:8px 10px; border:1px solid #292938; border-radius:10px; background:#161623; }
+  .item-row { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; padding:8px 10px; border:1px solid #292938; border-radius:10px; background:#161623; }
+  .item-actions { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
+  .item-actions .pill { white-space:nowrap; }
   .item-row .pill { white-space:nowrap; }
   .inv-summary { display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); align-items:center; }
   .inv-actions { display:flex; gap:8px; flex-wrap:wrap; }
@@ -160,6 +162,11 @@
       border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.6);
       max-height:90vh; overflow:auto;
     }
+    .price-choice-card{ max-width:520px; width:min(520px, 96vw); }
+    .price-choice-title{ font-weight:700; line-height:1.2; word-break:break-word; }
+    .price-choice-grid{ display:grid; gap:8px; }
+    .price-choice-custom{ display:grid; gap:8px; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+    .price-choice-field{ display:flex; gap:6px; align-items:center; min-width:0; }
     /* Personal tab */
     .personal-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items:start; margin-bottom:10px; }
     .kv-field { display:grid; gap:6px; min-width:0; }
@@ -2357,10 +2364,12 @@ function renderInventoryUI(){
               <div><strong>${invEscapeHtml(it.alt_name || it.name || 'Item')}</strong> <span class="muted">x${it.quantity||1}</span></div>
               <div class="muted">${it.kind||''}${it.variant?` - ${invEscapeHtml(it.variant)}`:''}</div>
             </div>
-            <div class="pill">${Number(it.enc||0).toFixed(1)} enc</div>
-            <button class="btn small toggle">${it.consumable ? 'Use' : (it.equipped!==false?'Unequip':'Equip')}</button>
-            ${hasChoice ? '<button class="btn small choices">Choices</button>' : ''}
-            <button class="btn small open">Open</button>
+            <div class="item-actions">
+              <div class="pill">${Number(it.enc||0).toFixed(1)} enc</div>
+              <button class="btn small toggle">${it.consumable ? 'Use' : (it.equipped!==false?'Unequip':'Equip')}</button>
+              ${hasChoice ? '<button class="btn small choices">Choices</button>' : ''}
+              <button class="btn small open">Open</button>
+            </div>
           `;
           row.querySelector('.toggle').addEventListener('click', ()=> it.consumable ? useItemInline(it) : toggleEquipInline(it));
           if (hasChoice) row.querySelector('.choices')?.addEventListener('click', ()=> openItemChoiceModal(it));
@@ -2627,34 +2636,35 @@ async function invPromptPricingChoice(row){
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:4000; display:grid; place-items:center; padding:12px;';
     const card = document.createElement('div');
-    card.style.cssText = 'background:#11121b; border:1px solid #2a2a3a; border-radius:12px; padding:14px; width:min(420px, 96vw); box-shadow:0 12px 40px rgba(0,0,0,0.45); color:#f3f3f5; font-family:inherit;';
+    card.className = 'price-choice-card';
+    card.style.cssText = 'background:#11121b; border:1px solid #2a2a3a; border-radius:12px; padding:14px; box-shadow:0 12px 40px rgba(0,0,0,0.45); color:#f3f3f5; font-family:inherit;';
     card.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
-        <div>
-          <div style="font-weight:700;">${invEscapeHtml(row?.name || row?.title || 'Item')}</div>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px;">
+        <div style="min-width:0;">
+          <div class="price-choice-title">${invEscapeHtml(row?.name || row?.title || 'Item')}</div>
           <div class="muted" style="font-size:0.9rem;">Base price: ${basePrice || 0}</div>
         </div>
         <button id="price-close" class="btn small" style="background:#222635; border-color:#2f3548;">?</button>
       </div>
-      <div style="display:grid; gap:8px;">
-        <label style="display:flex; gap:6px; align-items:center;">
+      <div class="price-choice-grid">
+        <label style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
           <input type="radio" name="price-mode" value="market" checked> <span>Buy at market price</span>
         </label>
-        <label style="display:flex; gap:6px; align-items:center;">
+        <label style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
           <input type="radio" name="price-mode" value="custom"> <span>Custom</span>
         </label>
-        <div id="price-custom" style="display:grid; gap:6px; grid-template-columns: 1fr 1fr;">
-          <div style="display:flex; gap:6px; align-items:center;">
+        <div id="price-custom" class="price-choice-custom">
+          <div class="price-choice-field">
             <span class="muted" style="min-width:80px;">% modifier</span>
-            <input id="price-mod-input" type="number" step="1" min="0" style="flex:1; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" value="${Math.round(((parseFloat(invPriceModEl?.value || '1') || 1) * 100))}">
+            <input id="price-mod-input" type="number" step="1" min="0" style="flex:1; min-width:0; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" value="${Math.round(((parseFloat(invPriceModEl?.value || '1') || 1) * 100))}">
           </div>
-          <div style="display:flex; gap:6px; align-items:center;">
+          <div class="price-choice-field">
             <span class="muted" style="min-width:80px;">Exact price</span>
-            <input id="price-exact-input" type="number" step="1" min="0" style="flex:1; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" placeholder="${basePrice || 0}">
+            <input id="price-exact-input" type="number" step="1" min="0" style="flex:1; min-width:0; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" placeholder="${basePrice || 0}">
           </div>
           <div class="muted" style="grid-column:1/-1; font-size:0.9rem;">Tip: fill either % modifier or exact price. Leave both blank to cancel.</div>
         </div>
-        <label style="display:flex; gap:6px; align-items:center;">
+        <label style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
           <input type="radio" name="price-mode" value="take"> <span>Take (price 0)</span>
         </label>
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
