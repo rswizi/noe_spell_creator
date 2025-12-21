@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -197,6 +197,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadInventory();
   $("#search").addEventListener("click", doSearch);
   $("#q").addEventListener("keydown", e=>{ if (e.key==="Enter") doSearch(); });
+  $("#tag").addEventListener("keydown", e=>{ if (e.key==="Enter") doSearch(); });
   $("#clear").addEventListener("click", clearSearch);
   $("#add-cont").addEventListener("click", addContainer);
   $("#item-close").addEventListener("click", closeItemModal);
@@ -478,11 +479,12 @@ async function addFunds(){
 
 async function doSearch(){
   const q = ($("#q").value || "").trim();
+  const tags = ($("#tag").value || "").trim();
   const kind = $("#kind").value;
   const limit = parseInt($("#limit").value || "50", 10);
   PRICE_MOD = parseFloat($("#price-mod").value || "1") || 1;
 
-  const rows = await fetchCatalog(kind, q, limit);
+  const rows = await fetchCatalog(kind, q, limit, tags);
   LAST_RESULTS = rows || [];
 
   // build category options from results
@@ -518,11 +520,11 @@ function applyCategoryFilter(){
   renderResults();
 }
 
-async function fetchCatalog(kind, q, limit){
+async function fetchCatalog(kind, q, limit, tags){
   const plural = KIND_PLURAL[kind] || "objects";
   const tryPaths = [
-    `/catalog/search?kind=${encodeURIComponent(kind)}&q=${encodeURIComponent(q)}&limit=${limit}`,
-    `/catalog/${encodeURIComponent(plural)}?q=${encodeURIComponent(q)}&limit=${limit}`
+    `/catalog/search?kind=${encodeURIComponent(kind)}&q=${encodeURIComponent(q)}&tags=${encodeURIComponent(tags || "")}&limit=${limit}`,
+    `/catalog/${encodeURIComponent(plural)}?q=${encodeURIComponent(q)}&tags=${encodeURIComponent(tags || "")}&limit=${limit}`
   ];
   for (const path of tryPaths){
     try{
@@ -581,6 +583,7 @@ function renderResults(){
 
 function clearSearch(){
   $("#q").value = "";
+  $("#tag").value = "";
   LAST_RESULTS = [];
   FILTERED = [];
   buildCategoryOptions([]);
@@ -1095,3 +1098,4 @@ function escapeAttr(s){ return escapeHtml(s).replaceAll('"',"&quot;"); }
 </script>
 </body>
 </html>
+

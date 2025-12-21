@@ -54,6 +54,9 @@
       <label style="flex:1">Effects (comma separated)<br/><input id="m-effects" style="width:100%"/></label>
     </div>
     <div class="row" style="margin-top:6px;">
+      <label style="flex:1">Tags (comma separated)<br/><input id="m-tags" style="width:100%"/></label>
+    </div>
+    <div class="row" style="margin-top:6px;">
       <label style="flex:1">Description<br/><textarea id="m-desc" rows="3" style="width:100%"></textarea></label>
     </div>
     <div class="row" style="margin-top:6px;">
@@ -217,6 +220,7 @@ function openEdit(id){
   document.getElementById("m-hands").value  = w.hands ?? 1;
   document.getElementById("m-enc").value    = w.enc ?? 0;
   document.getElementById("m-effects").value = (w.effects||[]).join(", ");
+  document.getElementById("m-tags").value = (w.tags || []).join(", ");
   document.getElementById("m-desc").value   = w.description||"";
   document.getElementById("m-upgrades").value = (w.upgrades||[]).join(", ");
   setModifiers(modListEl, w.modifiers || []);
@@ -253,6 +257,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
     hands:  Number(document.getElementById("m-hands").value||1),
     enc:    Number(document.getElementById("m-enc").value||0),
     effects: document.getElementById("m-effects").value.split(",").map(s=>s.trim()).filter(Boolean),
+    tags: document.getElementById("m-tags").value.trim(),
     description: document.getElementById("m-desc").value.trim(),
     price:  Number(document.getElementById("m-price").value||0),
     upgrades: document.getElementById("m-upgrades").value.split(",").map(s=>s.trim()).filter(Boolean),

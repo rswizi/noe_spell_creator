@@ -126,6 +126,10 @@
             <div class="muted" style="font-size:.85rem;">Tools auto-fill from tier.</div>
           </div>
         </div>
+        <div style="margin-top:10px;">
+          <label>Tags</label>
+          <input id="fld-tags" type="text" placeholder="Comma-separated tags" />
+        </div>
 
         <div id="section-tool" class="split" style="margin-top:10px; display:none;">
           <div>
@@ -876,6 +880,10 @@ function collectModifiers(){
   return mods;
 }
 
+function parseTagsInput(val){
+  return String(val || '').split(',').map(t=>t.trim()).filter(Boolean);
+}
+
 function buildPayload(){
   const type = document.querySelector("#fld-type").value;
   const name = (document.querySelector("#fld-name").value || "Unnamed").trim();
@@ -884,6 +892,7 @@ function buildPayload(){
   const enc = Number(document.querySelector("#fld-enc").value || 0);
   const mods = collectModifiers();
   const upgrades = STATE.upgrades.slice();
+  const tags = parseTagsInput(document.querySelector("#fld-tags").value);
 
   if (type === "weapon"){
     const magSize = hasMagazineAttribute() ? Number(document.querySelector("#fld-magazine").value || 0) : 0;
@@ -904,6 +913,7 @@ function buildPayload(){
       effects: Array.from(STATE.attributes),
       upgrades,
       modifiers: mods,
+      tags,
       nature: document.querySelector("#fld-nature").value,
       is_animarma: document.querySelector("#fld-animarma").checked,
       magazine_size: magSize,
@@ -926,6 +936,7 @@ function buildPayload(){
       description: desc,
       upgrades,
       modifiers: mods,
+      tags,
     };
     return payload;
   }
@@ -940,6 +951,7 @@ function buildPayload(){
       description: desc,
       consumable: document.querySelector("#fld-tool-consumable").checked,
       modifiers: mods,
+      tags,
     };
     return payload;
   }
@@ -951,6 +963,7 @@ function buildPayload(){
     description: desc,
     consumable: document.querySelector("#fld-obj-consumable").checked,
     modifiers: mods,
+    tags,
   };
 }
 
@@ -959,6 +972,7 @@ function fillFromPayload(item){
   document.querySelector("#fld-name").value = item.name || "";
   document.querySelector("#fld-enc").value = item.enc ?? 0;
   document.querySelector("#fld-price").value = item.price ?? 0;
+  document.querySelector("#fld-tags").value = (item.tags || []).join(", ");
   setRichText(item.description || "");
   STATE.upgrades = (item.upgrades || []).slice();
   STATE.attributes = new Set(item.effects || []);
@@ -1081,6 +1095,7 @@ function resetForm(){
   document.querySelector("#fld-name").value = "";
   document.querySelector("#fld-enc").value = 0;
   document.querySelector("#fld-price").value = 0;
+  document.querySelector("#fld-tags").value = "";
   document.querySelector("#fld-tier").value = "1";
   document.querySelector("#fld-method").value = "crafting";
   document.querySelector("#fld-tool-consumable").checked = false;

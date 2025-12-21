@@ -39,6 +39,7 @@
       <label>Price</label><input id="m-price" type="number" />
       <label>Enc.</label><input id="m-enc" type="number" />
       <label>Consumable</label><input id="m-consumable" type="checkbox" />
+      <label>Tags</label><input id="m-tags" placeholder="Comma-separated tags" />
       <label>Description</label><textarea id="m-desc" rows="4"></textarea>
     </div>
         <div class="row" style="margin-top:8px;">
@@ -168,6 +169,7 @@ function openEdit(id){
   document.getElementById("m-price").value = o.price ?? 0;
   document.getElementById("m-enc").value   = o.enc ?? 0;
   document.getElementById("m-desc").value  = o.description || "";
+  document.getElementById("m-tags").value  = (o.tags || []).join(", ");
   document.getElementById("m-consumable").checked = !!o.consumable;
   setModifiers(modListEl, o.modifiers || []);
   document.getElementById("modal").classList.remove("hidden");
@@ -199,6 +201,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
     enc:   Number(document.getElementById("m-enc").value || 0),
     description: document.getElementById("m-desc").value.trim(),
     consumable: document.getElementById("m-consumable").checked,
+    tags: document.getElementById("m-tags").value.trim(),
   };
   body.modifiers = collectModifiers(modListEl);
   const r = await fetch(`${API_BASE}/objects/${EDIT_ID}`, {

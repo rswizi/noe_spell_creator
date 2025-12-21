@@ -684,6 +684,7 @@
     </header>
     <div class="row" style="gap:10px; flex-wrap:wrap; margin-top:6px;">
       <input id="inv-q" placeholder="Search name" style="flex:1">
+      <input id="inv-tag" placeholder="Filter tag" style="min-width:180px;">
       <select id="inv-kind">
         <option value="object">Objects</option>
         <option value="weapon">Weapons</option>
@@ -1097,6 +1098,7 @@ const invNewContNameEl = document.getElementById('inv-new-cont-name');
 const invAddContBtn = document.getElementById('inv-add-cont');
 const invTxEl = document.getElementById('inv-tx');
 const invQEl = document.getElementById('inv-q');
+const invTagEl = document.getElementById('inv-tag');
 const invKindEl = document.getElementById('inv-kind');
 const invCatEl = document.getElementById('inv-cat-select');
 const invLimitEl = document.getElementById('inv-limit');
@@ -2558,13 +2560,14 @@ function invGetRowCategory(r){
   return "object";
 }
 
-async function invFetchCatalog(kind, q, limit){
+async function invFetchCatalog(kind, q, limit, tags){
   const url = kind === "weapon" ? "/catalog/weapons"
             : kind === "equipment" ? "/catalog/equipment"
             : kind === "tool" ? "/catalog/tools"
             : "/catalog/objects";
   const params = new URLSearchParams();
   if (q) params.set("q", q);
+  if (tags) params.set("tags", tags);
   if (limit) params.set("limit", limit);
   const r = await fetch(`${url}?${params.toString()}`, { headers: authHeaders() });
   const j = await r.json();
@@ -2703,9 +2706,10 @@ async function invPromptPricingChoice(row){
 
   async function invDoSearch(){
     const q = (invQEl.value || "").trim();
+    const tags = (invTagEl?.value || "").trim();
     const kind = invKindEl.value;
     const limit = parseInt(invLimitEl.value || "50", 10);
-    INV_LAST_RESULTS = await invFetchCatalog(kind, q, limit);
+    INV_LAST_RESULTS = await invFetchCatalog(kind, q, limit, tags);
   INV_FILTERED = INV_LAST_RESULTS.slice();
   invBuildCategoryOptions(INV_LAST_RESULTS);
   invRenderResults();
@@ -2713,6 +2717,7 @@ async function invPromptPricingChoice(row){
 
 function invClearSearch(){
   invQEl.value = "";
+  if (invTagEl) invTagEl.value = "";
   INV_LAST_RESULTS = [];
   INV_FILTERED = [];
   invBuildCategoryOptions([]);

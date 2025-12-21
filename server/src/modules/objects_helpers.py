@@ -24,6 +24,11 @@ def _object_from_body(b: dict) -> dict:
     enc   = int(b.get("enc") or 0)
     desc  = (b.get("description") or "").strip()
     consumable = bool(b.get("consumable"))
+    tags = b.get("tags") or []
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+    else:
+        tags = [str(t).strip() for t in tags if str(t).strip()]
     return {
         "name": name,
         "name_key": norm_key(name),
@@ -32,4 +37,5 @@ def _object_from_body(b: dict) -> dict:
         "description": desc,
         "consumable": consumable,
         "modifiers": _modifiers_from_body(b),
+        "tags": tags,
     }

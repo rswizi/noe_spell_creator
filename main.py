@@ -2129,6 +2129,11 @@ def _tool_from_body(b: dict) -> dict:
     if method not in ("crafting","alchemy"): method = "crafting"
     desc = (b.get("description") or "").strip()
     consumable = bool(b.get("consumable"))
+    tags = b.get("tags") or []
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+    else:
+        tags = [str(t).strip() for t in tags if str(t).strip()]
     out = {
         "name": name,
         "name_key": norm_key(name),
@@ -2138,6 +2143,7 @@ def _tool_from_body(b: dict) -> dict:
         "description": desc,
         "consumable": consumable,
         "modifiers": _modifiers_from_body(b),
+        "tags": tags,
     }
     out.update(_derive_for(method, tier))
     return out
@@ -2354,6 +2360,11 @@ def _weapon_from_body(b: dict) -> dict:
     price = int(b.get("price") or 0)
     enc   = float(b.get("enc") or 0)
     fx    = _as_list(b.get("effects"))
+    tags = b.get("tags") or []
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+    else:
+        tags = [str(t).strip() for t in tags if str(t).strip()]
 
     ups = _as_list(b.get("upgrades"))
     doc = {
@@ -2371,6 +2382,7 @@ def _weapon_from_body(b: dict) -> dict:
         "nature": (b.get("nature") or "").strip(),  # optional, can be edited later
         "modifiers": _modifiers_from_body(b),
         "upgrades": ups,
+        "tags": tags,
     }
     return doc
 
@@ -2668,6 +2680,11 @@ def _equipment_from_body(b: dict) -> dict:
         slot = slot + "s"
     if slot and slot not in EQUIPMENT_SLOTS:
         raise HTTPException(status_code=400, detail="slot must be one of head/arms/legs/accessory/chest")
+    tags = b.get("tags") or []
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+    else:
+        tags = [str(t).strip() for t in tags if str(t).strip()]
 
     if cat == "special":
         name, key = _eq_norm_name(b.get("name"))
@@ -2686,6 +2703,7 @@ def _equipment_from_body(b: dict) -> dict:
             "price": int(b.get("price") or 0),
             "enc": float(b.get("enc") or 0),
             "modifiers": _modifiers_from_body(b),
+            "tags": tags,
         }
         return doc
 
@@ -2702,6 +2720,7 @@ def _equipment_from_body(b: dict) -> dict:
             "price": int(b.get("price") or 0),
             "enc": float(b.get("enc") or 0),
             "modifiers": _modifiers_from_body(b),
+            "tags": tags,
         }
         return doc
 
@@ -2721,6 +2740,7 @@ def _equipment_from_body(b: dict) -> dict:
         "price": int(b.get("price") or 2528),
         "modifiers": _modifiers_from_body(b),
         "upgrades": _as_list(b.get("upgrades")),
+        "tags": tags,
     }
     return doc
 
@@ -3133,6 +3153,13 @@ def _fetch_catalog_item(kind: str, ref_id: str) -> dict | None:
     if not col: return None
     return db[col].find_one({"id": ref_id})
 
+def _tags_filter(tags: str) -> dict:
+    raw = [t.strip() for t in (tags or "").split(",") if t.strip()]
+    if not raw:
+        return {}
+    regexes = [re.compile(rf"^{re.escape(t)}$", re.IGNORECASE) for t in raw]
+    return {"tags": {"$in": regexes}}
+
 def _validate_upgrades(kind: str, subcat: str | None, quality: str, existing: list[dict], add: list[dict]) -> tuple[list[dict], int, list[dict]]:
     """Validate and compute fees. Returns (new_upgrades_list, total_fee, steps)"""
     exist = existing or []
@@ -3362,6 +3389,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "container_id": container_id,
         "stowed_container_id": stowed_container_id,
         "modifiers": src.get("modifiers") or [],
+        "tags": src.get("tags") or [],
         "equipped": is_equipped,
         "consumable": bool(src.get("consumable")),
         "alchemy_tool": bool(src.get("alchemy_tool")),
@@ -3440,12 +3468,14 @@ def improve_item(request: Request, inv_id: str, item_id: str, payload: dict = Bo
     return {"status":"success","inventory": inv2}
 
 @app.get("/catalog/objects")
-def catalog_objects(request: Request, q: str = "", limit: int = 25):
+def catalog_objects(request: Request, q: str = "", tags: str = "", limit: int = 25):
     require_auth(request)
     col = get_col("objects")
     filt = {}
     if q.strip():
         filt = {"name": {"$regex": re.escape(q.strip()), "$options": "i"}}
+    if tags.strip():
+        filt.update(_tags_filter(tags))
     rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1}).limit(int(limit)))
     return {"status": "success", "objects": rows}
 
@@ -3936,26 +3966,32 @@ def refill_alchemy_item(request: Request, inv_id: str, item_id: str, payload: di
 
 
 @app.get("/catalog/weapons")
-def catalog_weapons(request: Request, q: str = "", limit: int = 50):
+def catalog_weapons(request: Request, q: str = "", tags: str = "", limit: int = 50):
     require_auth(request)
     col = get_col("weapons")
     filt = {"name": {"$regex": re.escape(q.strip()), "$options": "i"}} if q.strip() else {}
+    if tags.strip():
+        filt.update(_tags_filter(tags))
     rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "subcategory": 1}).limit(int(limit)))
     return {"status": "success", "weapons": rows}
 
 @app.get("/catalog/equipment")
-def catalog_equipment(request: Request, q: str = "", limit: int = 50):
+def catalog_equipment(request: Request, q: str = "", tags: str = "", limit: int = 50):
     require_auth(request)
     col = get_col("equipment")
     filt = {"name": {"$regex": re.escape(q.strip()), "$options": "i"}} if q.strip() else {}
+    if tags.strip():
+        filt.update(_tags_filter(tags))
     rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1, "slot":1}).limit(int(limit)))
     return {"status": "success", "equipment": rows}
 
 @app.get("/catalog/tools")
-def catalog_tools(request: Request, q: str = "", limit: int = 50):
+def catalog_tools(request: Request, q: str = "", tags: str = "", limit: int = 50):
     require_auth(request)
     col = get_col("tools")
     filt = {"name": {"$regex": re.escape(q.strip()), "$options": "i"}} if q.strip() else {}
+    if tags.strip():
+        filt.update(_tags_filter(tags))
     rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1}).limit(int(limit)))
     return {"status": "success", "tools": rows}
 
