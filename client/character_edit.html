@@ -3497,9 +3497,8 @@ function renderSpellListSummary(){
   }
   const count = Array.isArray(LINKED_SPELL_LIST.spells) ? LINKED_SPELL_LIST.spells.length : (LINKED_SPELL_LIST.count || 0);
   const iv = currentIV();
-  slSummaryEl.textContent = `${LINKED_SPELL_LIST.name || 'Spell List'} • Spells: ${count} • MAG: ${iv.mag}`;
+  slSummaryEl.textContent = `${LINKED_SPELL_LIST.name || 'Spell List'} - Spells: ${count} - MAG: ${iv.mag}`;
 }
-
 
 function renderXpLedger(){
   if (!xpLedgerBody) return;
@@ -3523,7 +3522,7 @@ function renderXpLedger(){
         </div>
         <div style="text-align:right;">
           <div><strong>? ${sign}${delta}</strong></div>
-          <div class="muted">XP ${ent.xp} · Lv ${ent.level}</div>
+          <div class="muted">XP ${ent.xp} - Lv ${ent.level}</div>
         </div>
       </div>
     `;
@@ -3557,6 +3556,25 @@ function toggleXpLedger(open){
   }
 }
 
+function renderXpProgress(){
+  if (!xpProgressEl) return;
+  const lvl = Math.max(1, Math.floor(Number(CHAR.level)||1));
+  const xp = Math.max(0, Math.floor(Number(XP)||0));
+  const maxed = lvl >= MAX_LEVEL;
+  const curCap = xpForLevel(lvl);
+  const nextCap = maxed ? curCap : xpForLevel(lvl+1);
+  const span = Math.max(1, nextCap - curCap);
+  const pctRaw = maxed ? 100 : ((xp - curCap) / span) * 100;
+  const pct = Math.min(100, Math.max(0, Math.round(pctRaw)));
+  if (xpBarFillEl) xpBarFillEl.style.width = `${pct}%`;
+  if (xpBarTextEl) xpBarTextEl.textContent = maxed ? 'MAX' : `${pct}%`;
+  if (maxed){
+    xpProgressEl.textContent = `XP: ${xp} (level ${lvl} maxed)`;
+  }else{
+    const toNext = Math.max(0, nextCap - xp);
+    xpProgressEl.textContent = `XP: ${xp} (level ${lvl}) - Need ${toNext} more to reach level ${lvl+1}`;
+  }
+}
 async function renderSchoolSpellCounters(){
   if (!CHAR || !CHAR.stats) return;
   try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
@@ -5618,6 +5636,8 @@ function wirePersonal(){
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 </script>
+
+
 
 
 
