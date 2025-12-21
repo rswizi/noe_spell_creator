@@ -165,8 +165,11 @@
     .price-choice-card{ max-width:520px; width:min(520px, 96vw); }
     .price-choice-title{ font-weight:700; line-height:1.2; word-break:break-word; }
     .price-choice-grid{ display:grid; gap:8px; }
+    .price-choice-option{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .price-choice-option input{ margin:0; }
     .price-choice-custom{ display:grid; gap:8px; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
     .price-choice-field{ display:flex; gap:6px; align-items:center; min-width:0; }
+    .price-choice-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
     /* Personal tab */
     .personal-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items:start; margin-bottom:10px; }
     .kv-field { display:grid; gap:6px; min-width:0; }
@@ -2650,27 +2653,16 @@ async function invPromptPricingChoice(row){
         <button id="price-close" class="btn small" style="background:#222635; border-color:#2f3548;">?</button>
       </div>
       <div class="price-choice-grid">
-        <label style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <label class="price-choice-option">
           <input type="radio" name="price-mode" value="market" checked> <span>Buy at market price</span>
         </label>
-        <label style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <label class="price-choice-option">
           <input type="radio" name="price-mode" value="custom"> <span>Custom</span>
         </label>
-        <div id="price-custom" class="price-choice-custom">
-          <div class="price-choice-field">
-            <span class="muted" style="min-width:80px;">% modifier</span>
-            <input id="price-mod-input" type="number" step="1" min="0" style="flex:1; min-width:0; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" value="${Math.round(((parseFloat(invPriceModEl?.value || '1') || 1) * 100))}">
-          </div>
-          <div class="price-choice-field">
-            <span class="muted" style="min-width:80px;">Exact price</span>
-            <input id="price-exact-input" type="number" step="1" min="0" style="flex:1; min-width:0; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" placeholder="${basePrice || 0}">
-          </div>
-          <div class="muted" style="grid-column:1/-1; font-size:0.9rem;">Tip: fill either % modifier or exact price. Leave both blank to cancel.</div>
-        </div>
-        <label style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <label class="price-choice-option">
           <input type="radio" name="price-mode" value="take"> <span>Take (price 0)</span>
         </label>
-        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
+        <div class="price-choice-actions">
           <button id="price-cancel" class="btn small btn-secondary">Cancel</button>
           <button id="price-apply" class="btn small">Apply</button>
         </div>
@@ -2689,6 +2681,55 @@ async function invPromptPricingChoice(row){
       const mode = card.querySelector('input[name="price-mode"]:checked')?.value || 'market';
       if (mode === 'take'){ cleanup({ pricingMode:'take', customPrice:0 }); return; }
       if (mode === 'market'){ cleanup({ pricingMode:'market' }); return; }
+      openCustomPriceModal(basePrice).then(choice=>{
+        if (!choice) return;
+        cleanup({ pricingMode:'custom', ...choice });
+      });
+    });
+  });
+}
+
+function openCustomPriceModal(basePrice){
+  return new Promise(resolve=>{
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:4001; display:grid; place-items:center; padding:12px;';
+    const card = document.createElement('div');
+    card.className = 'price-choice-card';
+    card.style.cssText = 'background:#11121b; border:1px solid #2a2a3a; border-radius:12px; padding:14px; box-shadow:0 12px 40px rgba(0,0,0,0.45); color:#f3f3f5; font-family:inherit;';
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px;">
+        <div style="min-width:0;">
+          <div class="price-choice-title">Custom price</div>
+          <div class="muted" style="font-size:0.9rem;">Base price: ${basePrice || 0}</div>
+        </div>
+        <button id="custom-close" class="btn small" style="background:#222635; border-color:#2f3548;">?</button>
+      </div>
+      <div class="price-choice-grid">
+        <div class="price-choice-custom">
+          <div class="price-choice-field">
+            <span class="muted" style="min-width:80px;">% modifier</span>
+            <input id="price-mod-input" type="number" step="1" min="0" style="flex:1; min-width:0; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" value="${Math.round(((parseFloat(invPriceModEl?.value || '1') || 1) * 100))}">
+          </div>
+          <div class="price-choice-field">
+            <span class="muted" style="min-width:80px;">Exact price</span>
+            <input id="price-exact-input" type="number" step="1" min="0" style="flex:1; min-width:0; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" placeholder="${basePrice || 0}">
+          </div>
+          <div class="muted" style="grid-column:1/-1; font-size:0.9rem;">Tip: fill either % modifier or exact price. Leave both blank to cancel.</div>
+        </div>
+        <div class="price-choice-actions">
+          <button id="custom-cancel" class="btn small btn-secondary">Cancel</button>
+          <button id="custom-apply" class="btn small">Apply</button>
+        </div>
+      </div>
+    `;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const cleanup = (val)=>{ overlay.remove(); resolve(val); };
+    card.querySelector('#custom-close').addEventListener('click', ()=>cleanup(null));
+    card.querySelector('#custom-cancel').addEventListener('click', ()=>cleanup(null));
+    overlay.addEventListener('click', (e)=>{ if (e.target === overlay) cleanup(null); });
+    card.querySelector('#custom-apply').addEventListener('click', ()=>{
       const pctRaw = card.querySelector('#price-mod-input').value;
       const priceRaw = card.querySelector('#price-exact-input').value;
       const parsedPct = pctRaw ? invParseCustomPriceInput(`%${pctRaw}`) : null;
@@ -2698,7 +2739,7 @@ async function invPromptPricingChoice(row){
         alert('Enter a % modifier or an exact price for custom mode.');
         return;
       }
-      cleanup({ pricingMode:'custom', ...choice });
+      cleanup(choice);
     });
   });
 }
