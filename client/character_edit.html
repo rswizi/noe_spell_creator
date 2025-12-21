@@ -3238,11 +3238,25 @@ function openInvItemModal(it){
   btnRow.appendChild(disposeBtn);
 
   if (it.kind === "weapon" || it.kind === "equipment"){
+    const qWrap = document.createElement("div");
+    qWrap.className = "row";
+    qWrap.style.gap = "6px";
+    const qSelect = document.createElement("select");
+    const currentQuality = String(it.quality || "Adequate");
+    QUALITY_ORDER.forEach(q=>{
+      const opt = document.createElement("option");
+      opt.value = q;
+      opt.textContent = q;
+      qSelect.appendChild(opt);
+    });
+    const curIdx = QUALITY_ORDER.findIndex(q=> lc(q) === lc(currentQuality));
+    const nextIdx = curIdx >= 0 ? Math.min(curIdx + 1, QUALITY_ORDER.length - 1) : -1;
+    qSelect.value = nextIdx >= 0 ? QUALITY_ORDER[nextIdx] : (QUALITY_ORDER.includes(currentQuality) ? currentQuality : "Adequate");
     const qBtn = document.createElement("button");
     qBtn.className = "btn small";
     qBtn.textContent = "Improve quality";
     qBtn.addEventListener("click", async ()=>{
-      const target = prompt("Target quality? (e.g., Good, Excellent, ...)", (it.quality || "").toString());
+      const target = qSelect.value;
       if (!target) return;
       try{
         const inv = await upgradeQuality(it.item_id, target);
@@ -3252,7 +3266,9 @@ function openInvItemModal(it){
         alert(e.message);
       }
     });
-    btnRow.appendChild(qBtn);
+    qWrap.appendChild(qSelect);
+    qWrap.appendChild(qBtn);
+    btnRow.appendChild(qWrap);
   }
 
   if (hasChoice){
