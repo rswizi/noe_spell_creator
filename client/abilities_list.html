@@ -109,6 +109,10 @@
               <option value="Other">Other</option>
             </select>
           </div>
+          <div class="row">
+            <label for="filter-tags">Tags</label>
+            <input id="filter-tags" class="grow" placeholder="Comma-separated tags" />
+          </div>
         </div>
 
         <div class="panel">
@@ -360,6 +364,7 @@ const abilityListEl  = document.getElementById('ability-list');
 const filterNameEl   = document.getElementById('filter-name');
 const filterTypeEl   = document.getElementById('filter-type');
 const filterSourceEl = document.getElementById('filter-source');
+const filterTagsEl   = document.getElementById('filter-tags');
 
 const abIdEl       = document.getElementById('ab-id');
 const nameEl       = document.getElementById('ab-name');
@@ -806,6 +811,7 @@ async function loadAbilities(){
     if (filterNameEl.value) params.push('name='+encodeURIComponent(filterNameEl.value));
     if (filterTypeEl.value) params.push('typ='+encodeURIComponent(filterTypeEl.value));
     if (filterSourceEl.value) params.push('source='+encodeURIComponent(filterSourceEl.value));
+    if (filterTagsEl?.value) params.push('tags='+encodeURIComponent(filterTagsEl.value));
     const qs = params.length ? '?'+params.join('&') : '';
     const res = await api('/abilities'+qs);
     const arr = res.abilities || [];
@@ -854,6 +860,10 @@ filterNameEl.addEventListener('input', ()=>{
 });
 filterTypeEl.addEventListener('change', loadAbilities);
 filterSourceEl.addEventListener('change', loadAbilities);
+filterTagsEl.addEventListener('input', ()=>{
+  clearTimeout(filterTagsEl._t);
+  filterTagsEl._t = setTimeout(loadAbilities, 250);
+});
 
 btnSave.addEventListener('click', async ()=>{
   if (!currentAbilityId){

@@ -4541,6 +4541,7 @@ def list_abilities(
     name: str | None = Query(default=None),
     source: str | None = Query(default=None),
     typ: str | None = Query(default=None),
+    tags: str | None = Query(default=None),
 ):
     username, role = require_auth(request, roles=["user", "moderator", "admin"])
     col = get_col("abilities")
@@ -4548,6 +4549,11 @@ def list_abilities(
     if name:   q["name"] = {"$regex": name, "$options": "i"}
     if source: q["source_category"] = {"$regex": source, "$options": "i"}
     if typ:    q["type"] = {"$regex": typ, "$options": "i"}
+    if tags:
+        raw = [t.strip() for t in tags.split(",") if t.strip()]
+        if raw:
+            regexes = [re.compile(rf"^{re.escape(t)}$", re.IGNORECASE) for t in raw]
+            q["tags"] = {"$in": regexes}
     docs = list(col.find(q, {"_id": 0}))
     docs.sort(key=lambda d: d.get("name","").lower())
     return {"status":"success","abilities": docs}

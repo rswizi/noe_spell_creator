@@ -779,6 +779,7 @@
         <option value="Apotheosis">Apotheosis</option>
         <option value="Other">Other</option>
       </select>
+      <input id="abi-filter-tag" placeholder="Filter tag (comma-separated)" />
       <button id="abi-search-btn">Find</button>
     </div>
     <div id="abi-results" class="abi-list" style="margin-bottom:12px;"></div>
@@ -1052,6 +1053,7 @@ const abiAddCancel = document.getElementById('abi-add-cancel');
 const abiSearchEl = document.getElementById('abi-search');
 const abiFilterTypeEl = document.getElementById('abi-filter-type');
 const abiFilterSrcEl  = document.getElementById('abi-filter-source');
+const abiFilterTagEl  = document.getElementById('abi-filter-tag');
 const abiSearchBtn = document.getElementById('abi-search-btn');
 const abiResultsEl = document.getElementById('abi-results');
 const listPassiveEl   = document.getElementById('abi-list-passive');
@@ -4855,6 +4857,7 @@ async function searchAbilities(){
     if (abiSearchEl.value) params.push('name='+encodeURIComponent(abiSearchEl.value));
     if (abiFilterTypeEl.value) params.push('typ='+encodeURIComponent(abiFilterTypeEl.value));
     if (abiFilterSrcEl.value) params.push('source='+encodeURIComponent(abiFilterSrcEl.value));
+    if (abiFilterTagEl?.value) params.push('tags='+encodeURIComponent(abiFilterTagEl.value));
     const qs = params.length ? '?'+params.join('&') : '';
     const res = await api('/abilities'+qs);
     const arr = res.abilities || [];
@@ -4865,6 +4868,7 @@ async function searchAbilities(){
 }
 abiSearchBtn.addEventListener('click', searchAbilities);
 abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
+abiFilterTagEl?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
 abiOpenAddBtn?.addEventListener('click', openAbilityAddModal);
 abiAddClose?.addEventListener('click', closeAbilityAddModal);
 abiAddCancel?.addEventListener('click', closeAbilityAddModal);

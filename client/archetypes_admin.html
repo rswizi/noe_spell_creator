@@ -97,6 +97,10 @@
           <div class="row" style="justify-content:space-between;align-items:center;">
             <div class="section-title">Ranks (12 fixed)</div>
           </div>
+          <div class="row" style="margin:6px 0 10px;">
+            <label for="arc-ability-tag-filter">Filter abilities by tag</label>
+            <input id="arc-ability-tag-filter" placeholder="Comma-separated tags" style="flex:1;">
+          </div>
           <div id="rank-list" class="stack"></div>
         </div>
         <div id="arc-status" class="muted"></div>
@@ -121,13 +125,31 @@ const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
 const $ = s=>document.querySelector(s);
 let ABILITIES = [];
 let ARCHETYPES = [];
+const abilityTagFilterEl = document.getElementById('arc-ability-tag-filter');
+
+function parseTagFilter(val){
+  return String(val || '').split(',').map(t=>t.trim().toLowerCase()).filter(Boolean);
+}
+function abilityMatchesTags(a, tags){
+  if (!tags.length) return true;
+  const abTags = (a?.tags || []).map(t=> String(t || '').toLowerCase()).filter(Boolean);
+  return tags.some(t=> abTags.includes(t));
+}
+function filteredAbilities(){
+  const tags = parseTagFilter(abilityTagFilterEl?.value);
+  if (!tags.length) return ABILITIES.slice();
+  return ABILITIES.filter(a=> abilityMatchesTags(a, tags));
+}
 
 function optionLabelAbility(a){
   return `${a.name || 'Ability'} (${a.id})`;
 }
 
 function populateAbilitySelect(sel, selectedId=""){
-  sel.innerHTML = `<option value="">-- choose ability --</option>` + ABILITIES.map(a=>`<option value="${a.id}" ${a.id===selectedId?'selected':''}>${optionLabelAbility(a)}</option>`).join("");
+  const base = filteredAbilities();
+  const selected = selectedId ? ABILITIES.find(a=> a.id === selectedId) : null;
+  const list = selected && !base.some(a=> a.id === selectedId) ? [selected, ...base] : base;
+  sel.innerHTML = `<option value="">-- choose ability --</option>` + list.map(a=>`<option value="${a.id}" ${a.id===selectedId?'selected':''}>${optionLabelAbility(a)}</option>`).join("");
 }
 
 function populateReplaceSelect(sel, selectedId=""){
@@ -317,6 +339,10 @@ async function loadAbilities(){
   // refresh selects
   document.querySelectorAll('.rk-abil').forEach(sel=> populateAbilitySelect(sel, sel.value));
 }
+
+abilityTagFilterEl?.addEventListener('input', ()=>{
+  document.querySelectorAll('.rk-abil').forEach(sel=> populateAbilitySelect(sel, sel.value));
+});
 
 document.getElementById("arc-save").addEventListener("click", saveArchetype);
 document.getElementById("arc-refresh").addEventListener("click", loadList);
