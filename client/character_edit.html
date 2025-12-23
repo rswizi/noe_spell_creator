@@ -149,6 +149,9 @@
   .info-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); margin:10px 0; }
   .info-grid .cell { border:1px solid #242436; border-radius:10px; padding:8px; background:#12121c; }
   .info-grid .label { font-size:.85rem; opacity:.75; }
+  .inv-desc-box{ border:1px solid #2a2a3a; border-radius:12px; padding:10px 12px; background:#141420; color:#e7e7ee; }
+  .inv-desc-box > *:first-child{ margin-top:0; }
+  .inv-desc-box > *:last-child{ margin-bottom:0; }
   .pill-soft { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:10px; background:#111827; border:1px solid #1f2b3f; }
   .upg-list { display:grid; gap:10px; }
   .upg-row { border:1px solid #242436; border-radius:10px; padding:8px; background:#12121c; }
@@ -3124,7 +3127,7 @@ function openInvItemModal(it){
   const descText = (it.description || it.desc || it.description_html || '').toString().trim();
   if (descText){
     const desc = document.createElement("div");
-    desc.className = "muted";
+    desc.className = "inv-desc-box";
     desc.innerHTML = descText;
     invItemBody.appendChild(desc);
   }
