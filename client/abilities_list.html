@@ -453,6 +453,10 @@ const PASSIVE_TARGET_GROUPS = (()=>{
     { value:'choice:intensity_any', label:'[Choice] Pick one Intensity' },
   ];
   const skillGroupOptions = [...skillGroups, ...choiceOpts];
+  const spellSlots = [
+    { value:'spell_slots.simple', label:'Simple Spell Slots' },
+    { value:'spell_slots.complex', label:'Complex Spell Slots' },
+  ];
   return [
     { label:'Characteristics', options: characteristics.map(c=>({ value:`char.${c.key}`, label:`${c.label} (modifier)` })) },
     { label:'Skills', options: skills.flatMap(c=> c.skills.map(s=>({ value:`skills.${c.key}.${s}`, label:`${s} (${c.label})` }))) },
@@ -462,6 +466,7 @@ const PASSIVE_TARGET_GROUPS = (()=>{
     { label:'Intensities', options: intensityOpts },
     { label:'Magic Damage', options: [...magicDmgSpell, ...magicDmgWeapon] },
     { label:'Derived / Resources', options: derived.map(d=>({ value:`derived.${d.key}`, label:d.label })) },
+    { label:'Spell Slots', options: spellSlots },
     { label:'Custom', options:[{ value:CUSTOM_TARGET_VALUE, label:'Custom path...' }]},
   ];
 })();

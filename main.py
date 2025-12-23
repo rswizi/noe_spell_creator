@@ -3058,6 +3058,7 @@ def read_inventory(request: Request, inv_id: str):
     else:
         inv["containers"] = recomputed_containers
         inv["enc_total"] = inv_total
+    inv = _hydrate_inventory_item_descriptions(inv_id, inv)
     return {"status":"success","inventory": inv}
 
 @app.post("/inventories/{inv_id}/containers")
@@ -3161,6 +3162,34 @@ def _fetch_catalog_item(kind: str, ref_id: str) -> dict | None:
     col = {"weapon":"weapons","equipment":"equipment","tool":"tools","object":"objects"}.get(kind)
     if not col: return None
     return db[col].find_one({"id": ref_id})
+
+def _extract_item_description(src: dict) -> tuple[str | None, str | None]:
+    desc_html = src.get("description_html")
+    desc = src.get("description") or src.get("desc")
+    return desc, desc_html
+
+def _hydrate_inventory_item_descriptions(inv_id: str, inv: dict) -> dict:
+    items = inv.get("items") or []
+    updated = False
+    for it in items:
+        if it.get("description") or it.get("description_html"):
+            continue
+        ref_id = (it.get("ref_id") or "").strip()
+        kind = (it.get("kind") or "").strip()
+        if not ref_id or not kind:
+            continue
+        src = _fetch_catalog_item(kind, ref_id)
+        if not src:
+            continue
+        desc, desc_html = _extract_item_description(src)
+        if desc or desc_html:
+            it["description"] = desc
+            it["description_html"] = desc_html
+            updated = True
+    if updated:
+        get_db().inventories.update_one({"id": inv_id}, {"$set": {"items": items}})
+        inv["items"] = items
+    return inv
 
 def _tags_filter(tags: str) -> dict:
     raw = [t.strip() for t in (tags or "").split(",") if t.strip()]
@@ -3391,6 +3420,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     container_id = SELF_CONTAINER_ID if is_equipped else (container_id or SELF_CONTAINER_ID)
 
     # store item + transaction
+    desc, desc_html = _extract_item_description(src)
     item = {
         "item_id": next_id_str("invitem", padding=5),
         "kind": kind,
@@ -3398,6 +3428,8 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "equipment_slot": eq_slot,
         "ref_id": ref_id,
         "name": name,
+        "description": desc,
+        "description_html": desc_html,
         "quantity": qty,
         "quality": (quality if kind in ("weapon", "equipment") else None),
         "enc": enc,

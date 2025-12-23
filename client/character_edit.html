@@ -1018,6 +1018,7 @@ let PASSIVE = {
   char: {},     // key -> { set:[], mul:[], add:[], notes:[] }  (applied to characteristic MOD)
   skill: {},    // "key|skill" -> { set:[], mul:[], add:[], notes:[] } (applied to skill TOTAL)
   school: {},   // schoolId -> { set:[], mul:[], add:[], notes:[] } (applied to MS for that school)
+  spell_slots: {}, // simple|complex -> { set:[], mul:[], add:[], notes:[] }
 };
 
 /* DOM refs */
@@ -1564,7 +1565,7 @@ function addSublimationFromForm(){
 
 /* ---------- PASSIVE AGGREGATION (char & skills) ---------- */
 function resetPassiveAgg(){
-  PASSIVE = { char:{}, skill:{}, school:{}, magic_damage:{ spell:{}, weapon:{} } };
+  PASSIVE = { char:{}, skill:{}, school:{}, spell_slots:{}, magic_damage:{ spell:{}, weapon:{} } };
 }
 function ensureAgg(obj, key){
   if (!obj[key]) obj[key] = { set:[], mul:[], add:[], notes:[] };
@@ -1878,6 +1879,15 @@ function recomputePassiveAgg(){
         continue;
       }
 
+      const ss = t.match(/^spell_slots\.(simple|complex)$/i);
+      if (ss){
+        const key = ss[1].toLowerCase();
+        const agg = ensureAgg(PASSIVE.spell_slots, key);
+        (agg[mode]||agg.add).push({v:val, origin});
+        agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+        continue;
+      }
+
       const md = t.match(/^magic_damage\.(spell|weapon)\.(.+)$/i);
       if (md){
         const kind = md[1].toLowerCase();
@@ -1928,6 +1938,15 @@ function recomputePassiveAgg(){
     if (sch){
       const key = sch[1].toLowerCase();
       const agg = ensureAgg(PASSIVE.school, key);
+      (agg[mode]||agg.add).push({v:val, origin});
+      agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
+      continue;
+    }
+
+    const ss = t.match(/^spell_slots\.(simple|complex)$/i);
+    if (ss){
+      const key = ss[1].toLowerCase();
+      const agg = ensureAgg(PASSIVE.spell_slots, key);
       (agg[mode]||agg.add).push({v:val, origin});
       agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
       continue;
@@ -3703,8 +3722,12 @@ async function renderSchoolSpellCounters(){
   });
   const maxSimpleSchools = null; // unlimited simple schools
   const maxComplexSchools = msMAG || 0;
-  const maxSimplePrepared = magVal;
-  const maxComplexPrepared = msMAG * 2;
+  const maxSimplePreparedBase = magVal;
+  const maxComplexPreparedBase = msMAG * 2;
+  const simpleAdj = applyOps(maxSimplePreparedBase, PASSIVE.spell_slots?.simple);
+  const complexAdj = applyOps(maxComplexPreparedBase, PASSIVE.spell_slots?.complex);
+  const maxSimplePrepared = Math.max(0, Math.floor(simpleAdj.value));
+  const maxComplexPrepared = Math.max(0, Math.floor(complexAdj.value));
   if (cntSchSimpleEl)  cntSchSimpleEl.textContent  = `Simple schools: ${simpleSchools}${maxSimpleSchools != null ? ` / ${maxSimpleSchools}` : ''}`;
   if (cntSchComplexEl) cntSchComplexEl.textContent = `Complex schools: ${complexSchools} / ${maxComplexSchools}`;
   if (cntSpSimpleEl)   cntSpSimpleEl.textContent   = `Simple spell slots: ${simplePrepared} / ${maxSimplePrepared}`;
