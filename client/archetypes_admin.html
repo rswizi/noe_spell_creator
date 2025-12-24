@@ -100,6 +100,8 @@
           <div class="row" style="margin:6px 0 10px;">
             <label for="arc-ability-tag-filter">Filter abilities by tag</label>
             <input id="arc-ability-tag-filter" placeholder="Comma-separated tags" style="flex:1;">
+            <label for="arc-ability-source-filter">Source</label>
+            <input id="arc-ability-source-filter" placeholder="Source category or ref" style="flex:1;">
           </div>
           <div id="rank-list" class="stack"></div>
         </div>
@@ -126,6 +128,7 @@ const $ = s=>document.querySelector(s);
 let ABILITIES = [];
 let ARCHETYPES = [];
 const abilityTagFilterEl = document.getElementById('arc-ability-tag-filter');
+const abilitySourceFilterEl = document.getElementById('arc-ability-source-filter');
 
 function parseTagFilter(val){
   return String(val || '').split(',').map(t=>t.trim().toLowerCase()).filter(Boolean);
@@ -135,10 +138,20 @@ function abilityMatchesTags(a, tags){
   const abTags = (a?.tags || []).map(t=> String(t || '').toLowerCase()).filter(Boolean);
   return tags.some(t=> abTags.includes(t));
 }
+function parseSourceFilter(val){
+  return String(val || '').trim().toLowerCase();
+}
+function abilityMatchesSource(a, src){
+  if (!src) return true;
+  const cat = String(a?.source_category || '').toLowerCase();
+  const ref = String(a?.source_ref || '').toLowerCase();
+  return cat.includes(src) || ref.includes(src);
+}
 function filteredAbilities(){
   const tags = parseTagFilter(abilityTagFilterEl?.value);
-  if (!tags.length) return ABILITIES.slice();
-  return ABILITIES.filter(a=> abilityMatchesTags(a, tags));
+  const src = parseSourceFilter(abilitySourceFilterEl?.value);
+  if (!tags.length && !src) return ABILITIES.slice();
+  return ABILITIES.filter(a=> abilityMatchesTags(a, tags) && abilityMatchesSource(a, src));
 }
 
 function optionLabelAbility(a){
@@ -341,6 +354,9 @@ async function loadAbilities(){
 }
 
 abilityTagFilterEl?.addEventListener('input', ()=>{
+  document.querySelectorAll('.rk-abil').forEach(sel=> populateAbilitySelect(sel, sel.value));
+});
+abilitySourceFilterEl?.addEventListener('input', ()=>{
   document.querySelectorAll('.rk-abil').forEach(sel=> populateAbilitySelect(sel, sel.value));
 });
 

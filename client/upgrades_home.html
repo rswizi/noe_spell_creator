@@ -329,10 +329,10 @@ function addModifierRow(container, initial={}){
   });
 
   const value = document.createElement('input');
-  value.type = 'number'; value.step = '0.1'; value.value = initial.value ?? 0;
+  value.type = 'number'; value.step = '1'; value.value = initial.value ?? 0;
 
   const qStep = document.createElement('input');
-  qStep.type = 'number'; qStep.step = '0.1'; qStep.placeholder = '+ per quality'; qStep.value = initial.quality_step ?? '';
+  qStep.type = 'number'; qStep.step = '1'; qStep.placeholder = '+ per quality'; qStep.value = initial.quality_step ?? '';
 
   const note = document.createElement('input');
   note.className = 'note'; note.placeholder = 'Note';
