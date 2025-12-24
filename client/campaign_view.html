@@ -1,372 +1,316 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Campaign</title>
+  <link rel="stylesheet" href="/static/style.css" />
   <style>
-    :root { color-scheme: dark; --bg:#14090c; --bg-2:#0c0b12; --panel:#121219; --border:#252533; --accent:#c53535; --text:#f3f3f5; }
-    body { margin:0; font-family:"Segoe UI","Inter",-apple-system,BlinkMacSystemFont,sans-serif; color:var(--text); background:linear-gradient(180deg,#1a0c0f 0%,#0b0b10 100%); }
-    .page{min-height:100vh; display:grid; place-items:start center;}
-    .wrap{width:100%; max-width:1100px; padding:28px 16px 60px;}
-    .topbar{display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap;}
-    h1{margin:0; font-size:24px;}
-    button, select, input{padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#181821; color:var(--text);}
-    button:hover{background:#1f1f2a; border-color:#2f2f42;}
-    .section{border:1px solid var(--border); border-radius:14px; padding:12px; background:var(--panel); box-shadow:0 8px 24px rgba(0,0,0,0.25); margin-bottom:12px;}
-    .grid{display:grid; gap:10px;}
-    .folder{border:1px dashed #333; border-radius:12px; padding:10px; min-height:40px;}
-    .char-card{display:flex; gap:10px; align-items:center; padding:8px; border:1px solid #252533; border-radius:12px; background:#11111a;}
-    .avatar{width:52px; height:52px; border:1px solid #333; border-radius:12px; overflow:hidden; background:#0b0b10; flex-shrink:0; display:grid; place-items:center;}
-    .avatar img{width:100%; height:100%; object-fit:cover;}
-    .muted{opacity:.8; font-size:.9rem;}
-    .pill{display:inline-flex; gap:6px; align-items:center; padding:4px 10px; border-radius:999px; border:1px solid #2f2f3f; font-size:.82rem;}
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    :root{color-scheme:dark;--ink:#f5f2ee;--bg:#0b0b12;--panel:#141422;--border:#2a2a3a;--accent:#d1a348;--accent-2:#3a7fd1;}
+    body{margin:0;color:var(--ink);font-family:"Palatino Linotype","Book Antiqua","Georgia",serif;background:radial-gradient(1000px 600px at 0% 0%, rgba(209,163,72,0.18), transparent 60%),linear-gradient(180deg,#0b0b12 0%,#0a0a0f 100%);}
+    .page{max-width:1100px;margin:0 auto;padding:28px 16px 64px;}
+    .topbar{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+    .topbar h1{margin:0;font-size:1.8rem;}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid #3a3a4a;font-size:.8rem;opacity:.85;}
+    .panel{border:1px solid var(--border);border-radius:16px;padding:14px;background:linear-gradient(150deg, rgba(20,20,34,0.95), rgba(12,12,20,0.9));display:grid;gap:10px;margin-bottom:14px;}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    .muted{opacity:.78;}
+    .avatar{width:92px;height:92px;border-radius:16px;border:1px solid #333;overflow:hidden;background:#0b0b10;display:grid;place-items:center;}
+    .avatar img{width:100%;height:100%;object-fit:cover;}
+    .btn{border-radius:999px;border:1px solid #3a3a4a;padding:8px 12px;background:#141422;color:var(--ink);}
+    .btn:hover{background:#1c1c2e;border-color:#4a4a60;}
+    input,select,textarea{padding:9px 11px;border-radius:12px;border:1px solid #2a2a3a;background:#12121d;color:var(--ink);}
+    .rich-editor{border:1px solid #2a2a3a;border-radius:12px;background:#0f1018;}
+    .rich-toolbar{display:flex;gap:6px;flex-wrap:wrap;padding:6px;border-bottom:1px solid #1e1f2b;}
+    .rich-toolbar button{border-radius:8px;border:1px solid #2a2a3a;background:#151622;color:var(--ink);padding:6px 8px;}
+    .rich-area{min-height:110px;padding:10px;outline:none;}
+    .rich-area:empty:before{content:attr(data-placeholder);color:#6f6f7f;}
+    .grid{display:grid;gap:10px;}
+    @media(min-width:900px){.grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));}}
+    .char-card{border:1px solid #2a2a3a;border-radius:14px;padding:10px;background:#101018;display:grid;gap:8px;}
+    .char-card.hidden{border-color:#5a4f00;box-shadow:0 0 0 1px #5a4f00 inset;}
+    .char-head{display:flex;gap:10px;align-items:center;}
+    .char-meta{font-size:.85rem;opacity:.75;}
+    .toggle{display:inline-flex;gap:6px;align-items:center;}
   </style>
 </head>
 <body>
-  <div class="page"><div class="wrap">
+  <div class="page">
     <div class="topbar">
-      <h1 id="title">Campaign</h1>
+      <h1 id="camp-title">Campaign</h1>
+      <span id="login-chip" class="pill">Checking...</span>
+      <a class="btn" href="campaigns_my.html">My Campaigns</a>
       <a class="btn" href="campaign_manager.html">Back</a>
-      <span id="login-chip" class="muted" style="margin-left:auto;"></span>
       <span id="status" class="muted"></span>
     </div>
 
-    <div class="section">
-      <div class="row" style="align-items:flex-start; gap:12px;">
-        <div class="avatar" style="width:96px; height:96px;">
-          <img id="camp-avatar" alt="Campaign avatar" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';">
-        </div>
-        <div class="grow">
-          <label class="muted">Description
-            <textarea id="camp-desc" rows="3" style="width:100%;"></textarea>
-          </label>
-          <div class="row" style="gap:8px; margin-top:8px;">
-            <input type="file" id="camp-avatar-file" accept="image/png,image/jpeg">
-            <button id="camp-avatar-upload">Upload avatar</button>
-            <button id="camp-desc-save">Save description</button>
+    <div class="panel">
+      <div class="row" style="align-items:flex-start;">
+        <div class="avatar"><img id="camp-avatar" alt="Campaign avatar" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';"></div>
+        <div style="flex:1;">
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <div>
+              <div class="muted">Campaign</div>
+              <div id="camp-name" style="font-size:1.3rem;font-weight:600;"></div>
+              <div class="muted" id="camp-meta"></div>
+            </div>
+            <button id="config-btn" class="btn" style="display:none;">Configure</button>
           </div>
+          <div id="camp-desc" class="muted" style="margin-top:8px;"></div>
         </div>
       </div>
     </div>
 
-    <div class="section">
-      <div class="row" style="align-items:flex-end;">
-        <div class="grid" style="min-width:220px;">
-          <span class="muted">Assign character</span>
-          <select id="char-select"></select>
+    <div class="panel" id="config-panel" style="display:none;">
+      <div class="grid cols-2">
+        <div class="grid">
+          <label>Campaign name</label>
+          <input id="edit-name" />
         </div>
-        <div class="grid" style="min-width:180px;">
-          <span class="muted">Assign to (member)</span>
-          <select id="user-select"></select>
+        <div class="grid">
+          <label>Avatar</label>
+          <input id="edit-avatar" type="file" accept="image/png,image/jpeg" />
         </div>
-        <div class="grid" style="min-width:200px;">
-          <span class="muted">Folder path</span>
-          <input id="folder-input" placeholder="e.g. Party/Tank">
+      </div>
+      <label class="muted">Description</label>
+      <div id="desc-editor" class="rich-editor">
+        <div class="rich-toolbar">
+          <button type="button" data-cmd="bold">Bold</button>
+          <button type="button" data-cmd="italic">Italic</button>
+          <button type="button" data-cmd="underline">Underline</button>
+          <button type="button" data-cmd="insertUnorderedList">List</button>
+          <button type="button" data-cmd="removeFormat">Clear</button>
         </div>
-        <label class="row muted" style="gap:6px;">
-          <input type="checkbox" id="editable-gm"> GM can edit
-        </label>
-        <button id="assign-btn">Assign</button>
+        <div class="rich-area" contenteditable="true" data-placeholder="Campaign description..."></div>
+      </div>
+      <div class="row">
+        <button class="btn" id="save-campaign">Save changes</button>
       </div>
     </div>
 
-    <div class="section">
-      <div class="muted">Drag characters between folders to move them</div>
-      <div class="row" id="folder-tools" style="margin:8px 0; gap:8px;">
-        <input id="add-folder-input" placeholder="New folder path (e.g. Party/Tank)" style="flex:1; min-width:240px;">
-        <button id="add-folder-btn">Add folder</button>
+    <div class="panel" id="add-char-panel" style="display:none;">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>Add a character</strong>
       </div>
-      <div id="folders" class="grid" style="margin-top:10px;"></div>
+      <div class="row">
+        <select id="add-char-select" style="min-width:220px;"></select>
+        <select id="add-char-assign" style="min-width:200px;"></select>
+        <input id="add-char-folder" placeholder="Folder path (optional)" style="min-width:200px;">
+        <label class="toggle"><input type="checkbox" id="add-char-visible" checked> Visible to others</label>
+        <button class="btn" id="add-char-btn">Add to campaign</button>
+      </div>
+      <div class="muted">Only owners can add and assign characters.</div>
     </div>
-  </div></div>
 
-<script>
-const params = new URLSearchParams(location.search);
-const CID = params.get("cid") || "";
-const loginChip = document.getElementById("login-chip");
-const statusEl = document.getElementById("status");
-const titleEl = document.getElementById("title");
-const charSelect = document.getElementById("char-select");
-const userSelect = document.getElementById("user-select");
-const folderInput = document.getElementById("folder-input");
-const editableGmEl = document.getElementById("editable-gm");
-const foldersEl = document.getElementById("folders");
-const addFolderInput = document.getElementById("add-folder-input");
-const addFolderBtn = document.getElementById("add-folder-btn");
-const campAvatar = document.getElementById("camp-avatar");
-const campAvatarFile = document.getElementById("camp-avatar-file");
-const campAvatarUpload = document.getElementById("camp-avatar-upload");
-const campDesc = document.getElementById("camp-desc");
-const campDescSave = document.getElementById("camp-desc-save");
-
-let CAMPAIGN = null;
-let MY_CHARS = [];
-let IS_OWNER = false;
-
-function authHeaders(){
-  const tok = localStorage.getItem("auth_token") || "";
-  if (tok){ document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
-  return tok ? { "Authorization":"Bearer "+tok, "X-Auth-Token":tok } : {};
-}
-async function api(path,opt={}){
-  const headers = Object.assign({}, opt.headers||{}, authHeaders());
-  const resp = await fetch(path, { credentials:'include', ...opt, headers });
-  const ct = resp.headers.get("content-type") || "";
-  const data = ct.includes("application/json") ? await resp.json() : { status:"error", message: await resp.text() };
-  if (!resp.ok || data.status==="error") throw new Error(data.message || `HTTP ${resp.status}`);
-  return data;
-}
-
-async function loadMe(){
-  loginChip.textContent = "Checking...";
-  try{
-    const me = await api("/auth/me");
-    loginChip.textContent = `${me.username} (${me.role})`;
-    return me;
-  }catch(e){
-    loginChip.textContent = "Not logged in";
-    throw e;
-  }
-}
-
-function buildSelects(){
-  // characters
-  charSelect.innerHTML = "";
-  MY_CHARS.forEach(ch=>{
-    const o = document.createElement("option");
-    o.value = ch.id; o.textContent = ch.name || ch.id;
-    charSelect.appendChild(o);
-  });
-  // members
-  userSelect.innerHTML = '<option value=\"\">Unassigned</option>';
-  if (CAMPAIGN){
-    const all = [CAMPAIGN.owner].concat(CAMPAIGN.members || []);
-    all.forEach(u=>{
-      const o = document.createElement("option");
-      o.value = u; o.textContent = u;
-      userSelect.appendChild(o);
-    });
-  }
-}
-
-function folderTreeFromChars(chars){
-  const tree = {};
-  // include empty folders
-  (CAMPAIGN?.folders || []).forEach(f=>{
-    const path = (f||"").split("/").filter(Boolean);
-    let node = tree;
-    path.forEach(p=>{
-      node[p] = node[p] || {};
-      node = node[p];
-    });
-    node.__items = node.__items || [];
-  });
-  chars.forEach(c=>{
-    const path = (c.folder || "").split("/").filter(Boolean);
-    let node = tree;
-    path.forEach(p=>{
-      node[p] = node[p] || {};
-      node = node[p];
-    });
-    node.__items = node.__items || [];
-    node.__items.push(c);
-  });
-  return tree;
-}
-
-function renderTree(node, prefix=[]){
-  const container = document.createElement("div");
-  container.className = "folder";
-  container.dataset.folder = prefix.join("/");
-  container.addEventListener("dragover", e=> e.preventDefault());
-  container.addEventListener("drop", async (e)=>{
-    e.preventDefault();
-    const charId = e.dataTransfer.getData("text/plain");
-    await moveChar(charId, prefix.join("/"));
-  });
-  const title = prefix.length ? prefix.join("/") : "(root)";
-  container.innerHTML = `<div class="muted">${title}</div>`;
-  const items = (node.__items || []);
-  items.forEach(c=>{
-    const card = document.createElement("div");
-    card.className = "char-card";
-    card.draggable = true;
-    card.addEventListener("dragstart", e=>{ e.dataTransfer.setData("text/plain", c.character_id); });
-    card.innerHTML = `
-      <div class="avatar"><img src="/characters/${encodeURIComponent(c.character_id)}/avatar" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';"></div>
-      <div class="grow">
-        <div><strong>${c.character_id}</strong></div>
-        <div class="muted">Assigned: ${c.assigned_to || "Unassigned"} | ${c.editable_by_gm ? "GM editable" : "View only"}</div>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>Characters</strong>
+        <span class="muted">Hidden characters stay visible to their assigned player.</span>
       </div>
-      <div class="row" style="gap:6px;">
-        <button class="btn small req" title="Request edit">Request edit</button>
-        <button class="btn small assign-btn" ${IS_OWNER ? "" : "disabled"}>Assign</button>
-        <a class="btn small" href="character_edit.html?id=${encodeURIComponent(c.character_id)}">Open</a>
-      </div>
-    `;
-    card.querySelector(".req").addEventListener("click", ()=> requestEdit(c.character_id));
-    const assignBtn = card.querySelector(".assign-btn");
-    assignBtn?.addEventListener("click", async ()=>{
-      if (!IS_OWNER){ alert("Only GM/admin can reassign."); return; }
-      const targetUser = prompt("Assign to which member? Leave blank to unassign.", c.assigned_to||"") || "";
-      const folderPath = prompt("Folder path?", c.folder || container.dataset.folder || "") || "";
-      const editable = confirm("Allow GM edits? OK = yes, Cancel = no");
-      await assignExistingChar(c.character_id, targetUser, folderPath, editable);
+      <div id="char-list" class="grid"></div>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const CID = params.get("cid") || "";
+    const loginChip = document.getElementById("login-chip");
+    const statusEl = document.getElementById("status");
+    const campTitle = document.getElementById("camp-title");
+    const campName = document.getElementById("camp-name");
+    const campMeta = document.getElementById("camp-meta");
+    const campDesc = document.getElementById("camp-desc");
+    const campAvatar = document.getElementById("camp-avatar");
+    const configBtn = document.getElementById("config-btn");
+    const configPanel = document.getElementById("config-panel");
+    const editName = document.getElementById("edit-name");
+    const editAvatar = document.getElementById("edit-avatar");
+    const descEditor = document.querySelector("#desc-editor .rich-area");
+    const saveCampaignBtn = document.getElementById("save-campaign");
+    const addCharPanel = document.getElementById("add-char-panel");
+    const addCharSelect = document.getElementById("add-char-select");
+    const addCharAssign = document.getElementById("add-char-assign");
+    const addCharFolder = document.getElementById("add-char-folder");
+    const addCharVisible = document.getElementById("add-char-visible");
+    const addCharBtn = document.getElementById("add-char-btn");
+    const charList = document.getElementById("char-list");
+
+    let ME = null;
+    let CAMPAIGN = null;
+    let MY_CHARS = [];
+
+    function authHeaders(){
+      const t = localStorage.getItem("auth_token") || "";
+      return t ? { "Authorization":"Bearer " + t, "X-Auth-Token": t } : {};
+    }
+    async function api(path,opt={}){
+      const headers = Object.assign({}, opt.headers||{}, authHeaders());
+      const resp = await fetch(path, { credentials:"include", ...opt, headers });
+      const ct = resp.headers.get("content-type") || "";
+      const data = ct.includes("application/json") ? await resp.json() : { status:"error", message: await resp.text() };
+      if (!resp.ok || data.status === "error") throw new Error(data.message || `HTTP ${resp.status}`);
+      return data;
+    }
+    async function loadMe(){
+      try{
+        const res = await api("/auth/me");
+        ME = res;
+        loginChip.textContent = `${res.username} (${res.role})`;
+      }catch{
+        loginChip.textContent = "Not logged in";
+      }
+    }
+    async function loadCampaign(){
+      const res = await api(`/campaigns/${encodeURIComponent(CID)}`);
+      CAMPAIGN = res.campaign;
+      renderCampaign();
+    }
+    async function loadMyCharacters(){
+      try{
+        const res = await api("/characters");
+        MY_CHARS = res.characters || [];
+      }catch{
+        MY_CHARS = [];
+      }
+    }
+    function richValue(){
+      const text = (descEditor.textContent || "").trim();
+      if (!text) return "";
+      return descEditor.innerHTML;
+    }
+    function renderCampaign(){
+      if (!CAMPAIGN) return;
+      const isOwner = CAMPAIGN.is_owner || (ME && ME.role && ME.role.toLowerCase() === "admin");
+      campTitle.textContent = CAMPAIGN.name || "Campaign";
+      campName.textContent = CAMPAIGN.name || "Campaign";
+      campMeta.textContent = `Owner: ${CAMPAIGN.owner || "?"} • Code: ${CAMPAIGN.join_code || "--"}`;
+      campDesc.innerHTML = CAMPAIGN.description || "<span class='muted'>No description.</span>";
+      campAvatar.src = CAMPAIGN.avatar_url ? `${CAMPAIGN.avatar_url}?ts=${Date.now()}` : `/campaigns/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
+      configBtn.style.display = isOwner ? "" : "none";
+      addCharPanel.style.display = isOwner ? "" : "none";
+      if (isOwner){
+        editName.value = CAMPAIGN.name || "";
+        descEditor.innerHTML = CAMPAIGN.description || "";
+        const members = [CAMPAIGN.owner].concat(CAMPAIGN.members || []);
+        addCharAssign.innerHTML = `<option value="">Unassigned</option>` + members.map(m=>`<option value="${m}">${m}</option>`).join("");
+        addCharSelect.innerHTML = (MY_CHARS || []).map(c=>`<option value="${c.id}">${c.name || c.id}</option>`).join("");
+      }
+      renderCharacters(isOwner);
+    }
+    function renderCharacters(isOwner){
+      charList.innerHTML = "";
+      const chars = CAMPAIGN.characters || [];
+      if (!chars.length){
+        charList.innerHTML = "<div class='muted'>No characters yet.</div>";
+        return;
+      }
+      chars.forEach(c=>{
+        const assignedTo = (c.assigned_to || "").trim();
+        const visible = c.visible_to_others !== false;
+        const card = document.createElement("div");
+        card.className = `char-card ${visible ? "" : "hidden"}`;
+        const canEdit = ME && assignedTo && assignedTo === ME.username;
+        card.innerHTML = `
+          <div class="char-head">
+            <div class="avatar" style="width:52px;height:52px;">
+              <img src="/characters/${encodeURIComponent(c.character_id)}/avatar" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';">
+            </div>
+            <div style="flex:1;">
+              <div><strong>${c.character_id}</strong></div>
+              <div class="char-meta">Assigned: ${assignedTo || "Unassigned"} • ${visible ? "Visible" : "Hidden"}</div>
+            </div>
+            <div class="row">
+              <a class="btn small" href="character_edit.html?id=${encodeURIComponent(c.character_id)}">Open</a>
+              ${canEdit ? "" : "<span class='muted' style='font-size:.8rem;'>Edit only if you own</span>"}
+            </div>
+          </div>
+        `;
+        if (isOwner){
+          const controls = document.createElement("div");
+          controls.className = "row";
+          controls.innerHTML = `
+            <select class="assign-select" style="min-width:180px;">
+              <option value="">Unassigned</option>
+              ${(CAMPAIGN.members || []).concat([CAMPAIGN.owner]).map(m=>`<option value="${m}" ${m===assignedTo?"selected":""}>${m}</option>`).join("")}
+            </select>
+            <input class="folder-input" placeholder="Folder" value="${c.folder || ""}" style="min-width:180px;">
+            <label class="toggle"><input type="checkbox" class="visible-toggle" ${visible ? "checked" : ""}> Visible to others</label>
+            <button class="btn small assign-btn">Update</button>
+            <button class="btn small dup-btn">Duplicate</button>
+          `;
+          controls.querySelector(".assign-btn").addEventListener("click", async ()=>{
+            const assigned_to = controls.querySelector(".assign-select").value || "";
+            const folder = controls.querySelector(".folder-input").value || "";
+            const visible_to_others = controls.querySelector(".visible-toggle").checked;
+            await api(`/campaigns/${encodeURIComponent(CID)}/characters/${encodeURIComponent(c.character_id)}`, {
+              method:"PATCH",
+              headers:{ "content-type":"application/json" },
+              body: JSON.stringify({ assigned_to, folder, visible_to_others })
+            });
+            await loadCampaign();
+          });
+          controls.querySelector(".dup-btn").addEventListener("click", async ()=>{
+            const name = prompt("Name for duplicate character (optional):") || "";
+            await api(`/campaigns/${encodeURIComponent(CID)}/characters/${encodeURIComponent(c.character_id)}/duplicate`, {
+              method:"POST",
+              headers:{ "content-type":"application/json" },
+              body: JSON.stringify({ name })
+            });
+            await loadCampaign();
+          });
+          card.appendChild(controls);
+        }
+        charList.appendChild(card);
+      });
+    }
+
+    configBtn.addEventListener("click", ()=>{
+      configPanel.style.display = configPanel.style.display === "none" ? "" : "none";
     });
-    container.appendChild(card);
-  });
-  Object.keys(node).filter(k=>k!=="__items").forEach(k=>{
-    container.appendChild(renderTree(node[k], prefix.concat([k])));
-  });
-  return container;
-}
-
-function renderCampaign(){
-  if (!CAMPAIGN) return;
-  titleEl.textContent = `${CAMPAIGN.name} (${CAMPAIGN.join_code || "code?"})`;
-  IS_OWNER = !!(CAMPAIGN.is_owner || CAMPAIGN.is_admin);
-  const tools = document.getElementById("folder-tools");
-  if (tools) tools.style.display = IS_OWNER ? "" : "none";
-   if (campDesc) {
-     campDesc.value = CAMPAIGN.description || "";
-     campDesc.disabled = !IS_OWNER;
-   }
-   if (campAvatar) {
-     campAvatar.src = CAMPAIGN.avatar_url || `/campaigns/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
-   }
-   if (campAvatarFile) campAvatarFile.disabled = !IS_OWNER;
-   if (campAvatarUpload) campAvatarUpload.disabled = !IS_OWNER;
-   if (campDescSave) campDescSave.disabled = !IS_OWNER;
-  foldersEl.innerHTML = "";
-  const tree = folderTreeFromChars(CAMPAIGN.characters || []);
-  foldersEl.appendChild(renderTree(tree, []));
-  buildSelects();
-}
-
-async function loadCampaign(){
-  const res = await api(`/campaigns/${encodeURIComponent(CID)}`);
-  CAMPAIGN = res.campaign;
-  renderCampaign();
-}
-
-async function loadCharacters(){
-  const res = await api('/characters');
-  MY_CHARS = res.characters || [];
-}
-
-async function assignChar(){
-  const character_id = charSelect.value || "";
-  if (!character_id){ alert("Select a character"); return; }
-  if (!IS_OWNER){ alert("Only the GM can assign."); return; }
-  const assigned_to = userSelect.value || "";
-  const folder = folderInput.value || "";
-  const editable_by_gm = !!editableGmEl.checked;
-  await assignExistingChar(character_id, assigned_to, folder, editable_by_gm);
-}
-
-async function assignExistingChar(character_id, assigned_to, folder, editable_by_gm){
-  statusEl.textContent = "Assigning...";
-  await api(`/campaigns/${encodeURIComponent(CID)}/assign_character`, {
-    method:"POST",
-    headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ character_id, assigned_to, folder, editable_by_gm })
-  });
-  await loadCampaign();
-  statusEl.textContent = "Assigned.";
-}
-
-async function moveChar(charId, folderPath){
-  if (!IS_OWNER) return;
-  statusEl.textContent = "Moving...";
-  await api(`/campaigns/${encodeURIComponent(CID)}/characters/${encodeURIComponent(charId)}`, {
-    method:"PATCH",
-    headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ folder: folderPath })
-  });
-  await loadCampaign();
-  statusEl.textContent = "Moved.";
-}
-
-async function requestEdit(charId){
-  statusEl.textContent = "Requesting...";
-  await api(`/campaigns/${encodeURIComponent(CID)}/request_edit`, {
-    method:"POST",
-    headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ character_id: charId })
-  });
-  statusEl.textContent = "Request sent.";
-}
-
-document.getElementById("assign-btn").addEventListener("click", assignChar);
-addFolderBtn.addEventListener("click", async ()=>{
-  const f = (addFolderInput.value || "").trim();
-  if (!f){ alert("Enter folder path"); return; }
-  if (!IS_OWNER){ alert("Only the GM can add folders."); return; }
-  statusEl.textContent = "Adding folder...";
-  try{
-    await api(`/campaigns/${encodeURIComponent(CID)}/folders`, {
-      method:"PATCH",
-      headers:{ "content-type":"application/json" },
-      body: JSON.stringify({ folder: f })
+    document.querySelectorAll("#desc-editor [data-cmd]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{ document.execCommand(btn.dataset.cmd, false, null); descEditor.focus(); });
     });
-    addFolderInput.value = "";
-    await loadCampaign();
-    statusEl.textContent = "Folder added.";
-  }catch(e){
-    statusEl.textContent = e.message;
-    alert(e.message);
-  }
-});
-
-campAvatarUpload?.addEventListener("click", async ()=>{
-  if (!IS_OWNER){ alert("Only GM/admin can change avatar."); return; }
-  const f = campAvatarFile?.files?.[0];
-  if (!f){ alert("Choose an image first."); return; }
-  const fd = new FormData();
-  fd.append("file", f);
-  try{
-    statusEl.textContent = "Uploading avatar...";
-    const r = await fetch(`/campaigns/${encodeURIComponent(CID)}/avatar`, {
-      method:"POST",
-      headers: authHeaders(),
-      body: fd,
-      credentials:'include'
+    saveCampaignBtn.addEventListener("click", async ()=>{
+      try{
+        statusEl.textContent = "Saving...";
+        await api(`/campaigns/${encodeURIComponent(CID)}`, {
+          method:"PATCH",
+          headers:{ "content-type":"application/json" },
+          body: JSON.stringify({ name: editName.value || "", description: richValue() })
+        });
+        const file = editAvatar.files?.[0];
+        if (file){
+          const fd = new FormData();
+          fd.append("file", file);
+          await fetch(`/campaigns/${encodeURIComponent(CID)}/avatar`, { method:"POST", headers: authHeaders(), body: fd, credentials:"include" });
+        }
+        await loadCampaign();
+        statusEl.textContent = "Saved.";
+      }catch(e){
+        statusEl.textContent = e.message;
+      }
     });
-    const j = await r.json().catch(()=>({}));
-    if (j.status !== "success") throw new Error(j.message || "Upload failed");
-    statusEl.textContent = "Avatar updated.";
-    await loadCampaign();
-  }catch(e){
-    statusEl.textContent = e.message;
-    alert(e.message);
-  }
-});
-
-campDescSave?.addEventListener("click", async ()=>{
-  if (!IS_OWNER){ alert("Only GM/admin can edit description."); return; }
-  try{
-    statusEl.textContent = "Saving description...";
-    const res = await fetch(`/campaigns/${encodeURIComponent(CID)}`, {
-      method:"PATCH",
-      headers:{ "content-type":"application/json", ...authHeaders() },
-      credentials:'include',
-      body: JSON.stringify({ description: campDesc.value || "" })
+    addCharBtn.addEventListener("click", async ()=>{
+      const character_id = addCharSelect.value || "";
+      if (!character_id){ alert("Pick a character"); return; }
+      try{
+        await api(`/campaigns/${encodeURIComponent(CID)}/assign_character`, {
+          method:"POST",
+          headers:{ "content-type":"application/json" },
+          body: JSON.stringify({
+            character_id,
+            assigned_to: addCharAssign.value || "",
+            folder: addCharFolder.value || "",
+            visible_to_others: addCharVisible.checked
+          })
+        });
+        await loadCampaign();
+      }catch(e){
+        alert(e.message);
+      }
     });
-    const j = await res.json().catch(()=>({}));
-    if (j.status !== "success") throw new Error(j.message || "Save failed");
-    statusEl.textContent = "Saved.";
-  }catch(e){
-    statusEl.textContent = e.message;
-    alert(e.message);
-  }
-});
 
-loadMe()
-  .then(loadCharacters)
-  .then(loadCampaign)
-  .catch(e=>{ statusEl.textContent = e.message; });
-</script>
+    loadMe().then(loadMyCharacters).then(loadCampaign).catch(e=>{ statusEl.textContent = e.message; });
+  </script>
 </body>
 </html>

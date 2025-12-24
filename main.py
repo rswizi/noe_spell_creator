@@ -33,6 +33,14 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
         d["is_owner"] = d.get("owner") == user
         d["is_member"] = user in (d.get("members") or [])
         d["is_admin"] = (role or "").lower() == "admin"
+        if not (d["is_owner"] or d["is_admin"]):
+            visible_chars = []
+            for c in (d.get("characters") or []):
+                assigned_to = (c.get("assigned_to") or "").strip()
+                visible_to_others = c.get("visible_to_others", True)
+                if assigned_to == user or visible_to_others:
+                    visible_chars.append(c)
+            d["characters"] = visible_chars
     # compute avatar url if stored
     if d.get("avatar"):
         d["avatar_url"] = f"/campaigns/{d['id']}/avatar"
@@ -139,7 +147,14 @@ async def join_campaign(req: Request):
     # Optional: join with a character
     if char_id:
         chars = [c for c in (doc.get("characters") or []) if c.get("character_id") != char_id]
-        chars.append({"character_id": char_id, "assigned_to": user, "folder": folder, "editable_by_gm": False, "edit_requests":[]})
+        chars.append({
+            "character_id": char_id,
+            "assigned_to": user,
+            "folder": folder,
+            "editable_by_gm": False,
+            "edit_requests": [],
+            "visible_to_others": True
+        })
         CAMPAIGN_COL.update_one({"id": doc["id"]}, {"$set": {"characters": chars}})
         doc["characters"] = chars
     return {"status":"success", "campaign": _campaign_view(doc, user, role)}
@@ -180,8 +195,16 @@ async def assign_campaign_character(cid: str, req: Request):
     assigned_to = (body.get("assigned_to") or "").strip()
     folder = (body.get("folder") or "").strip()
     editable = bool(body.get("editable_by_gm"))
+    visible_to_others = True if body.get("visible_to_others") is None else bool(body.get("visible_to_others"))
     chars = [c for c in (doc.get("characters") or []) if c.get("character_id") != char_id]
-    chars.append({"character_id": char_id, "assigned_to": assigned_to, "folder": folder, "editable_by_gm": editable, "edit_requests":[]})
+    chars.append({
+        "character_id": char_id,
+        "assigned_to": assigned_to,
+        "folder": folder,
+        "editable_by_gm": editable,
+        "edit_requests": [],
+        "visible_to_others": visible_to_others
+    })
     CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": chars}})
     doc["characters"] = chars
     return {"status":"success", "campaign": _campaign_view(doc, user, role)}
@@ -202,12 +225,54 @@ async def update_campaign_character(cid: str, char_id: str, req: Request):
             if "assigned_to" in body: c["assigned_to"] = (body.get("assigned_to") or "").strip()
             if "folder" in body: c["folder"] = (body.get("folder") or "").strip()
             if "editable_by_gm" in body: c["editable_by_gm"] = bool(body.get("editable_by_gm"))
+            if "visible_to_others" in body: c["visible_to_others"] = bool(body.get("visible_to_others"))
         updated.append(c)
     if not found:
         raise HTTPException(404, "Character not in campaign")
     CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": updated}})
     doc["characters"] = updated
     return {"status":"success", "campaign": _campaign_view(doc, user, role)}
+
+@app.post("/campaigns/{cid}/characters/{char_id}/duplicate")
+async def duplicate_campaign_character(cid: str, char_id: str, req: Request):
+    user, role = require_auth(req)
+    doc = _require_campaign_access(cid, user, role)
+    if doc.get("owner") != user and (role or "").lower() != "admin":
+        raise HTTPException(403, "Only GM/admin can duplicate")
+    body = await req.json()
+    new_name = (body.get("name") or "").strip()
+
+    chars = doc.get("characters") or []
+    src_entry = next((c for c in chars if c.get("character_id") == char_id), None)
+    if not src_entry:
+        raise HTTPException(404, "Character not in campaign")
+    src = get_col("characters").find_one({"id": char_id})
+    if not src:
+        raise HTTPException(404, "Character not found")
+    src = dict(src)
+    src.pop("_id", None)
+    src.pop("id", None)
+    src["owner"] = user
+    src["name"] = new_name or (src.get("name") or "Character") + " (Copy)"
+    now = datetime.datetime.utcnow().isoformat() + "Z"
+    src["created_at"] = now
+    src["updated_at"] = now
+    new_id = next_id_str("characters", padding=4)
+    src["id"] = new_id
+    get_col("characters").insert_one(dict(src))
+
+    chars = [c for c in chars if c.get("character_id") != new_id]
+    chars.append({
+        "character_id": new_id,
+        "assigned_to": user,
+        "folder": (src_entry.get("folder") or ""),
+        "editable_by_gm": True,
+        "edit_requests": [],
+        "visible_to_others": True
+    })
+    CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": chars}})
+    doc["characters"] = chars
+    return {"status":"success", "character_id": new_id, "campaign": _campaign_view(doc, user, role)}
 
 @app.post("/campaigns/{cid}/request_edit")
 async def request_edit_rights(cid: str, req: Request):

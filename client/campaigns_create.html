@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Create Campaign</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    :root{color-scheme:dark;--ink:#f5f2ee;--bg:#0b0b12;--panel:#141422;--border:#2a2a3a;--accent:#d1a348;}
+    body{margin:0;color:var(--ink);font-family:"Palatino Linotype","Book Antiqua","Georgia",serif;background:radial-gradient(900px 500px at 40% -10%, rgba(209,163,72,0.2), transparent 60%),linear-gradient(180deg,#0b0b12 0%,#0a0a0f 100%);}
+    .page{max-width:920px;margin:0 auto;padding:28px 16px 64px;}
+    .topbar{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+    .topbar h1{margin:0;font-size:1.8rem;}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid #3a3a4a;font-size:.8rem;opacity:.85;}
+    .panel{border:1px solid var(--border);border-radius:16px;padding:14px;background:linear-gradient(150deg, rgba(20,20,34,0.95), rgba(12,12,20,0.9));display:grid;gap:10px;}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    label{font-size:.9rem;opacity:.85;}
+    input,textarea{padding:9px 11px;border-radius:12px;border:1px solid #2a2a3a;background:#12121d;color:var(--ink);}
+    .btn{border-radius:999px;border:1px solid #3a3a4a;padding:8px 12px;background:#141422;color:var(--ink);}
+    .btn:hover{background:#1c1c2e;border-color:#4a4a60;}
+    .muted{opacity:.78;}
+    .rich-editor{border:1px solid #2a2a3a;border-radius:12px;background:#0f1018;}
+    .rich-toolbar{display:flex;gap:6px;flex-wrap:wrap;padding:6px;border-bottom:1px solid #1e1f2b;}
+    .rich-toolbar button{border-radius:8px;border:1px solid #2a2a3a;background:#151622;color:var(--ink);padding:6px 8px;}
+    .rich-area{min-height:140px;padding:10px;outline:none;}
+    .rich-area:empty:before{content:attr(data-placeholder);color:#6f6f7f;}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <h1>Create Campaign</h1>
+      <span id="login-chip" class="pill">Checking...</span>
+      <a class="btn" href="campaign_manager.html">Back</a>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <label style="min-width:140px;">Campaign name</label>
+        <input id="camp-name" placeholder="Ex: Ashfall Requiem" style="flex:1;min-width:220px;">
+      </div>
+
+      <label class="muted">Description (rich text)</label>
+      <div id="desc-editor" class="rich-editor">
+        <div class="rich-toolbar">
+          <button type="button" data-cmd="bold">Bold</button>
+          <button type="button" data-cmd="italic">Italic</button>
+          <button type="button" data-cmd="underline">Underline</button>
+          <button type="button" data-cmd="insertUnorderedList">List</button>
+          <button type="button" data-cmd="removeFormat">Clear</button>
+        </div>
+        <div class="rich-area" contenteditable="true" data-placeholder="Optional description..."></div>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <label>Avatar (optional)</label>
+        <input id="camp-avatar" type="file" accept="image/png,image/jpeg">
+      </div>
+      <div class="row">
+        <button class="btn" id="create-btn">Create campaign</button>
+        <span class="muted" id="status"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const loginChip = document.getElementById("login-chip");
+    const statusEl = document.getElementById("status");
+    const nameEl = document.getElementById("camp-name");
+    const avatarEl = document.getElementById("camp-avatar");
+    const editor = document.querySelector("#desc-editor .rich-area");
+    document.querySelectorAll("#desc-editor [data-cmd]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{ document.execCommand(btn.dataset.cmd, false, null); editor.focus(); });
+    });
+
+    function authHeaders(){
+      const t = localStorage.getItem("auth_token") || "";
+      return t ? { "Authorization":"Bearer " + t, "X-Auth-Token": t } : {};
+    }
+    async function api(path,opt={}){
+      const headers = Object.assign({}, opt.headers||{}, authHeaders());
+      const resp = await fetch(path, { credentials:"include", ...opt, headers });
+      const ct = resp.headers.get("content-type") || "";
+      const data = ct.includes("application/json") ? await resp.json() : { status:"error", message: await resp.text() };
+      if (!resp.ok || data.status === "error") throw new Error(data.message || `HTTP ${resp.status}`);
+      return data;
+    }
+    async function checkMe(){
+      try{
+        const me = await api("/auth/me");
+        loginChip.textContent = `${me.username} (${me.role})`;
+      }catch{
+        loginChip.textContent = "Not logged in";
+      }
+    }
+    function richValue(){
+      const text = (editor.textContent || "").trim();
+      if (!text) return "";
+      return editor.innerHTML;
+    }
+    document.getElementById("create-btn").addEventListener("click", async ()=>{
+      const name = (nameEl.value || "").trim();
+      if (!name){ alert("Enter a campaign name"); return; }
+      try{
+        statusEl.textContent = "Creating...";
+        const res = await api("/campaigns", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ name, description: richValue() }) });
+        const cid = res.campaign?.id || "";
+        const file = avatarEl.files?.[0];
+        if (cid && file){
+          const fd = new FormData();
+          fd.append("file", file);
+          await fetch(`/campaigns/${encodeURIComponent(cid)}/avatar`, { method:"POST", headers: authHeaders(), body: fd, credentials:"include" });
+        }
+        statusEl.textContent = "Created.";
+        if (cid){
+          location.href = `campaign_view.html?cid=${encodeURIComponent(cid)}`;
+        }
+      }catch(e){
+        statusEl.textContent = e.message;
+      }
+    });
+
+    checkMe();
+  </script>
+</body>
+</html>
