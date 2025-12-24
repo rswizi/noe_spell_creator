@@ -52,6 +52,12 @@
     .tag button { background:transparent; border:0; color:#ff7676; cursor:pointer; font-size:1rem; padding:0 4px; }
     .upgrade-row { border:1px solid #252c3b; border-radius:10px; padding:10px; margin-top:8px; background:#0e121c; }
     .upgrade-row .muted { font-size:.9rem; }
+    .pending-item{border:1px solid #2a2a3a;border-radius:12px;padding:10px;margin-top:8px;background:#12121a;}
+    .pending-item.pending{border-color:#5a4f00;box-shadow:0 0 0 1px #5a4f00 inset;}
+    .pending-item.rejected{border-color:#6b1b1b;box-shadow:0 0 0 1px #6b1b1b inset;}
+    .status-pill.pending{color:#ffd34d;border-color:#5a4f00;background:#2b2500;}
+    .status-pill.rejected{color:#ff9090;border-color:#6b1b1b;background:#2a1010;}
+    .status-pill.approved{color:#7dffb0;border-color:#1d4d2d;background:#0f2a18;}
     .list { max-height: 520px; overflow:auto; }
     .list .item { padding:10px; border:1px solid #1f2533; border-radius:10px; margin-bottom:10px; background:#101521; }
     .item .title { font-weight:600; }
@@ -337,6 +343,13 @@
             <button id="btn-refresh" class="btn small" type="button">Refresh</button>
           </div>
           <div id="library" class="list" style="margin-top:10px;"></div>
+          <div id="pending-panel" style="margin-top:12px; display:none;">
+            <div class="row" style="gap:8px; align-items:center;">
+              <strong>Pending submissions</strong>
+              <button id="pending-refresh" class="btn small" type="button">Refresh</button>
+            </div>
+            <div id="pending-list" class="list" style="margin-top:8px;"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -346,6 +359,10 @@
 const API_BASE = "";
 const token = localStorage.getItem("auth_token") || "";
 const authHeaders = () => token ? { "Authorization":"Bearer " + token } : {};
+const pendingPanel = document.getElementById("pending-panel");
+const pendingListEl = document.getElementById("pending-list");
+const pendingRefreshBtn = document.getElementById("pending-refresh");
+let ROLE = "";
 
 const QUALITY_DIFF = {
   "Very Mediocre": -300,
@@ -889,6 +906,72 @@ function parseTagsInput(val){
   return String(val || '').split(',').map(t=>t.trim()).filter(Boolean);
 }
 
+async function checkMe(){
+  try{
+    const r = await fetch("/auth/me", { headers: authHeaders() });
+    const j = await r.json().catch(()=>({}));
+    if (j.status === "success"){
+      ROLE = (j.role || "").toLowerCase();
+      if (ROLE === "moderator" || ROLE === "admin"){
+        if (pendingPanel) pendingPanel.style.display = "";
+        loadPendingSubmissions().catch(()=>{});
+      }
+    }
+  }catch{}
+}
+
+async function loadPendingSubmissions(){
+  if (!pendingListEl) return;
+  const kind = document.querySelector("#library-type").value;
+  const r = await fetch(`/submissions?type=item&kind=${encodeURIComponent(kind)}`, { headers: authHeaders() });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){
+    pendingListEl.innerHTML = `<div class="muted">${j.message || "Load failed"}</div>`;
+    return;
+  }
+  const subs = j.submissions || [];
+  if (!subs.length){
+    pendingListEl.innerHTML = '<div class="muted">No submissions.</div>';
+    return;
+  }
+  pendingListEl.innerHTML = "";
+  subs.forEach(s=>{
+    const status = (s.status || "pending").toLowerCase();
+    const name = s.payload?.name || s.id || "Submission";
+    const div = document.createElement("div");
+    div.className = `pending-item ${status}`;
+    div.innerHTML = `
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>${name}</strong>
+        <span class="badge status-pill ${status}">${status}</span>
+      </div>
+      <div class="muted">${s.submitter || "unknown"} • ${s.created_at || ""}</div>
+      ${s.review_note ? `<div class="muted">Note: ${s.review_note}</div>` : ""}
+      <div class="row" style="margin-top:6px;">
+        <button class="btn small" data-action="approve">Approve</button>
+        <button class="btn btn-secondary small" data-action="reject">Reject</button>
+      </div>
+    `;
+    const approveBtn = div.querySelector('[data-action="approve"]');
+    const rejectBtn = div.querySelector('[data-action="reject"]');
+    if (status !== "pending"){
+      approveBtn.disabled = true;
+      rejectBtn.disabled = true;
+    }
+    approveBtn.addEventListener("click", async ()=>{
+      await fetch(`/submissions/${encodeURIComponent(s.id)}/approve`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body:"{}" });
+      await loadLibrary(kind);
+      await loadPendingSubmissions();
+    });
+    rejectBtn.addEventListener("click", async ()=>{
+      const note = prompt("Reason for rejection (optional):") || "";
+      await fetch(`/submissions/${encodeURIComponent(s.id)}/reject`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify({ note }) });
+      await loadPendingSubmissions();
+    });
+    pendingListEl.appendChild(div);
+  });
+}
+
 function buildPayload(){
   const type = document.querySelector("#fld-type").value;
   const name = (document.querySelector("#fld-name").value || "Unnamed").trim();
@@ -1028,6 +1111,10 @@ async function saveItem(){
       body: JSON.stringify(payload),
     });
     const j = await r.json().catch(()=>({}));
+    if (j.status === "pending"){
+      setStateChip("Submitted for review");
+      return;
+    }
     if (j.status !== "success") throw new Error(j.message || "Save failed");
     setStateChip(isUpdate ? "Updated" : "Created");
     await loadLibrary(type);
@@ -1147,13 +1234,15 @@ function onReady(){
   document.querySelector("#btn-add-attr").addEventListener("click", addAttribute);
   document.querySelector("#btn-save").addEventListener("click", saveItem);
   document.querySelector("#btn-new").addEventListener("click", resetForm);
-  document.querySelector("#btn-refresh").addEventListener("click", ()=> loadLibrary(document.querySelector("#library-type").value));
-  document.querySelector("#library-type").addEventListener("change", (e)=>{ STATE.id=null; loadLibrary(e.target.value); });
+  document.querySelector("#btn-refresh").addEventListener("click", ()=>{ loadLibrary(document.querySelector("#library-type").value); loadPendingSubmissions(); });
+  document.querySelector("#library-type").addEventListener("change", (e)=>{ STATE.id=null; loadLibrary(e.target.value); loadPendingSubmissions(); });
   document.querySelector("#search-library").addEventListener("input", ()=> renderLibrary(document.querySelector("#library-type").value));
+  pendingRefreshBtn?.addEventListener("click", loadPendingSubmissions);
 
   document.querySelector("#craft-search-btn").addEventListener("click", searchCraft);
   document.querySelector("#craft-results").addEventListener("change", onSelectCraft);
   document.querySelector("#btn-clear-craft").addEventListener("click", clearCraft);
+  checkMe();
 
   document.querySelector("#fld-tier").addEventListener("change", ()=>{ const base=TIER_TABLE[document.querySelector("#fld-tier").value]?.price||0; document.querySelector("#fld-price").value = base; syncPriceSummary(); });
 }

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>My Submissions</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; background:#0b0b10; color:#f2f2f4; font-family: "Segoe UI", system-ui, sans-serif; }
+    .page { max-width:960px; margin:0 auto; padding:24px 16px 60px; }
+    .topbar { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+    .topbar h1 { margin:0; font-size:1.4rem; }
+    .card { border:1px solid #2a2a38; border-radius:14px; padding:14px; background:#13131b; margin-bottom:12px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .muted { opacity:.8; }
+    .badge { padding:4px 8px; border-radius:999px; border:1px solid #333; font-size:.8rem; }
+    .status-pending { border-color:#5a4f00; background:#2b2500; color:#ffd34d; }
+    .status-approved { border-color:#1d4d2d; background:#0f2a18; color:#7dffb0; }
+    .status-rejected { border-color:#6b1b1b; background:#2a1010; color:#ff9090; }
+    .item-card.pending { border-color:#5a4f00; box-shadow:0 0 0 1px #5a4f00 inset; }
+    .item-card.rejected { border-color:#6b1b1b; box-shadow:0 0 0 1px #6b1b1b inset; }
+    details { margin-top:8px; }
+    pre { white-space:pre-wrap; word-break:break-word; background:#0d0d14; border:1px solid #222; padding:8px; border-radius:10px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <h1>My Submissions</h1>
+      <span class="muted" id="whoami"></span>
+      <a class="btn btn-secondary small" href="portal.html">Back to Portal</a>
+    </div>
+    <div class="card">
+      <div class="row">
+        <button class="btn small" id="refresh">Refresh</button>
+        <span class="muted" id="status"></span>
+      </div>
+    </div>
+    <div id="list"></div>
+  </div>
+
+  <script>
+    const API_BASE = "";
+    const listEl = document.getElementById("list");
+    const statusEl = document.getElementById("status");
+    const whoEl = document.getElementById("whoami");
+    const refreshBtn = document.getElementById("refresh");
+
+    function authHeaders(){
+      const t = localStorage.getItem("auth_token") || "";
+      return t ? { "Authorization": "Bearer " + t } : {};
+    }
+
+    function statusBadge(status){
+      const cls = status === "approved" ? "status-approved" : status === "rejected" ? "status-rejected" : "status-pending";
+      return `<span class="badge ${cls}">${status}</span>`;
+    }
+
+    function submissionTitle(s){
+      const payload = s.payload || {};
+      return payload.name || payload.title || payload.id || s.id;
+    }
+
+    function renderList(items){
+      if (!items.length){
+        listEl.innerHTML = '<div class="card muted">No submissions yet.</div>';
+        return;
+      }
+      listEl.innerHTML = "";
+      items.forEach(s=>{
+        const status = (s.status || "pending").toLowerCase();
+        const card = document.createElement("div");
+        card.className = `card item-card ${status}`;
+        card.innerHTML = `
+          <div class="row" style="justify-content:space-between;">
+            <div><strong>${submissionTitle(s)}</strong></div>
+            ${statusBadge(status)}
+          </div>
+          <div class="muted" style="margin-top:4px;">${(s.type || "").toUpperCase()} ${s.kind ? "(" + s.kind + ")" : ""} • Created ${s.created_at || "?"}</div>
+          <div class="muted" style="margin-top:4px;">Reviewed ${s.reviewed_at || "—"} ${s.reviewed_by ? "by " + s.reviewed_by : ""}</div>
+          ${s.review_note ? `<div class="muted" style="margin-top:4px;">Note: ${s.review_note}</div>` : ""}
+          ${s.approved_id ? `<div class="muted" style="margin-top:4px;">Approved ID: ${s.approved_id}</div>` : ""}
+          <details>
+            <summary>View submitted data</summary>
+            <pre>${JSON.stringify(s.payload || {}, null, 2)}</pre>
+          </details>
+        `;
+        listEl.appendChild(card);
+      });
+    }
+
+    async function loadMe(){
+      try{
+        const res = await fetch(`${API_BASE}/auth/me`, { headers: authHeaders() });
+        const data = await res.json();
+        if (data.status === "success") whoEl.textContent = `${data.username} (${data.role})`;
+      }catch{}
+    }
+
+    async function loadSubmissions(){
+      statusEl.textContent = "Loading...";
+      try{
+        const res = await fetch(`${API_BASE}/submissions/mine`, { headers: authHeaders() });
+        const data = await res.json();
+        if (data.status !== "success") throw new Error(data.message || "Load failed");
+        renderList(data.submissions || []);
+        statusEl.textContent = "Loaded.";
+      }catch(e){
+        statusEl.textContent = "Failed: " + e.message;
+      }
+    }
+
+    refreshBtn.addEventListener("click", loadSubmissions);
+    loadMe().then(loadSubmissions);
+  </script>
+</body>
+</html>

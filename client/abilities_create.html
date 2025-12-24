@@ -695,6 +695,10 @@ btnSave.addEventListener('click', async ()=>{
       headers:{ 'content-type':'application/json' },
       body: JSON.stringify(payload),
     });
+    if (res.status === 'pending'){
+      statusLine.textContent = 'Submitted for review.';
+      return;
+    }
     try{
       const check = await api('/abilities/'+encodeURIComponent(res.ability.id));
       const same = JSON.stringify(payload.passive?.modifiers||[]) === JSON.stringify(check.ability?.passive?.modifiers||[]);

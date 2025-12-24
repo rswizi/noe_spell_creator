@@ -1997,11 +1997,14 @@ def list_archetypes(request: Request):
 
 @app.post("/archetypes")
 async def create_archetype(request: Request):
-    require_auth(request, roles=["moderator","admin"])
+    username, role = require_auth(request, roles=["user","moderator","admin"])
     body = await request.json()
     doc = _validate_archetype_doc(body or {})
+    if role not in ("moderator","admin"):
+        pending = _create_pending_submission(username, role, "archetype", doc)
+        return {"status":"pending","submission": pending}
     doc["id"] = next_id_str("archetypes", padding=4)
-    doc["created_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    doc["created_at"] = _now_iso()
     doc["updated_at"] = doc["created_at"]
     get_col("archetypes").insert_one(dict(doc))
     return {"status":"success","archetype": {k:v for k,v in doc.items() if k!="_id"}}
@@ -2049,12 +2052,14 @@ def list_objects(q: str | None = Query(None)):
 
 @app.post("/objects")
 def create_object(request: Request, body: dict = Body(...)):
-    # creator must be moderator/admin
-    username, role = require_auth(request, roles=["moderator","admin"])
+    username, role = require_auth(request, roles=["user","moderator","admin"])
     col = get_col("objects")
     doc = _object_from_body(body)
+    if role not in ("moderator","admin"):
+        pending = _create_pending_submission(username, role, "item", doc, kind="object")
+        return {"status":"pending","submission": pending}
     doc["id"] = next_id_str("objects", padding=4)
-    doc["created_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+    doc["created_at"] = _now_iso()
     col.insert_one(dict(doc))
     return {"status": "success", "object": {k:v for k,v in doc.items() if k != "_id"}}
 
@@ -2166,14 +2171,17 @@ def list_tools(q: str | None = Query(None)):
 
 @app.post("/tools")
 def create_tool(request: Request, body: dict = Body(...)):
-    require_auth(request, roles=["moderator","admin"])
+    username, role = require_auth(request, roles=["user","moderator","admin"])
     col = get_col("tools")
     doc = _tool_from_body(body)
+    if role not in ("moderator","admin"):
+        pending = _create_pending_submission(username, role, "item", doc, kind="tool")
+        return {"status":"pending","submission": pending}
     # duplicate protection by name_key
     if col.find_one({"name_key": doc["name_key"]}):
         raise HTTPException(status_code=409, detail="Tool with same name already exists")
     doc["id"] = next_id_str("tools", padding=4)
-    doc["created_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    doc["created_at"] = _now_iso()
     col.insert_one(dict(doc))
     return {"status":"success","tool": {k:v for k,v in doc.items() if k!="_id"}}
 
@@ -2416,15 +2424,18 @@ def list_weapons(q: str | None = Query(None)):
 
 @app.post("/weapons")
 def create_weapon(request: Request, body: dict = Body(...)):
-    require_auth(request, roles=["moderator","admin"])
+    username, role = require_auth(request, roles=["user","moderator","admin"])
     col = get_col("weapons")
 
     base = _weapon_from_body(body)
+    if role not in ("moderator","admin"):
+        pending = _create_pending_submission(username, role, "item", base, kind="weapon")
+        return {"status":"pending","submission": pending}
     if col.find_one({"name_key": base["name_key"]}):
         raise HTTPException(status_code=409, detail="Weapon with same name already exists")
 
     base["id"] = next_id_str("weapons", padding=4)
-    now = datetime.datetime.utcnow().isoformat()+"Z"
+    now = _now_iso()
     base["created_at"] = now
     col.insert_one(dict(base))
 
@@ -2769,13 +2780,16 @@ def list_equipment(q: str | None = Query(None), category: str | None = Query(Non
 
 @app.post("/equipment")
 def create_equipment(request: Request, body: dict = Body(...)):
-    require_auth(request, roles=["moderator","admin"])
+    username, role = require_auth(request, roles=["user","moderator","admin"])
     col = get_col("equipment")
     doc = _equipment_from_body(body)
+    if role not in ("moderator","admin"):
+        pending = _create_pending_submission(username, role, "item", doc, kind="equipment")
+        return {"status":"pending","submission": pending}
     if col.find_one({"category": doc["category"], "name_key": doc["name_key"]}):
         raise HTTPException(status_code=409, detail="Duplicate equipment")
     doc["id"] = next_id_str("equipment", padding=4)
-    doc["created_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    doc["created_at"] = _now_iso()
     col.insert_one(dict(doc))
     return {"status":"success","equipment": {k:v for k,v in doc.items() if k!="_id"}}
 
@@ -2906,9 +2920,12 @@ def list_upgrades(request: Request, kind: str = "", slot: str = ""):
 
 @app.post("/upgrades")
 def create_upgrade(request: Request, body: dict = Body(...)):
-    require_auth(request, roles=["moderator","admin"])
+    username, role = require_auth(request, roles=["user","moderator","admin"])
     col = get_col("upgrades")
     doc = _upgrade_from_body(body)
+    if role not in ("moderator","admin"):
+        pending = _create_pending_submission(username, role, "upgrade", doc)
+        return {"status":"pending","submission": pending}
     if col.find_one({"name_key": doc["name_key"], "kind": doc["kind"], "slot": doc.get("slot","")}):
         raise HTTPException(status_code=409, detail="Duplicate upgrade")
     doc["id"] = next_id_str("upgrade", padding=4)
@@ -3244,6 +3261,28 @@ def _normalize_tags(val):
     if isinstance(val, list):
         return [str(t).strip() for t in val if str(t).strip()]
     return []
+
+def _now_iso():
+    return datetime.datetime.utcnow().isoformat() + "Z"
+
+def _create_pending_submission(submitter: str, role: str, sub_type: str, payload: dict, kind: str | None = None) -> dict:
+    doc = {
+        "id": next_id_str("pending", padding=5),
+        "type": sub_type,
+        "kind": kind or "",
+        "status": "pending",
+        "payload": payload,
+        "submitter": submitter,
+        "submitter_role": role,
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+    }
+    get_col("pending_submissions").insert_one(dict(doc))
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+def _ensure_moderator(role: str):
+    if role not in ("moderator", "admin"):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 def _validate_upgrades(kind: str, subcat: str | None, quality: str, existing: list[dict], add: list[dict]) -> tuple[list[dict], int, list[dict]]:
     """Validate and compute fees. Returns (new_upgrades_list, total_fee, steps)"""
@@ -4550,18 +4589,14 @@ def get_character_computed(cid: str, request: Request):
 # -------------------- Abilities & Traits --------------------
 from fastapi import Body, Query
 
-@app.post("/abilities")
-async def create_ability(request: Request, payload: dict = Body(...)):
-    username, role = require_auth(request, roles=["moderator", "admin"])
-    col = get_col("abilities")
-
+def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
     name = (payload.get("name") or "Unnamed Ability").strip()
     if not name:
-        return JSONResponse({"status": "error", "message": "Name is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="Name is required")
 
     ab_type = (payload.get("type") or "passive").strip().lower()
     if ab_type not in ("active", "passive", "mixed"):
-        return JSONResponse({"status": "error", "message": "Invalid type"}, status_code=400)
+        raise HTTPException(status_code=400, detail="Invalid type")
 
     source_category = (payload.get("source_category") or "Other").strip()
     source_ref      = (payload.get("source_ref") or "").strip()
@@ -4582,7 +4617,7 @@ async def create_ability(request: Request, payload: dict = Body(...)):
         try:
             rng = int(active_in.get("range") or 0)
         except Exception:
-            return JSONResponse({"status": "error", "message": "Active range must be an integer"}, status_code=400)
+            raise HTTPException(status_code=400, detail="Active range must be an integer")
         aoe = (active_in.get("aoe") or "").strip()
 
         costs_in = active_in.get("costs") or {}
@@ -4594,7 +4629,7 @@ async def create_ability(request: Request, payload: dict = Body(...)):
         try:
             costs = {"HP":_num("HP"),"EN":_num("EN"),"MP":_num("MP"),"FO":_num("FO"),"MO":_num("MO"),"TX":_num("TX")}
         except ValueError as bad:
-            return JSONResponse({"status":"error","message":f"Cost {bad} must be an integer"}, status_code=400)
+            raise HTTPException(status_code=400, detail=f"Cost {bad} must be an integer")
 
         costs["other_label"] = (costs_in.get("other_label") or "").strip()
         try: costs["other_value"] = int(costs_in.get("other_value") or 0)
@@ -4618,7 +4653,7 @@ async def create_ability(request: Request, payload: dict = Body(...)):
             try:
                 value = float(m.get("value") or 0)
             except Exception:
-                return JSONResponse({"status":"error","message":f"Invalid modifier value for {target}"}, status_code=400)
+                raise HTTPException(status_code=400, detail=f"Invalid modifier value for {target}")
             note = (m.get("note") or "").strip()
             choice = _normalize_choice(m.get("choice") if isinstance(m.get("choice"), dict) else None)
             mod = {"target":target,"mode":mode,"value":value,"note":note}
@@ -4634,11 +4669,8 @@ async def create_ability(request: Request, payload: dict = Body(...)):
             modifiers.append(mod)
         passive_block = {"description":pdesc,"modifiers":modifiers}
 
-    aid = next_id_str("abilities", padding=4)
-    now = datetime.datetime.utcnow().isoformat()+"Z"
-
-    doc = {
-        "id": aid,
+    now = _now_iso()
+    return {
         "name": name,
         "name_key": norm_key(name),
         "type": ab_type,
@@ -4648,13 +4680,32 @@ async def create_ability(request: Request, payload: dict = Body(...)):
         "description": description,
         "active": active_block,
         "passive": passive_block,
-        "creator": username,
+        "creator": creator,
         "created_at": now,
         "updated_at": now,
         "archetype_version": archetype_version,
         "archetype_original_rank": archetype_original_rank,
         "archetype_replaces": archetype_replaces,
     }
+
+@app.post("/abilities")
+async def create_ability(request: Request, payload: dict = Body(...)):
+    username, role = require_auth(request, roles=["user", "moderator", "admin"])
+    if role not in ("moderator", "admin"):
+        try:
+            doc = _ability_doc_from_payload(payload, username)
+        except HTTPException as e:
+            return JSONResponse({"status": "error", "message": str(e.detail)}, status_code=e.status_code)
+        pending = _create_pending_submission(username, role, "ability", doc)
+        return {"status": "pending", "submission": pending}
+
+    col = get_col("abilities")
+    try:
+        doc = _ability_doc_from_payload(payload, username)
+    except HTTPException as e:
+        return JSONResponse({"status": "error", "message": str(e.detail)}, status_code=e.status_code)
+
+    doc["id"] = next_id_str("abilities", padding=4)
     col.insert_one(dict(doc))
     doc.pop("_id", None)
     return {"status":"success","ability": doc}
@@ -4838,6 +4889,138 @@ async def delete_ability_fallback(request: Request):
     if not aid:
         raise HTTPException(400, "id required")
     return _delete_ability_and_references(aid)
+
+
+# ---------- Pending submissions ----------
+@app.get("/submissions/mine")
+def my_submissions(request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    col = get_col("pending_submissions")
+    docs = list(col.find({"submitter": username}, {"_id": 0}))
+    docs.sort(key=lambda d: d.get("created_at",""), reverse=True)
+    return {"status": "success", "submissions": docs}
+
+@app.get("/submissions")
+def list_submissions(request: Request, type: str | None = Query(default=None), status: str | None = Query(default=None), kind: str | None = Query(default=None)):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    _ensure_moderator(role)
+    col = get_col("pending_submissions")
+    q: dict = {}
+    if type:
+        q["type"] = type.strip().lower()
+    if status:
+        q["status"] = status.strip().lower()
+    if kind:
+        q["kind"] = kind.strip().lower()
+    docs = list(col.find(q, {"_id": 0}))
+    docs.sort(key=lambda d: d.get("created_at",""), reverse=True)
+    return {"status": "success", "submissions": docs}
+
+@app.post("/submissions/{sid}/reject")
+async def reject_submission(sid: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    _ensure_moderator(role)
+    col = get_col("pending_submissions")
+    sub = col.find_one({"id": sid})
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Submission already reviewed")
+    body = await request.json() if request.method == "POST" else {}
+    note = (body.get("note") or "").strip() if isinstance(body, dict) else ""
+    now = _now_iso()
+    col.update_one({"id": sid}, {"$set": {
+        "status": "rejected",
+        "reviewed_by": username,
+        "reviewed_at": now,
+        "review_note": note,
+        "updated_at": now,
+    }})
+    return {"status": "success", "submission": sid, "result": "rejected"}
+
+@app.post("/submissions/{sid}/approve")
+async def approve_submission(sid: str, request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    _ensure_moderator(role)
+    col = get_col("pending_submissions")
+    sub = col.find_one({"id": sid})
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Submission already reviewed")
+    sub_type = (sub.get("type") or "").strip().lower()
+    kind = (sub.get("kind") or "").strip().lower()
+    payload = sub.get("payload") or {}
+    now = _now_iso()
+
+    approved_id = None
+    if sub_type == "ability":
+        doc = _ability_doc_from_payload(payload, sub.get("submitter") or username)
+        doc["id"] = next_id_str("abilities", padding=4)
+        doc["created_at"] = now
+        doc["updated_at"] = now
+        get_col("abilities").insert_one(dict(doc))
+        approved_id = doc["id"]
+    elif sub_type == "archetype":
+        doc = _validate_archetype_doc(payload or {})
+        doc["id"] = next_id_str("archetypes", padding=4)
+        doc["created_at"] = now
+        doc["updated_at"] = now
+        get_col("archetypes").insert_one(dict(doc))
+        approved_id = doc["id"]
+    elif sub_type == "upgrade":
+        doc = _upgrade_from_body(payload or {})
+        up_col = get_col("upgrades")
+        if up_col.find_one({"name_key": doc["name_key"], "kind": doc["kind"], "slot": doc.get("slot","")}):
+            raise HTTPException(status_code=409, detail="Duplicate upgrade")
+        doc["id"] = next_id_str("upgrade", padding=4)
+        doc["created_at"] = now
+        doc["updated_at"] = now
+        up_col.insert_one(dict(doc))
+        approved_id = doc["id"]
+    elif sub_type == "item":
+        if kind == "weapon":
+            doc = _weapon_from_body(payload or {})
+            col_items = get_col("weapons")
+            if col_items.find_one({"name_key": doc["name_key"]}):
+                raise HTTPException(status_code=409, detail="Weapon with same name already exists")
+            doc["id"] = next_id_str("weapons", padding=4)
+        elif kind == "equipment":
+            doc = _equipment_from_body(payload or {})
+            col_items = get_col("equipment")
+            if col_items.find_one({"category": doc["category"], "name_key": doc["name_key"]}):
+                raise HTTPException(status_code=409, detail="Equipment with same name already exists")
+            doc["id"] = next_id_str("equipment", padding=4)
+        elif kind == "tool":
+            doc = _tool_from_body(payload or {})
+            col_items = get_col("tools")
+            if col_items.find_one({"name_key": doc["name_key"]}):
+                raise HTTPException(status_code=409, detail="Tool with same name already exists")
+            doc["id"] = next_id_str("tools", padding=4)
+        else:
+            doc = _object_from_body(payload or {})
+            col_items = get_col("objects")
+            doc["id"] = next_id_str("objects", padding=4)
+        doc["created_at"] = now
+        col_items.insert_one(dict(doc))
+        if kind == "weapon":
+            anim = _make_animarma(doc)
+            if not col_items.find_one({"name_key": anim["name_key"]}):
+                anim["id"] = next_id_str("weapons", padding=4)
+                anim["created_at"] = now
+                col_items.insert_one(dict(anim))
+        approved_id = doc["id"]
+    else:
+        raise HTTPException(status_code=400, detail="Unknown submission type")
+
+    col.update_one({"id": sid}, {"$set": {
+        "status": "approved",
+        "reviewed_by": username,
+        "reviewed_at": now,
+        "approved_id": approved_id,
+        "updated_at": now,
+    }})
+    return {"status": "success", "submission": sid, "approved_id": approved_id}
 
 
 # --- Admin: delete user ---

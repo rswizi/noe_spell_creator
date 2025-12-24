@@ -56,6 +56,12 @@
     .rule-row,.rank-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
     .rule-row select,.rule-row input{min-width:120px;}
     .rank-row select{min-width:200px; flex:1;}
+    .pending-item{border:1px solid #2a2a3a;border-radius:12px;padding:10px;margin-top:8px;background:#12121a;}
+    .pending-item.pending{border-color:#5a4f00;box-shadow:0 0 0 1px #5a4f00 inset;}
+    .pending-item.rejected{border-color:#6b1b1b;box-shadow:0 0 0 1px #6b1b1b inset;}
+    .status-pill.pending{color:#ffd34d;border-color:#5a4f00;background:#2b2500;}
+    .status-pill.rejected{color:#ff9090;border-color:#6b1b1b;background:#2a1010;}
+    .status-pill.approved{color:#7dffb0;border-color:#1d4d2d;background:#0f2a18;}
   </style>
 </head>
 <body>
@@ -118,6 +124,14 @@
         </div>
         <div id="arc-list" style="margin-top:10px;"></div>
       </div>
+
+      <div class="card" id="pending-panel" style="display:none;">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <div class="section-title">Pending submissions</div>
+          <button class="subtle" id="pending-refresh">Refresh</button>
+        </div>
+        <div id="pending-list" style="margin-top:10px;"></div>
+      </div>
     </div>
   </div>
 
@@ -129,6 +143,10 @@ let ABILITIES = [];
 let ARCHETYPES = [];
 const abilityTagFilterEl = document.getElementById('arc-ability-tag-filter');
 const abilitySourceFilterEl = document.getElementById('arc-ability-source-filter');
+const pendingPanel = document.getElementById('pending-panel');
+const pendingListEl = document.getElementById('pending-list');
+const pendingRefreshBtn = document.getElementById('pending-refresh');
+let ROLE = '';
 
 function parseTagFilter(val){
   return String(val || '').split(',').map(t=>t.trim().toLowerCase()).filter(Boolean);
@@ -193,6 +211,71 @@ function getSelectedSources(){
   const out = [];
   document.querySelectorAll('#arc-sources input[type="checkbox"]:checked').forEach(cb=> out.push(cb.value));
   return out;
+}
+
+async function checkMe(){
+  try{
+    const res = await fetch("/auth/me", { headers: authHeaders() });
+    const j = await res.json().catch(()=>({}));
+    if (j.status === "success"){
+      ROLE = (j.role || "").toLowerCase();
+      if (ROLE === "moderator" || ROLE === "admin"){
+        if (pendingPanel) pendingPanel.style.display = "";
+        loadPendingSubmissions().catch(()=>{});
+      }
+    }
+  }catch{}
+}
+
+async function loadPendingSubmissions(){
+  if (!pendingListEl) return;
+  const r = await fetch("/submissions?type=archetype", { headers: authHeaders() });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){
+    pendingListEl.innerHTML = `<div class="muted">${j.message || "Load failed"}</div>`;
+    return;
+  }
+  const subs = j.submissions || [];
+  if (!subs.length){
+    pendingListEl.innerHTML = '<div class="muted">No submissions.</div>';
+    return;
+  }
+  pendingListEl.innerHTML = "";
+  subs.forEach(s=>{
+    const status = (s.status || "pending").toLowerCase();
+    const name = s.payload?.name || s.id || "Submission";
+    const div = document.createElement("div");
+    div.className = `pending-item ${status}`;
+    div.innerHTML = `
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>${name}</strong>
+        <span class="pill status-pill ${status}">${status}</span>
+      </div>
+      <div class="muted">${s.submitter || "unknown"} • ${s.created_at || ""}</div>
+      ${s.review_note ? `<div class="muted">Note: ${s.review_note}</div>` : ""}
+      <div class="row" style="margin-top:6px;">
+        <button class="subtle" data-action="approve">Approve</button>
+        <button class="subtle" data-action="reject">Reject</button>
+      </div>
+    `;
+    const approveBtn = div.querySelector('[data-action="approve"]');
+    const rejectBtn = div.querySelector('[data-action="reject"]');
+    if (status !== "pending"){
+      approveBtn.disabled = true;
+      rejectBtn.disabled = true;
+    }
+    approveBtn.addEventListener("click", async ()=>{
+      await fetch(`/submissions/${encodeURIComponent(s.id)}/approve`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body:"{}" });
+      await loadPendingSubmissions();
+      await loadList();
+    });
+    rejectBtn.addEventListener("click", async ()=>{
+      const note = prompt("Reason for rejection (optional):") || "";
+      await fetch(`/submissions/${encodeURIComponent(s.id)}/reject`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify({ note }) });
+      await loadPendingSubmissions();
+    });
+    pendingListEl.appendChild(div);
+  });
 }
 
 function ruleRow(rule={}){
@@ -280,6 +363,7 @@ async function saveArchetype(){
   $("#arc-status").textContent = "Saving...";
   const r = await fetch(path, { method, headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify(body)});
   const j = await r.json().catch(()=>({}));
+  if (j.status === "pending"){ $("#arc-status").textContent = "Submitted for review."; return; }
   if (j.status !== "success"){ $("#arc-status").textContent = j.message || "Save failed"; return; }
   $("#arc-status").textContent = "Saved.";
   $("#arc-editing").value = editing || j.archetype?.id || "";
@@ -363,6 +447,7 @@ abilitySourceFilterEl?.addEventListener('input', ()=>{
 document.getElementById("arc-save").addEventListener("click", saveArchetype);
 document.getElementById("arc-refresh").addEventListener("click", loadList);
 document.getElementById("pr-add").addEventListener("click", ()=> document.getElementById("pr-list").appendChild(ruleRow({})));
+pendingRefreshBtn?.addEventListener("click", loadPendingSubmissions);
 (()=>{
   const rl = document.getElementById("rank-list");
   rl.innerHTML = "";
@@ -371,6 +456,7 @@ document.getElementById("pr-add").addEventListener("click", ()=> document.getEle
 document.getElementById("pr-list").appendChild(ruleRow({}));
 
 loadAbilities().then(loadList);
+checkMe();
 </script>
 </body>
 </html>

@@ -50,6 +50,12 @@
     .mod-row .custom { grid-column:1 / span 2; }
     .mod-row .note { grid-column:1 / span 2; }
     .mod-row .group { grid-column:1 / span 2; display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:6px; }
+    .pending-item{border:1px solid #2a2a3a;border-radius:12px;padding:10px;margin-top:8px;background:#12121a;}
+    .pending-item.pending{border-color:#5a4f00;box-shadow:0 0 0 1px #5a4f00 inset;}
+    .pending-item.rejected{border-color:#6b1b1b;box-shadow:0 0 0 1px #6b1b1b inset;}
+    .status-pill.pending{color:#ffd34d;border-color:#5a4f00;background:#2b2500;}
+    .status-pill.rejected{color:#ff9090;border-color:#6b1b1b;background:#2a1010;}
+    .status-pill.approved{color:#7dffb0;border-color:#1d4d2d;background:#0f2a18;}
     .badge { display:inline-block; border:1px solid #33425f; border-radius:999px; padding:3px 9px; font-size:.82rem; background:#101728; color:#d6e2ff; }
 
     .effect-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
@@ -178,6 +184,14 @@
       </div>
       <div id="list" class="card-list"></div>
     </div>
+
+    <div class="panel" id="pending-panel" style="margin-top:14px; display:none;">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <h2>Pending Submissions</h2>
+        <button id="pending-refresh" class="btn small" type="button">Refresh</button>
+      </div>
+      <div id="pending-list" class="card-list"></div>
+    </div>
   </div></div>
 
 <script>
@@ -185,9 +199,84 @@ const API_BASE = "";
 const token = localStorage.getItem("auth_token") || "";
 const authHeaders = () => token ? { "Authorization": "Bearer " + token, "X-Auth-Token": token } : {};
 const $ = s => document.querySelector(s);
+const loginChip = document.getElementById("login-chip");
+const pendingPanel = document.getElementById("pending-panel");
+const pendingListEl = document.getElementById("pending-list");
+const pendingRefreshBtn = document.getElementById("pending-refresh");
+let ROLE = "";
 
 function requireAuth(){
   if (!token){ alert("Please log in."); window.location.href="home.html"; }
+}
+
+async function checkMe(){
+  try{
+    const res = await fetch("/auth/me", { headers: authHeaders() });
+    const j = await res.json().catch(()=>({}));
+    if (j.status === "success"){
+      loginChip.textContent = `${j.username} (${j.role})`;
+      ROLE = (j.role || "").toLowerCase();
+      if (ROLE === "moderator" || ROLE === "admin"){
+        if (pendingPanel) pendingPanel.style.display = "";
+        loadPendingSubmissions().catch(()=>{});
+      }
+    }else{
+      loginChip.textContent = "Not logged in.";
+    }
+  }catch{
+    loginChip.textContent = "Not logged in.";
+  }
+}
+
+async function loadPendingSubmissions(){
+  if (!pendingListEl) return;
+  const res = await fetch("/submissions?type=upgrade", { headers: authHeaders() });
+  const j = await res.json().catch(()=>({}));
+  if (j.status !== "success"){
+    pendingListEl.innerHTML = `<div class="muted">${j.message || "Load failed"}</div>`;
+    return;
+  }
+  const subs = j.submissions || [];
+  if (!subs.length){
+    pendingListEl.innerHTML = '<div class="muted">No submissions.</div>';
+    return;
+  }
+  pendingListEl.innerHTML = "";
+  subs.forEach(s=>{
+    const status = (s.status || "pending").toLowerCase();
+    const name = s.payload?.name || s.id || "Submission";
+    const div = document.createElement("div");
+    div.className = `pending-item ${status}`;
+    div.innerHTML = `
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>${name}</strong>
+        <span class="pill status-pill ${status}">${status}</span>
+      </div>
+      <div class="muted">Submitted by ${s.submitter || "unknown"} • ${s.created_at || ""}</div>
+      ${s.review_note ? `<div class="muted">Note: ${s.review_note}</div>` : ""}
+      <div class="row" style="margin-top:6px;">
+        <button class="btn small" data-action="approve">Approve</button>
+        <button class="btn secondary small" data-action="reject">Reject</button>
+      </div>
+    `;
+    const approveBtn = div.querySelector('[data-action="approve"]');
+    const rejectBtn = div.querySelector('[data-action="reject"]');
+    if (status !== "pending"){
+      approveBtn.disabled = true;
+      rejectBtn.disabled = true;
+    }
+    approveBtn.addEventListener("click", async ()=>{
+      await fetch(`/submissions/${encodeURIComponent(s.id)}/approve`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body:"{}" });
+      await loadPendingSubmissions();
+      await loadList();
+    });
+    rejectBtn.addEventListener("click", async ()=>{
+      const note = prompt("Reason for rejection (optional):") || "";
+      await fetch(`/submissions/${encodeURIComponent(s.id)}/reject`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify({ note }) });
+      await loadPendingSubmissions();
+    });
+    pendingListEl.appendChild(div);
+  });
 }
 
 function setupRichTextEditor(containerId, placeholder=''){
@@ -473,6 +562,10 @@ async function saveUpgrade(){
     const text = await res.text();
     let j = {};
     try{ j = JSON.parse(text); }catch{}
+    if (j.status === "pending"){
+      $("#status-line").textContent = "Submitted for review.";
+      return;
+    }
     if (!res.ok || j.status !== "success"){
       const msg = j.message || text || "Save failed";
       throw new Error(msg);
@@ -580,7 +673,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
   $("#btn-save").addEventListener('click', saveUpgrade);
   $("#btn-reset").addEventListener('click', resetForm);
   $("#btn-refresh").addEventListener('click', loadList);
+  pendingRefreshBtn?.addEventListener('click', loadPendingSubmissions);
   loadList();
+  checkMe();
 });
 </script>
 </body>

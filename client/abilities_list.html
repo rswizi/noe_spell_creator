@@ -40,6 +40,13 @@
     .badge { border-radius:999px; border:1px solid #333; padding:2px 8px; font-size:.8rem; }
 
     .pill { font-size:.75rem; opacity:.85; border:1px solid #343434; border-radius:999px; padding:2px 7px; }
+    .status-pill.pending { color:#ffd34d; border-color:#5a4f00; background:#2b2500; }
+    .status-pill.rejected { color:#ff9090; border-color:#6b1b1b; background:#2a1010; }
+    .status-pill.approved { color:#7dffb0; border-color:#1d4d2d; background:#0f2a18; }
+    .pending-item { border:1px solid #2a2a2a; border-radius:10px; padding:8px; margin-top:8px; background:#121212; }
+    .pending-item.pending { border-color:#5a4f00; box-shadow:0 0 0 1px #5a4f00 inset; }
+    .pending-item.rejected { border-color:#6b1b1b; box-shadow:0 0 0 1px #6b1b1b inset; }
+    .pending-item .meta { font-size:.85rem; opacity:.8; }
 
     .subgrid-2 { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:8px; }
     @media (max-width:700px) { .subgrid-2 { grid-template-columns:1fr; } }
@@ -120,6 +127,11 @@
           <div id="ability-list" class="ability-list">
             <div class="muted">No abilities loaded yet.</div>
           </div>
+        </div>
+
+        <div class="panel" id="pending-panel" style="display:none;">
+          <h2>Pending Submissions</h2>
+          <div id="pending-list" class="pending-list"></div>
         </div>
       </div>
 
@@ -360,6 +372,9 @@ function setupRichTextEditor(containerId, placeholder=''){
 }
 
 const loginChip      = document.getElementById('login-chip');
+const pendingPanel   = document.getElementById('pending-panel');
+const pendingListEl  = document.getElementById('pending-list');
+let ROLE = '';
 const abilityListEl  = document.getElementById('ability-list');
 const filterNameEl   = document.getElementById('filter-name');
 const filterTypeEl   = document.getElementById('filter-type');
@@ -490,9 +505,60 @@ async function checkMe(){
   try{
     const me = await api('/auth/me');
     loginChip.textContent = me.username + ' (' + me.role + ')';
+    ROLE = (me.role || '').toLowerCase();
+    if (ROLE === 'moderator' || ROLE === 'admin'){
+      if (pendingPanel) pendingPanel.style.display = '';
+      loadPendingSubmissions().catch(()=>{});
+    }
   }catch(e){
     loginChip.textContent = 'Not logged in.';
   }
+}
+
+async function loadPendingSubmissions(){
+  if (!pendingListEl) return;
+  const res = await api('/submissions?type=ability');
+  const subs = res.submissions || [];
+  if (!subs.length){
+    pendingListEl.innerHTML = '<div class="muted">No submissions.</div>';
+    return;
+  }
+  pendingListEl.innerHTML = '';
+  subs.forEach(s=>{
+    const status = (s.status || 'pending').toLowerCase();
+    const name = s.payload?.name || s.id || 'Submission';
+    const card = document.createElement('div');
+    card.className = `pending-item ${status}`;
+    card.innerHTML = `
+      <div class="row" style="justify-content:space-between;">
+        <strong>${name}</strong>
+        <span class="pill status-pill ${status}">${status}</span>
+      </div>
+      <div class="meta">Submitted by ${s.submitter || 'unknown'} • ${s.created_at || ''}</div>
+      ${s.review_note ? `<div class="meta">Note: ${s.review_note}</div>` : ''}
+      <div class="row" style="margin-top:6px;">
+        <button class="btn small" data-action="approve">Approve</button>
+        <button class="btn btn-secondary small" data-action="reject">Reject</button>
+      </div>
+    `;
+    const approveBtn = card.querySelector('[data-action="approve"]');
+    const rejectBtn = card.querySelector('[data-action="reject"]');
+    if (status !== 'pending'){
+      approveBtn.disabled = true;
+      rejectBtn.disabled = true;
+    }
+    approveBtn.addEventListener('click', async ()=>{
+      await api(`/submissions/${encodeURIComponent(s.id)}/approve`, { method:'POST', headers:{ 'content-type':'application/json' }, body:'{}' });
+      await loadPendingSubmissions();
+      await loadAbilities();
+    });
+    rejectBtn.addEventListener('click', async ()=>{
+      const note = prompt('Reason for rejection (optional):') || '';
+      await api(`/submissions/${encodeURIComponent(s.id)}/reject`, { method:'POST', headers:{ 'content-type':'application/json' }, body: JSON.stringify({ note }) });
+      await loadPendingSubmissions();
+    });
+    pendingListEl.appendChild(card);
+  });
 }
 
 function addModifierRow(initial){
