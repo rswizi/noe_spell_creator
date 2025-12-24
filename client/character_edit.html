@@ -1015,6 +1015,57 @@ let ARCHETYPES = [];
 let COMPUTED_ARC_ABILITIES = [];
 let UPGRADE_META = {};
 let TALENT_MAX = 1;
+let INITIAL_LOAD = true;
+
+let REFRESH_NOTICE_QUEUE = [];
+let REFRESH_NOTICE_TIMER = null;
+function queueRefreshNotice(msg){
+  if (!msg) return;
+  REFRESH_NOTICE_QUEUE.push(msg);
+  if (REFRESH_NOTICE_TIMER) return;
+  REFRESH_NOTICE_TIMER = setTimeout(()=>{
+    const uniq = Array.from(new Set(REFRESH_NOTICE_QUEUE));
+    REFRESH_NOTICE_QUEUE = [];
+    REFRESH_NOTICE_TIMER = null;
+    if (!uniq.length) return;
+    alert("Updates found:\n" + uniq.map(m=>`- ${m}`).join("\n"));
+  }, 250);
+}
+function refreshCacheKey(){
+  return `refresh-cache:${CID || "unknown"}`;
+}
+function loadRefreshCache(){
+  try{
+    const raw = localStorage.getItem(refreshCacheKey());
+    return raw ? JSON.parse(raw) : {};
+  }catch{
+    return {};
+  }
+}
+function saveRefreshCache(cache){
+  try{
+    localStorage.setItem(refreshCacheKey(), JSON.stringify(cache || {}));
+  }catch{}
+}
+function trackUpdatedAt(kind, items, label){
+  if (!INITIAL_LOAD) return;
+  const cache = loadRefreshCache();
+  const prev = cache[kind] || {};
+  const next = {};
+  const changed = [];
+  (items || []).forEach(it=>{
+    const id = String(it?.id || "").trim();
+    if (!id) return;
+    const ts = String(it?.updated_at || it?.updatedAt || it?.updated || "").trim();
+    next[id] = ts;
+    if (prev[id] && prev[id] !== ts) changed.push(id);
+  });
+  cache[kind] = next;
+  saveRefreshCache(cache);
+  if (changed.length){
+    queueRefreshNotice(`${label} updated (${changed.length})`);
+  }
+}
 
 /* Passive bonus aggregations (recomputed whenever ASSIGNED changes) */
 let PASSIVE = {
@@ -2441,6 +2492,13 @@ async function loadInventoryById(id){
       LINKED_INV = res.inventory;
       SELECTED_INV_ID = LINKED_INV.id || id;
       CHAR.inventory_id = SELECTED_INV_ID;
+      const report = res.refresh_report;
+      if (INITIAL_LOAD && report && report.count){
+        const names = (report.changed_items || []).map(r=>r.name).filter(Boolean);
+        const preview = names.slice(0, 5).join(", ");
+        const suffix = names.length > 5 ? "..." : "";
+        queueRefreshNotice(`Inventory updated (${report.count} item${report.count===1?"":"s"}): ${preview}${suffix}`);
+      }
       renderInventoryUI();
       recomputePassiveAgg();
       renderStatistics();
@@ -4225,6 +4283,7 @@ async function reloadSpellListData(){
   }
   await loadSpellListMeta(SELECTED_SPELL_LIST_ID);
   SPELLLIST_SPELLS = await fetchSpellListSpells(SELECTED_SPELL_LIST_ID);
+  trackUpdatedAt("spells", SPELLLIST_SPELLS, "Spells");
   await ensureEffectsLoaded();
   renderSpellListSummary();
   await fetchSchools();
@@ -4838,6 +4897,7 @@ function updateDerived(){
 
 /* LOAD & SAVE */
 async function loadCharacter(){
+  INITIAL_LOAD = true;
   if (!CID){ statusEl.textContent = 'Missing id'; return; }
   const res = await api('/characters/' + encodeURIComponent(CID));
   CHAR = res.character || {};
@@ -4913,8 +4973,9 @@ async function loadCharacter(){
   await loadSpellListsList();
   if (SELECTED_SPELL_LIST_ID) await loadSpellListById(SELECTED_SPELL_LIST_ID);
   await loadInventoriesList();
-  if (SELECTED_INV_ID) loadInventoryById(SELECTED_INV_ID);
+  if (SELECTED_INV_ID) await loadInventoryById(SELECTED_INV_ID);
   wirePersonal();
+  INITIAL_LOAD = false;
 }
 
 function queueSave(){
@@ -5125,6 +5186,7 @@ async function resolveAssignedAbilities(){
   let assigned = ids.map(id=> byId[id]).filter(Boolean); // preserve order and duplicates
   assigned = collapseAbilityReplacements(assigned);
   ASSIGNED = assigned;
+  trackUpdatedAt("abilities", ASSIGNED, "Abilities");
 }
 function abilityHasChoice(ab){
   return !!((ab?.passive?.modifiers||[]).find(m=> String(m.target||'').startsWith('choice:') || (m.group || '').trim()));

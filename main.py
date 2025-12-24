@@ -3048,6 +3048,7 @@ def read_inventory(request: Request, inv_id: str):
     db = get_db()
     inv = db.inventories.find_one({"id": inv_id, "owner": user}, {"_id":0})
     if not inv: raise HTTPException(404, "Not found")
+    inv, refresh_report = _refresh_inventory_items_from_catalog(inv_id, inv)
     containers = _ensure_self_container(inv.get("containers") or [])
     recomputed_containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
     needs_update = (inv.get("enc_total") != inv_total) or ((inv.get("containers") or []) != recomputed_containers)
@@ -3058,8 +3059,7 @@ def read_inventory(request: Request, inv_id: str):
     else:
         inv["containers"] = recomputed_containers
         inv["enc_total"] = inv_total
-    inv = _hydrate_inventory_item_descriptions(inv_id, inv)
-    return {"status":"success","inventory": inv}
+    return {"status":"success","inventory": inv, "refresh_report": refresh_report}
 
 @app.post("/inventories/{inv_id}/containers")
 def add_container(request: Request, inv_id: str, payload: dict = Body(...)):
@@ -3168,28 +3168,60 @@ def _extract_item_description(src: dict) -> tuple[str | None, str | None]:
     desc = src.get("description") or src.get("desc")
     return desc, desc_html
 
-def _hydrate_inventory_item_descriptions(inv_id: str, inv: dict) -> dict:
+def _refresh_inventory_items_from_catalog(inv_id: str, inv: dict) -> tuple[dict, dict]:
     items = inv.get("items") or []
     updated = False
+    changed = []
     for it in items:
-        if it.get("description") or it.get("description_html"):
-            continue
         ref_id = (it.get("ref_id") or "").strip()
-        kind = (it.get("kind") or "").strip()
+        kind = (it.get("kind") or "").strip().lower()
         if not ref_id or not kind:
             continue
         src = _fetch_catalog_item(kind, ref_id)
         if not src:
             continue
+
+        subcat = src.get("category") if kind == "equipment" else None
+        eq_slot = src.get("slot") if kind == "equipment" else None
+        name = src.get("name") or (subcat == "armor" and f"Armor - {src.get('type')}") or src.get("style") or "Item"
+        enc = float(src.get("enc") or 0.0)
+        base_price = int(src.get("price") or 0)
+        modifiers = src.get("modifiers") or []
+        tags = src.get("tags") or []
         desc, desc_html = _extract_item_description(src)
-        if desc or desc_html:
-            it["description"] = desc
-            it["description_html"] = desc_html
+        consumable = bool(src.get("consumable"))
+        alchemy_tool = bool(src.get("alchemy_tool"))
+
+        updates = {}
+        def set_if_diff(key, val):
+            if it.get(key) != val:
+                updates[key] = val
+
+        set_if_diff("name", name)
+        set_if_diff("subcategory", subcat)
+        set_if_diff("equipment_slot", eq_slot)
+        set_if_diff("enc", enc)
+        set_if_diff("base_price", base_price)
+        set_if_diff("modifiers", modifiers)
+        set_if_diff("tags", tags)
+        set_if_diff("description", desc)
+        set_if_diff("description_html", desc_html)
+        set_if_diff("consumable", consumable)
+        set_if_diff("alchemy_tool", alchemy_tool)
+
+        if updates:
+            it.update(updates)
             updated = True
+            changed.append({
+                "item_id": it.get("item_id"),
+                "ref_id": ref_id,
+                "name": name,
+                "fields": sorted(list(updates.keys()))
+            })
     if updated:
         get_db().inventories.update_one({"id": inv_id}, {"$set": {"items": items}})
         inv["items"] = items
-    return inv
+    return inv, {"count": len(changed), "changed_items": changed}
 
 def _tags_filter(tags: str) -> dict:
     raw = [t.strip() for t in (tags or "").split(",") if t.strip()]
