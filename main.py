@@ -29,6 +29,7 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
         return {}
     d = dict(doc)
     d.pop("_id", None)
+    d.pop("avatar", None)
     if user:
         d["is_owner"] = d.get("owner") == user
         d["is_member"] = user in (d.get("members") or [])
