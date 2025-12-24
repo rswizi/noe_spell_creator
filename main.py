@@ -2609,9 +2609,15 @@ def _compute_archetype_unlocked(archetype: dict, lvl: int) -> list[str]:
     keep_ids = []
     replaced = set()
     by_ab = {r["ability_id"]: r for r in unlocked}
+    docs_by_id = {d.get("id"): d for d in _load_abilities_by_id([r["ability_id"] for r in unlocked])}
     for r in unlocked:
-        if r.get("replaces_id") and r["replaces_id"] in by_ab:
-            replaced.add(r["replaces_id"])
+        rep = r.get("replaces_id")
+        if rep and rep in by_ab:
+            replaced.add(rep)
+        ab = docs_by_id.get(r.get("ability_id"))
+        rep_doc = (ab or {}).get("archetype_replaces")
+        if rep_doc and rep_doc in by_ab:
+            replaced.add(rep_doc)
     for r in unlocked:
         if r["ability_id"] in replaced:
             continue

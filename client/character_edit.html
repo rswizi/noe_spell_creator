@@ -4318,7 +4318,7 @@ async function fetchAbilitiesByIds(ids){
   return res.abilities || [];
 }
 
-function computeArchetypeUnlockedIds(archetype, lvl){
+async function computeArchetypeUnlockedIds(archetype, lvl){
   if (!archetype) return [];
   const effRank = _archetypeRankForLevel(Math.max(1, Number(lvl)||1));
   const ranks = archetype.ranks || [];
@@ -4333,6 +4333,14 @@ function computeArchetypeUnlockedIds(archetype, lvl){
     const rep = r.replaces_id || r.replaces || '';
     if (rep && byId[rep]) replaced.add(rep);
   });
+  const ids = Object.keys(byId);
+  if (ids.length){
+    const docs = await fetchAbilitiesByIds(ids);
+    docs.forEach(d=>{
+      const rep = String(d?.archetype_replaces || '').trim();
+      if (rep && byId[rep]) replaced.add(rep);
+    });
+  }
   const keep = [];
   unlocked.forEach(r=>{
     const id = r.ability_id || r.ability || r.id;
@@ -4342,12 +4350,12 @@ function computeArchetypeUnlockedIds(archetype, lvl){
   return keep;
 }
 
-function refreshArchetypeAbilities(){
+async function refreshArchetypeAbilities(){
   if (!CHAR?.archetype_id) return;
   const arc = ARCHETYPES.find(a=>a.id===CHAR.archetype_id);
   if (!arc) return;
   CHAR.archetype_rank = _archetypeRankForLevel(Math.max(1, Number(CHAR.level)||1));
-  const ids = computeArchetypeUnlockedIds(arc, CHAR.level);
+  const ids = await computeArchetypeUnlockedIds(arc, CHAR.level);
   CHAR.computed_archetype_abilities = ids;
   COMPUTED_ARC_ABILITIES = ids.slice();
   renderArchetypePanel();
