@@ -254,10 +254,17 @@ async function loadPendingSubmissions(){
       <div class="muted">${s.submitter || "unknown"} • ${s.created_at || ""}</div>
       ${s.review_note ? `<div class="muted">Note: ${s.review_note}</div>` : ""}
       <div class="row" style="margin-top:6px;">
+        <button class="subtle" data-action="load">Load</button>
         <button class="subtle" data-action="approve">Approve</button>
         <button class="subtle" data-action="reject">Reject</button>
       </div>
     `;
+    div.querySelector('[data-action="load"]').addEventListener("click", ()=>{
+      const payload = s.payload || {};
+      loadToForm({ ...payload, id: "" });
+      $("#arc-editing").value = "";
+      $("#arc-status").textContent = "Loaded pending submission.";
+    });
     const approveBtn = div.querySelector('[data-action="approve"]');
     const rejectBtn = div.querySelector('[data-action="reject"]');
     if (status !== "pending"){

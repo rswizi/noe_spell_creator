@@ -69,6 +69,32 @@
     const nameEl = document.getElementById("camp-name");
     const avatarEl = document.getElementById("camp-avatar");
     const editor = document.querySelector("#desc-editor .rich-area");
+    const sanitizePastedHtml = (html, text) => {
+      if (html){
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        doc.querySelectorAll('*').forEach(el=>{
+          el.removeAttribute('color');
+          el.style.color = '';
+          if (el.getAttribute('style') === '') el.removeAttribute('style');
+        });
+        return doc.body.innerHTML;
+      }
+      if (text != null){
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML.replace(/\n/g, '<br>');
+      }
+      return '';
+    };
+    editor.addEventListener('paste', (e)=>{
+      const html = e.clipboardData?.getData('text/html');
+      const text = e.clipboardData?.getData('text/plain');
+      if (html || text){
+        e.preventDefault();
+        const cleaned = sanitizePastedHtml(html, text);
+        if (cleaned) document.execCommand('insertHTML', false, cleaned);
+      }
+    });
     document.querySelectorAll("#desc-editor [data-cmd]").forEach(btn=>{
       btn.addEventListener("click", ()=>{ document.execCommand(btn.dataset.cmd, false, null); editor.focus(); });
     });

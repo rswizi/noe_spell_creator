@@ -1199,6 +1199,38 @@ const avatarClose = document.getElementById('avatar-close');
 const avatarCancel = document.getElementById('avatar-cancel');
 const avatarStatusEl = document.getElementById('avatar-status');
 const avatarCanvas = document.getElementById('avatar-canvas');
+
+function sanitizePastedHtml(html, text){
+  if (html){
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('*').forEach(el=>{
+      el.removeAttribute('color');
+      el.style.color = '';
+      if (el.getAttribute('style') === '') el.removeAttribute('style');
+    });
+    return doc.body.innerHTML;
+  }
+  if (text != null){
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML.replace(/\n/g, '<br>');
+  }
+  return '';
+}
+
+function wireRichTextPaste(){
+  document.querySelectorAll('.richtext').forEach(el=>{
+    el.addEventListener('paste', (e)=>{
+      const html = e.clipboardData?.getData('text/html');
+      const text = e.clipboardData?.getData('text/plain');
+      if (html || text){
+        e.preventDefault();
+        const cleaned = sanitizePastedHtml(html, text);
+        if (cleaned) document.execCommand('insertHTML', false, cleaned);
+      }
+    });
+  });
+}
 let AVATAR_IMG = null;
 if (avatarPreview){
   avatarPreview.onerror = ()=>{ avatarPreview.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII='; };
@@ -5861,6 +5893,7 @@ function wirePersonal(){
 
 /* boot */
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
+wireRichTextPaste();
 </script>
 
 

@@ -126,6 +126,32 @@
     const editName = document.getElementById("edit-name");
     const editAvatar = document.getElementById("edit-avatar");
     const descEditor = document.querySelector("#desc-editor .rich-area");
+    const sanitizePastedHtml = (html, text) => {
+      if (html){
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        doc.querySelectorAll('*').forEach(el=>{
+          el.removeAttribute('color');
+          el.style.color = '';
+          if (el.getAttribute('style') === '') el.removeAttribute('style');
+        });
+        return doc.body.innerHTML;
+      }
+      if (text != null){
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML.replace(/\n/g, '<br>');
+      }
+      return '';
+    };
+    descEditor.addEventListener('paste', (e)=>{
+      const html = e.clipboardData?.getData('text/html');
+      const text = e.clipboardData?.getData('text/plain');
+      if (html || text){
+        e.preventDefault();
+        const cleaned = sanitizePastedHtml(html, text);
+        if (cleaned) document.execCommand('insertHTML', false, cleaned);
+      }
+    });
     const saveCampaignBtn = document.getElementById("save-campaign");
     const addCharPanel = document.getElementById("add-char-panel");
     const addCharSelect = document.getElementById("add-char-select");

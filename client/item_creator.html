@@ -363,6 +363,23 @@ const pendingPanel = document.getElementById("pending-panel");
 const pendingListEl = document.getElementById("pending-list");
 const pendingRefreshBtn = document.getElementById("pending-refresh");
 let ROLE = "";
+function sanitizePastedHtml(html, text){
+  if (html){
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('*').forEach(el=>{
+      el.removeAttribute('color');
+      el.style.color = '';
+      if (el.getAttribute('style') === '') el.removeAttribute('style');
+    });
+    return doc.body.innerHTML;
+  }
+  if (text != null){
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML.replace(/\n/g, '<br>');
+  }
+  return '';
+}
 
 const QUALITY_DIFF = {
   "Very Mediocre": -300,
@@ -948,10 +965,19 @@ async function loadPendingSubmissions(){
       <div class="muted">${s.submitter || "unknown"} • ${s.created_at || ""}</div>
       ${s.review_note ? `<div class="muted">Note: ${s.review_note}</div>` : ""}
       <div class="row" style="margin-top:6px;">
+        <button class="btn small" data-action="load">Load</button>
         <button class="btn small" data-action="approve">Approve</button>
         <button class="btn btn-secondary small" data-action="reject">Reject</button>
       </div>
     `;
+    div.querySelector('[data-action="load"]').addEventListener("click", ()=>{
+      const payload = s.payload || {};
+      const kind = (s.kind || payload.kind || document.querySelector("#library-type").value || "object");
+      document.querySelector("#library-type").value = kind;
+      fillFromPayload({ ...payload, id: "" });
+      STATE.id = null;
+      setStateChip("Loaded pending submission");
+    });
     const approveBtn = div.querySelector('[data-action="approve"]');
     const rejectBtn = div.querySelector('[data-action="reject"]');
     if (status !== "pending"){
@@ -1245,6 +1271,16 @@ function onReady(){
   checkMe();
 
   document.querySelector("#fld-tier").addEventListener("change", ()=>{ const base=TIER_TABLE[document.querySelector("#fld-tier").value]?.price||0; document.querySelector("#fld-price").value = base; syncPriceSummary(); });
+  const desc = document.querySelector("#fld-desc");
+  desc?.addEventListener("paste", (e)=>{
+    const html = e.clipboardData?.getData('text/html');
+    const text = e.clipboardData?.getData('text/plain');
+    if (html || text){
+      e.preventDefault();
+      const cleaned = sanitizePastedHtml(html, text);
+      if (cleaned) document.execCommand('insertHTML', false, cleaned);
+    }
+  });
 }
 
 document.addEventListener("DOMContentLoaded", onReady);

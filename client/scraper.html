@@ -124,6 +124,33 @@ function setupRichTextEditor(containerId, placeholder=''){
   if (!area) throw new Error('Missing rich text area in '+containerId);
   if (placeholder) area.setAttribute('data-placeholder', placeholder);
 
+  const sanitizePastedHtml = (html, text) => {
+    if (html){
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll('*').forEach(el=>{
+        el.removeAttribute('color');
+        el.style.color = '';
+        if (el.getAttribute('style') === '') el.removeAttribute('style');
+      });
+      return doc.body.innerHTML;
+    }
+    if (text != null){
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML.replace(/\n/g, '<br>');
+    }
+    return '';
+  };
+  area.addEventListener('paste', (e)=>{
+    const html = e.clipboardData?.getData('text/html');
+    const text = e.clipboardData?.getData('text/plain');
+    if (html || text){
+      e.preventDefault();
+      const cleaned = sanitizePastedHtml(html, text);
+      if (cleaned) document.execCommand('insertHTML', false, cleaned);
+    }
+  });
+
   const normalizeHtml = (html)=>{
     const text = (area.textContent || '').replace(/\u00a0/g, ' ').trim();
     const raw = (html || '').trim();
@@ -243,6 +270,38 @@ function parseRawBlock(text){
   return out;
 }
 
+function parseTableFromHtml(rawHtml){
+  if (!rawHtml) return [];
+  const doc = new DOMParser().parseFromString(rawHtml, "text/html");
+  const tables = Array.from(doc.querySelectorAll("table"));
+  if (!tables.length) return [];
+  const table = tables
+    .map(t => ({ el: t, rows: t.querySelectorAll("tr").length }))
+    .sort((a,b) => b.rows - a.rows)[0].el;
+  const rows = Array.from(table.querySelectorAll("tr"));
+  const out = [];
+  rows.forEach((row, idx)=>{
+    const cells = Array.from(row.querySelectorAll("th,td"));
+    if (cells.length < 3) return;
+    const first = (cells[0].textContent || "").replace(/\s+/g, " ").trim();
+    const mpRaw = (cells[1].textContent || "").replace(/\s+/g, " ").trim();
+    const enRaw = (cells[2].textContent || "").replace(/\s+/g, " ").trim();
+    const isHeader = idx === 0 && /spell\s*effect/i.test(first);
+    if (isHeader) return;
+    if (!first) return;
+    const colonIdx = first.indexOf(":");
+    const name = colonIdx === -1 ? first : first.slice(0, colonIdx).trim();
+    const description = colonIdx === -1 ? "" : first.slice(colonIdx + 1).trim();
+    const mpMatch = mpRaw.match(/[+-]?\d+/);
+    const enMatch = enRaw.match(/[+-]?\d+/);
+    const mp = mpMatch ? parseInt(mpMatch[0], 10) : NaN;
+    const en = enMatch ? parseInt(enMatch[0], 10) : NaN;
+    if (Number.isNaN(mp) || Number.isNaN(en)) return;
+    out.push({ name, description, mp_cost: mp, en_cost: en });
+  });
+  return out;
+}
+
 // ------------ UI rendering ------------
 function renderPreview(){
   const tbody = $("#preview-body");
@@ -293,12 +352,17 @@ $("#parse-btn").addEventListener("click", ()=>{
 
   try{
     const rawHtml = rawEditor.getHTML();
-    const text = rawHtml
-      .replace(/<\/p>/gi, "\n")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<[^>]+>/g, "")
-      .replace(/\u00a0/g, " ");
-    PREVIEW = parseRawBlock(text);
+    const tableParsed = parseTableFromHtml(rawHtml);
+    if (tableParsed.length){
+      PREVIEW = tableParsed;
+    }else{
+      const text = rawHtml
+        .replace(/<\/p>/gi, "\n")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/\u00a0/g, " ");
+      PREVIEW = parseRawBlock(text);
+    }
     $("#errors").textContent = "";
     renderPreview();
     $("#preview-card").style.display = "block";
