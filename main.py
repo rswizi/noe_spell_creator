@@ -4702,7 +4702,8 @@ def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
         try: costs["other_value"] = int(costs_in.get("other_value") or 0)
         except Exception: costs["other_value"] = 0
 
-        active_block = {"activation":activation,"range":rng,"aoe":aoe,"costs":costs}
+        costs_active = bool(active_in.get("costs_active") or active_in.get("cost_active") or False)
+        active_block = {"activation":activation,"range":rng,"aoe":aoe,"costs":costs,"costs_active":costs_active}
 
     # --- passive part ---
     passive_block = None
@@ -4873,7 +4874,8 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
         costs["other_label"] = (costs_in.get("other_label") or "").strip()
         try: costs["other_value"] = int(costs_in.get("other_value") or 0)
         except Exception: costs["other_value"] = 0
-        active_block = {"activation":activation,"range":rng,"aoe":aoe,"costs":costs}
+        costs_active = bool(active_in.get("costs_active") or active_in.get("cost_active") or existing.get("active", {}).get("costs_active") or False)
+        active_block = {"activation":activation,"range":rng,"aoe":aoe,"costs":costs,"costs_active":costs_active}
 
     passive_block = None
     if ab_type in ("passive","mixed"):

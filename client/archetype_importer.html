@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NoE - Archetype Importer</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#060608; color:#f5f5f5; }
+    .page { min-height:100vh; display:grid; place-items:start center; }
+    .wrap { width:100%; max-width:1080px; padding:24px 16px 40px; }
+    .topbar { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+    .topbar h1 { margin:0; font-size:20px; }
+    .topbar .right { margin-left:auto; }
+    .muted { opacity:.8; font-size:.9rem; }
+    a.btn, button.btn, input, textarea {
+      border-radius:10px; border:1px solid #333; background:#111; color:#f0f0f0;
+      padding:8px 10px; font:inherit;
+    }
+    a.btn:hover, button.btn:hover { background:#181818; }
+    textarea { width:100%; min-height:260px; resize:vertical; }
+    .panel { border:1px solid #262626; border-radius:14px; background:#101010; padding:14px 14px 16px; margin-bottom:12px; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .row label { font-size:.88rem; opacity:.85; }
+    .grid { display:grid; gap:12px; grid-template-columns: 1fr; }
+    .preview-card { border:1px solid #2b2b2b; border-radius:12px; padding:12px; background:#0f0f15; margin-top:10px; }
+    .preview-card h3 { margin:0 0 6px; font-size:1rem; }
+    .ability-row { border-top:1px solid #1f1f1f; padding:8px 0; }
+    .ability-row:first-child { border-top:none; padding-top:0; }
+    .pill { border-radius:999px; border:1px solid #333; padding:2px 8px; font-size:.78rem; opacity:.85; }
+    .desc-box { border:1px solid #262626; border-radius:10px; padding:8px 10px; background:#121218; }
+    .status-line { margin-top:10px; font-size:.88rem; opacity:.9; }
+  </style>
+</head>
+<body>
+  <div class="page"><div class="wrap">
+    <div class="topbar">
+      <h1>Archetype Importer</h1>
+      <span id="login-chip" class="muted right"></span>
+      <a class="btn" href="abilities_home.html">Back</a>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <label for="ability-tags">Ability Tags</label>
+        <input id="ability-tags" placeholder="Comma-separated tags" style="flex:1;">
+      </div>
+      <label for="raw-input" class="muted" style="display:block; margin-top:8px;">Paste archetype text (multiple archetypes supported)</label>
+      <textarea id="raw-input" placeholder="[3*] Haunted Ranger
+Prerequisites:
+WIL must at least be equal to half your highest characteristic.
+..."></textarea>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn" id="btn-parse">Parse Preview</button>
+        <button class="btn" id="btn-import">Import</button>
+        <span id="status-line" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="panel" id="preview-panel" style="display:none;">
+      <h2>Preview</h2>
+      <div id="preview-list"></div>
+    </div>
+  </div></div>
+
+<script>
+function getToken(){ return localStorage.getItem('auth_token') || ''; }
+function setCookieToken(tok){ if(!tok) return; document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
+function authHeaders(){
+  const t=getToken(); if(t) setCookieToken(t);
+  return t ? {'Authorization':'Bearer '+t, 'X-Auth-Token':t} : {};
+}
+async function api(path,opt={}){
+  const headers = Object.assign({}, opt.headers||{}, authHeaders());
+  const resp = await fetch(path, { credentials:'include', ...opt, headers });
+  const ct = resp.headers.get('content-type') || '';
+  const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
+  if(!resp.ok || data.status==='error') throw new Error(data.message || ('HTTP '+resp.status));
+  return data;
+}
+
+const loginChip = document.getElementById('login-chip');
+const rawInput = document.getElementById('raw-input');
+const abilityTagsEl = document.getElementById('ability-tags');
+const previewPanel = document.getElementById('preview-panel');
+const previewList = document.getElementById('preview-list');
+const statusLine = document.getElementById('status-line');
+
+let ROLE = '';
+
+function escapeHtml(s){
+  return String(s||'')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
+function textToHtml(text){
+  const parts = String(text||'').split(/\n\s*\n/);
+  return parts.map(p=>{
+    const lines = p.split(/\n/).map(l=>escapeHtml(l.trim())).filter(Boolean);
+    if (!lines.length) return '';
+    return `<p>${lines.join('<br>')}</p>`;
+  }).filter(Boolean).join('');
+}
+function stripStarsPrefix(name){
+  return String(name||'').replace(/^\s*\[[^\]]*\]\s*/,'').trim();
+}
+function normalizeActionLabel(label){
+  const raw = String(label||'').toLowerCase();
+  if (raw.includes('free action')) return 'Free Action';
+  if (raw.includes('special action')) return 'Special Action';
+  if (raw.includes('ritual')) return 'Ritual';
+  if (raw.includes('action')) return 'Action';
+  return '';
+}
+function parseCosts(text){
+  const costs = { HP:0, EN:0, MP:0, FO:0, MO:0, TX:0, other_label:'', other_value:0 };
+  let costsActive = false;
+  const re = /(Active\s+Cost|Cost)\s*\(([^)]+)\)/gi;
+  let m;
+  while ((m = re.exec(text))){
+    if (/active/i.test(m[1])) costsActive = true;
+    const inner = m[2] || '';
+    const tokenRe = /([+-]?\d+)\s*([A-Za-z]+)/g;
+    let t;
+    while ((t = tokenRe.exec(inner))){
+      const val = parseInt(t[1], 10);
+      const key = String(t[2] || '').toUpperCase();
+      if (['HP','EN','MP','FO','MO','TX'].includes(key)){
+        costs[key] += val;
+      }else if (!costs.other_label){
+        costs.other_label = key;
+        costs.other_value = val;
+      }
+    }
+  }
+  return { costs, costsActive };
+}
+function stripCostMarkers(text){
+  return String(text||'')
+    .replace(/\[?\s*Active\s+Cost\s*\([^)]+\)\s*\]?/gi, '')
+    .replace(/\[?\s*Cost\s*\([^)]+\)\s*\]?/gi, '')
+    .replace(/\[\s*,\s*\]/g, '')
+    .replace(/\[\s*,\s*/g, '[')
+    .replace(/,\s*\]/g, ']')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+function parseAbility(rank, lines){
+  const filtered = lines.filter(l=> l != null);
+  if (!filtered.length) return null;
+  const first = filtered.find(l=> String(l).trim() !== '') || '';
+  let namePart = String(first).trim();
+  let descPart = '';
+  const colonIdx = namePart.indexOf(':');
+  if (colonIdx >= 0){
+    descPart = namePart.slice(colonIdx + 1).trim();
+    namePart = namePart.slice(0, colonIdx).trim();
+    if (filtered.length > 1){
+      descPart += '\n' + filtered.slice(1).join('\n');
+    }
+  }else if (filtered.length > 1){
+    descPart = filtered.slice(1).join('\n');
+  }
+
+  let activation = '';
+  let type = 'passive';
+  const actionMatch = namePart.match(/\(([^)]+)\)/);
+  if (actionMatch && /action|ritual/i.test(actionMatch[1])){
+    activation = normalizeActionLabel(actionMatch[1]);
+    type = activation ? 'active' : 'passive';
+    namePart = namePart.replace(actionMatch[0], '').replace(/\s{2,}/g,' ').trim();
+  }
+
+  const fullText = filtered.join(' ');
+  const costInfo = parseCosts(fullText);
+  descPart = stripCostMarkers(descPart);
+
+  const vMatch = namePart.match(/\bV\.?\s*(\d+)\b/i);
+  const version = vMatch ? Math.max(1, parseInt(vMatch[1], 10)) : 1;
+  const baseName = vMatch ? namePart.replace(vMatch[0], '').replace(/\s{2,}/g,' ').trim() : namePart;
+
+  return {
+    rank,
+    name: namePart.trim(),
+    base_name: baseName.trim(),
+    version,
+    type,
+    activation,
+    description_text: descPart.trim(),
+    description_html: textToHtml(descPart.trim()),
+    costs: costInfo.costs,
+    costs_active: costInfo.costsActive
+  };
+}
+
+function parseArchetypes(raw){
+  const lines = String(raw||'').replace(/\r/g,'').split('\n');
+  const blocks = [];
+  let current = null;
+  const pushCurrent = ()=>{
+    if (current) blocks.push(current);
+  };
+  lines.forEach(line=>{
+    const trimmed = line.trim();
+    const headerMatch = trimmed.match(/^\[[^\]]+\]\s*(.+)$/);
+    if (headerMatch){
+      pushCurrent();
+      current = { header: trimmed, headerName: headerMatch[1].trim(), lines: [] };
+      return;
+    }
+    if (!current){
+      if (trimmed){
+        current = { header: trimmed, headerName: trimmed, lines: [] };
+      }
+      return;
+    }
+    current.lines.push(line);
+  });
+  pushCurrent();
+
+  const parsed = [];
+  blocks.forEach(block=>{
+    const name = stripStarsPrefix(block.headerName || block.header || '');
+    const lines = block.lines || [];
+    const prereqIdx = lines.findIndex(l=>/^\s*Prerequisites\s*:/i.test(l));
+    const rankIdx = lines.findIndex(l=>/^\s*Rank\b/i.test(l));
+    let prereqText = '';
+    let descLines = [];
+    if (prereqIdx >= 0){
+      const tail = lines.slice(prereqIdx + 1, rankIdx >= 0 ? rankIdx : lines.length);
+      const firstNonEmpty = tail.findIndex(l=> String(l||'').trim() !== '');
+      if (firstNonEmpty >= 0){
+        prereqText = String(tail[firstNonEmpty] || '').trim();
+        descLines = tail.slice(firstNonEmpty + 1);
+      }else{
+        descLines = [];
+      }
+    }else{
+      descLines = lines.slice(0, rankIdx >= 0 ? rankIdx : lines.length);
+    }
+    const descText = descLines.join('\n').trim();
+
+    const rankLines = rankIdx >= 0 ? lines.slice(rankIdx + 1) : lines.slice();
+    const abilities = [];
+    let currentRank = null;
+    let buffer = [];
+    const flush = ()=>{
+      if (currentRank == null) return;
+      const ability = parseAbility(currentRank, buffer);
+      if (ability) abilities.push(ability);
+      buffer = [];
+    };
+    rankLines.forEach(line=>{
+      const trimmed = String(line||'').trim();
+      if (!trimmed) {
+        if (currentRank != null) buffer.push('');
+        return;
+      }
+      if (/^Rank\s*Reward/i.test(trimmed) || /^Rank\s*$/i.test(trimmed)) return;
+      const m = trimmed.match(/^(\d{1,2})\s*(.*)$/);
+      if (m){
+        const rk = parseInt(m[1], 10);
+        if (rk >= 1 && rk <= 12){
+          flush();
+          currentRank = rk;
+          if (m[2]) buffer.push(m[2].trim());
+          return;
+        }
+      }
+      if (currentRank != null) buffer.push(trimmed);
+    });
+    flush();
+
+    parsed.push({
+      name,
+      prereq_text: prereqText,
+      description_text: descText,
+      description_html: textToHtml(descText),
+      abilities
+    });
+  });
+  return parsed;
+}
+
+function formatCostDisplay(ab){
+  const costs = ab.costs || {};
+  const suffix = ab.costs_active ? ' (A)' : '';
+  const parts = [];
+  const push = (val, label)=>{
+    const num = Number(val);
+    if (!Number.isFinite(num) || num === 0) return;
+    parts.push(`${num} ${label}${suffix}`);
+  };
+  push(costs.HP, 'HP');
+  push(costs.EN, 'EN');
+  push(costs.MP, 'MP');
+  push(costs.FO, 'FO');
+  push(costs.MO, 'MO');
+  push(costs.TX, 'TX');
+  if (costs.other_label && costs.other_value != null){
+    push(costs.other_value, costs.other_label);
+  }
+  return parts.join(' • ');
+}
+
+function renderPreview(archetypes){
+  if (!archetypes.length){
+    previewPanel.style.display = 'none';
+    previewList.innerHTML = '';
+    return;
+  }
+  previewPanel.style.display = '';
+  previewList.innerHTML = '';
+  archetypes.forEach(arc=>{
+    const card = document.createElement('div');
+    card.className = 'preview-card';
+    const prereq = arc.prereq_text ? `<div class="muted">Prereq: ${escapeHtml(arc.prereq_text)}</div>` : '';
+    const desc = arc.description_text ? `<div class="desc-box">${arc.description_html}</div>` : '';
+    card.innerHTML = `
+      <h3>${escapeHtml(arc.name)}</h3>
+      ${prereq}
+      ${desc}
+      <div class="muted" style="margin-top:6px;">Abilities: ${arc.abilities.length}</div>
+    `;
+    const list = document.createElement('div');
+    arc.abilities.forEach(ab=>{
+      const row = document.createElement('div');
+      row.className = 'ability-row';
+      const cost = formatCostDisplay(ab);
+      row.innerHTML = `
+        <div class="row">
+          <span class="pill">Rank ${ab.rank}</span>
+          <strong>${escapeHtml(ab.name)}</strong>
+          <span class="pill">${ab.type}</span>
+          ${ab.activation ? `<span class="pill">${escapeHtml(ab.activation)}</span>` : ''}
+        </div>
+        <div class="muted">${escapeHtml(ab.description_text || '')}</div>
+        ${cost ? `<div class="muted">Cost: ${escapeHtml(cost)}</div>` : ''}
+      `;
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+    previewList.appendChild(card);
+  });
+}
+
+async function checkMe(){
+  try{
+    const me = await api('/auth/me');
+    loginChip.textContent = me.username + ' (' + me.role + ')';
+    ROLE = (me.role || '').toLowerCase();
+  }catch(e){
+    loginChip.textContent = 'Not logged in.';
+  }
+}
+
+async function importArchetypes(archetypes, tags){
+  if (ROLE !== 'moderator' && ROLE !== 'admin'){
+    throw new Error('Only moderators/admins can import archetypes.');
+  }
+  const created = [];
+  for (const arc of archetypes){
+    statusLine.textContent = `Creating abilities for ${arc.name}...`;
+    const baseMap = {};
+    const abilities = arc.abilities.slice().sort((a,b)=> a.rank - b.rank);
+    for (const ab of abilities){
+      const baseKey = String(ab.base_name || ab.name || '').toLowerCase();
+      const prev = baseMap[baseKey];
+      const originalRank = prev ? prev.original_rank : ab.rank;
+      const replacesId = (ab.version > 1 && prev) ? prev.last_id : '';
+      const payload = {
+        name: ab.name,
+        type: ab.type,
+        source_category: 'Archetype',
+        source_ref: arc.name,
+        tags,
+        description: ab.description_html || '',
+        archetype_version: ab.version || 1,
+        archetype_original_rank: originalRank,
+        archetype_replaces: replacesId || ''
+      };
+      if (ab.type === 'active'){
+        payload.active = {
+          activation: ab.activation || 'Action',
+          range: 0,
+          aoe: '',
+          costs: ab.costs || { HP:0, EN:0, MP:0, FO:0, MO:0, TX:0, other_label:'', other_value:0 },
+          costs_active: !!ab.costs_active
+        };
+      }else{
+        payload.passive = {
+          description: ab.description_html || '',
+          modifiers: []
+        };
+      }
+      const res = await api('/abilities', {
+        method:'POST',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ability?.id){
+        throw new Error('Ability creation failed for ' + ab.name);
+      }
+      ab.created_id = res.ability.id;
+      ab.original_rank = originalRank;
+      ab.replaces_id = replacesId || '';
+      baseMap[baseKey] = { last_id: ab.created_id, original_rank: originalRank };
+    }
+
+    statusLine.textContent = `Creating archetype ${arc.name}...`;
+    const ranks = abilities.map(ab=>({
+      rank: ab.rank,
+      ability_id: ab.created_id,
+      version: ab.version || 1,
+      original_rank: ab.original_rank || ab.rank,
+      replaces_id: ab.replaces_id || ''
+    }));
+    const arcPayload = {
+      name: arc.name,
+      prereq_text: arc.prereq_text || '',
+      description_html: arc.description_html || '',
+      ranks
+    };
+    const arcRes = await api('/archetypes', {
+      method:'POST',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify(arcPayload)
+    });
+    created.push({ name: arc.name, id: arcRes.archetype?.id });
+  }
+  return created;
+}
+
+document.getElementById('btn-parse').addEventListener('click', ()=>{
+  try{
+    const parsed = parseArchetypes(rawInput.value || '');
+    renderPreview(parsed);
+    statusLine.textContent = parsed.length ? `Parsed ${parsed.length} archetype(s).` : 'No archetypes detected.';
+  }catch(e){
+    statusLine.textContent = 'Parse failed: ' + e.message;
+  }
+});
+
+document.getElementById('btn-import').addEventListener('click', async ()=>{
+  try{
+    const parsed = parseArchetypes(rawInput.value || '');
+    if (!parsed.length) throw new Error('No archetypes to import.');
+    let tags = (abilityTagsEl.value || '').split(',').map(t=>t.trim()).filter(Boolean);
+    if (!tags.length){
+      const input = prompt('Enter tags for imported abilities (comma-separated):', '') || '';
+      tags = input.split(',').map(t=>t.trim()).filter(Boolean);
+    }
+    const created = await importArchetypes(parsed, tags);
+    statusLine.textContent = `Imported ${created.length} archetype(s).`;
+  }catch(e){
+    statusLine.textContent = 'Import failed: ' + e.message;
+  }
+});
+
+checkMe();
+</script>
+</body>
+</html>

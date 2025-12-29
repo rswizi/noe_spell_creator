@@ -219,6 +219,10 @@
             <div><label>Other label</label><input id="cost-other-label" placeholder="Ex: SP, Tension" /></div>
             <div><label>Other value</label><input id="cost-other-value" type="number" step="1" value="0" /></div>
           </div>
+          <label class="row" style="gap:6px; margin-top:6px;">
+            <input type="checkbox" id="costs-active">
+            <span class="muted">Active cost?</span>
+          </label>
         </div>
       </div>
     </div>
@@ -336,6 +340,7 @@ const costMoEl    = document.getElementById('cost-mo');
 const costTxEl    = document.getElementById('cost-tx');
 const costOLabelEl= document.getElementById('cost-other-label');
 const costOValEl  = document.getElementById('cost-other-value');
+const costsActiveEl = document.getElementById('costs-active');
 
 const btnSave     = document.getElementById('btn-save');
 
@@ -663,7 +668,8 @@ async function buildPayload(){
         TX: Number(costTxEl.value || 0),
         other_label: costOLabelEl.value || '',
         other_value: Number(costOValEl.value || 0),
-      }
+      },
+      costs_active: !!costsActiveEl?.checked
     };
   }
 

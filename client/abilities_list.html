@@ -277,6 +277,10 @@
             <div><label>Other label</label><input id="cost-other-label" /></div>
             <div><label>Other value</label><input id="cost-other-value" type="number" step="1" /></div>
           </div>
+          <label class="row" style="gap:6px; margin-top:6px;">
+            <input type="checkbox" id="costs-active">
+            <span class="muted">Active cost?</span>
+          </label>
         </div>
       </div>
     </div>
@@ -435,6 +439,7 @@ const costMoEl    = document.getElementById('cost-mo');
 const costTxEl    = document.getElementById('cost-tx');
 const costOLabelEl= document.getElementById('cost-other-label');
 const costOValEl  = document.getElementById('cost-other-value');
+const costsActiveEl = document.getElementById('costs-active');
 
 const btnSave     = document.getElementById('btn-save');
 const btnDelete   = document.getElementById('btn-delete');
@@ -821,7 +826,8 @@ async function buildPayloadFromForm(){
         TX: Number(costTxEl.value || 0),
         other_label: costOLabelEl.value || '',
         other_value: Number(costOValEl.value || 0),
-      }
+      },
+      costs_active: !!costsActiveEl?.checked
     };
   }
 
@@ -905,6 +911,7 @@ function populateForm(a){
   costTxEl.value     = costs.TX ?? 0;
   costOLabelEl.value = costs.other_label || '';
   costOValEl.value   = costs.other_value ?? 0;
+  costsActiveEl.checked = !!active.costs_active;
 
   updateTypeVisibility();
   updateArchetypeMeta();
@@ -1020,6 +1027,7 @@ btnDelete?.addEventListener('click', async ()=>{
     actActivationEl.value = 'Action';
     actRangeEl.value = '';
     [costHpEl,costEnEl,costMpEl,costFoEl,costMoEl,costTxEl,costOValEl].forEach(el=>{ if (el) el.value = 0; });
+    if (costsActiveEl) costsActiveEl.checked = false;
     modListEl.innerHTML = '';
     document.querySelectorAll('.ability-item').forEach(x=>x.classList.remove('active'));
     loadAbilities();

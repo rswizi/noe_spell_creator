@@ -5212,10 +5212,12 @@ function renderSearchResults(arr){
   for (const a of arr){
     const div = document.createElement('div');
     div.className = 'abi-item';
+    const costText = abilityCostText(a);
     div.innerHTML = `
       <div class="grow">
         <div><strong>${a.name}</strong></div>
         <div class="muted" style="font-size:.85rem">${a.description||''}</div>
+        ${costText ? `<div class="muted" style="font-size:.8rem">Cost: ${costText}</div>` : ''}
       </div>
       <span class="tag">${a.type||''}</span>
       <span class="tag">${a.source_category||''}</span>
@@ -5833,6 +5835,28 @@ async function removeAbilityFromChar(aid){
   updateDerived();
 }
 
+function abilityCostText(ab){
+  const active = ab?.active || {};
+  const costs = active.costs || {};
+  const suffix = active.costs_active ? " (A)" : "";
+  const parts = [];
+  const push = (val, label)=>{
+    const num = Number(val);
+    if (!Number.isFinite(num) || num === 0) return;
+    parts.push(`${num} ${label}${suffix}`);
+  };
+  push(costs.HP, "HP");
+  push(costs.EN, "EN");
+  push(costs.MP, "MP");
+  push(costs.FO, "FO");
+  push(costs.MO, "MO");
+  push(costs.TX, "TX");
+  if (costs.other_label && costs.other_value != null){
+    push(costs.other_value, costs.other_label);
+  }
+  return parts.join(" • ");
+}
+
 function renderAbilitiesBucket(el, list){
   if (!el) return;
   el.innerHTML = '';
@@ -5843,10 +5867,12 @@ function renderAbilitiesBucket(el, list){
     const isPassive = (a.type||'').toLowerCase()!=='active';
     const hasChoice = abilityHasChoice(a);
     const desc = isPassive ? (a.passive?.description||a.description||'') : (a.description||'');
+    const costText = abilityCostText(a);
     div.innerHTML = `
       <div class="grow">
         <div><strong>${a.name}</strong></div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
+        ${costText ? `<div class="muted" style="font-size:.8rem">Cost: ${costText}</div>` : ''}
       </div>
       <span class="tag">${a.type||''}</span>
       <span class="tag">${a.source_category||''}</span>
