@@ -152,6 +152,9 @@
   .inv-desc-box{ border:1px solid #2a2a3a; border-radius:12px; padding:10px 12px; background:#141420; color:#e7e7ee; }
   .inv-desc-box > *:first-child{ margin-top:0; }
   .inv-desc-box > *:last-child{ margin-bottom:0; }
+  .arc-desc{ border:1px solid #2a2a3a; border-radius:12px; padding:10px 12px; background:#141420; color:#e7e7ee; }
+  .arc-desc > *:first-child{ margin-top:0; }
+  .arc-desc > *:last-child{ margin-bottom:0; }
   .pill-soft { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:10px; background:#111827; border:1px solid #1f2b3f; }
   .upg-list { display:grid; gap:10px; }
   .upg-row { border:1px solid #242436; border-radius:10px; padding:8px; background:#12121c; }
@@ -394,6 +397,7 @@
                 <span id="arc-status" class="muted"></span>
               </div>
               <div id="arc-summary" class="muted"></div>
+              <div id="arc-description" class="arc-desc" style="display:none;"></div>
               <div class="abi-list" id="arc-abilities"></div>
             </div>
           </details>
@@ -1137,6 +1141,7 @@ const arcSelectEl     = document.getElementById('arc-select');
 const arcApplyBtn     = document.getElementById('arc-apply');
 const arcStatusEl     = document.getElementById('arc-status');
 const arcSummaryEl    = document.getElementById('arc-summary');
+const arcDescEl       = document.getElementById('arc-description');
 const arcAbilitiesEl  = document.getElementById('arc-abilities');
 /* Inventory tab refs */
 const invSelectEl = document.getElementById('inv-select');
@@ -4396,12 +4401,21 @@ async function refreshArchetypeAbilities(){
 async function renderArchetypePanel(){
   if (!CHAR?.archetype_id){
     arcSummaryEl.textContent = 'No archetype linked.';
+    if (arcDescEl){
+      arcDescEl.innerHTML = '';
+      arcDescEl.style.display = 'none';
+    }
     arcAbilitiesEl.innerHTML = '<div class="muted">Select an archetype.</div>';
     return;
   }
   const arc = ARCHETYPES.find(a=>a.id===CHAR.archetype_id);
   const rank = CHAR.archetype_rank || _archetype_rank_for_level(Number(CHAR.level||1));
   arcSummaryEl.textContent = `${arc?.name || CHAR.archetype_id} • Rank: ${rank}`;
+  if (arcDescEl){
+    const arcDesc = (arc?.description_html || arc?.description || "").toString().trim();
+    arcDescEl.innerHTML = arcDesc;
+    arcDescEl.style.display = arcDesc ? '' : 'none';
+  }
   COMPUTED_ARC_ABILITIES = (CHAR.computed_archetype_abilities || []).slice();
   if (!COMPUTED_ARC_ABILITIES.length){
     arcAbilitiesEl.innerHTML = '<div class="muted">No unlocked abilities yet.</div>';

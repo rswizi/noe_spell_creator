@@ -62,6 +62,15 @@
     .status-pill.pending{color:#ffd34d;border-color:#5a4f00;background:#2b2500;}
     .status-pill.rejected{color:#ff9090;border-color:#6b1b1b;background:#2a1010;}
     .status-pill.approved{color:#7dffb0;border-color:#1d4d2d;background:#0f2a18;}
+    .rich-editor { border:1px solid #333; border-radius:12px; background:#0f0f0f; }
+    .rich-toolbar { display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px; border-bottom:1px solid #1f1f1f; }
+    .rich-toolbar button { padding:6px 8px; font-size:.9rem; border-radius:8px; border:1px solid #2d2d2d; background:#161616; color:#f3f3f3; cursor:pointer; }
+    .rich-toolbar button:hover { background:#1f1f1f; }
+    .rich-toolbar button:active { background:#222; }
+    .rich-area { min-height:130px; padding:10px; outline:none; }
+    .rich-area:empty:before { content: attr(data-placeholder); color:#777; }
+    .rich-area table { width:100%; border-collapse:collapse; margin-top:6px; }
+    .rich-area th, .rich-area td { border:1px solid #333; padding:6px; }
   </style>
 </head>
 <body>
@@ -85,6 +94,19 @@
         </div>
         <div class="row">
           <textarea id="arc-prereq-text" placeholder="Prerequisite description" style="flex:1;"></textarea>
+        </div>
+        <div>
+          <label style="display:block; margin:2px 0 6px;">Archetype Description</label>
+          <div id="arc-desc-editor" class="rich-editor">
+            <div class="rich-toolbar">
+              <button type="button" data-cmd="bold" title="Bold">Bold</button>
+              <button type="button" data-cmd="italic" title="Italic">Italic</button>
+              <button type="button" data-cmd="underline" title="Underline">Underline</button>
+              <button type="button" data-cmd="table" title="Insert 2x2 table">Table</button>
+              <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+            </div>
+            <div class="rich-area" contenteditable="true" data-placeholder="Describe the archetype and its theme."></div>
+          </div>
         </div>
         <div id="sources-block" class="card" style="margin:0;">
           <div class="section-title">Source archetypes (for hybrids)</div>
@@ -147,6 +169,70 @@ const pendingPanel = document.getElementById('pending-panel');
 const pendingListEl = document.getElementById('pending-list');
 const pendingRefreshBtn = document.getElementById('pending-refresh');
 let ROLE = '';
+
+function setupRichTextEditor(containerId, placeholder=''){
+  const container = document.getElementById(containerId);
+  if (!container) throw new Error('Missing rich text container '+containerId);
+  const area = container.querySelector('.rich-area');
+  if (!area) throw new Error('Missing rich text area in '+containerId);
+  if (placeholder) area.setAttribute('data-placeholder', placeholder);
+
+  const sanitizePastedHtml = (html, text) => {
+    if (html){
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll('*').forEach(el=>{
+        el.removeAttribute('color');
+        el.style.color = '';
+        if (el.getAttribute('style') === '') el.removeAttribute('style');
+      });
+      return doc.body.innerHTML;
+    }
+    if (text != null){
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML.replace(/\n/g, '<br>');
+    }
+    return '';
+  };
+  area.addEventListener('paste', (e)=>{
+    const html = e.clipboardData?.getData('text/html');
+    const text = e.clipboardData?.getData('text/plain');
+    if (html || text){
+      e.preventDefault();
+      const cleaned = sanitizePastedHtml(html, text);
+      if (cleaned) document.execCommand('insertHTML', false, cleaned);
+    }
+  });
+
+  const normalizeHtml = (html)=>{
+    const text = (area.textContent || '').replace(/\u00a0/g, ' ').trim();
+    const raw = (html || '').trim();
+    if (!text) return '';
+    return raw;
+  };
+
+  container.querySelectorAll('[data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.preventDefault();
+      area.focus();
+      const cmd = btn.dataset.cmd;
+      if (cmd === 'table'){
+        const tbl = '<table class="rte-table"><tbody><tr><td>Cell 1</td><td>Cell 2</td></tr><tr><td>Cell 3</td><td>Cell 4</td></tr></tbody></table>';
+        document.execCommand('insertHTML', false, tbl);
+      }else{
+        document.execCommand(cmd, false, null);
+      }
+    });
+  });
+
+  return {
+    el: area,
+    getHTML: ()=> normalizeHtml(area.innerHTML),
+    setHTML: (html='')=>{ area.innerHTML = html || ''; },
+  };
+}
+
+const arcDescEditor = setupRichTextEditor('arc-desc-editor', 'Describe the archetype and its theme.');
 
 function parseTagFilter(val){
   return String(val || '').split(',').map(t=>t.trim().toLowerCase()).filter(Boolean);
@@ -354,6 +440,7 @@ function collectDoc(){
     hybrid: $("#arc-hybrid").checked,
     sources: getSelectedSources(),
     prereq_text: $("#arc-prereq-text").value.trim(),
+    description_html: arcDescEditor.getHTML(),
     prereq_rules:{
       char_order: charOrder,
       char_min: charMin
@@ -383,6 +470,7 @@ function loadToForm(a){
   $("#arc-hybrid").checked = !!a.hybrid;
   setSelectedSources(a.sources || []);
   $("#arc-prereq-text").value = a.prereq_text || "";
+  arcDescEditor.setHTML(a.description_html || a.description || "");
   const rl = $("#rank-list"); rl.innerHTML = "";
   const ranks = a.ranks || [];
   for (let i=0; i<12; i++){

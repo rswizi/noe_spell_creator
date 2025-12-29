@@ -2607,6 +2607,7 @@ def _validate_archetype_doc(doc: dict, is_update=False):
     doc["hybrid"] = bool(doc.get("hybrid") or False)
     doc["sources"] = [str(s).strip() for s in (doc.get("sources") or []) if str(s).strip()] if doc.get("hybrid") else []
     doc["prereq_text"] = (doc.get("prereq_text") or "").strip()
+    doc["description_html"] = (doc.get("description_html") or doc.get("description") or "").strip()
     rules = doc.get("prereq_rules") or {}
     # structured prereqs
     allowed_keys = {"mag_highest","wis_half_mag","char_min","char_order"}
