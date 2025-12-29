@@ -31,6 +31,15 @@
     .pill { border-radius:999px; border:1px solid #333; padding:2px 8px; font-size:.78rem; opacity:.85; }
     .desc-box { border:1px solid #262626; border-radius:10px; padding:8px 10px; background:#121218; }
     .status-line { margin-top:10px; font-size:.88rem; opacity:.9; }
+    .rich-editor { border:1px solid #333; border-radius:12px; background:#0f0f0f; }
+    .rich-toolbar { display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px; border-bottom:1px solid #1f1f1f; }
+    .rich-toolbar button { padding:6px 8px; font-size:.9rem; border-radius:8px; border:1px solid #2d2d2d; background:#161616; color:#f3f3f3; cursor:pointer; }
+    .rich-toolbar button:hover { background:#1f1f1f; }
+    .rich-toolbar button:active { background:#222; }
+    .rich-area { min-height:260px; padding:10px; outline:none; }
+    .rich-area:empty:before { content: attr(data-placeholder); color:#777; }
+    .rich-area table { width:100%; border-collapse:collapse; margin-top:6px; }
+    .rich-area th, .rich-area td { border:1px solid #333; padding:6px; }
   </style>
 </head>
 <body>
@@ -46,11 +55,20 @@
         <label for="ability-tags">Ability Tags</label>
         <input id="ability-tags" placeholder="Comma-separated tags" style="flex:1;">
       </div>
-      <label for="raw-input" class="muted" style="display:block; margin-top:8px;">Paste archetype text (multiple archetypes supported)</label>
-      <textarea id="raw-input" placeholder="[3*] Haunted Ranger
+      <label class="muted" style="display:block; margin-top:8px;">Paste archetype text (multiple archetypes supported)</label>
+      <div id="raw-editor" class="rich-editor">
+        <div class="rich-toolbar">
+          <button type="button" data-cmd="bold" title="Bold">Bold</button>
+          <button type="button" data-cmd="italic" title="Italic">Italic</button>
+          <button type="button" data-cmd="underline" title="Underline">Underline</button>
+          <button type="button" data-cmd="table" title="Insert 2x2 table">Table</button>
+          <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+        </div>
+        <div class="rich-area" contenteditable="true" data-placeholder="[3*] Haunted Ranger
 Prerequisites:
 WIL must at least be equal to half your highest characteristic.
-..."></textarea>
+..."></div>
+      </div>
       <div class="row" style="margin-top:10px;">
         <button class="btn" id="btn-parse">Parse Preview</button>
         <button class="btn" id="btn-import">Import</button>
@@ -81,13 +99,76 @@ async function api(path,opt={}){
 }
 
 const loginChip = document.getElementById('login-chip');
-const rawInput = document.getElementById('raw-input');
 const abilityTagsEl = document.getElementById('ability-tags');
 const previewPanel = document.getElementById('preview-panel');
 const previewList = document.getElementById('preview-list');
 const statusLine = document.getElementById('status-line');
 
 let ROLE = '';
+
+function setupRichTextEditor(containerId, placeholder=''){
+  const container = document.getElementById(containerId);
+  if (!container) throw new Error('Missing rich text container '+containerId);
+  const area = container.querySelector('.rich-area');
+  if (!area) throw new Error('Missing rich text area in '+containerId);
+  if (placeholder) area.setAttribute('data-placeholder', placeholder);
+
+  const sanitizePastedHtml = (html, text) => {
+    if (html){
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll('*').forEach(el=>{
+        el.removeAttribute('color');
+        el.style.color = '';
+        if (el.getAttribute('style') === '') el.removeAttribute('style');
+      });
+      return doc.body.innerHTML;
+    }
+    if (text != null){
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML.replace(/\n/g, '<br>');
+    }
+    return '';
+  };
+  area.addEventListener('paste', (e)=>{
+    const html = e.clipboardData?.getData('text/html');
+    const text = e.clipboardData?.getData('text/plain');
+    if (html || text){
+      e.preventDefault();
+      const cleaned = sanitizePastedHtml(html, text);
+      if (cleaned) document.execCommand('insertHTML', false, cleaned);
+    }
+  });
+
+  const normalizeHtml = (html)=>{
+    const text = (area.textContent || '').replace(/\u00a0/g, ' ').trim();
+    const raw = (html || '').trim();
+    if (!text) return '';
+    return raw;
+  };
+
+  container.querySelectorAll('[data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.preventDefault();
+      area.focus();
+      const cmd = btn.dataset.cmd;
+      if (cmd === 'table'){
+        const tbl = '<table class="rte-table"><tbody><tr><td>Rank</td><td>Reward</td></tr><tr><td>1</td><td>Example</td></tr></tbody></table>';
+        document.execCommand('insertHTML', false, tbl);
+      }else{
+        document.execCommand(cmd, false, null);
+      }
+    });
+  });
+
+  return {
+    el: area,
+    getHTML: ()=> normalizeHtml(area.innerHTML),
+    setHTML: (html='')=>{ area.innerHTML = html || ''; },
+  };
+}
+
+const rawEditor = setupRichTextEditor('raw-editor');
 
 function escapeHtml(s){
   return String(s||'')
@@ -195,8 +276,43 @@ function parseAbility(rank, lines){
   };
 }
 
-function parseArchetypes(raw){
-  const lines = String(raw||'').replace(/\r/g,'').split('\n');
+function htmlToText(rawHtml){
+  const text = String(rawHtml || '')
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<tr[^>]*>/gi, "\n")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\u00a0/g, " ");
+  return text;
+}
+
+function parseRankTables(rawHtml){
+  const doc = new DOMParser().parseFromString(rawHtml || '', 'text/html');
+  const tables = Array.from(doc.querySelectorAll('table'));
+  const parsed = [];
+  tables.forEach(table=>{
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const items = [];
+    rows.forEach((row, idx)=>{
+      const cells = Array.from(row.querySelectorAll('th,td'));
+      if (cells.length < 2) return;
+      const c0 = (cells[0].textContent || '').replace(/\s+/g, ' ').trim();
+      const c1 = (cells[1].textContent || '').replace(/\s+/g, ' ').trim();
+      if (idx === 0 && /rank/i.test(c0) && /reward/i.test(c1)) return;
+      const rank = parseInt(c0, 10);
+      if (!Number.isFinite(rank)) return;
+      if (!c1) return;
+      items.push({ rank, text: c1 });
+    });
+    if (items.length) parsed.push(items);
+  });
+  return parsed;
+}
+
+function parseArchetypes(rawHtml){
+  const lines = htmlToText(rawHtml).replace(/\r/g,'').split('\n');
+  const tableSets = parseRankTables(rawHtml);
   const blocks = [];
   let current = null;
   const pushCurrent = ()=>{
@@ -272,6 +388,14 @@ function parseArchetypes(raw){
       if (currentRank != null) buffer.push(trimmed);
     });
     flush();
+
+    if (!abilities.length && tableSets.length){
+      const tableItems = tableSets.shift();
+      tableItems.forEach(entry=>{
+        const ab = parseAbility(entry.rank, entry.text.split(/\n/));
+        if (ab) abilities.push(ab);
+      });
+    }
 
     parsed.push({
       name,
@@ -435,9 +559,9 @@ async function importArchetypes(archetypes, tags){
 
 document.getElementById('btn-parse').addEventListener('click', ()=>{
   try{
-    const parsed = parseArchetypes(rawInput.value || '');
-    renderPreview(parsed);
-    statusLine.textContent = parsed.length ? `Parsed ${parsed.length} archetype(s).` : 'No archetypes detected.';
+  const parsed = parseArchetypes(rawEditor.getHTML());
+  renderPreview(parsed);
+  statusLine.textContent = parsed.length ? `Parsed ${parsed.length} archetype(s).` : 'No archetypes detected.';
   }catch(e){
     statusLine.textContent = 'Parse failed: ' + e.message;
   }
@@ -445,7 +569,7 @@ document.getElementById('btn-parse').addEventListener('click', ()=>{
 
 document.getElementById('btn-import').addEventListener('click', async ()=>{
   try{
-    const parsed = parseArchetypes(rawInput.value || '');
+    const parsed = parseArchetypes(rawEditor.getHTML());
     if (!parsed.length) throw new Error('No archetypes to import.');
     let tags = (abilityTagsEl.value || '').split(',').map(t=>t.trim()).filter(Boolean);
     if (!tags.length){
