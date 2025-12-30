@@ -219,6 +219,87 @@ function cleanSignedIntInput(val) {
   return sign + digits;
 }
 
+function escapeHtml(s){
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function textToHtml(text){
+  const parts = String(text || "").split(/\n\s*\n/);
+  return parts.map(p=>{
+    const lines = p.split(/\n/).map(l=> escapeHtml(l.trim())).filter(Boolean);
+    if (!lines.length) return "";
+    return `<p>${lines.join("<br>")}</p>`;
+  }).filter(Boolean).join("");
+}
+
+function htmlToLineTokens(rawHtml){
+  const doc = new DOMParser().parseFromString(rawHtml || "", "text/html");
+  const out = [];
+  const pushLine = (html)=>{
+    const parts = String(html || "").split(/<br\s*\/?>/i);
+    parts.forEach((part, idx)=>{
+      if (idx > 0) out.push({ text:"", html:"" });
+      const text = (part || "").replace(/<[^>]+>/g, "").replace(/\u00a0/g, " ").trim();
+      if (text || String(part).trim()){
+        out.push({ text, html: part.trim() });
+      }
+    });
+  };
+  const walk = (node)=>{
+    if (node.nodeType === 3){
+      const txt = (node.textContent || "").trim();
+      if (txt) out.push({ text: txt, html: escapeHtml(txt) });
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    const tag = node.tagName.toLowerCase();
+    if (tag === "br"){ out.push({ text:"", html:"" }); return; }
+    if (tag === "table"){ return; }
+    if (tag === "ul" || tag === "ol"){
+      node.querySelectorAll("li").forEach(li=> pushLine(li.innerHTML));
+      return;
+    }
+    if (["p","div","li","h1","h2","h3","h4","h5","h6"].includes(tag)){
+      pushLine(node.innerHTML);
+      return;
+    }
+    if (node.children && node.children.length){
+      Array.from(node.children).forEach(walk);
+    }else{
+      pushLine(node.innerHTML);
+    }
+  };
+  Array.from(doc.body.childNodes).forEach(walk);
+  return out;
+}
+
+function sliceHtmlAfterPrefix(html, prefixText){
+  const wrap = document.createElement("div");
+  wrap.innerHTML = html || "";
+  let remaining = String(prefixText || "");
+  const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, null);
+  let node;
+  while ((node = walker.nextNode())){
+    if (!remaining) break;
+    const text = node.textContent || "";
+    if (remaining.length >= text.length){
+      remaining = remaining.slice(text.length);
+      node.textContent = "";
+    }else{
+      node.textContent = text.slice(remaining.length);
+      remaining = "";
+      break;
+    }
+  }
+  wrap.querySelectorAll("*").forEach(el=>{
+    if (el.textContent === "" && el.children.length === 0) el.remove();
+  });
+  return wrap.innerHTML.trim();
+}
+
 /**
  * Expected block:
  * Name: Description (can continue on several lines)
@@ -226,7 +307,7 @@ function cleanSignedIntInput(val) {
  * EN  (signed integer, e.g. -1 or 0)
  * [blank line or next entry]
  */
-function parseRawBlock(text){
+function parseRawBlock(text, tokens){
   const lines = text.split(/\r?\n/).map(l => l.trim());
   const out = [];
   let i = 0;
@@ -244,11 +325,22 @@ function parseRawBlock(text){
       throw new Error(`Missing ":" in header near line ${i}: "${header}"`);
     const name = header.slice(0, colonIdx).trim();
     let description = header.slice(colonIdx+1).trim();
+    let descriptionHtml = "";
+    if (tokens && tokens[i - 1] && tokens[i - 1].html){
+      descriptionHtml = sliceHtmlAfterPrefix(tokens[i - 1].html, header.slice(0, colonIdx + 1));
+    }
 
     // Collect extra description lines up to the MP line
+    const htmlParts = descriptionHtml ? [descriptionHtml] : [];
     while (i < lines.length && lines[i] !== "" && !isSignedIntLine(lines[i])) {
       description += (description ? " " : "") + lines[i];
+      if (tokens && tokens[i] && tokens[i].html){
+        htmlParts.push(tokens[i].html);
+      }
       i++;
+    }
+    if (htmlParts.length){
+      descriptionHtml = htmlParts.join("<br>");
     }
 
     if (i >= lines.length || !isSignedIntLine(lines[i])) {
@@ -261,7 +353,13 @@ function parseRawBlock(text){
     }
     const en = parseInt(lines[i++], 10);
 
-    out.push({ name, description, mp_cost: mp, en_cost: en });
+    out.push({
+      name,
+      description,
+      description_html: descriptionHtml || textToHtml(description),
+      mp_cost: mp,
+      en_cost: en
+    });
 
     while (i < lines.length && lines[i] === "") i++;
   }
@@ -284,6 +382,7 @@ function parseTableFromHtml(rawHtml){
     const cells = Array.from(row.querySelectorAll("th,td"));
     if (cells.length < 3) return;
     const first = (cells[0].textContent || "").replace(/\s+/g, " ").trim();
+    const firstHtml = (cells[0].innerHTML || "").trim();
     const mpRaw = (cells[1].textContent || "").replace(/\s+/g, " ").trim();
     const enRaw = (cells[2].textContent || "").replace(/\s+/g, " ").trim();
     const isHeader = idx === 0 && /spell\s*effect/i.test(first);
@@ -292,12 +391,22 @@ function parseTableFromHtml(rawHtml){
     const colonIdx = first.indexOf(":");
     const name = colonIdx === -1 ? first : first.slice(0, colonIdx).trim();
     const description = colonIdx === -1 ? "" : first.slice(colonIdx + 1).trim();
+    let descriptionHtml = "";
+    if (colonIdx >= 0 && firstHtml){
+      descriptionHtml = sliceHtmlAfterPrefix(firstHtml, first.slice(0, colonIdx + 1));
+    }
     const mpMatch = mpRaw.match(/[+-]?\d+/);
     const enMatch = enRaw.match(/[+-]?\d+/);
     const mp = mpMatch ? parseInt(mpMatch[0], 10) : NaN;
     const en = enMatch ? parseInt(enMatch[0], 10) : NaN;
     if (Number.isNaN(mp) || Number.isNaN(en)) return;
-    out.push({ name, description, mp_cost: mp, en_cost: en });
+    out.push({
+      name,
+      description,
+      description_html: descriptionHtml || textToHtml(description),
+      mp_cost: mp,
+      en_cost: en
+    });
   });
   return out;
 }
@@ -328,6 +437,7 @@ function renderPreview(){
         PREVIEW[idx][key] = (!val || val === "+" || val === "-") ? 0 : parseInt(val, 10);
       } else {
         PREVIEW[idx][key] = val;
+        if (key === "description") PREVIEW[idx].description_html = textToHtml(val);
       }
     });
   });
@@ -361,7 +471,8 @@ $("#parse-btn").addEventListener("click", ()=>{
         .replace(/<br\s*\/?>/gi, "\n")
         .replace(/<[^>]+>/g, "")
         .replace(/\u00a0/g, " ");
-      PREVIEW = parseRawBlock(text);
+      const tokens = htmlToLineTokens(rawHtml);
+      PREVIEW = parseRawBlock(text, tokens);
     }
     $("#errors").textContent = "";
     renderPreview();
@@ -394,7 +505,7 @@ $("#confirm-btn").addEventListener("click", async ()=>{
     replace_duplicates: replaceDupes,
     effects: PREVIEW.map(e => ({
       name: e.name,
-      description: e.description || "",
+      description: e.description_html || e.description || "",
       mp_cost: Number(e.mp_cost),
       en_cost: Number(e.en_cost),
       tags: tags
