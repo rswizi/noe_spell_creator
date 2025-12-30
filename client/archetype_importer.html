@@ -69,6 +69,10 @@ Prerequisites:
 WIL must at least be equal to half your highest characteristic.
 ..."></div>
       </div>
+      <label class="row" style="gap:6px; margin-top:8px;">
+        <input type="checkbox" id="replace-dup">
+        <span class="muted">Replace duplicates (update existing archetype + abilities)</span>
+      </label>
       <div class="row" style="margin-top:10px;">
         <button class="btn" id="btn-parse">Parse Preview</button>
         <button class="btn" id="btn-import">Import</button>
@@ -100,6 +104,7 @@ async function api(path,opt={}){
 
 const loginChip = document.getElementById('login-chip');
 const abilityTagsEl = document.getElementById('ability-tags');
+const replaceDupEl = document.getElementById('replace-dup');
 const previewPanel = document.getElementById('preview-panel');
 const previewList = document.getElementById('preview-list');
 const statusLine = document.getElementById('status-line');
@@ -205,11 +210,16 @@ function normalizeCharKey(token){
 
 function parsePrereqRules(text){
   const out = {};
-  const clean = String(text||'').replace(/\s+/g,' ').trim();
-  if (!clean) return out;
+  const lines = String(text||'')
+    .split(/\r?\n/)
+    .map(l=> l.replace(/^\s*[-•]\s*/,'').trim())
+    .filter(Boolean);
+  if (!lines.length) return out;
   const highestRe = /([a-zA-Z,\s]+)\s+must be your highest characteristic/i;
-  const match = clean.match(highestRe);
-  if (match){
+  lines.forEach(line=>{
+    const clean = line.replace(/\s+/g,' ').trim();
+    const match = clean.match(highestRe);
+    if (!match) return;
     const raw = match[1] || '';
     const parts = raw.split(/or|,|\//i).map(s=>s.trim()).filter(Boolean);
     const keys = parts.map(normalizeCharKey).filter(Boolean);
@@ -218,7 +228,7 @@ function parsePrereqRules(text){
     }else if (keys.length > 1){
       out.char_order_any = [{ position: 1, keys }];
     }
-  }
+  });
   return out;
 }
 function normalizeActionLabel(label){
@@ -262,10 +272,25 @@ function stripCostMarkers(text){
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
-function parseAbility(rank, lines){
-  const filtered = lines.filter(l=> l != null);
+function stripCostMarkersHtml(html){
+  return String(html||'')
+    .replace(/\[?\s*Active\s+Cost\s*\([^)]+\)\s*\]?/gi, '')
+    .replace(/\[?\s*Cost\s*\([^)]+\)\s*\]?/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+function parseAbility(rank, lines, htmlLines){
+  const filtered = [];
+  const filteredHtml = [];
+  (lines || []).forEach((l, i)=>{
+    if (l == null) return;
+    filtered.push(l);
+    filteredHtml.push((htmlLines || [])[i] || '');
+  });
   if (!filtered.length) return null;
-  const first = filtered.find(l=> String(l).trim() !== '') || '';
+  let firstIdx = filtered.findIndex(l=> String(l).trim() !== '');
+  if (firstIdx < 0) return null;
+  const first = filtered[firstIdx];
   let namePart = String(first).trim();
   let descPart = '';
   const colonIdx = namePart.indexOf(':');
@@ -296,6 +321,19 @@ function parseAbility(rank, lines){
   const version = vMatch ? Math.max(1, parseInt(vMatch[1], 10)) : 1;
   const baseName = vMatch ? namePart.replace(vMatch[0], '').replace(/\s{2,}/g,' ').trim() : namePart;
 
+  let descHtml = '';
+  if (filteredHtml.length){
+    let htmlFirst = filteredHtml[firstIdx] || '';
+    if (colonIdx >= 0 && htmlFirst){
+      const prefix = String(first).slice(0, colonIdx + 1);
+      htmlFirst = sliceHtmlAfterPrefix(htmlFirst, prefix);
+    }
+    const htmlRest = filteredHtml.slice(firstIdx + 1);
+    const parts = [htmlFirst, ...htmlRest].filter(h=> h != null && String(h).trim() !== '');
+    descHtml = stripCostMarkersHtml(parts.join('<br>'));
+  }
+  if (!descHtml) descHtml = textToHtml(descPart.trim());
+
   return {
     rank,
     name: namePart.trim(),
@@ -304,7 +342,7 @@ function parseAbility(rank, lines){
     type,
     activation,
     description_text: descPart.trim(),
-    description_html: textToHtml(descPart.trim()),
+    description_html: descHtml,
     costs: costInfo.costs,
     costs_active: costInfo.costsActive
   };
@@ -314,6 +352,8 @@ function htmlToText(rawHtml){
   const text = String(rawHtml || '')
     .replace(/<\/p>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "\n")
     .replace(/<tr[^>]*>/gi, "\n")
     .replace(/<\/tr>/gi, "\n")
     .replace(/<[^>]+>/g, "")
@@ -333,40 +373,124 @@ function parseRankTables(rawHtml){
       if (cells.length < 2) return;
       const c0 = (cells[0].textContent || '').replace(/\s+/g, ' ').trim();
       const c1 = (cells[1].textContent || '').replace(/\s+/g, ' ').trim();
+      const c1Html = (cells[1].innerHTML || '').trim();
       if (idx === 0 && /rank/i.test(c0) && /reward/i.test(c1)) return;
       const rank = parseInt(c0, 10);
       if (!Number.isFinite(rank)) return;
       if (!c1) return;
-      items.push({ rank, text: c1 });
+      items.push({ rank, text: c1, html: c1Html });
     });
     if (items.length) parsed.push(items);
   });
   return parsed;
 }
 
+function htmlToLineTokens(rawHtml){
+  const doc = new DOMParser().parseFromString(rawHtml || '', 'text/html');
+  const out = [];
+  const pushLine = (html)=>{
+    const text = htmlToText(html).trim();
+    out.push({ text, html });
+  };
+  const walk = (node)=>{
+    if (node.nodeType === 3){
+      const txt = (node.textContent || '').trim();
+      if (txt) out.push({ text: txt, html: escapeHtml(txt) });
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'br'){ out.push({ text:'', html:'' }); return; }
+    if (tag === 'table'){ return; }
+    if (tag === 'ul' || tag === 'ol'){
+      node.querySelectorAll('li').forEach(li=> pushLine(li.innerHTML));
+      return;
+    }
+    if (['p','div','li','h1','h2','h3','h4','h5','h6'].includes(tag)){
+      pushLine(node.innerHTML);
+      return;
+    }
+    if (node.children && node.children.length){
+      Array.from(node.children).forEach(walk);
+    }else{
+      pushLine(node.innerHTML);
+    }
+  };
+  Array.from(doc.body.childNodes).forEach(walk);
+  return out;
+}
+
+function sliceHtmlAfterPrefix(html, prefixText){
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html || '';
+  let remaining = String(prefixText || '');
+  const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, null);
+  let node;
+  while ((node = walker.nextNode())){
+    if (!remaining) break;
+    const text = node.textContent || '';
+    if (remaining.length >= text.length){
+      remaining = remaining.slice(text.length);
+      node.textContent = '';
+    }else{
+      node.textContent = text.slice(remaining.length);
+      remaining = '';
+      break;
+    }
+  }
+  wrap.querySelectorAll('*').forEach(el=>{
+    if (el.textContent === '' && el.children.length === 0) el.remove();
+  });
+  return wrap.innerHTML.trim();
+}
+
+function splitHeaderPrereq(line){
+  const m = String(line||'').match(/^(.*?)(\bPrerequisites?\s*:)(.*)$/i);
+  if (!m) return null;
+  return {
+    name: (m[1] || '').trim(),
+    marker: (m[2] || 'Prerequisites:').trim(),
+    after: (m[3] || '').trim()
+  };
+}
+
 function parseArchetypes(rawHtml){
-  const lines = htmlToText(rawHtml).replace(/\r/g,'').split('\n');
+  const tokens = htmlToLineTokens(rawHtml);
   const tableSets = parseRankTables(rawHtml);
   const blocks = [];
   let current = null;
   const pushCurrent = ()=>{
     if (current) blocks.push(current);
   };
-  lines.forEach(line=>{
-    const trimmed = line.trim();
+  tokens.forEach(tok=>{
+    const trimmed = (tok.text || '').trim();
     const headerMatch = trimmed.match(/^\[[^\]]+\]\s*(.+)$/);
     if (headerMatch){
       pushCurrent();
       current = { header: trimmed, headerName: headerMatch[1].trim(), lines: [] };
       return;
     }
+    const split = splitHeaderPrereq(trimmed);
     if (!current){
       if (trimmed){
-        current = { header: trimmed, headerName: trimmed, lines: [] };
+        const name = split ? (split.name || trimmed) : trimmed;
+        current = { header: trimmed, headerName: name, lines: [] };
+        if (split){
+          current.lines.push({ text: split.marker, html: escapeHtml(split.marker) });
+          if (split.after) current.lines.push({ text: split.after, html: escapeHtml(split.after) });
+        }
       }
       return;
     }
-    current.lines.push(line);
+    if (split){
+      if (split.name){
+        current.headerName = current.headerName || split.name;
+      }
+      current.lines.push({ text: split.marker, html: escapeHtml(split.marker) });
+      if (split.after) current.lines.push({ text: split.after, html: escapeHtml(split.after) });
+      return;
+    }
+    current.lines.push({ text: tok.text || '', html: tok.html || '' });
   });
   pushCurrent();
 
@@ -374,39 +498,57 @@ function parseArchetypes(rawHtml){
   blocks.forEach(block=>{
     const name = stripStarsPrefix(block.headerName || block.header || '');
     const lines = block.lines || [];
-    const prereqIdx = lines.findIndex(l=>/^\s*Prerequisites\s*:/i.test(l));
-    const rankIdx = lines.findIndex(l=>/^\s*Rank\b/i.test(l));
+    const prereqIdx = lines.findIndex(l=>/^\s*Prerequisites?\s*:/i.test(l.text || ''));
+    const rankIdx = lines.findIndex(l=>/^\s*Rank\b/i.test(l.text || ''));
     let prereqText = '';
     let descLines = [];
     if (prereqIdx >= 0){
       const tail = lines.slice(prereqIdx + 1, rankIdx >= 0 ? rankIdx : lines.length);
-      const firstNonEmpty = tail.findIndex(l=> String(l||'').trim() !== '');
-      if (firstNonEmpty >= 0){
-        prereqText = String(tail[firstNonEmpty] || '').trim();
-        descLines = tail.slice(firstNonEmpty + 1);
-      }else{
-        descLines = [];
+      let splitIdx = -1;
+      for (let i = 0; i < tail.length; i++){
+        const raw = String(tail[i].text || '').trim();
+        if (!raw){
+          splitIdx = i;
+          break;
+        }
+        const isBullet = /^[-•]\s+/.test(raw);
+        const hasMust = /\bmust\b/i.test(raw);
+        if (!isBullet && !hasMust && i > 0){
+          splitIdx = i;
+          break;
+        }
       }
+      const prereqSlice = splitIdx >= 0 ? tail.slice(0, splitIdx) : tail.slice(0, tail.length);
+      const prereqLines = prereqSlice.map(l=> String(l.text || '').trim()).filter(Boolean);
+      prereqText = prereqLines.map(l=> l.replace(/^[-•]\s+/, '').trim()).join('\n').trim();
+      descLines = splitIdx >= 0 ? tail.slice(splitIdx + 1) : tail.slice(prereqSlice.length);
     }else{
       descLines = lines.slice(0, rankIdx >= 0 ? rankIdx : lines.length);
     }
-    const descText = descLines.join('\n').trim();
+    const descText = descLines.map(l=> l.text || '').join('\n').trim();
+    const descHtmlParts = descLines.map(l=> l.html || '').filter(h=> String(h).trim() !== '');
+    const descHtml = descHtmlParts.length ? descHtmlParts.join('<br>') : textToHtml(descText);
     const prereqRules = parsePrereqRules(prereqText);
 
     const rankLines = rankIdx >= 0 ? lines.slice(rankIdx + 1) : lines.slice();
     const abilities = [];
     let currentRank = null;
     let buffer = [];
+    let bufferHtml = [];
     const flush = ()=>{
       if (currentRank == null) return;
-      const ability = parseAbility(currentRank, buffer);
+      const ability = parseAbility(currentRank, buffer, bufferHtml);
       if (ability) abilities.push(ability);
       buffer = [];
+      bufferHtml = [];
     };
     rankLines.forEach(line=>{
-      const trimmed = String(line||'').trim();
+      const trimmed = String(line.text || '').trim();
       if (!trimmed) {
-        if (currentRank != null) buffer.push('');
+        if (currentRank != null){
+          buffer.push('');
+          bufferHtml.push('');
+        }
         return;
       }
       if (/^Rank\s*Reward/i.test(trimmed) || /^Rank\s*$/i.test(trimmed)) return;
@@ -416,18 +558,30 @@ function parseArchetypes(rawHtml){
         if (rk >= 1 && rk <= 12){
           flush();
           currentRank = rk;
-          if (m[2]) buffer.push(m[2].trim());
+          if (m[2]){
+            buffer.push(m[2].trim());
+            if (line.html){
+              const prefix = String(line.text || '').slice(0, Math.max(0, String(line.text || '').length - m[2].length));
+              const sliced = sliceHtmlAfterPrefix(line.html, prefix);
+              bufferHtml.push(sliced || escapeHtml(m[2].trim()));
+            }else{
+              bufferHtml.push(escapeHtml(m[2].trim()));
+            }
+          }
           return;
         }
       }
-      if (currentRank != null) buffer.push(trimmed);
+      if (currentRank != null){
+        buffer.push(trimmed);
+        bufferHtml.push(line.html || escapeHtml(trimmed));
+      }
     });
     flush();
 
     if (!abilities.length && tableSets.length){
       const tableItems = tableSets.shift();
       tableItems.forEach(entry=>{
-        const ab = parseAbility(entry.rank, entry.text.split(/\n/));
+        const ab = parseAbility(entry.rank, entry.text.split(/\n/), entry.html ? [entry.html] : []);
         if (ab) abilities.push(ab);
       });
     }
@@ -436,7 +590,7 @@ function parseArchetypes(rawHtml){
       name,
       prereq_text: prereqText,
       description_text: descText,
-      description_html: textToHtml(descText),
+      description_html: descHtml,
       prereq_rules: prereqRules,
       abilities
     });
@@ -496,7 +650,7 @@ function renderPreview(archetypes){
           <span class="pill">${ab.type}</span>
           ${ab.activation ? `<span class="pill">${escapeHtml(ab.activation)}</span>` : ''}
         </div>
-        <div class="muted">${escapeHtml(ab.description_text || '')}</div>
+        <div class="muted">${ab.description_html || escapeHtml(ab.description_text || '')}</div>
         ${cost ? `<div class="muted">Cost: ${escapeHtml(cost)}</div>` : ''}
       `;
       list.appendChild(row);
@@ -516,12 +670,37 @@ async function checkMe(){
   }
 }
 
-async function importArchetypes(archetypes, tags){
+async function findExistingAbilityByName(name, sourceRef, cache){
+  const key = `${String(name||'').toLowerCase()}||${String(sourceRef||'')}`;
+  if (cache && cache[key]) return cache[key];
+  const res = await api(`/abilities?name=${encodeURIComponent(name)}&source=Archetype`);
+  const list = res.abilities || [];
+  const found = list.find(a=>
+    String(a.name||'').toLowerCase() === String(name||'').toLowerCase()
+    && String(a.source_ref||'') === String(sourceRef||'')
+  ) || null;
+  if (cache) cache[key] = found;
+  return found;
+}
+
+async function loadArchetypeIndex(){
+  const res = await api('/archetypes');
+  const map = new Map();
+  (res.archetypes || []).forEach(a=>{
+    if (a?.name) map.set(String(a.name).toLowerCase(), a);
+  });
+  return map;
+}
+
+async function importArchetypes(archetypes, tags, replaceDup){
   if (ROLE !== 'moderator' && ROLE !== 'admin'){
     throw new Error('Only moderators/admins can import archetypes.');
   }
   const created = [];
+  const abilityCache = {};
+  const archetypeIndex = replaceDup ? await loadArchetypeIndex() : new Map();
   for (const arc of archetypes){
+    const existingArc = replaceDup ? archetypeIndex.get(String(arc.name||'').toLowerCase()) : null;
     statusLine.textContent = `Creating abilities for ${arc.name}...`;
     const baseMap = {};
     const abilities = arc.abilities.slice().sort((a,b)=> a.rank - b.rank);
@@ -555,21 +734,36 @@ async function importArchetypes(archetypes, tags){
           modifiers: []
         };
       }
-      const res = await api('/abilities', {
-        method:'POST',
-        headers:{ 'content-type':'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ability?.id){
-        throw new Error('Ability creation failed for ' + ab.name);
+      let abilityId = '';
+      if (replaceDup){
+        const existing = await findExistingAbilityByName(ab.name, arc.name, abilityCache);
+        if (existing?.id){
+          const upd = await api(`/abilities/${encodeURIComponent(existing.id)}`, {
+            method:'PUT',
+            headers:{ 'content-type':'application/json' },
+            body: JSON.stringify(payload)
+          });
+          abilityId = upd.ability?.id || existing.id;
+        }
       }
-      ab.created_id = res.ability.id;
+      if (!abilityId){
+        const res = await api('/abilities', {
+          method:'POST',
+          headers:{ 'content-type':'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ability?.id){
+          throw new Error('Ability creation failed for ' + ab.name);
+        }
+        abilityId = res.ability.id;
+      }
+      ab.created_id = abilityId;
       ab.original_rank = originalRank;
       ab.replaces_id = replacesId || '';
       baseMap[baseKey] = { last_id: ab.created_id, original_rank: originalRank };
     }
 
-    statusLine.textContent = `Creating archetype ${arc.name}...`;
+    statusLine.textContent = `${existingArc ? 'Updating' : 'Creating'} archetype ${arc.name}...`;
     const ranks = abilities.map(ab=>({
       rank: ab.rank,
       ability_id: ab.created_id,
@@ -577,19 +771,36 @@ async function importArchetypes(archetypes, tags){
       original_rank: ab.original_rank || ab.rank,
       replaces_id: ab.replaces_id || ''
     }));
-    const arcPayload = {
+    let arcPayload = {
       name: arc.name,
       prereq_text: arc.prereq_text || '',
       description_html: arc.description_html || '',
       prereq_rules: arc.prereq_rules || {},
       ranks
     };
-    const arcRes = await api('/archetypes', {
-      method:'POST',
-      headers:{ 'content-type':'application/json' },
-      body: JSON.stringify(arcPayload)
-    });
-    created.push({ name: arc.name, id: arcRes.archetype?.id });
+    let arcRes = null;
+    if (existingArc && replaceDup){
+      const full = await api(`/archetypes/${encodeURIComponent(existingArc.id)}`);
+      const prev = full.archetype || existingArc;
+      arcPayload = {
+        ...arcPayload,
+        hybrid: !!prev.hybrid,
+        sources: prev.sources || [],
+        prereq_rules: Object.keys(arc.prereq_rules || {}).length ? arc.prereq_rules : (prev.prereq_rules || {})
+      };
+      arcRes = await api(`/archetypes/${encodeURIComponent(existingArc.id)}`, {
+        method:'PUT',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify(arcPayload)
+      });
+    }else{
+      arcRes = await api('/archetypes', {
+        method:'POST',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify(arcPayload)
+      });
+    }
+    created.push({ name: arc.name, id: arcRes.archetype?.id || arcRes.archetype?.id });
   }
   return created;
 }
@@ -613,7 +824,7 @@ document.getElementById('btn-import').addEventListener('click', async ()=>{
       const input = prompt('Enter tags for imported abilities (comma-separated):', '') || '';
       tags = input.split(',').map(t=>t.trim()).filter(Boolean);
     }
-    const created = await importArchetypes(parsed, tags);
+    const created = await importArchetypes(parsed, tags, !!replaceDupEl?.checked);
     statusLine.textContent = `Imported ${created.length} archetype(s).`;
   }catch(e){
     statusLine.textContent = 'Import failed: ' + e.message;
