@@ -2610,7 +2610,7 @@ def _validate_archetype_doc(doc: dict, is_update=False):
     doc["description_html"] = (doc.get("description_html") or doc.get("description") or "").strip()
     rules = doc.get("prereq_rules") or {}
     # structured prereqs
-    allowed_keys = {"mag_highest","wis_half_mag","char_min","char_order"}
+    allowed_keys = {"mag_highest","wis_half_mag","char_min","char_order","char_order_any"}
     doc["prereq_rules"] = {k:v for k,v in rules.items() if k in allowed_keys}
     if "char_min" in doc["prereq_rules"]:
         cm = doc["prereq_rules"]["char_min"] or {}
@@ -2642,6 +2642,41 @@ def _validate_archetype_doc(doc: dict, is_update=False):
         if rules.get("mag_highest"):
             co.append({"key":"magic","position":1})
         doc["prereq_rules"]["char_order"] = co
+    # normalize "any of" highest/second/third
+    if "char_order_any" in doc["prereq_rules"]:
+        alias = {
+            "ref":"reflex","reflex":"reflex",
+            "dex":"dexterity","dexterity":"dexterity",
+            "bod":"body","body":"body",
+            "wis":"wisdom","wisdom":"wisdom",
+            "pre":"presence","presence":"presence",
+            "mag":"magic","magic":"magic",
+            "wil":"willpower","willpower":"willpower",
+            "tec":"tech","tech":"tech",
+        }
+        co = doc["prereq_rules"]["char_order_any"] or []
+        if not isinstance(co, list): co = []
+        cleaned = []
+        for entry in co:
+            if not isinstance(entry, dict): continue
+            try:
+                pos = int(entry.get("position") or 0)
+            except Exception:
+                continue
+            keys = entry.get("keys") or entry.get("key") or []
+            if isinstance(keys, str):
+                keys = [k.strip() for k in keys.split(",") if k.strip()]
+            if not isinstance(keys, list):
+                continue
+            clean_keys = []
+            for k in keys:
+                norm = alias.get(str(k).strip().lower(), "")
+                if norm:
+                    clean_keys.append(norm)
+            if not clean_keys or pos not in (1,2,3):
+                continue
+            cleaned.append({"position": pos, "keys": clean_keys})
+        doc["prereq_rules"]["char_order_any"] = cleaned
 
     ranks = doc.get("ranks") or []
     if not isinstance(ranks, list):
@@ -2751,6 +2786,32 @@ def _archetype_prereq_errors(archetype: dict, stats: dict) -> list[str]:
                 errors.append(f"{key.title()} must be in the top 2 (mod {my_val}, current rank {higher_count+1}).")
             if pos == 3 and higher_count > 2:
                 errors.append(f"{key.title()} must be in the top 3 (mod {my_val}, current rank {higher_count+1}).")
+    any_rules = rules.get("char_order_any") or []
+    if any_rules:
+        vals = [(k, mod_map[k]) for k in char_keys]
+        vals.sort(key=lambda kv: (-kv[1], kv[0]))
+        for r in any_rules:
+            pos = int(r.get("position") or 0)
+            keys = [str(k).strip() for k in (r.get("keys") or []) if str(k).strip()]
+            if pos not in (1,2,3) or not keys:
+                continue
+            ok = False
+            for key in keys:
+                if key not in mod_map:
+                    continue
+                my_val = mod_map[key]
+                higher_count = sum(1 for k,v in vals if v > my_val)
+                if pos == 1 and higher_count == 0:
+                    ok = True
+                if pos == 2 and higher_count <= 1:
+                    ok = True
+                if pos == 3 and higher_count <= 2:
+                    ok = True
+                if ok:
+                    break
+            if not ok:
+                label = " / ".join([k.title() for k in keys])
+                errors.append(f"{label} must be in the top {pos} (none match).")
     char_min = rules.get("char_min") or {}
     for k,v in char_min.items():
         try:
