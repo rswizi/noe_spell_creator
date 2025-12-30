@@ -26,6 +26,10 @@
         <label><input type="radio" name="skill" value="Accuracy"> Accuracy</label>
         <label><input type="radio" name="skill" value="Aura"> Aura</label>
       </div>
+      <div>
+        <label class="small muted">Tags (applied to all)</label><br/>
+        <input id="tags" placeholder="Comma-separated tags" />
+      </div>
     </div>
 
     <p class="muted">For each weapon, provide:
@@ -78,7 +82,7 @@ Enc.
         <thead>
           <tr>
             <th>Name</th><th>Skill</th><th>Damage</th><th>Range</th><th>Hands</th>
-            <th>Effects</th><th>Price</th><th>Enc.</th>
+            <th>Attributes</th><th>Price</th><th>Enc.</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -289,9 +293,11 @@ document.getElementById("reparse").addEventListener("click", ()=>document.getEle
 document.getElementById("save").addEventListener("click", async ()=>{
   if (!PREVIEW.length) return;
   try{
+    const tags = (document.getElementById("tags").value || "").split(",").map(s=>s.trim()).filter(Boolean);
     const items = PREVIEW.map(x=>({
       name:x.name, description:x.description, damage:x.damage, range:String(x.range),
       hands:Number(x.hands), effects:x.effects, price:Number(x.price), enc:Number(x.enc),
+      tags: tags,
       magazine_size: Number(x.magazine_size || 0)
     }));
     const res = await fetch(`/weapons/bulk_create`, {
