@@ -51,7 +51,7 @@
           <label for="upgrade" style="margin:0;">Upgrade?</label>
         </div>
         <div style="display:flex;align-items:flex-end;gap:8px;">
-          <input id="replace-duplicates" type="checkbox" />
+          <input id="replace-duplicates" type="checkbox" checked />
           <label for="replace-duplicates" style="margin:0;">Replace duplicates</label>
         </div>
         <div>
@@ -417,14 +417,16 @@ function renderPreview(){
   tbody.innerHTML = PREVIEW.map((e, idx) => `
     <tr>
       <td><input data-idx="${idx}" data-key="name" value="${(e.name || "").replace(/"/g,'&quot;')}" /></td>
-      <td><textarea data-idx="${idx}" data-key="description" rows="2">${e.description || ""}</textarea></td>
+      <td>
+        <div class="rich-area" contenteditable="true" data-idx="${idx}" data-key="description_html">${e.description_html || textToHtml(e.description || "")}</div>
+      </td>
       <td><input data-idx="${idx}" data-key="mp_cost" value="${e.mp_cost}" /></td>
       <td><input data-idx="${idx}" data-key="en_cost" value="${e.en_cost}" /></td>
     </tr>
   `).join("");
 
   // Wire edits back into PREVIEW; allow signed ints
-  tbody.querySelectorAll("input,textarea").forEach(el=>{
+  tbody.querySelectorAll("input,[contenteditable='true']").forEach(el=>{
     el.addEventListener("input", (ev)=>{
       const idx = parseInt(ev.target.dataset.idx,10);
       const key = ev.target.dataset.key;
@@ -435,9 +437,11 @@ function renderPreview(){
         ev.target.value = val;
         // Treat empty/sign-only as 0 for the model
         PREVIEW[idx][key] = (!val || val === "+" || val === "-") ? 0 : parseInt(val, 10);
+      } else if (key === "description_html") {
+        PREVIEW[idx].description_html = ev.target.innerHTML;
+        PREVIEW[idx].description = (ev.target.textContent || "").trim();
       } else {
         PREVIEW[idx][key] = val;
-        if (key === "description") PREVIEW[idx].description_html = textToHtml(val);
       }
     });
   });
@@ -520,7 +524,16 @@ $("#confirm-btn").addEventListener("click", async ()=>{
     });
     const data = await res.json();
     if (data.status === "success"){
-      alert(`Created ${data.created.length} effect(s) in ${data.school.name} [${data.school.id}].`);
+      const createdCount = (data.created || []).length;
+      const updatedCount = (data.updated || []).length;
+      let msg = "";
+      if (replaceDupes){
+        msg = `Updated ${updatedCount} effect(s) in ${data.school.name} [${data.school.id}].`;
+        if (createdCount) msg += ` Created ${createdCount} new effect(s).`;
+      }else{
+        msg = `Created ${createdCount} effect(s) in ${data.school.name} [${data.school.id}].`;
+      }
+      alert(msg);
       location.href = "home.html";
     }else{
       $("#errors").textContent = data.message || "Bulk create failed";
