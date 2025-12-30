@@ -3328,14 +3328,15 @@ function openInvItemModal(it){
           }catch(e){ alert(e.message); }
         });
         const choiceMods = upgradeChoiceMods(u, meta);
-        const edit = document.createElement("button");
-        edit.className = "btn small";
-        edit.textContent = "Configure";
-        edit.disabled = !choiceMods.length;
-        edit.title = choiceMods.length ? "Configure upgrade choices" : "No configurable choices";
-        edit.addEventListener("click", ()=> openUpgradeChoiceModal(it, u));
         btns.appendChild(rem);
-        btns.appendChild(edit);
+        if (choiceMods.length){
+          const edit = document.createElement("button");
+          edit.className = "btn small";
+          edit.textContent = "Configure";
+          edit.title = "Configure upgrade choices";
+          edit.addEventListener("click", ()=> openUpgradeChoiceModal(it, u));
+          btns.appendChild(edit);
+        }
         row.appendChild(btns);
         upList.appendChild(row);
       });
