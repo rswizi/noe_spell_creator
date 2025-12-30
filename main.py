@@ -2209,6 +2209,8 @@ def _tool_from_body(b: dict) -> dict:
     if method not in ("crafting","alchemy"): method = "crafting"
     desc = (b.get("description") or "").strip()
     consumable = bool(b.get("consumable"))
+    if method == "alchemy":
+        consumable = True
     tags = b.get("tags") or []
     if isinstance(tags, str):
         tags = [t.strip() for t in tags.split(",") if t.strip()]
@@ -2228,9 +2230,17 @@ def _tool_from_body(b: dict) -> dict:
     out.update(_derive_for(method, tier))
     return out
 
+def _ensure_alchemy_tools_consumable():
+    col = get_col("tools")
+    col.update_many(
+        {"method": "alchemy", "consumable": {"$ne": True}},
+        {"$set": {"consumable": True, "updated_at": _now_iso()}}
+    )
+
 @app.get("/tools")
 def list_tools(q: str | None = Query(None)):
     col = get_col("tools")
+    _ensure_alchemy_tools_consumable()
     filt = {}
     if q: filt["name_key"] = {"$regex": norm_key(q)}
     return {"status":"success","tools": list(col.find(filt, {"_id":0}))}
@@ -2442,6 +2452,7 @@ def _weapon_from_body(b: dict) -> dict:
     hands = int(b.get("hands") or 1)
     price = int(b.get("price") or 0)
     enc   = float(b.get("enc") or 0)
+    magazine_size = int(b.get("magazine_size") or b.get("magazine") or 0)
     fx    = _as_list(b.get("effects"))
     tags = b.get("tags") or []
     if isinstance(tags, str):
@@ -2461,6 +2472,7 @@ def _weapon_from_body(b: dict) -> dict:
         "effects": fx,
         "price": price,                 # base price (quality applied client-side when needed)
         "enc": enc,
+        "magazine_size": magazine_size,
         "is_animarma": bool(b.get("is_animarma") or False),
         "nature": (b.get("nature") or "").strip(),  # optional, can be edited later
         "modifiers": _modifiers_from_body(b),
@@ -2544,6 +2556,7 @@ def bulk_create_weapons(request: Request, payload: dict = Body(...)):
     require_auth(request, roles=["moderator","admin"])
     skill = (payload.get("skill") or "Technicity").strip().title()
     items = payload.get("items") or []
+    replace_dup = bool(payload.get("replace_duplicates") or payload.get("replace_dup") or False)
     if not isinstance(items, list) or not items:
         raise HTTPException(status_code=400, detail="items must be a non-empty list")
 
@@ -2553,17 +2566,28 @@ def bulk_create_weapons(request: Request, payload: dict = Body(...)):
 
     for b in items:
         base = _weapon_from_body({**b, "skill": skill, "is_animarma": False})
-        if col.find_one({"name_key": base["name_key"]}):
-            skipped.append(base["name"]); continue
-
-        base["id"] = next_id_str("weapons", padding=4)
-        base["created_at"] = now
-        col.insert_one(dict(base))
-        created.append({k:v for k,v in base.items() if k!="_id"})
+        existing = col.find_one({"name_key": base["name_key"]})
+        if existing:
+            if not replace_dup:
+                skipped.append(base["name"]); continue
+            col.update_one({"_id": existing["_id"]}, {"$set": {**base, "updated_at": now}})
+            base["id"] = existing.get("id")
+            created.append({k:v for k,v in base.items() if k!="_id"})
+        else:
+            base["id"] = next_id_str("weapons", padding=4)
+            base["created_at"] = now
+            col.insert_one(dict(base))
+            created.append({k:v for k,v in base.items() if k!="_id"})
 
         # auto-create animarma twin
         anim = _make_animarma(base)
-        if not col.find_one({"name_key": anim["name_key"]}):
+        existing_anim = col.find_one({"name_key": anim["name_key"]})
+        if existing_anim:
+            if replace_dup:
+                col.update_one({"_id": existing_anim["_id"]}, {"$set": {**anim, "updated_at": now}})
+                anim["id"] = existing_anim.get("id")
+                created.append({k:v for k,v in anim.items() if k!="_id"})
+        else:
             anim["id"] = next_id_str("weapons", padding=4)
             anim["created_at"] = now
             col.insert_one(dict(anim))
@@ -4244,6 +4268,7 @@ def catalog_equipment(request: Request, q: str = "", tags: str = "", limit: int 
 def catalog_tools(request: Request, q: str = "", tags: str = "", limit: int = 50):
     require_auth(request)
     col = get_col("tools")
+    _ensure_alchemy_tools_consumable()
     filt = {"name": {"$regex": re.escape(q.strip()), "$options": "i"}} if q.strip() else {}
     if tags.strip():
         filt.update(_tags_filter(tags))

@@ -30,7 +30,7 @@
 
     <p class="muted">For each weapon, provide:
       <em>Name</em>, a paragraph of <em>Description</em>, then the headings and values exactly in this order:
-      Damage / Range / Hands / Effects / Price (Jelly) / Enc.</p>
+      Damage / Range / Hands / Attributes / Price (Jelly) / Enc.</p>
 
 <textarea id="raw" rows="16" placeholder="Chokuto
 An ancient sword from the East, with a straight blade sharpened on one side. Simple but effective, it is the legacy of ancient martial traditions.
@@ -40,7 +40,7 @@ Range
 1
 Hands
 1
-Effects
+Attributes
 Destruction, Speed
 Price (Jelly)
 1530
@@ -55,7 +55,7 @@ Range
 1
 Hands
 1
-Effects
+Attributes
 Armor Piercing, Speed
 Price (Jelly)
 1530
@@ -63,6 +63,7 @@ Enc.
 5"></textarea>
 
     <div class="row" style="margin-top:8px">
+      <label class="muted"><input type="checkbox" id="replace-dup"> Replace duplicates</label>
       <button id="parse" class="btn">Parse</button>
       <button id="clear" class="btn btn-secondary">Clear</button>
       <span id="msg" class="muted"></span>
@@ -98,7 +99,7 @@ const token = localStorage.getItem("auth_token") || "";
 const authHeaders = () => token ? { "Authorization":"Bearer "+token } : {};
 let PREVIEW = [];
 
-const H = ["damage","range","hands","effects","price (jelly)","enc."];
+const H = ["damage","range","hands","attributes","price (jelly)","enc."];
 
 function skill(){ return (document.querySelector('input[name="skill"]:checked')||{}).value || "Technicity"; }
 const norm = s => (s||"").trim();
@@ -107,7 +108,8 @@ const isHead = s => H.includes(norm(s).toLowerCase());
 function parseBlocks(txt){
   const lines = txt.split(/\r?\n/);
   let i = 0, out = [];
-  const LABELS = ["damage","range","hands","effects","price (jelly)","enc."];
+  const LABELS = ["damage","range","hands","attributes","price (jelly)","enc."];
+  const LABEL_ALIASES = { "effects": "attributes" };
 
   const norm = s => (s||"").trim();
   const skipBlanks = () => { while (i < lines.length && !norm(lines[i])) i++; };
@@ -115,14 +117,18 @@ function parseBlocks(txt){
   const nextIsHeadingsBlock = () => {
     if (i + LABELS.length > lines.length) return false;
     for (let k = 0; k < LABELS.length; k++){
-      if (norm(lines[i + k]).toLowerCase() !== LABELS[k]) return false;
+      const raw = norm(lines[i + k]).toLowerCase();
+      const key = LABEL_ALIASES[raw] || raw;
+      if (key !== LABELS[k]) return false;
     }
     return true;
   };
 
   const needPair = (label) => {
     skipBlanks();
-    if (i >= lines.length || norm(lines[i]).toLowerCase() !== label) {
+    const raw = norm(lines[i]).toLowerCase();
+    const key = LABEL_ALIASES[raw] || raw;
+    if (i >= lines.length || key !== label) {
       throw new Error(`Expected heading "${label}" near line ${i+1}, found "${norm(lines[i]||"")}"`);
     }
     i++; skipBlanks();
@@ -139,6 +145,36 @@ function parseBlocks(txt){
       if (i >= lines.length) throw new Error(`Missing value for "${label}"`);
       vals[label] = norm(lines[i++]);
     }
+    return vals;
+  };
+
+  const splitRow = (line) => {
+    if (!line) return [];
+    if (line.includes('\t')) return line.split('\t').map(s=>s.trim()).filter(Boolean);
+    return line.split(/\s{2,}/).map(s=>s.trim()).filter(Boolean);
+  };
+
+  const rowHasAllLabels = (line) => {
+    const low = norm(line).toLowerCase();
+    return LABELS.every(l=> low.includes(l.replace(/\s+/g,' ')));
+  };
+
+  const readRowLayout = () => {
+    const headLine = norm(lines[i] || '');
+    if (!rowHasAllLabels(headLine)) return null;
+    const heads = splitRow(headLine).map(h=> (LABEL_ALIASES[h.toLowerCase()] || h.toLowerCase()));
+    const normHeads = heads.map(h=> h.replace(/\s+/g,' '));
+    const expect = LABELS.map(h=> h.replace(/\s+/g,' '));
+    if (!expect.every(h=> normHeads.includes(h))) return null;
+    i++;
+    skipBlanks();
+    if (i >= lines.length) throw new Error('Missing values row after headings');
+    const valsRow = splitRow(norm(lines[i++]));
+    if (valsRow.length < LABELS.length) throw new Error('Not enough values in row layout');
+    const vals = {};
+    LABELS.forEach((label, idx)=>{
+      vals[label] = valsRow[idx] ?? '';
+    });
     return vals;
   };
 
@@ -166,9 +202,14 @@ function parseBlocks(txt){
     if (nextIsHeadingsBlock()){
       vals = readValuesBlock();
     } else {
-      vals = {};
-      for (const label of LABELS){
-        vals[label] = needPair(label);
+      const rowVals = readRowLayout();
+      if (rowVals){
+        vals = rowVals;
+      } else {
+        vals = {};
+        for (const label of LABELS){
+          vals[label] = needPair(label);
+        }
       }
     }
 
@@ -179,7 +220,17 @@ function parseBlocks(txt){
     if (!Number.isFinite(enc)) throw new Error(`Invalid enc. for "${name}"`);
     if (!Number.isFinite(hands)) throw new Error(`Invalid hands for "${name}"`);
 
-    const fx = String(vals["effects"]||"").split(",").map(s=>s.trim()).filter(Boolean);
+    const fxRaw = String(vals["attributes"]||"");
+    let magazineSize = 0;
+    let fx = fxRaw.split(",").map(s=>s.trim()).filter(Boolean);
+    fx = fx.filter(f=>{
+      const m = f.match(/^magazine\s*\((\d+)\)/i) || f.match(/^magazine\s+(\d+)/i);
+      if (m){
+        magazineSize = Number(m[1] || 0) || magazineSize;
+        return false;
+      }
+      return !/^magazine$/i.test(f);
+    });
 
     out.push({
       name,
@@ -188,6 +239,7 @@ function parseBlocks(txt){
       range: String(vals["range"]||""),
       hands,
       effects: fx,
+      magazine_size: magazineSize,
       price: Math.trunc(pr),
       enc
     });
@@ -239,12 +291,13 @@ document.getElementById("save").addEventListener("click", async ()=>{
   try{
     const items = PREVIEW.map(x=>({
       name:x.name, description:x.description, damage:x.damage, range:String(x.range),
-      hands:Number(x.hands), effects:x.effects, price:Number(x.price), enc:Number(x.enc)
+      hands:Number(x.hands), effects:x.effects, price:Number(x.price), enc:Number(x.enc),
+      magazine_size: Number(x.magazine_size || 0)
     }));
     const res = await fetch(`/weapons/bulk_create`, {
       method:"POST",
       headers:{ "Content-Type":"application/json", ...authHeaders() },
-      body: JSON.stringify({ skill: skill(), items })
+      body: JSON.stringify({ skill: skill(), items, replace_duplicates: document.getElementById("replace-dup")?.checked })
     });
     const j = await res.json().catch(()=>({}));
     if (j.status!=="success") throw new Error(j.message||"Save failed.");
