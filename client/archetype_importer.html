@@ -389,8 +389,14 @@ function htmlToLineTokens(rawHtml){
   const doc = new DOMParser().parseFromString(rawHtml || '', 'text/html');
   const out = [];
   const pushLine = (html)=>{
-    const text = htmlToText(html).trim();
-    out.push({ text, html });
+    const parts = String(html || '').split(/<br\s*\/?>/i);
+    parts.forEach((part, idx)=>{
+      if (idx > 0) out.push({ text:'', html:'' });
+      const text = htmlToText(part).trim();
+      if (text || part.trim()){
+        out.push({ text, html: part.trim() });
+      }
+    });
   };
   const walk = (node)=>{
     if (node.nodeType === 3){
@@ -402,6 +408,10 @@ function htmlToLineTokens(rawHtml){
     const tag = node.tagName.toLowerCase();
     if (tag === 'br'){ out.push({ text:'', html:'' }); return; }
     if (tag === 'table'){ return; }
+    if (tag === 'div' && node.children && node.children.length){
+      Array.from(node.children).forEach(walk);
+      return;
+    }
     if (tag === 'ul' || tag === 'ol'){
       node.querySelectorAll('li').forEach(li=> pushLine(li.innerHTML));
       return;
