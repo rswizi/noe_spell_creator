@@ -1104,9 +1104,9 @@ function fillFromPayload(item){
     document.querySelector("#fld-animarma").checked = !!item.is_animarma;
     document.querySelector("#fld-magazine").value = item.magazine_size ?? item.magazine ?? 0;
     const dmg = item.damage || "2d6+2+M(REF)";
-    const diceMatch = dmg.match(/^(\\d+)/); document.querySelector("#fld-dice").value = diceMatch ? diceMatch[1] : 2;
-    const flatMatch = dmg.match(/\\+(\\d+)/); document.querySelector("#fld-flat").value = flatMatch ? flatMatch[1] : 2;
-    const msMatch = dmg.match(/M\\(([^)]+)\\)/i); document.querySelector("#fld-ms").value = (msMatch?.[1] || "REF").toUpperCase();
+    const diceMatch = dmg.match(/^(\d+)/); document.querySelector("#fld-dice").value = diceMatch ? diceMatch[1] : 2;
+    const flatMatch = dmg.match(/\+(\d+)/); document.querySelector("#fld-flat").value = flatMatch ? flatMatch[1] : 2;
+    const msMatch = dmg.match(/M\(([^)]+)\)/i); document.querySelector("#fld-ms").value = (msMatch?.[1] || "REF").toUpperCase();
   } else if (type === "equipment"){
     document.querySelector("#fld-location").value = item.slot || "special";
     document.querySelector("#fld-eq-hands").value = item.hands ?? 1;
