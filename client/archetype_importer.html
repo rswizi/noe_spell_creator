@@ -70,7 +70,7 @@ WIL must at least be equal to half your highest characteristic.
 ..."></div>
       </div>
       <label class="row" style="gap:6px; margin-top:8px;">
-        <input type="checkbox" id="replace-dup">
+        <input type="checkbox" id="replace-dup" checked>
         <span class="muted">Replace duplicates (update existing archetype + abilities)</span>
       </label>
       <div class="row" style="margin-top:10px;">
@@ -609,6 +609,17 @@ function parseArchetypes(rawHtml){
       abilities
     });
   });
+  const dupMap = new Map();
+  const dups = new Set();
+  parsed.forEach(a=>{
+    const key = String(a.name || '').trim().toLowerCase();
+    if (!key) return;
+    if (dupMap.has(key)) dups.add(a.name || key);
+    else dupMap.set(key, true);
+  });
+  if (dups.size){
+    throw new Error('Duplicate archetype names detected: ' + Array.from(dups).join(', '));
+  }
   return parsed;
 }
 

@@ -71,6 +71,23 @@
     .rich-area:empty:before { content: attr(data-placeholder); color:#777; }
     .rich-area table { width:100%; border-collapse:collapse; margin-top:6px; }
     .rich-area th, .rich-area td { border:1px solid #333; padding:6px; }
+    .modal-backdrop {
+      position:fixed; inset:0; background:rgba(0,0,0,0.7); display:none; align-items:center; justify-content:center; z-index:50;
+    }
+    .modal-card {
+      width:min(720px, 92vw); max-height:86vh; overflow:auto;
+      border:1px solid #2b2b2b; border-radius:14px; background:#121212; padding:16px;
+      box-shadow:0 18px 40px rgba(0,0,0,0.6);
+    }
+    .dup-list { display:grid; gap:8px; margin-top:10px; }
+    .dup-item {
+      display:flex; gap:10px; align-items:flex-start; border:1px solid #2a2a2a; border-radius:10px; padding:8px;
+      background:#141414;
+    }
+    .dup-item input { margin-top:3px; }
+    .dup-name { font-weight:600; }
+    .dup-meta { font-size:.85rem; opacity:.8; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
   </style>
 </head>
 <body>
@@ -142,7 +159,10 @@
             <div class="section-title">Existing archetypes</div>
             <div class="muted" style="margin-top:2px;">Select to edit or delete.</div>
           </div>
-          <button class="subtle" id="arc-refresh">Refresh</button>
+          <div class="row">
+            <button class="subtle" id="arc-refresh">Refresh</button>
+            <button class="subtle" id="arc-clear-dup">Clear Duplicates</button>
+          </div>
         </div>
         <div id="arc-list" style="margin-top:10px;"></div>
       </div>
@@ -157,17 +177,40 @@
     </div>
   </div>
 
+  <div id="dup-modal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card">
+      <h2 style="margin:0 0 4px;">Clear Archetype Duplicates</h2>
+      <div class="muted" id="dup-subtitle">Review duplicates and choose which to keep.</div>
+      <div id="dup-list" class="dup-list"></div>
+      <div class="modal-actions">
+        <button class="subtle" id="dup-skip" type="button">Skip</button>
+        <button id="dup-next" type="button">Next</button>
+        <button class="subtle" id="dup-cancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 const token = localStorage.getItem('auth_token') || "";
 const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
 const $ = s=>document.querySelector(s);
 let ABILITIES = [];
 let ARCHETYPES = [];
+let DUP_GROUPS = [];
+let DUP_INDEX = 0;
 const abilityTagFilterEl = document.getElementById('arc-ability-tag-filter');
 const abilitySourceFilterEl = document.getElementById('arc-ability-source-filter');
 const pendingPanel = document.getElementById('pending-panel');
 const pendingListEl = document.getElementById('pending-list');
 const pendingRefreshBtn = document.getElementById('pending-refresh');
+const clearDupBtn = document.getElementById('arc-clear-dup');
+const statusEl = document.getElementById('arc-status');
+const dupModal = document.getElementById('dup-modal');
+const dupSubtitle = document.getElementById('dup-subtitle');
+const dupListEl = document.getElementById('dup-list');
+const dupNextBtn = document.getElementById('dup-next');
+const dupSkipBtn = document.getElementById('dup-skip');
+const dupCancelBtn = document.getElementById('dup-cancel');
 let ROLE = '';
 
 function setupRichTextEditor(containerId, placeholder=''){
@@ -297,6 +340,120 @@ function getSelectedSources(){
   const out = [];
   document.querySelectorAll('#arc-sources input[type="checkbox"]:checked').forEach(cb=> out.push(cb.value));
   return out;
+}
+
+function setDupModalOpen(open){
+  if (!dupModal) return;
+  dupModal.style.display = open ? 'flex' : 'none';
+  dupModal.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+
+function normName(name){
+  return String(name || '').trim().toLowerCase();
+}
+
+function idNum(id){
+  const n = parseInt(String(id || '').replace(/\D/g, ''), 10);
+  return Number.isFinite(n) ? n : -1;
+}
+
+function buildDuplicateGroups(list){
+  const byName = new Map();
+  (list || []).forEach(a=>{
+    const key = normName(a.name);
+    if (!key) return;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(a);
+  });
+  const groups = Array.from(byName.values()).filter(g=>g.length > 1);
+  groups.sort((a,b)=> (a[0]?.name || '').localeCompare(b[0]?.name || ''));
+  return groups;
+}
+
+function getDefaultKeepId(group){
+  if (!group || !group.length) return '';
+  let best = group[0];
+  group.forEach(a=>{
+    if (idNum(a.id) > idNum(best.id)) best = a;
+  });
+  return best.id || '';
+}
+
+function renderDuplicateGroup(){
+  if (!DUP_GROUPS.length || DUP_INDEX >= DUP_GROUPS.length){
+    setDupModalOpen(false);
+    if (statusEl) statusEl.textContent = 'Duplicate cleanup complete.';
+    loadList();
+    return;
+  }
+  const group = DUP_GROUPS[DUP_INDEX];
+  const total = DUP_GROUPS.length;
+  const title = group[0]?.name || 'Duplicate';
+  if (dupSubtitle) dupSubtitle.textContent = `Set ${DUP_INDEX + 1} of ${total} • ${title}`;
+  if (dupListEl) dupListEl.innerHTML = '';
+  const defaultKeep = getDefaultKeepId(group);
+  group.forEach(a=>{
+    const row = document.createElement('label');
+    row.className = 'dup-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = a.id || '';
+    cb.checked = (a.id === defaultKeep);
+    const info = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'dup-name';
+    name.textContent = a.name || '(unnamed)';
+    const meta = document.createElement('div');
+    meta.className = 'dup-meta';
+    meta.textContent = [a.id, a.hybrid ? 'Hybrid' : 'Standard'].filter(Boolean).join(' • ');
+    info.appendChild(name);
+    info.appendChild(meta);
+    row.appendChild(cb);
+    row.appendChild(info);
+    dupListEl.appendChild(row);
+  });
+}
+
+async function deleteArchetypeById(id){
+  const target = String(id || '').trim();
+  if (!target) throw new Error('Missing archetype id');
+  const r = await fetch(`/archetypes/${encodeURIComponent(target)}`, { method:"DELETE", headers: authHeaders() });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success") throw new Error(j.message || "Delete failed");
+}
+
+async function applyDuplicateSelection(){
+  const group = DUP_GROUPS[DUP_INDEX] || [];
+  const keepIds = Array.from(dupListEl.querySelectorAll('input[type="checkbox"]:checked')).map(cb=>cb.value);
+  if (!keepIds.length){
+    alert('Select at least one archetype to keep.');
+    return;
+  }
+  const toDelete = group.filter(a=>!keepIds.includes(a.id));
+  if (!toDelete.length){
+    DUP_INDEX++;
+    renderDuplicateGroup();
+    return;
+  }
+  dupNextBtn.disabled = true;
+  dupSkipBtn.disabled = true;
+  try{
+    for (const a of toDelete){
+      await deleteArchetypeById(a.id);
+    }
+    DUP_INDEX++;
+    renderDuplicateGroup();
+  }catch(err){
+    if (statusEl) statusEl.textContent = 'Duplicate delete failed: ' + (err.message || err);
+  }finally{
+    dupNextBtn.disabled = false;
+    dupSkipBtn.disabled = false;
+  }
+}
+
+function skipDuplicateGroup(){
+  DUP_INDEX++;
+  renderDuplicateGroup();
 }
 
 async function checkMe(){
@@ -563,6 +720,28 @@ abilitySourceFilterEl?.addEventListener('input', ()=>{
 
 document.getElementById("arc-save").addEventListener("click", saveArchetype);
 document.getElementById("arc-refresh").addEventListener("click", loadList);
+clearDupBtn?.addEventListener("click", async ()=>{
+  if (statusEl) statusEl.textContent = "Scanning for duplicates...";
+  try{
+    const r = await fetch("/archetypes", { headers: authHeaders() });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success") throw new Error(j.message || "Load failed");
+    ARCHETYPES = j.archetypes || [];
+    DUP_GROUPS = buildDuplicateGroups(ARCHETYPES);
+    DUP_INDEX = 0;
+    if (!DUP_GROUPS.length){
+      if (statusEl) statusEl.textContent = "No duplicate archetypes found.";
+      return;
+    }
+    setDupModalOpen(true);
+    renderDuplicateGroup();
+  }catch(err){
+    if (statusEl) statusEl.textContent = "Duplicate scan failed: " + (err.message || err);
+  }
+});
+dupNextBtn?.addEventListener("click", applyDuplicateSelection);
+dupSkipBtn?.addEventListener("click", skipDuplicateGroup);
+dupCancelBtn?.addEventListener("click", ()=> setDupModalOpen(false));
 document.getElementById("pr-add").addEventListener("click", ()=> document.getElementById("pr-list").appendChild(ruleRow({})));
 pendingRefreshBtn?.addEventListener("click", loadPendingSubmissions);
 (()=>{
