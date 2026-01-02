@@ -69,6 +69,7 @@ Enc.
     <div class="row" style="margin-top:8px">
       <label class="muted"><input type="checkbox" id="replace-dup"> Replace duplicates</label>
       <button id="parse" class="btn">Parse</button>
+      <button id="clear-db" class="btn btn-secondary">Clear weapon DB</button>
       <button id="clear" class="btn btn-secondary">Clear</button>
       <span id="msg" class="muted"></span>
     </div>
@@ -289,6 +290,22 @@ document.getElementById("parse").addEventListener("click", ()=>{
 });
 document.getElementById("clear").addEventListener("click", ()=>{ document.getElementById("raw").value=""; document.getElementById("preview-card").style.display="none"; PREVIEW=[]; });
 document.getElementById("reparse").addEventListener("click", ()=>document.getElementById("parse").click());
+document.getElementById("clear-db").addEventListener("click", async ()=>{
+  const typed = prompt('Type DELETE_ALL_WEAPONS to clear the weapon database.');
+  if ((typed || "").trim() !== "DELETE_ALL_WEAPONS") return;
+  try{
+    const res = await fetch("/admin/weapons/clear", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", ...authHeaders() },
+      body: JSON.stringify({ confirm:"DELETE_ALL_WEAPONS" })
+    });
+    const j = await res.json().catch(()=>({}));
+    if (j.status !== "success") throw new Error(j.detail || j.message || "Clear failed.");
+    alert(`Cleared weapons: ${j.deleted}`);
+  }catch(err){
+    document.getElementById("errors").textContent = err.message || String(err);
+  }
+});
 
 document.getElementById("save").addEventListener("click", async ()=>{
   if (!PREVIEW.length) return;
