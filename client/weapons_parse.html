@@ -306,7 +306,7 @@ document.getElementById("save").addEventListener("click", async ()=>{
       body: JSON.stringify({ skill: skill(), items, replace_duplicates: document.getElementById("replace-dup")?.checked })
     });
     const j = await res.json().catch(()=>({}));
-    if (j.status!=="success") throw new Error(j.message||"Save failed.");
+    if (j.status!=="success") throw new Error(j.message || j.detail || "Save failed.");
     alert(`Created ${j.created.length} weapon(s) (+ Animarma). Skipped ${j.skipped.length} duplicate(s).`);
     PREVIEW=[]; document.getElementById("preview-card").style.display="none"; document.getElementById("raw").value="";
   }catch(err){ document.getElementById("errors").textContent = err.message||String(err); }

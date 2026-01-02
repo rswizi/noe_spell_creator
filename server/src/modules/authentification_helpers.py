@@ -1,7 +1,7 @@
 import hashlib
 import secrets
 from typing import Dict, Optional, Tuple
-from fastapi import Request
+from fastapi import Request, HTTPException
 
 from db_mongo import get_col
 
@@ -39,8 +39,8 @@ def require_auth(request: Request, roles: Optional[list[str]] = None) -> Tuple[s
     """Return (username, role) or raise Exception."""
     token = get_auth_token(request)
     if not token or token not in SESSIONS:
-        raise Exception("Not authenticated")
+        raise HTTPException(status_code=401, detail="Not authenticated")
     username, role = SESSIONS[token]
     if roles and role not in roles:
-        raise Exception("Forbidden")
+        raise HTTPException(status_code=403, detail="Forbidden")
     return username, role

@@ -1631,10 +1631,10 @@ function renderSublimations(){
 }
 
 function onSublimationChanged(){
-  renderSublimations();
   recomputePassiveAgg();
   renderStatistics();
   updateDerived();
+  renderSublimations();
   queueSave();
 }
 
@@ -4074,9 +4074,8 @@ function addXp(amount){
   CHAR.stats.level = CHAR.level;
   levelEl.value = lvl;
   renderXpProgress();
-  renderSublimations();
-  updatePointCounters();
   updateDerived();
+  renderSublimations();
   refreshArchetypeAbilities();
   logXpChange('Add XP', XP - prevXp, `Added ${inc} XP`);
   queueSave();
@@ -4091,9 +4090,8 @@ function setLevelManual(lvl){
   if (XP < xpForLevel(val)) XP = xpForLevel(val);
   CHAR.xp = XP;
   renderXpProgress();
-  renderSublimations();
-  updatePointCounters();
   updateDerived();
+  renderSublimations();
   refreshArchetypeAbilities();
   logXpChange('Set level', XP - prevXp, `Set level to ${val}`);
   queueSave();
@@ -4969,11 +4967,12 @@ function updateDerived(){
     return `${etVal} (TEC ${etTech})`;
   })();
   etEl.textContent = etDisplay;
-  txEl.textContent = maxVals.tx ?? final.tx;
-  updatePointCounters();
-  renderAddedSchools();
-  updateTalentCounter();
-}
+    txEl.textContent = maxVals.tx ?? final.tx;
+    updatePointCounters();
+    renderAddedSchools();
+    updateTalentCounter();
+    if (subSlotPill) renderSublimations();
+  }
 
 /* LOAD & SAVE */
 async function loadCharacter(){
@@ -5027,19 +5026,15 @@ async function loadCharacter(){
     CHAR.xp = XP;
     CHAR.stats.level = CHAR.level;
   renderXpProgress();
-  renderSublimations();
-  updatePointCounters();
   updateDerived();
+  renderSublimations();
   refreshArchetypeAbilities();
   queueSave();
 });
   renderXpProgress();
 
-  renderSublimations();
-
   // Render stats/skills
   renderStatistics();
-  updatePointCounters();
 
   // Resolve abilities â†’ recalc passive agg â†’ render abilities â†’ derived
   await resolveAssignedAbilities();
@@ -5048,6 +5043,7 @@ async function loadCharacter(){
   // refresh visuals that depend on passive agg
   renderStatistics();
   updateDerived();
+  renderSublimations();
   await loadArchetypesList();
   renderArchetypePanel();
   await loadSpellListsList();
