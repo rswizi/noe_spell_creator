@@ -2374,6 +2374,36 @@ def _as_list(x):
     if isinstance(x, str):  return [s for s in (v.strip() for v in x.split(",")) if s]
     return []
 
+def _safe_int(val, default: int = 0) -> int:
+    try:
+        if val is None:
+            return default
+        if isinstance(val, bool):
+            return int(val)
+        if isinstance(val, (int, float)):
+            return int(val)
+        txt = str(val).strip()
+        if not txt:
+            return default
+        return int(float(txt))
+    except Exception:
+        return default
+
+def _safe_float(val, default: float = 0.0) -> float:
+    try:
+        if val is None:
+            return default
+        if isinstance(val, bool):
+            return float(val)
+        if isinstance(val, (int, float)):
+            return float(val)
+        txt = str(val).strip()
+        if not txt:
+            return default
+        return float(txt)
+    except Exception:
+        return default
+
 def _normalize_choice(choice: dict | None) -> dict | None:
     """Ensure choice metadata keeps restrict fields populated regardless of client shape."""
     if not isinstance(choice, dict):
@@ -2449,10 +2479,10 @@ def _weapon_from_body(b: dict) -> dict:
     desc  = (b.get("description") or "").strip()
     dmg   = (b.get("damage") or "").strip()
     rng   = str(b.get("range") or "").strip()
-    hands = int(b.get("hands") or 1)
-    price = int(b.get("price") or 0)
-    enc   = float(b.get("enc") or 0)
-    magazine_size = int(b.get("magazine_size") or b.get("magazine") or 0)
+    hands = _safe_int(b.get("hands"), 1)
+    price = _safe_int(b.get("price"), 0)
+    enc   = _safe_float(b.get("enc"), 0.0)
+    magazine_size = _safe_int(b.get("magazine_size") or b.get("magazine"), 0)
     fx    = _as_list(b.get("effects"))
     tags = b.get("tags") or []
     if isinstance(tags, str):
@@ -2564,7 +2594,9 @@ def bulk_create_weapons(request: Request, payload: dict = Body(...)):
     created, skipped = [], []
     now = datetime.datetime.utcnow().isoformat()+"Z"
 
-    for b in items:
+    for idx, b in enumerate(items):
+        if not isinstance(b, dict):
+            raise HTTPException(status_code=400, detail=f"item {idx+1} is not an object")
         base = _weapon_from_body({**b, "skill": skill, "is_animarma": False})
         existing = col.find_one({"name_key": base["name_key"]})
         if existing:
@@ -2594,6 +2626,17 @@ def bulk_create_weapons(request: Request, payload: dict = Body(...)):
             created.append({k:v for k,v in anim.items() if k!="_id"})
 
     return {"status":"success","created": created, "skipped": skipped}
+
+@app.post("/admin/weapons/clear")
+def clear_weapons(request: Request, payload: dict = Body(...)):
+    require_auth(request, roles=["admin"])
+    confirm = (payload or {}).get("confirm") or ""
+    if confirm != "DELETE_ALL_WEAPONS":
+        raise HTTPException(status_code=400, detail="confirm must be DELETE_ALL_WEAPONS")
+    col = get_col("weapons")
+    res = col.delete_many({})
+    get_col("counters").update_one({"_id": "weapons"}, {"$set": {"seq": 0}}, upsert=True)
+    return {"status": "success", "deleted": res.deleted_count}
 
 # ---------- Equipment ----------
 from fastapi import Body
