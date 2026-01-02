@@ -937,6 +937,9 @@ const TARGET_GROUPS = [
     { value:'derived.et', label:'Eclipse Threshold (ET)' },
     { value:'derived.tx', label:'Max Toxicity (TX)' },
     { value:'derived.talent_max', label:'Talent Max' },
+    { value:'derived.skill_points', label:'Skill point pool' },
+    { value:'derived.stat_points', label:'Characteristic point pool' },
+    { value:'derived.sublimation_slots', label:'Sublimation slots' },
   ]},
   { label:'Custom', options:[{ value:'__custom__', label:'Custom path...' }]}
 ];
@@ -1113,6 +1116,7 @@ const curHpEl = document.getElementById('cur-hp');
 const curEnEl = document.getElementById('cur-en');
 const curFoEl = document.getElementById('cur-fo');
 const curSpEl = document.getElementById('cur-sp');
+let DERIVED_CACHE = {};
 
 /* Abilities tab refs */
 const abiOpenAddBtn = document.getElementById('abi-open-add');
@@ -1457,6 +1461,12 @@ function statPointPool(lvl){
   // 24 at level 1, +3 every 9 levels (per KP rule)
   return 24 + Math.floor((Math.max(1, lvl) - 1) / 9) * 3;
 }
+function effectiveSkillPointPool(lvl){
+  return numOr(DERIVED_CACHE?.skill_points, skillPointPool(lvl));
+}
+function effectiveStatPointPool(lvl){
+  return numOr(DERIVED_CACHE?.stat_points, statPointPool(lvl));
+}
 function statInvestCap(lvl){
   const lv = Math.max(1, Math.floor(Number(lvl) || 1));
   // Base total cap 10, +1 every 10 levels, max 20
@@ -1490,8 +1500,8 @@ function totalStatInvest(){
 }
 function updatePointCounters(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const poolSkill = skillPointPool(lvl);
-  const poolStat = statPointPool(lvl);
+  const poolSkill = effectiveSkillPointPool(lvl);
+  const poolStat = effectiveStatPointPool(lvl);
   const usedSkill = totalSkillInvest();
   const usedStat = totalStatInvest();
   const capSkillInvest = skillMaxForLevel(lvl);
@@ -1528,6 +1538,9 @@ function normalizeSublimations(arr){
 function slotsForLevel(lvl){
   const base = 2; // unlocked immediately, +2 every 10 levels
   return base + (Math.floor(Math.max(1, lvl-1) / 10) * 2);
+}
+function effectiveSublimationSlots(lvl){
+  return numOr(DERIVED_CACHE?.sublimation_slots, slotsForLevel(lvl));
 }
 function slotsUsed(subs){
   return (subs||[]).reduce((acc,s)=> acc + (SUB_TIER_SLOTS[s.tier] || 0), 0);
@@ -1573,7 +1586,7 @@ function sublimationDescription(sub){
 
 function renderSublimations(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const cap = slotsForLevel(lvl);
+  const cap = effectiveSublimationSlots(lvl);
   const used = slotsUsed(SUBLIMATIONS);
   subSlotPill.textContent = `Slots: ${used} / ${cap}`;
   subWarningEl.textContent = used > cap ? 'Over capacity' : '';
@@ -1642,7 +1655,7 @@ function addSublimationFromForm(){
     return;
   }
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const cap = slotsForLevel(lvl);
+  const cap = effectiveSublimationSlots(lvl);
   const newUsed = slotsUsed(SUBLIMATIONS) + (SUB_TIER_SLOTS[tier] || 0);
   if (newUsed > cap){
     subWarningEl.textContent = 'Not enough slots';
@@ -1821,13 +1834,16 @@ function prettyTargetLabel(target){
   if (sn) return `Schools linked to ${sn[1]}`;
   const ss = t.match(/^schools\.by_skill\.(.+)$/i);
   if (ss) return `Schools using ${ss[1]}`;
-  if (t === 'skill_ms') return 'Magic School (by skill)';
-  if (t === 'nature_ms') return 'Magic School (by nature)';
-  if (t === 'char_skill') return 'Skill linked to characteristic';
-  if (t === 'school_any' || t === 'school_ms') return 'Magic School';
-  if (t === 'intensity_any') return 'Intensity';
-  return t;
-}
+    if (t === 'skill_ms') return 'Magic School (by skill)';
+    if (t === 'nature_ms') return 'Magic School (by nature)';
+    if (t === 'char_skill') return 'Skill linked to characteristic';
+    if (t === 'school_any' || t === 'school_ms') return 'Magic School';
+    if (t === 'intensity_any') return 'Intensity';
+    if (t === 'derived.skill_points') return 'Skill point pool';
+    if (t === 'derived.stat_points') return 'Characteristic point pool';
+    if (t === 'derived.sublimation_slots') return 'Sublimation slots';
+    return t;
+  }
 function expandedTargets(mod){
   const baseTarget = String(mod.target || mod.key || '').trim();
   if (!baseTarget) return [];
@@ -4626,7 +4642,7 @@ function renderStatistics(){
     input.addEventListener('input', ()=>{
       const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
       const cap = skillMaxForLevel(lvl);
-      const pool = skillPointPool(lvl);
+      const pool = effectiveSkillPointPool(lvl);
       const currentVal = investVal(CHAR.stats.intensities?.[n], 0);
       const totalOther = totalSkillInvest() - currentVal;
       const desired = Math.max(0, Math.floor(investVal(input.value, 0)));
@@ -4652,7 +4668,7 @@ function renderStatistics(){
     const input = document.getElementById(`${c.key}-invest`);
     input.addEventListener('input', ()=>{
       const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-      const pool = statPointPool(lvl);
+      const pool = effectiveStatPointPool(lvl);
       const currentVal = investVal(CHAR.stats[c.key].invest, 0);
       const totalOther = totalStatInvest() - currentVal;
       const desired = Math.max(0, Math.floor(investVal(input.value, 0)));
@@ -4690,7 +4706,7 @@ function renderStatistics(){
       si.addEventListener('input', ()=>{
         const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
         const cap = skillMaxForLevel(lvl);
-        const pool = skillPointPool(lvl);
+        const pool = effectiveSkillPointPool(lvl);
         const currentVal = investVal(CHAR.stats[c.key].skills?.[s], 0);
         const totalOther = totalSkillInvest() - currentVal;
         const desired = Math.max(0, Math.floor(investVal(si.value, 0)));
@@ -4723,17 +4739,20 @@ function renderDefenseSummary(){
 function applyPassiveModifiersToDerived(base, currentEnc = 0){
   const out = { ...base };
   out.current_enc = Number(currentEnc || 0);
-  const notes = {
-    hp: [`Base = ${base.hp}`],
-    en: [`Base = ${base.en}`],
-    fo: [`Base = ${base.fo}`],
-    mo: [`Base = ${base.mo}`],
-    et: [`Base = ${base.et}`],
-    tx: [`Base = ${base.tx}`],
-    enc:[`Base = ${base.enc}`],
-    spcap:[],
-    talent_max:[`Base = ${base.talent_max ?? 0}`]
-  };
+    const notes = {
+      hp: [`Base = ${base.hp}`],
+      en: [`Base = ${base.en}`],
+      fo: [`Base = ${base.fo}`],
+      mo: [`Base = ${base.mo}`],
+      et: [`Base = ${base.et}`],
+      tx: [`Base = ${base.tx}`],
+      enc:[`Base = ${base.enc}`],
+      spcap:[],
+      talent_max:[`Base = ${base.talent_max ?? 0}`],
+      skill_points:[`Base = ${base.skill_points ?? 0}`],
+      stat_points:[`Base = ${base.stat_points ?? 0}`],
+      sublimation_slots:[`Base = ${base.sublimation_slots ?? 0}`]
+    };
   notes.enc.unshift(`Current enc = ${Number(currentEnc||0).toFixed(1)}`);
   if (base._notes){
     Object.entries(base._notes).forEach(([k, arr])=>{
@@ -4785,10 +4804,12 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
     });
   }
 
-  const map = {
-    'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo',
-    'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap','derived.talent_max':'talent_max'
-  };
+    const map = {
+      'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo',
+      'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap','derived.talent_max':'talent_max',
+      'derived.skill_points':'skill_points','derived.stat_points':'stat_points',
+      'derived.sublimation_slots':'sublimation_slots'
+    };
   for (const m of allMods){
     if (map[m.target]){
       ops[m.mode]?.push({ k: map[m.target], v: m.val, origin: m.origin });
@@ -4885,12 +4906,16 @@ function updateDerived(){
   base.et = 1 + Math.floor(lvl/10) + msMAG;
   const etTech = 1 + Math.floor(lvl/10) + msTEC;
   base._notes = Object.assign(base._notes || {}, { et: [`Alt (TEC): ${etTech}`] });
-  base.tx = 2 + msBOD + (2 * msTEC);
-  base.talent_max = baseTalentMax(lvl);
+    base.tx = 2 + msBOD + (2 * msTEC);
+    base.talent_max = baseTalentMax(lvl);
+    base.skill_points = skillPointPool(lvl);
+    base.stat_points = statPointPool(lvl);
+    base.sublimation_slots = slotsForLevel(lvl);
 
-  // Apply passive modifiers to derived
-  const final = applyPassiveModifiersToDerived(base, invEnc);
-  // Overrides
+    // Apply passive modifiers to derived
+    const final = applyPassiveModifiersToDerived(base, invEnc);
+    DERIVED_CACHE = { ...final };
+    // Overrides
   const maxVals = { ...final };
   if (OVERRIDE_ENABLED){
     maxVals.hp = numOr(OVERRIDE_VALUES.hp ?? final.hp, final.hp);

@@ -389,22 +389,23 @@ function ruleRow(rule={}){
       <option value="second">Second highest</option>
       <option value="third">Third highest</option>
       <option value="highest_any">Any of the following are the Highest</option>
+      <option value="second_any">Any of the following are the Second Highest</option>
       <option value="min">Not lower than</option>
     </select>
     <input class="pr-val" type="number" placeholder="Value" style="width:100px; display:${type==='min'?'block':'none'};" value="${type==='min'?val:''}">
-    <input class="pr-any" type="text" placeholder="Any of: REF, BOD, DEX" style="min-width:220px; display:${type==='highest_any'?'block':'none'};" value="${(rule.keys||[]).join(', ')}">
+    <input class="pr-any" type="text" placeholder="Any of: REF, BOD, DEX" style="min-width:220px; display:${(type==='highest_any'||type==='second_any')?'block':'none'};" value="${(rule.keys||[]).join(', ')}">
     <button class="subtle pr-del">Remove</button>
   `;
   div.querySelector('.pr-attr').value = key;
   div.querySelector('.pr-type').value = type;
   div.querySelector('.pr-type').addEventListener('change', (e)=>{
     const isMin = e.target.value === 'min';
-    const isAny = e.target.value === 'highest_any';
+    const isAny = e.target.value === 'highest_any' || e.target.value === 'second_any';
     div.querySelector('.pr-val').style.display = isMin ? 'block' : 'none';
     div.querySelector('.pr-any').style.display = isAny ? 'block' : 'none';
     div.querySelector('.pr-attr').disabled = isAny;
   });
-  if (type === 'highest_any') div.querySelector('.pr-attr').disabled = true;
+  if (type === 'highest_any' || type === 'second_any') div.querySelector('.pr-attr').disabled = true;
   div.querySelector('.pr-del').addEventListener('click', ()=>div.remove());
   return div;
 }
@@ -435,10 +436,11 @@ function collectDoc(){
     const attr = row.querySelector('.pr-attr').value;
     const typ = row.querySelector('.pr-type').value;
     const val = row.querySelector('.pr-val').value;
-    if(typ === 'highest_any'){
+    if(typ === 'highest_any' || typ === 'second_any'){
       const raw = (row.querySelector('.pr-any').value || '');
       const keys = raw.split(',').map(s=>s.trim()).filter(Boolean);
-      if (keys.length) charOrderAny.push({ position: 1, keys });
+      const pos = typ === 'second_any' ? 2 : 1;
+      if (keys.length) charOrderAny.push({ position: pos, keys });
       return;
     }
     if(!attr) return;
@@ -499,7 +501,10 @@ function loadToForm(a){
     rules.push({key:"magic", type:"highest"});
   }
   const anyOrder = a.prereq_rules?.char_order_any || [];
-  anyOrder.forEach(r=> rules.push({ type:'highest_any', keys: r.keys || [] }));
+  anyOrder.forEach(r=>{
+    const pos = Number(r.position || 1);
+    rules.push({ type: pos === 2 ? 'second_any' : 'highest_any', keys: r.keys || [] });
+  });
   const charMin = a.prereq_rules?.char_min || {};
   Object.keys(charMin).forEach(k=> rules.push({key:k, type:'min', value: charMin[k]}));
   if (!rules.length) rules.push({});

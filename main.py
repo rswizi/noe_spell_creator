@@ -4811,6 +4811,17 @@ def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
             note = (m.get("note") or "").strip()
             choice = _normalize_choice(m.get("choice") if isinstance(m.get("choice"), dict) else None)
             mod = {"target":target,"mode":mode,"value":value,"note":note}
+            try:
+                level_step = int(m.get("level_step") or 0)
+            except Exception:
+                level_step = 0
+            try:
+                level_increment = int(m.get("level_increment") or 1)
+            except Exception:
+                level_increment = 1
+            if level_step > 0:
+                mod["level_step"] = level_step
+                mod["level_increment"] = max(1, level_increment)
             group = (m.get("group") or "").strip()
             if group:
                 mod["group"] = group
@@ -4982,6 +4993,17 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
             note = (m.get("note") or "").strip()
             choice = _normalize_choice(m.get("choice") if isinstance(m.get("choice"), dict) else None)
             mod = {"target":target,"mode":mode,"value":value,"note":note}
+            try:
+                level_step = int(m.get("level_step") or 0)
+            except Exception:
+                level_step = 0
+            try:
+                level_increment = int(m.get("level_increment") or 1)
+            except Exception:
+                level_increment = 1
+            if level_step > 0:
+                mod["level_step"] = level_step
+                mod["level_increment"] = max(1, level_increment)
             group = (m.get("group") or "").strip()
             if group:
                 mod["group"] = group

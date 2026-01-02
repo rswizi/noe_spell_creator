@@ -216,17 +216,21 @@ function parsePrereqRules(text){
     .filter(Boolean);
   if (!lines.length) return out;
   const highestRe = /([a-zA-Z,\s]+)\s+must be your highest characteristic/i;
+  const secondRe = /([a-zA-Z,\s]+)\s+must be your second highest characteristic/i;
   lines.forEach(line=>{
     const clean = line.replace(/\s+/g,' ').trim();
-    const match = clean.match(highestRe);
+    const matchHigh = clean.match(highestRe);
+    const matchSecond = clean.match(secondRe);
+    const match = matchHigh || matchSecond;
     if (!match) return;
     const raw = match[1] || '';
     const parts = raw.split(/or|,|\//i).map(s=>s.trim()).filter(Boolean);
     const keys = parts.map(normalizeCharKey).filter(Boolean);
+    const pos = matchSecond ? 2 : 1;
     if (keys.length === 1){
-      out.char_order = [{ key: keys[0], position: 1 }];
+      out.char_order = [{ key: keys[0], position: pos }];
     }else if (keys.length > 1){
-      out.char_order_any = [{ position: 1, keys }];
+      out.char_order_any = [{ position: pos, keys }];
     }
   });
   return out;
