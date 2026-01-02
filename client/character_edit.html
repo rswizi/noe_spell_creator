@@ -1469,8 +1469,8 @@ function effectiveStatPointPool(lvl){
 }
 function statInvestCap(lvl){
   const lv = Math.max(1, Math.floor(Number(lvl) || 1));
-  // Base total cap 10, +1 every 10 levels, max 20
-  const maxTotal = Math.min(20, 10 + Math.floor(lv / 10));
+  // Base total cap 10, +2 every 15 levels, max 20
+  const maxTotal = Math.min(20, 10 + (Math.floor((lv - 1) / 15) * 2));
   return Math.max(0, maxTotal - 4); // convert back to invest (base is 4)
 }
 function statTotalCap(lvl){
