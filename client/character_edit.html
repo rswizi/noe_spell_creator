@@ -991,6 +991,7 @@ let ROLE = 'user';
 let SAVE_TIMER = null;
 let CHAR = null;
 let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
+let ARC_ASSIGNED = []; // full documents of archetype abilities (resolved by id)
 let ABILITY_CHOICES = {}; // per-ability user selections for configurable modifiers (choices or groups)
 let ITEM_CHOICES = {}; // per-item (inventory) user selections for choice-based modifiers
 let INVENTORIES = [];
@@ -1909,10 +1910,12 @@ function resolvedPassiveMods(ab){
 }
 function recomputePassiveAgg(){
   resetPassiveAgg();
-  const passiveAbilities = (ASSIGNED||[]).filter(a=>{
-    const t = (a.type||'').toLowerCase();
-    return t==='passive' || t==='mixed';
-  });
+    const assignedIds = new Set((ASSIGNED||[]).map(a=> String(a?.id || '')));
+    const combined = (ASSIGNED||[]).concat((ARC_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
+    const passiveAbilities = combined.filter(a=>{
+      const t = (a.type||'').toLowerCase();
+      return t==='passive' || t==='mixed';
+    });
   for (const ab of passiveAbilities){
     const mods = resolvedPassiveMods(ab);
     for (const m of mods){
@@ -4413,12 +4416,17 @@ async function refreshArchetypeAbilities(){
   renderArchetypePanel();
 }
 
-async function renderArchetypePanel(){
-  if (!CHAR?.archetype_id){
-    arcSummaryEl.textContent = 'No archetype linked.';
-    if (arcDescEl){
-      arcDescEl.innerHTML = '';
-      arcDescEl.style.display = 'none';
+  async function renderArchetypePanel(){
+    if (!CHAR?.archetype_id){
+      ARC_ASSIGNED = [];
+      recomputePassiveAgg();
+      renderStatistics();
+      updateDerived();
+      renderSublimations();
+      arcSummaryEl.textContent = 'No archetype linked.';
+      if (arcDescEl){
+        arcDescEl.innerHTML = '';
+        arcDescEl.style.display = 'none';
     }
     arcAbilitiesEl.innerHTML = '<div class="muted">Select an archetype.</div>';
     return;
@@ -4432,15 +4440,21 @@ async function renderArchetypePanel(){
     arcDescEl.style.display = arcDesc ? '' : 'none';
   }
   COMPUTED_ARC_ABILITIES = (CHAR.computed_archetype_abilities || []).slice();
-  if (!COMPUTED_ARC_ABILITIES.length){
-    arcAbilitiesEl.innerHTML = '<div class="muted">No unlocked abilities yet.</div>';
-    return;
-  }
-  const docs = await fetchAbilitiesByIds(COMPUTED_ARC_ABILITIES);
-  const byId = {};
-  docs.forEach(d=>{ if(d?.id) byId[d.id]=d; });
-  arcAbilitiesEl.innerHTML = '';
-  COMPUTED_ARC_ABILITIES.forEach(id=>{
+    if (!COMPUTED_ARC_ABILITIES.length){
+      ARC_ASSIGNED = [];
+      recomputePassiveAgg();
+      renderStatistics();
+      updateDerived();
+      renderSublimations();
+      arcAbilitiesEl.innerHTML = '<div class="muted">No unlocked abilities yet.</div>';
+      return;
+    }
+    const docs = await fetchAbilitiesByIds(COMPUTED_ARC_ABILITIES);
+    ARC_ASSIGNED = docs.slice();
+    const byId = {};
+    docs.forEach(d=>{ if(d?.id) byId[d.id]=d; });
+    arcAbilitiesEl.innerHTML = '';
+    COMPUTED_ARC_ABILITIES.forEach(id=>{
     const a = byId[id] || { name:id, description:'' };
     const div = document.createElement('div');
     div.className = 'abi-item';
@@ -4450,10 +4464,14 @@ async function renderArchetypePanel(){
         <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
       </div>
       <span class="tag">Archetype</span>
-    `;
-    arcAbilitiesEl.appendChild(div);
-  });
-}
+      `;
+      arcAbilitiesEl.appendChild(div);
+    });
+    recomputePassiveAgg();
+    renderStatistics();
+    updateDerived();
+    renderSublimations();
+  }
 
 async function loadSpellListById(id){
   if (!id){
