@@ -4783,10 +4783,12 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   }
 
   const ops = { set:[], mul:[], add:[] };
-  const passiveAbilities = (ASSIGNED||[]).filter(a=>{
-    const t = (a.type||'').toLowerCase();
-    return t==='passive' || t==='mixed';
-  });
+    const assignedIds = new Set((ASSIGNED||[]).map(a=> String(a?.id || '')));
+    const combined = (ASSIGNED||[]).concat((ARC_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
+    const passiveAbilities = combined.filter(a=>{
+      const t = (a.type||'').toLowerCase();
+      return t==='passive' || t==='mixed';
+    });
 
   const allMods = [];
   for (const ab of passiveAbilities){
