@@ -367,17 +367,19 @@ const PASSIVE_TARGET_GROUPS = (()=> {
     { key:'willpower', label:'Willpower', skills:['Intimidation','Spirit','Instinct','Absorption'] },
     { key:'tech',      label:'Tech',      skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
   ];
-  const derived = [
-    { key:'hp', label:'HP' },
-    { key:'en', label:'EN' },
-    { key:'fo', label:'FO' },
-    { key:'mo', label:'MO' },
-    { key:'spcap', label:'SP cap (10% HP)' },
-    { key:'enc', label:'Encumbrance' },
-    { key:'et', label:'Eclipse Threshold (ET)' },
-    { key:'tx', label:'Max Toxicity (TX)' },
-    { key:'talent_max', label:'Talent Max' },
-  ];
+    const derived = [
+      { key:'hp', label:'HP' },
+      { key:'en', label:'EN' },
+      { key:'fo', label:'FO' },
+      { key:'mo', label:'MO' },
+      { key:'initiative', label:'Initiative' },
+      { key:'spcap', label:'SP cap (10% HP)' },
+      { key:'enc', label:'Encumbrance' },
+      { key:'et', label:'Eclipse Threshold (ET)' },
+      { key:'tx', label:'Max Toxicity (TX)' },
+      { key:'talent_max', label:'Talent Max' },
+      { key:'sublimation_slots', label:'Sublimation slots' },
+    ];
   const skillGroups = characteristics.map(c=>({ value:`choice:skills.by_char.${c.key}`, label:`[Choice] Skills linked to ${c.label}` }));
   const intensityOpts = DEFAULT_NATURES.map(n=>({ value:`intensities.${n}`, label:`Intensity: ${n}` }));
   const schoolByNature = DEFAULT_NATURES.map(n=>({ value:`choice:schools.by_nature.${n}`, label:`[Choice] MS for schools linked to ${n}` }));

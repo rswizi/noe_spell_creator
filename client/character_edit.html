@@ -279,6 +279,8 @@
                 <ul class="mod-list" id="mods-derived-fo" style="display:none"></ul></div>
                 <div class="kv"><div class="k">MO</div> <div class="val badge mod-toggle" id="mo-val" data-target="mods-derived-mo" title="">--</div>
                 <ul class="mod-list" id="mods-derived-mo" style="display:none"></ul></div>
+                <div class="kv"><div class="k">Initiative</div> <div class="val badge mod-toggle" id="init-val" data-target="mods-derived-initiative" title="">--</div>
+                <ul class="mod-list" id="mods-derived-initiative" style="display:none"></ul></div>
                 <div class="kv"><div class="k">SP cap (10% HP)</div> <div class="val badge mod-toggle" id="spcap-val" data-target="mods-derived-spcap" title="">--</div>
                 <ul class="mod-list" id="mods-derived-spcap" style="display:none"></ul></div>
                 <div class="kv"><div class="k">Encumbrance</div> <div class="val badge mod-toggle" id="enc-val" data-target="mods-derived-enc" title="">--</div>
@@ -932,6 +934,7 @@ const TARGET_GROUPS = [
     { value:'derived.en', label:'EN' },
     { value:'derived.fo', label:'FO' },
     { value:'derived.mo', label:'MO' },
+    { value:'derived.initiative', label:'Initiative' },
     { value:'derived.spcap', label:'SP cap' },
     { value:'derived.enc', label:'Encumbrance' },
     { value:'derived.et', label:'Eclipse Threshold (ET)' },
@@ -1097,7 +1100,8 @@ const levelEl = document.getElementById('level');
 const hpEl = document.getElementById('hp-val');
 const enEl = document.getElementById('en-val');
 const foEl = document.getElementById('fo-val');
-const moEl = document.getElementById('mo-val');
+  const moEl = document.getElementById('mo-val');
+  const initEl = document.getElementById('init-val');
 const spcapEl = document.getElementById('spcap-val');
 const encEl = document.getElementById('enc-val');
 const etEl = document.getElementById('et-val');
@@ -1680,11 +1684,11 @@ function modEffectiveValue(mod){
   const base = Number(mod?.value || 0);
   const step = Math.max(0, Number(mod?.level_step || 0));
   const inc = Number(mod?.level_increment || 1);
-  if (step > 0){
-    const lvl = Math.max(1, Math.floor(Number(CHAR?.level || levelEl?.value || 1)));
-    const extra = Math.floor((lvl - 1) / step) * inc;
-    return base + extra;
-  }
+    if (step > 0){
+      const lvl = Math.max(1, Math.floor(Number(CHAR?.level || levelEl?.value || 1)));
+      const extra = Math.floor(lvl / step) * inc;
+      return base + extra;
+    }
   return base;
 }
 function normalizeChoiceEntry(val){
@@ -1843,6 +1847,7 @@ function prettyTargetLabel(target){
     if (t === 'derived.skill_points') return 'Skill point pool';
     if (t === 'derived.stat_points') return 'Characteristic point pool';
     if (t === 'derived.sublimation_slots') return 'Sublimation slots';
+    if (t === 'derived.initiative') return 'Initiative';
     return t;
   }
 function expandedTargets(mod){
@@ -4757,13 +4762,14 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   out.current_enc = Number(currentEnc || 0);
     const notes = {
       hp: [`Base = ${base.hp}`],
-      en: [`Base = ${base.en}`],
-      fo: [`Base = ${base.fo}`],
-      mo: [`Base = ${base.mo}`],
-      et: [`Base = ${base.et}`],
-      tx: [`Base = ${base.tx}`],
-      enc:[`Base = ${base.enc}`],
-      spcap:[],
+        en: [`Base = ${base.en}`],
+        fo: [`Base = ${base.fo}`],
+        mo: [`Base = ${base.mo}`],
+        initiative: [`Base = ${base.initiative ?? 0}`],
+        et: [`Base = ${base.et}`],
+        tx: [`Base = ${base.tx}`],
+        enc:[`Base = ${base.enc}`],
+        spcap:[],
       talent_max:[`Base = ${base.talent_max ?? 0}`],
       skill_points:[`Base = ${base.skill_points ?? 0}`],
       stat_points:[`Base = ${base.stat_points ?? 0}`],
@@ -4821,7 +4827,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   }
 
     const map = {
-      'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo',
+        'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo','derived.initiative':'initiative',
       'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap','derived.talent_max':'talent_max',
       'derived.skill_points':'skill_points','derived.stat_points':'stat_points',
       'derived.sublimation_slots':'sublimation_slots'
@@ -4857,6 +4863,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   enEl.title = notes.en.join('\n');   setNotesList('mods-derived-en', notes.en);
   foEl.title = notes.fo.join('\n');   setNotesList('mods-derived-fo', notes.fo);
   moEl.title = notes.mo.join('\n');   setNotesList('mods-derived-mo', notes.mo);
+  initEl.title = notes.initiative.join('\n'); setNotesList('mods-derived-initiative', notes.initiative);
   spcapEl.title = notes.spcap.join('\n'); setNotesList('mods-derived-spcap', notes.spcap);
   encEl.title = notes.enc.join('\n'); setNotesList('mods-derived-enc', notes.enc);
   etEl.title = notes.et.join('\n');   setNotesList('mods-derived-et', notes.et);
@@ -4915,7 +4922,8 @@ function updateDerived(){
   base.hp = 39 + lvl + 12*msBOD + 6*msWIL;
   base.en = 5 + Math.floor(lvl/5) + msWIL + 2*msMAG;
   base.fo = 2 + Math.floor(lvl/5) + msWIL + (2*msPRE) + msWIS;
-  base.mo = 4 + msDEX + msREF;
+    base.mo = 4 + msDEX + msREF;
+    base.initiative = msDEX + msREF;
   base.spcap = Math.floor(base.hp * 0.10);
   base.enc = 10 + (10 * msBOD) + (5 * msWIL);
   const invEnc = LINKED_INV?.enc_total || 0;
@@ -4973,11 +4981,12 @@ function updateDerived(){
   });
 
   // Display
-  hpEl.textContent = `${cur.hp} / ${maxVals.hp}`;
-  enEl.textContent = `${cur.en} / ${maxVals.en}`;
-  foEl.textContent = `${cur.fo} / ${maxVals.fo}`;
-  moEl.textContent = maxVals.mo;
-  spcapEl.textContent = `${cur.sp} / ${maxVals.spcap}`;
+    hpEl.textContent = `${cur.hp} / ${maxVals.hp}`;
+    enEl.textContent = `${cur.en} / ${maxVals.en}`;
+    foEl.textContent = `${cur.fo} / ${maxVals.fo}`;
+    moEl.textContent = maxVals.mo;
+    initEl.textContent = maxVals.initiative ?? final.initiative;
+    spcapEl.textContent = `${cur.sp} / ${maxVals.spcap}`;
   encEl.textContent = `${Number(final.current_enc || 0).toFixed(1)} / ${maxVals.enc ?? final.enc}`;
   const etDisplay = (()=> {
     const etVal = maxVals.et ?? final.et;
