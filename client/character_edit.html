@@ -210,7 +210,7 @@
       <a class="btn" href="character_admin.html" id="admin-link" style="display:none">All Characters</a>
       <button class="btn" id="delete-char" style="border-color:#7a1b1b; background:linear-gradient(135deg, rgba(197,53,53,0.35), rgba(60,10,14,0.9)); color:#fff;">Delete</button>
       <label class="row" style="gap:6px; margin-left:8px;">
-        <input type="checkbox" id="override-derived"> <span class="muted">Override values (DM)</span>
+        <input type="checkbox" id="override-derived"> <span class="muted">Override values (GM)</span>
       </label>
     </div>
 
@@ -290,6 +290,22 @@
                 <ul class="mod-list" id="mods-derived-et" style="display:none"></ul></div>
                 <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge mod-toggle" id="tx-val" data-target="mods-derived-tx" title="">--</div>
                 <ul class="mod-list" id="mods-derived-tx" style="display:none"></ul></div>
+              </div>
+              <div id="override-inputs">
+                <label>HP <input id="ov-hp" type="number" step="1"></label>
+                <label>EN <input id="ov-en" type="number" step="1"></label>
+                <label>FO <input id="ov-fo" type="number" step="1"></label>
+                <label>MO <input id="ov-mo" type="number" step="1"></label>
+                <label>Initiative <input id="ov-init" type="number" step="1"></label>
+                <label>SP cap <input id="ov-spcap" type="number" step="1"></label>
+                <label>Encumbrance <input id="ov-enc" type="number" step="0.1"></label>
+                <label>Eclipse Threshold <input id="ov-et" type="number" step="1"></label>
+                <label>Max Toxicity <input id="ov-tx" type="number" step="1"></label>
+                <label>Talent Max <input id="ov-talent-max" type="number" step="1"></label>
+                <label>Skill points <input id="ov-skill-points" type="number" step="1"></label>
+                <label>Stat points <input id="ov-stat-points" type="number" step="1"></label>
+                <label>Sublimation slots <input id="ov-sub-slots" type="number" step="1"></label>
+                <label>Complex schools <input id="ov-complex-schools" type="number" step="1"></label>
               </div>
             </div>
           </details>
@@ -1023,7 +1039,7 @@ let SUB_HIDDEN = {};
 let PERSONAL = {};
 let CURRENT = { hp:null, en:null, fo:null, sp:null };
 let OVERRIDE_ENABLED = false;
-let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, spcap:null, enc:null, et:null, tx:null };
+let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, initiative:null, spcap:null, enc:null, et:null, tx:null, talent_max:null, skill_points:null, stat_points:null, sublimation_slots:null, complex_schools:null };
 let ARCHETYPES = [];
 let COMPUTED_ARC_ABILITIES = [];
 let UPGRADE_META = {};
@@ -1119,6 +1135,15 @@ const ovEnEl = document.getElementById('ov-en');
 const ovFoEl = document.getElementById('ov-fo');
 const ovMoEl = document.getElementById('ov-mo');
 const ovSpEl = document.getElementById('ov-spcap');
+const ovInitEl = document.getElementById('ov-init');
+const ovEncEl = document.getElementById('ov-enc');
+const ovEtEl = document.getElementById('ov-et');
+const ovTxEl = document.getElementById('ov-tx');
+const ovTalentMaxEl = document.getElementById('ov-talent-max');
+const ovSkillPointsEl = document.getElementById('ov-skill-points');
+const ovStatPointsEl = document.getElementById('ov-stat-points');
+const ovSubSlotsEl = document.getElementById('ov-sub-slots');
+const ovComplexSchoolsEl = document.getElementById('ov-complex-schools');
 const curHpEl = document.getElementById('cur-hp');
 const curEnEl = document.getElementById('cur-en');
 const curFoEl = document.getElementById('cur-fo');
@@ -1387,17 +1412,38 @@ subCancel?.addEventListener('click', closeSubModal);
 subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) closeSubModal(); });
 
 // Overrides & current handlers
-[curHpEl, curEnEl, curFoEl, curSpEl].forEach(el=>{
-  el?.addEventListener('input', ()=>{
-    CURRENT = {
-      hp: Number(curHpEl?.value||0),
-      en: Number(curEnEl?.value||0),
-      fo: Number(curFoEl?.value||0),
-      sp: Number(curSpEl?.value||0),
-    };
-    updateDerived(); queueSave();
+  [curHpEl, curEnEl, curFoEl, curSpEl].forEach(el=>{
+    el?.addEventListener('input', ()=>{
+      CURRENT = {
+        hp: Number(curHpEl?.value||0),
+        en: Number(curEnEl?.value||0),
+        fo: Number(curFoEl?.value||0),
+        sp: Number(curSpEl?.value||0),
+      };
+      updateDerived(); queueSave();
+    });
   });
-});
+
+  function bindOverrideInput(el, key){
+    if (!el) return;
+    el.addEventListener('input', ()=>{
+      const raw = String(el.value || '').trim();
+      OVERRIDE_VALUES[key] = raw === '' ? null : Number(raw);
+      updateDerived();
+      queueSave();
+    });
+  }
+  [
+    [ovHpEl, 'hp'], [ovEnEl, 'en'], [ovFoEl, 'fo'], [ovMoEl, 'mo'], [ovInitEl, 'initiative'],
+    [ovSpEl, 'spcap'], [ovEncEl, 'enc'], [ovEtEl, 'et'], [ovTxEl, 'tx'],
+    [ovTalentMaxEl, 'talent_max'], [ovSkillPointsEl, 'skill_points'], [ovStatPointsEl, 'stat_points'],
+    [ovSubSlotsEl, 'sublimation_slots'], [ovComplexSchoolsEl, 'complex_schools']
+  ].forEach(([el, key])=> bindOverrideInput(el, key));
+  overrideToggle?.addEventListener('change', ()=>{
+    OVERRIDE_ENABLED = !!overrideToggle.checked;
+    updateDerived();
+    queueSave();
+  });
 
 /* tabs switching */
 document.querySelectorAll('.tab').forEach(tab=>{
@@ -1507,10 +1553,23 @@ function totalStatInvest(){
 }
 function updatePointCounters(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const poolSkill = effectiveSkillPointPool(lvl);
-  const poolStat = effectiveStatPointPool(lvl);
   const usedSkill = totalSkillInvest();
   const usedStat = totalStatInvest();
+  if (OVERRIDE_ENABLED){
+    if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkill} / ∞`;
+    if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStat} / ∞`;
+    if (skillCapEl){
+      skillCapEl.textContent = 'Max per skill (invest): ∞';
+      skillCapEl.title = 'Override enabled: caps are hints only.';
+    }
+    if (statCapEl){
+      statCapEl.textContent = 'Max per characteristic (invest): ∞';
+      statCapEl.title = 'Override enabled: caps are hints only.';
+    }
+    return;
+  }
+  const poolSkill = effectiveSkillPointPool(lvl);
+  const poolStat = effectiveStatPointPool(lvl);
   const capSkillInvest = skillMaxForLevel(lvl);
   const capStatInvest = statInvestCap(lvl);
   const capStatTotal = statTotalCap(lvl);
@@ -4703,8 +4762,8 @@ function renderStatistics(){
       const totalOther = totalSkillInvest() - currentVal;
       const desired = Math.max(0, Math.floor(investVal(input.value, 0)));
       const allowed = Math.max(0, pool - totalOther);
-      const val = Math.min(desired, cap, allowed);
-      input.value = val;
+      const val = OVERRIDE_ENABLED ? desired : Math.min(desired, cap, allowed);
+      if (!OVERRIDE_ENABLED) input.value = val;
       CHAR.stats.intensities[n] = val;
       const adj = skillAdjTotal('magic', n);
       const totalId = `intensity-${n}-total`;
@@ -4730,8 +4789,8 @@ function renderStatistics(){
       const desired = Math.max(0, Math.floor(investVal(input.value, 0)));
       const allowed = Math.max(0, pool - totalOther);
       const capInvest = statInvestCap(lvl);
-      const val = Math.min(desired, allowed, capInvest);
-      if (val !== desired) input.value = val;
+      const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, capInvest);
+      if (!OVERRIDE_ENABLED && val !== desired) input.value = val;
       CHAR.stats[c.key].invest = val;
 
       // update characteristic header
@@ -4767,8 +4826,8 @@ function renderStatistics(){
         const totalOther = totalSkillInvest() - currentVal;
         const desired = Math.max(0, Math.floor(investVal(si.value, 0)));
         const allowed = Math.max(0, pool - totalOther);
-        const val = Math.min(desired, cap, allowed);
-        if (val !== desired) si.value = val;
+        const val = OVERRIDE_ENABLED ? desired : Math.min(desired, cap, allowed);
+        if (!OVERRIDE_ENABLED && val !== desired) si.value = val;
         CHAR.stats[c.key].skills[s] = val;
         const adj = skillAdjTotal(c.key, s);
         const el = document.getElementById(skillId(c.key, s, 'total'));
@@ -4977,31 +5036,41 @@ function updateDerived(){
 
     // Apply passive modifiers to derived
     const final = applyPassiveModifiersToDerived(base, invEnc);
-    DERIVED_CACHE = { ...final };
     // Overrides
-  const maxVals = { ...final };
-  if (OVERRIDE_ENABLED){
-    maxVals.hp = numOr(OVERRIDE_VALUES.hp ?? final.hp, final.hp);
-    maxVals.en = numOr(OVERRIDE_VALUES.en ?? final.en, final.en);
-    maxVals.fo = numOr(OVERRIDE_VALUES.fo ?? final.fo, final.fo);
-    maxVals.mo = numOr(OVERRIDE_VALUES.mo ?? final.mo, final.mo);
-    maxVals.spcap = numOr(OVERRIDE_VALUES.spcap ?? final.spcap, final.spcap);
-    // allow overriding derived enc/et/tx if provided
-    maxVals.enc = numOr(OVERRIDE_VALUES.enc ?? final.enc, final.enc);
-    maxVals.et  = numOr(OVERRIDE_VALUES.et  ?? final.et, final.et);
-    maxVals.tx  = numOr(OVERRIDE_VALUES.tx  ?? final.tx, final.tx);
-  }else{
-    // ensure all are finite
-    Object.keys(maxVals).forEach(k=>{
-      maxVals[k] = numOr(maxVals[k], 0);
-    });
-  }
-  const cur = {
-    hp: Math.max(0, Math.min(numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp), maxVals.hp)),
-    en: Math.max(0, Math.min(numOr(CURRENT.en ?? maxVals.en, maxVals.en), maxVals.en)),
-    fo: Math.max(0, Math.min(numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo), maxVals.fo)),
-    sp: Math.max(0, Math.min(numOr(CURRENT.sp ?? maxVals.spcap, maxVals.spcap), maxVals.spcap)),
-  };
+    const maxVals = { ...final };
+    if (OVERRIDE_ENABLED){
+      maxVals.hp = numOr(OVERRIDE_VALUES.hp ?? final.hp, final.hp);
+      maxVals.en = numOr(OVERRIDE_VALUES.en ?? final.en, final.en);
+      maxVals.fo = numOr(OVERRIDE_VALUES.fo ?? final.fo, final.fo);
+      maxVals.mo = numOr(OVERRIDE_VALUES.mo ?? final.mo, final.mo);
+      maxVals.initiative = numOr(OVERRIDE_VALUES.initiative ?? final.initiative, final.initiative);
+      maxVals.spcap = numOr(OVERRIDE_VALUES.spcap ?? final.spcap, final.spcap);
+      maxVals.enc = numOr(OVERRIDE_VALUES.enc ?? final.enc, final.enc);
+      maxVals.et  = numOr(OVERRIDE_VALUES.et  ?? final.et, final.et);
+      maxVals.tx  = numOr(OVERRIDE_VALUES.tx  ?? final.tx, final.tx);
+      maxVals.talent_max = numOr(OVERRIDE_VALUES.talent_max ?? final.talent_max, final.talent_max);
+      maxVals.skill_points = numOr(OVERRIDE_VALUES.skill_points ?? final.skill_points, final.skill_points);
+      maxVals.stat_points = numOr(OVERRIDE_VALUES.stat_points ?? final.stat_points, final.stat_points);
+      maxVals.sublimation_slots = numOr(OVERRIDE_VALUES.sublimation_slots ?? final.sublimation_slots, final.sublimation_slots);
+      maxVals.complex_schools = numOr(OVERRIDE_VALUES.complex_schools ?? final.complex_schools, final.complex_schools);
+    }else{
+      // ensure all are finite
+      Object.keys(maxVals).forEach(k=>{
+        maxVals[k] = numOr(maxVals[k], 0);
+      });
+    }
+    DERIVED_CACHE = { ...final, ...maxVals };
+    const cur = OVERRIDE_ENABLED ? {
+      hp: numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp),
+      en: numOr(CURRENT.en ?? maxVals.en, maxVals.en),
+      fo: numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo),
+      sp: numOr(CURRENT.sp ?? maxVals.spcap, maxVals.spcap),
+    } : {
+      hp: Math.max(0, Math.min(numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp), maxVals.hp)),
+      en: Math.max(0, Math.min(numOr(CURRENT.en ?? maxVals.en, maxVals.en), maxVals.en)),
+      fo: Math.max(0, Math.min(numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo), maxVals.fo)),
+      sp: Math.max(0, Math.min(numOr(CURRENT.sp ?? maxVals.spcap, maxVals.spcap), maxVals.spcap)),
+    };
   if (CURRENT.hp == null) cur.hp = maxVals.hp;
   if (CURRENT.en == null) cur.en = maxVals.en;
   if (CURRENT.fo == null) cur.fo = maxVals.fo;
@@ -5011,13 +5080,18 @@ function updateDerived(){
   if (curEnEl) curEnEl.value = cur.en;
   if (curFoEl) curFoEl.value = cur.fo;
   if (curSpEl) curSpEl.value = cur.sp;
-  if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
-  [ [ovHpEl, maxVals.hp], [ovEnEl, maxVals.en], [ovFoEl, maxVals.fo], [ovMoEl, maxVals.mo], [ovSpEl, maxVals.spcap] ].forEach(([el,val])=>{
-    if (!el) return;
-    el.disabled = !OVERRIDE_ENABLED;
-    if (OVERRIDE_ENABLED && (el.value==="" || Number.isNaN(Number(el.value)))) el.value = val;
-    if (!OVERRIDE_ENABLED) el.value = '';
-  });
+    if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
+    [
+      [ovHpEl, maxVals.hp], [ovEnEl, maxVals.en], [ovFoEl, maxVals.fo], [ovMoEl, maxVals.mo],
+      [ovInitEl, maxVals.initiative], [ovSpEl, maxVals.spcap], [ovEncEl, maxVals.enc], [ovEtEl, maxVals.et],
+      [ovTxEl, maxVals.tx], [ovTalentMaxEl, maxVals.talent_max], [ovSkillPointsEl, maxVals.skill_points],
+      [ovStatPointsEl, maxVals.stat_points], [ovSubSlotsEl, maxVals.sublimation_slots], [ovComplexSchoolsEl, maxVals.complex_schools]
+    ].forEach(([el,val])=>{
+      if (!el) return;
+      el.disabled = !OVERRIDE_ENABLED;
+      if (OVERRIDE_ENABLED && (el.value==="" || Number.isNaN(Number(el.value)))) el.value = val;
+      if (!OVERRIDE_ENABLED) el.value = '';
+    });
 
   // Display
     hpEl.textContent = `${cur.hp} / ${maxVals.hp}`;
@@ -5066,7 +5140,7 @@ async function loadCharacter(){
    COMPUTED_ARC_ABILITIES = CHAR.computed_archetype_abilities || [];
   CURRENT = Object.assign({hp:null,en:null,fo:null,sp:null}, CHAR.current || {});
   OVERRIDE_ENABLED = !!CHAR.override_stats?.enabled;
-  OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,spcap:null,enc:null,et:null,tx:null}, CHAR.override_stats?.values || {});
+  OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,initiative:null,spcap:null,enc:null,et:null,tx:null,talent_max:null,skill_points:null,stat_points:null,sublimation_slots:null,complex_schools:null}, CHAR.override_stats?.values || {});
   if (overrideToggle) overrideToggle.checked = OVERRIDE_ENABLED;
   if (!CHAR.archetype_rank) CHAR.archetype_rank = _archetypeRankForLevel(CHAR.level);
   LINKED_SPELL_LIST = null;
