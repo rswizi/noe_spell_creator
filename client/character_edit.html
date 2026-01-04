@@ -2255,14 +2255,17 @@ function getEquippedInventoryModifiers(){
     const itemKey = itemChoiceKey(it);
     const allMods = [
       ...(it.modifiers || []).map(m=>({ ...m, __origin:'Item' })),
-      ...((it.upgrades||[]).flatMap(u=>{
-        const upgId = u?.id || u?.key || u;
-        const meta = (window.UPGRADE_META || {})[upgId] || {};
-        const pool = resolveUpgradeModifiers(u, meta);
-        const name = meta?.name || u?.name || upgId || 'Upgrade';
-        return (pool || []).map(m=>({ ...m, __origin:`Upgrade: ${name}` }));
-      }) || [])
     ];
+    (it.upgrades || []).forEach((u, idx)=>{
+      const upgId = u?.id || u?.key || u;
+      const meta = (window.UPGRADE_META || {})[upgId] || {};
+      const pool = resolveUpgradeModifiers(u, meta);
+      const name = meta?.name || u?.name || upgId || 'Upgrade';
+      const choiceKey = upgradeChoiceKey(it, u, idx);
+      (pool || []).forEach(m=>{
+        allMods.push({ ...m, __origin:`Upgrade: ${name}`, __choice_key: choiceKey });
+      });
+    });
     for (const m of allMods){
       const originPrefix = m.__origin || 'Item';
       const note = m.note ? ` (${m.note})` : '';
@@ -2280,7 +2283,8 @@ function getEquippedInventoryModifiers(){
         const level_increment = Number(em.level_increment ?? m.level_increment ?? 1);
         if (target.startsWith('choice:')){
           const kind = target.replace('choice:','');
-          const picks = normalizeChoiceEntry(itemChoiceState(itemKey, kind)).picks;
+          const choiceKey = m.__choice_key || itemKey;
+          const picks = normalizeChoiceEntry(itemChoiceState(choiceKey, kind)).picks;
           if (!picks.length) return;
           picks.forEach(sel=> mods.push({ target: sel, mode, value, level_step, level_increment, origin }));
           return;
@@ -2618,20 +2622,14 @@ function invToggleModal(modal, backdrop, open){
   }
 }
 
-function itemChoiceMods(it){
-  const mods = [];
-  (it.modifiers || []).forEach(m=>{
-    if (String(m.target||'').startsWith('choice:')) mods.push({ ...m, __source:'Item' });
-  });
-  (it.upgrades || []).forEach(u=>{
-    const pool = (Array.isArray(u.holder_modifiers) && u.holder_modifiers.length) ? u.holder_modifiers : (u.modifiers || []);
-    pool.forEach(m=>{
-      if (String(m.target||'').startsWith('choice:')) mods.push({ ...m, __source:`Upgrade: ${u.name || u.id || 'Upgrade'}` });
+  function itemChoiceMods(it){
+    const mods = [];
+    (it.modifiers || []).forEach(m=>{
+      if (String(m.target||'').startsWith('choice:')) mods.push({ ...m, __source:'Item' });
     });
-  });
-  return mods;
-}
-function resolveUpgradeModifiers(u, meta){
+    return mods;
+  }
+  function resolveUpgradeModifiers(u, meta){
   const holder = (Array.isArray(u?.holder_modifiers) && u.holder_modifiers.length) ? u.holder_modifiers : [];
   if (holder.length) return holder;
   const mods = Array.isArray(u?.modifiers) ? u.modifiers : [];
@@ -2640,25 +2638,43 @@ function resolveUpgradeModifiers(u, meta){
   if (metaHolder.length) return metaHolder;
   return Array.isArray(meta?.modifiers) ? meta.modifiers : [];
 }
-function upgradeChoiceMods(u, meta){
-  const name = meta?.name || u?.name || u?.id || 'Upgrade';
-  const mods = resolveUpgradeModifiers(u, meta);
-  return (mods || []).filter(m=> String(m.target||'').startsWith('choice:')).map(m=> ({ ...m, __source:`Upgrade: ${name}` }));
-}
+  function upgradeChoiceMods(u, meta, choiceKey){
+    const name = meta?.name || u?.name || u?.id || 'Upgrade';
+    const mods = resolveUpgradeModifiers(u, meta);
+    return (mods || []).filter(m=> String(m.target||'').startsWith('choice:')).map(m=> ({
+      ...m,
+      __source:`Upgrade: ${name}`,
+      __choice_key: choiceKey || ''
+    }));
+  }
 function itemHasChoice(it){
   return itemChoiceMods(it).length > 0;
 }
-function itemChoiceKey(it){
-  const key = String(it?.item_id || it?.id || '').trim();
-  if (key) return key;
-  const name = String(it?.name || '').trim();
-  return name || '';
-}
-function pruneItemChoices(){
-  if (!LINKED_INV) return;
-  const ids = new Set((LINKED_INV.items || []).map(it=> itemChoiceKey(it)).filter(Boolean));
-  Object.keys(ITEM_CHOICES).forEach(id=>{ if (!ids.has(String(id))) delete ITEM_CHOICES[id]; });
-}
+  function itemChoiceKey(it){
+    const key = String(it?.item_id || it?.id || '').trim();
+    if (key) return key;
+    const name = String(it?.name || '').trim();
+    return name || '';
+  }
+  function upgradeChoiceKey(it, upgrade, idx){
+    const itemKey = itemChoiceKey(it);
+    const upgId = String(upgrade?.id || upgrade?.key || upgrade || '').trim() || 'upgrade';
+    const target = String(upgrade?.target || '').trim() || 'any';
+    const pos = Number.isFinite(idx) ? idx : 0;
+    return `${itemKey}::upg:${upgId}:${target}:${pos}`;
+  }
+  function pruneItemChoices(){
+    if (!LINKED_INV) return;
+    const ids = new Set();
+    (LINKED_INV.items || []).forEach(it=>{
+      const baseKey = itemChoiceKey(it);
+      if (baseKey) ids.add(baseKey);
+      (it.upgrades || []).forEach((u, idx)=>{
+        ids.add(upgradeChoiceKey(it, u, idx));
+      });
+    });
+    Object.keys(ITEM_CHOICES).forEach(id=>{ if (!ids.has(String(id))) delete ITEM_CHOICES[id]; });
+  }
 
 async function invAddContainer(){
   const name = (invNewContNameEl.value || "Container").trim();
@@ -3316,11 +3332,11 @@ function openInvItemModal(it){
       empty.textContent = "No upgrades installed.";
       upList.appendChild(empty);
     }else{
-      ups.forEach(u=>{
-        const upgId = u.id || u.key || u;
-        const meta = (window.UPGRADE_META || {})[upgId] || {};
-        const title = meta.name || u.name || upgId || "Upgrade";
-        const desc = u.description_html || u.description || meta.description_html || meta.description || "";
+        ups.forEach((u, idx)=>{
+          const upgId = u.id || u.key || u;
+          const meta = (window.UPGRADE_META || {})[upgId] || {};
+          const title = meta.name || u.name || upgId || "Upgrade";
+          const desc = u.description_html || u.description || meta.description_html || meta.description || "";
 
         const row = document.createElement("div");
         row.className = "upg-row";
@@ -3351,16 +3367,17 @@ function openInvItemModal(it){
             closeInvItemModal();
           }catch(e){ alert(e.message); }
         });
-        const choiceMods = upgradeChoiceMods(u, meta);
-        btns.appendChild(rem);
-        if (choiceMods.length){
-          const edit = document.createElement("button");
-          edit.className = "btn small";
-          edit.textContent = "Configure";
-          edit.title = "Configure upgrade choices";
-          edit.addEventListener("click", ()=> openUpgradeChoiceModal(it, u));
-          btns.appendChild(edit);
-        }
+          const choiceKey = upgradeChoiceKey(it, u, idx);
+          const choiceMods = upgradeChoiceMods(u, meta, choiceKey);
+          btns.appendChild(rem);
+          if (choiceMods.length){
+            const edit = document.createElement("button");
+            edit.className = "btn small";
+            edit.textContent = "Configure";
+            edit.title = "Configure upgrade choices";
+            edit.addEventListener("click", ()=> openUpgradeChoiceModal(it, u, idx));
+            btns.appendChild(edit);
+          }
         row.appendChild(btns);
         upList.appendChild(row);
       });
@@ -5840,20 +5857,19 @@ async function openItemChoiceModal(it){
   }, { titleText: `Configure: ${it.alt_name || it.name || 'Item'}` });
 }
 
-async function openUpgradeChoiceModal(it, upgrade){
-  const upgId = upgrade?.id || upgrade?.key || upgrade;
-  const meta = (window.UPGRADE_META || {})[upgId] || {};
-  const mods = upgradeChoiceMods(upgrade, meta);
-  if (!mods.length) return false;
-  const key = itemChoiceKey(it);
-  if (!key) return false;
-  return openChoiceModalGeneric(mods, ITEM_CHOICES[key] || {}, (selections)=>{
-    const existing = ITEM_CHOICES[key] || {};
-    ITEM_CHOICES[key] = { ...existing, ...selections };
-    queueSave();
-    recomputePassiveAgg(); renderStatistics(); updateDerived();
-  }, { titleText: `Configure: ${meta.name || upgrade?.name || 'Upgrade'}` });
-}
+  async function openUpgradeChoiceModal(it, upgrade, idx){
+    const upgId = upgrade?.id || upgrade?.key || upgrade;
+    const meta = (window.UPGRADE_META || {})[upgId] || {};
+    const choiceKey = upgradeChoiceKey(it, upgrade, idx);
+    const mods = upgradeChoiceMods(upgrade, meta, choiceKey);
+    if (!mods.length) return false;
+    if (!choiceKey) return false;
+    return openChoiceModalGeneric(mods, ITEM_CHOICES[choiceKey] || {}, (selections)=>{
+      ITEM_CHOICES[choiceKey] = selections;
+      queueSave();
+      recomputePassiveAgg(); renderStatistics(); updateDerived();
+    }, { titleText: `Configure: ${meta.name || upgrade?.name || 'Upgrade'}` });
+  }
 
 async function addAbilityToChar(aid){
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
