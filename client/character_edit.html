@@ -128,7 +128,8 @@
     .current-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:8px; margin-top:8px; }
     .current-row label { display:flex; align-items:center; gap:6px; }
     .current-row input { width:100%; }
-    .override-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+      .override-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+      #override-inputs { display:none; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap:8px; margin-top:10px; }
   /* Avatar */
   .avatar-card { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
   .avatar-frame { width:124px; height:124px; border:1px solid #333; border-radius:14px; overflow:hidden; background:#08080e; display:grid; place-items:center; }
@@ -3491,40 +3492,21 @@ function openInvItemModal(it){
       opt.textContent = q;
       qSelect.appendChild(opt);
     });
-    const curIdx = QUALITY_ORDER.findIndex(q=> lc(q) === lc(currentQuality));
-    const nextIdx = curIdx >= 0 ? Math.min(curIdx + 1, QUALITY_ORDER.length - 1) : -1;
-    qSelect.value = nextIdx >= 0 ? QUALITY_ORDER[nextIdx] : (QUALITY_ORDER.includes(currentQuality) ? currentQuality : "Adequate");
+    qSelect.value = QUALITY_ORDER.find(q=> lc(q) === lc(currentQuality)) || "Adequate";
     const qBtn = document.createElement("button");
     qBtn.className = "btn small";
-    qBtn.textContent = "Improve quality";
+    qBtn.textContent = "Change quality";
     qBtn.addEventListener("click", async ()=>{
       const target = qSelect.value;
       if (!target) return;
+      const curIdx = QUALITY_ORDER.findIndex(q=> lc(q) === lc(currentQuality));
+      const targetIdx = QUALITY_ORDER.findIndex(q=> lc(q) === lc(target));
+      if (curIdx < 0 || targetIdx < 0) return;
+      if (targetIdx === curIdx) return;
       try{
-        const inv = await upgradeQuality(it.item_id, target);
-        LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
-        closeInvItemModal();
-      }catch(e){
-        alert(e.message);
-      }
-    });
-    const downSelect = document.createElement("select");
-    QUALITY_ORDER.forEach(q=>{
-      const opt = document.createElement("option");
-      opt.value = q;
-      opt.textContent = q;
-      downSelect.appendChild(opt);
-    });
-    const prevIdx = curIdx > 0 ? curIdx - 1 : -1;
-    downSelect.value = prevIdx >= 0 ? QUALITY_ORDER[prevIdx] : (QUALITY_ORDER.includes(currentQuality) ? currentQuality : "Adequate");
-    const downBtn = document.createElement("button");
-    downBtn.className = "btn small btn-secondary";
-    downBtn.textContent = "Downgrade quality";
-    downBtn.addEventListener("click", async ()=>{
-      const target = downSelect.value;
-      if (!target) return;
-      try{
-        const inv = await downgradeQuality(it.item_id, target);
+        const inv = targetIdx > curIdx
+          ? await upgradeQuality(it.item_id, target)
+          : await downgradeQuality(it.item_id, target);
         LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
         closeInvItemModal();
       }catch(e){
@@ -3533,8 +3515,6 @@ function openInvItemModal(it){
     });
     qWrap.appendChild(qSelect);
     qWrap.appendChild(qBtn);
-    qWrap.appendChild(downSelect);
-    qWrap.appendChild(downBtn);
     btnRow.appendChild(qWrap);
   }
 
