@@ -943,6 +943,7 @@ const TARGET_GROUPS = [
     { value:'derived.skill_points', label:'Skill point pool' },
     { value:'derived.stat_points', label:'Characteristic point pool' },
     { value:'derived.sublimation_slots', label:'Sublimation slots' },
+    { value:'derived.complex_schools', label:'Complex schools' },
   ]},
   { label:'Custom', options:[{ value:'__custom__', label:'Custom path...' }]}
 ];
@@ -1847,6 +1848,7 @@ function prettyTargetLabel(target){
     if (t === 'derived.skill_points') return 'Skill point pool';
     if (t === 'derived.stat_points') return 'Characteristic point pool';
     if (t === 'derived.sublimation_slots') return 'Sublimation slots';
+    if (t === 'derived.complex_schools') return 'Complex schools';
     if (t === 'derived.initiative') return 'Initiative';
     return t;
   }
@@ -3861,7 +3863,7 @@ async function renderSchoolSpellCounters(){
     else if (onlySimple) simplePrepared++;
   });
   const maxSimpleSchools = null; // unlimited simple schools
-  const maxComplexSchools = msMAG || 0;
+    const maxComplexSchools = numOr(DERIVED_CACHE?.complex_schools, msMAG || 0);
   const maxSimplePreparedBase = magVal;
   const maxComplexPreparedBase = msMAG * 2;
   const simpleAdj = applyOps(maxSimplePreparedBase, PASSIVE.spell_slots?.simple);
@@ -4783,6 +4785,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
         fo: [`Base = ${base.fo}`],
         mo: [`Base = ${base.mo}`],
         initiative: [`Base = ${base.initiative ?? 0}`],
+        complex_schools: [`Base = ${base.complex_schools ?? 0}`],
         et: [`Base = ${base.et}`],
         tx: [`Base = ${base.tx}`],
         enc:[`Base = ${base.enc}`],
@@ -4849,7 +4852,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
         'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo','derived.initiative':'initiative',
       'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap','derived.talent_max':'talent_max',
       'derived.skill_points':'skill_points','derived.stat_points':'stat_points',
-      'derived.sublimation_slots':'sublimation_slots'
+      'derived.sublimation_slots':'sublimation_slots','derived.complex_schools':'complex_schools'
     };
   for (const m of allMods){
     if (map[m.target]){
@@ -4943,7 +4946,8 @@ function updateDerived(){
   base.fo = 2 + Math.floor(lvl/5) + msWIL + (2*msPRE) + msWIS;
     base.mo = 4 + msDEX + msREF;
     base.initiative = msDEX + msREF;
-  base.spcap = Math.floor(base.hp * 0.10);
+    base.spcap = Math.floor(base.hp * 0.10);
+    base.complex_schools = msMAG || 0;
   base.enc = 10 + (10 * msBOD) + (5 * msWIL);
   const invEnc = LINKED_INV?.enc_total || 0;
   base.et = 1 + Math.floor(lvl/10) + msMAG;
