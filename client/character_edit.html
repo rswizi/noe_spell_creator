@@ -1542,7 +1542,7 @@ function normalizeSublimations(arr){
 }
 function slotsForLevel(lvl){
   const base = 2; // unlocked immediately, +2 every 10 levels
-  return base + (Math.floor(Math.max(1, lvl-1) / 10) * 2);
+  return base + (Math.floor(Math.max(1, lvl) / 10) * 2);
 }
 function effectiveSublimationSlots(lvl){
   return numOr(DERIVED_CACHE?.sublimation_slots, slotsForLevel(lvl));
