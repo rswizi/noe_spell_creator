@@ -3999,6 +3999,7 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
     kind = it.get("kind")
     if upg_doc.get("kind") != kind:
         raise HTTPException(400, "Upgrade kind mismatch")
+    slot = None
     if kind == "equipment":
         slot = (it.get("equipment_slot") or it.get("slot") or "").lower()
         if upg_doc.get("slot") and slot and upg_doc.get("slot") != slot:
