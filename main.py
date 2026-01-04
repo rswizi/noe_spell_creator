@@ -3973,6 +3973,59 @@ def upgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict =
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
     return {"status": "success", "inventory": inv2, "transaction": tx}
 
+@app.post("/inventories/{inv_id}/items/{item_id}/downgrade_quality")
+def downgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    items = inv.get("items") or []
+    it = next((x for x in items if x.get("item_id") == item_id), None)
+    if not it:
+        raise HTTPException(404, "Item not found")
+    if it.get("kind") not in ("weapon", "equipment"):
+        raise HTTPException(400, "Only weapons/equipment can downgrade quality")
+
+    to = (payload.get("to") or "").strip()
+    if to not in QUALITY_ORDER:
+        raise HTTPException(400, "Invalid quality target")
+
+    cur_q = it.get("quality") or "Adequate"
+    if QUALITY_ORDER.index(to) >= QUALITY_ORDER.index(cur_q):
+        raise HTTPException(400, "Target quality must be lower than current")
+
+    base_price = int(it.get("base_price") or 0)
+    old_unit = int(_qprice(base_price, cur_q))
+    new_unit = int(_qprice(base_price, to))
+
+    new_paid_unit = min(int(it.get("paid_unit") or old_unit), new_unit)
+    new_variant = _compose_variant(to, it.get("upgrades"))
+
+    tx = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "currency": _pick_currency(inv, (payload.get("currency") or None)),
+        "amount": 0,
+        "note": f'Downgrade quality: {it.get("name","Item")} {cur_q} → {to}',
+        "source": "downgrade_quality",
+        "item_id": item_id
+    }
+
+    db.inventories.update_one(
+        {"id": inv_id, "owner": user, "items.item_id": item_id},
+        {
+            "$set": {
+                "items.$.quality": to,
+                "items.$.paid_unit": new_paid_unit,
+                "items.$.variant": new_variant
+            },
+            "$push": {"transactions": tx}
+        }
+    )
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2, "transaction": tx}
+
 @app.post("/inventories/{inv_id}/items/{item_id}/install_upgrade")
 def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
     user, role = require_auth(request)
