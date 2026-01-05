@@ -3979,7 +3979,11 @@ function msForSchool(school){
   const skillVal = Math.max(valFromIV ?? 0, valFromChar ?? 0);
   const ints = (school.linked_intensities || []).map(lc);
   const vals = ints
-    .map(k => ({ key:k, val:numOr(iv.natures?.[k], 0) }))
+    .map(k => {
+      const name = INTENSITIES.find(n=> lc(n) === k) || k;
+      const val = skillTotalAdjustedFor('magic', name);
+      return { key:k, val:numOr(val, 0) };
+    })
     .sort((a,b)=> (b.val - a.val) || a.key.localeCompare(b.key));
   const top1 = vals[0] || { key:null, val:0 };
   const top2 = vals[1] || { key:null, val:0 };
