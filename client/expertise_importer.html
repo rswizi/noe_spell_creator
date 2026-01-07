@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NoE - Expertise / Divine Manifestation Importer</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#060608; color:#f5f5f5; }
+    .page { min-height:100vh; display:grid; place-items:start center; }
+    .wrap { width:100%; max-width:1080px; padding:24px 16px 40px; }
+    .topbar { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+    .topbar h1 { margin:0; font-size:20px; }
+    .topbar .right { margin-left:auto; }
+    .muted { opacity:.8; font-size:.9rem; }
+    a.btn, button.btn, input, textarea, select {
+      border-radius:10px; border:1px solid #333; background:#111; color:#f0f0f0;
+      padding:8px 10px; font:inherit;
+    }
+    a.btn:hover, button.btn:hover { background:#181818; }
+    textarea { width:100%; min-height:260px; resize:vertical; }
+    .panel { border:1px solid #262626; border-radius:14px; background:#101010; padding:14px 14px 16px; margin-bottom:12px; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .row label { font-size:.88rem; opacity:.85; }
+    .grid { display:grid; gap:12px; grid-template-columns: 1fr; }
+    .preview-card { border:1px solid #2b2b2b; border-radius:12px; padding:12px; background:#0f0f15; margin-top:10px; }
+    .preview-card h3 { margin:0 0 6px; font-size:1rem; }
+    .ability-row { border-top:1px solid #1f1f1f; padding:8px 0; }
+    .ability-row:first-child { border-top:none; padding-top:0; }
+    .pill { border-radius:999px; border:1px solid #333; padding:2px 8px; font-size:.78rem; opacity:.85; }
+    .desc-box { border:1px solid #262626; border-radius:10px; padding:8px 10px; background:#121218; }
+    .status-line { margin-top:10px; font-size:.88rem; opacity:.9; }
+    .rich-editor { border:1px solid #333; border-radius:12px; background:#0f0f0f; }
+    .rich-toolbar { display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px; border-bottom:1px solid #1f1f1f; }
+    .rich-toolbar button { padding:6px 8px; font-size:.9rem; border-radius:8px; border:1px solid #2d2d2d; background:#161616; color:#f3f3f3; cursor:pointer; }
+    .rich-toolbar button:hover { background:#1f1f1f; }
+    .rich-toolbar button:active { background:#222; }
+    .rich-area { min-height:260px; padding:10px; outline:none; }
+    .rich-area:empty:before { content: attr(data-placeholder); color:#777; }
+    .rich-area table { width:100%; border-collapse:collapse; margin-top:6px; }
+    .rich-area th, .rich-area td { border:1px solid #333; padding:6px; }
+  </style>
+</head>
+<body>
+  <div class="page"><div class="wrap">
+    <div class="topbar">
+      <h1>Expertise / Divine Manifestation Importer</h1>
+      <span id="login-chip" class="muted right"></span>
+      <a class="btn" href="abilities_home.html">Back</a>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <label for="source-kind">Source</label>
+        <select id="source-kind">
+          <option value="Expertise">Expertise</option>
+          <option value="Divine Manifestation">Divine Manifestation</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:6px;">
+        <label for="ability-tags">Ability Tags</label>
+        <input id="ability-tags" placeholder="Comma-separated tags" style="flex:1;">
+      </div>
+      <label class="muted" style="display:block; margin-top:8px;">Paste text (multiple entries supported)</label>
+      <div id="raw-editor" class="rich-editor">
+        <div class="rich-toolbar">
+          <button type="button" data-cmd="bold" title="Bold">Bold</button>
+          <button type="button" data-cmd="italic" title="Italic">Italic</button>
+          <button type="button" data-cmd="underline" title="Underline">Underline</button>
+          <button type="button" data-cmd="table" title="Insert 2x2 table">Table</button>
+          <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+        </div>
+        <div class="rich-area" contenteditable="true" data-placeholder="Physician
+WIS should be at least your third-highest characteristic.
+..."></div>
+      </div>
+      <label class="row" style="gap:6px; margin-top:8px;">
+        <input type="checkbox" id="replace-dup" checked>
+        <span class="muted">Replace duplicates (update existing entries)</span>
+      </label>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn" id="btn-parse">Parse Preview</button>
+        <button class="btn" id="btn-import">Import</button>
+        <span id="status-line" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="panel" id="preview-panel" style="display:none;">
+      <h2>Preview</h2>
+      <div id="preview-list"></div>
+    </div>
+  </div></div>
+
+<script>
+function getToken(){ return localStorage.getItem('auth_token') || ''; }
+function setCookieToken(tok){ if(!tok) return; document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
+function authHeaders(){
+  const t=getToken(); if(t) setCookieToken(t);
+  return t ? {'Authorization':'Bearer '+t, 'X-Auth-Token':t} : {};
+}
+async function api(path,opt={}){
+  const headers = Object.assign({}, opt.headers||{}, authHeaders());
+  const resp = await fetch(path, { credentials:'include', ...opt, headers });
+  const ct = resp.headers.get('content-type') || '';
+  const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
+  if(!resp.ok || data.status==='error') throw new Error(data.message || ('HTTP '+resp.status));
+  return data;
+}
+
+const loginChip = document.getElementById('login-chip');
+const sourceKindEl = document.getElementById('source-kind');
+const abilityTagsEl = document.getElementById('ability-tags');
+const replaceDupEl = document.getElementById('replace-dup');
+const previewPanel = document.getElementById('preview-panel');
+const previewList = document.getElementById('preview-list');
+const statusLine = document.getElementById('status-line');
+
+let ROLE = '';
+
+function getKindInfo(){
+  const kind = (sourceKindEl.value || 'Expertise').trim();
+  if (kind.toLowerCase().includes('divine')){
+    return {
+      label: 'Divine Manifestation',
+      sourceCategory: 'Divine Manifestation',
+      endpoint: '/divine_manifestations',
+      listKey: 'divine_manifestations',
+      itemKey: 'divine_manifestation'
+    };
+  }
+  return {
+    label: 'Expertise',
+    sourceCategory: 'Expertise',
+    endpoint: '/expertise',
+    listKey: 'expertises',
+    itemKey: 'expertise'
+  };
+}
+
+function setupRichTextEditor(containerId, placeholder=''){
+  const container = document.getElementById(containerId);
+  if (!container) throw new Error('Missing rich text container '+containerId);
+  const area = container.querySelector('.rich-area');
+  if (!area) throw new Error('Missing rich text area in '+containerId);
+  if (placeholder) area.setAttribute('data-placeholder', placeholder);
+
+  const sanitizePastedHtml = (html, text) => {
+    if (html){
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll('*').forEach(el=>{
+        el.removeAttribute('color');
+        el.style.color = '';
+        if (el.getAttribute('style') === '') el.removeAttribute('style');
+      });
+      return doc.body.innerHTML;
+    }
+    if (text != null){
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML.replace(/\n/g, '<br>');
+    }
+    return '';
+  };
+  area.addEventListener('paste', (e)=>{
+    const html = e.clipboardData?.getData('text/html');
+    const text = e.clipboardData?.getData('text/plain');
+    if (html || text){
+      e.preventDefault();
+      const cleaned = sanitizePastedHtml(html, text);
+      if (cleaned) document.execCommand('insertHTML', false, cleaned);
+    }
+  });
+
+  const normalizeHtml = (html)=>{
+    const text = (area.textContent || '').replace(/\u00a0/g, ' ').trim();
+    const raw = (html || '').trim();
+    if (!text) return '';
+    return raw;
+  };
+
+  container.querySelectorAll('[data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.preventDefault();
+      area.focus();
+      const cmd = btn.dataset.cmd;
+      if (cmd === 'table'){
+        const tbl = '<table class="rte-table"><tbody><tr><td>Rank</td><td>Reward</td></tr><tr><td>1</td><td>Example</td></tr></tbody></table>';
+        document.execCommand('insertHTML', false, tbl);
+      }else{
+        document.execCommand(cmd, false, null);
+      }
+    });
+  });
+
+  return {
+    el: area,
+    getHTML: ()=> normalizeHtml(area.innerHTML),
+    setHTML: (html='')=>{ area.innerHTML = html || ''; },
+  };
+}
+
+const rawEditor = setupRichTextEditor('raw-editor');
+function escapeHtml(s){
+  return String(s||'')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
+function textToHtml(text){
+  const parts = String(text||'').split(/\n\s*\n/);
+  return parts.map(p=>{
+    const lines = p.split(/\n/).map(l=>escapeHtml(l.trim())).filter(Boolean);
+    if (!lines.length) return '';
+    return `<p>${lines.join('<br>')}</p>`;
+  }).filter(Boolean).join('');
+}
+function stripStarsPrefix(name){
+  return String(name||'').replace(/^\s*\[[^\]]*\]\s*/,'').trim();
+}
+
+function normalizeCharKey(token){
+  const t = String(token||'').trim().toLowerCase();
+  const map = {
+    ref:'reflex', reflex:'reflex',
+    dex:'dexterity', dexterity:'dexterity',
+    bod:'body', body:'body',
+    wis:'wisdom', wisdom:'wisdom',
+    pre:'presence', presence:'presence',
+    mag:'magic', magic:'magic',
+    wil:'willpower', willpower:'willpower',
+    tec:'tech', tech:'tech'
+  };
+  return map[t] || '';
+}
+
+function parsePrereqRules(text){
+  const out = {};
+  const lines = String(text||'')
+    .split(/\r?\n/)
+    .map(l=> l.replace(/^\s*[-*]\s*/,'').trim())
+    .filter(Boolean);
+  if (!lines.length) return out;
+  const highestRe = /([a-zA-Z,\s]+)\s+must be your highest characteristic/i;
+  const secondRe = /([a-zA-Z,\s]+)\s+must be your second highest characteristic/i;
+  const thirdRe = /([a-zA-Z,\s]+)\s+must be your third highest characteristic/i;
+  lines.forEach(line=>{
+    const clean = line.replace(/\s+/g,' ').trim();
+    const matchHigh = clean.match(highestRe);
+    const matchSecond = clean.match(secondRe);
+    const matchThird = clean.match(thirdRe);
+    const match = matchHigh || matchSecond || matchThird;
+    if (!match) return;
+    const raw = match[1] || '';
+    const parts = raw.split(/or|,|\//i).map(s=>s.trim()).filter(Boolean);
+    const keys = parts.map(normalizeCharKey).filter(Boolean);
+    const pos = matchSecond ? 2 : (matchThird ? 3 : 1);
+    if (keys.length === 1){
+      out.char_order = [{ key: keys[0], position: pos }];
+    }else if (keys.length > 1){
+      out.char_order_any = [{ position: pos, keys }];
+    }
+  });
+  return out;
+}
+function normalizeActionLabel(label){
+  const raw = String(label||'').toLowerCase();
+  if (raw.includes('free action')) return 'Free Action';
+  if (raw.includes('special action')) return 'Special Action';
+  if (raw.includes('ritual')) return 'Ritual';
+  if (raw.includes('action')) return 'Action';
+  return '';
+}
+function parseCosts(text){
+  const costs = { HP:0, EN:0, MP:0, FO:0, MO:0, TX:0, other_label:'', other_value:0 };
+  let costsActive = false;
+  const re = /(Active\s+Cost|Cost)\s*\(([^)]+)\)/gi;
+  let m;
+  while ((m = re.exec(text))){
+    if (/active/i.test(m[1])) costsActive = true;
+    const inner = m[2] || '';
+    const tokenRe = /([+-]?\d+)\s*([A-Za-z]+)/g;
+    let t;
+    while ((t = tokenRe.exec(inner))){
+      const val = parseInt(t[1], 10);
+      const key = String(t[2] || '').toUpperCase();
+      if (['HP','EN','MP','FO','MO','TX'].includes(key)){
+        costs[key] += val;
+      }else if (!costs.other_label){
+        costs.other_label = key;
+        costs.other_value = val;
+      }
+    }
+  }
+  return { costs, costsActive };
+}
+function stripCostMarkers(text){
+  return String(text||'')
+    .replace(/\[?\s*Active\s+Cost\s*\([^)]+\)\s*\]?/gi, '')
+    .replace(/\[?\s*Cost\s*\([^)]+\)\s*\]?/gi, '')
+    .replace(/\[\s*,\s*\]/g, '')
+    .replace(/\[\s*,\s*/g, '[')
+    .replace(/,\s*\]/g, ']')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+function stripCostMarkersHtml(html){
+  return String(html||'')
+    .replace(/\[?\s*Active\s+Cost\s*\([^)]+\)\s*\]?/gi, '')
+    .replace(/\[?\s*Cost\s*\([^)]+\)\s*\]?/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function parseAbility(rank, lines, htmlLines){
+  const filtered = [];
+  const filteredHtml = [];
+  (lines || []).forEach((l, i)=>{
+    if (l == null) return;
+    filtered.push(l);
+    filteredHtml.push((htmlLines || [])[i] || '');
+  });
+  if (!filtered.length) return null;
+  let firstIdx = filtered.findIndex(l=> String(l).trim() !== '');
+  if (firstIdx < 0) return null;
+  const first = filtered[firstIdx];
+  let namePart = String(first).trim();
+  let descPart = '';
+  const colonIdx = namePart.indexOf(':');
+  if (colonIdx >= 0){
+    descPart = namePart.slice(colonIdx + 1).trim();
+    namePart = namePart.slice(0, colonIdx).trim();
+    if (filtered.length > 1){
+      descPart += '\n' + filtered.slice(1).join('\n');
+    }
+  }else if (filtered.length > 1){
+    descPart = filtered.slice(1).join('\n');
+  }
+
+  const fullText = filtered.join(' ');
+  const labelRe = /\(([^)]+)\)/g;
+  let hasAction = false;
+  let hasPassive = false;
+  let activation = '';
+  const scanLabels = (text)=>{
+    let m;
+    while ((m = labelRe.exec(text || ''))){
+      const raw = m[1] || '';
+      const normAct = normalizeActionLabel(raw);
+      if (normAct && !activation) activation = normAct;
+      if (/action|ritual/i.test(raw)) hasAction = true;
+      if (/passive/i.test(raw)) hasPassive = true;
+    }
+  };
+  scanLabels(namePart);
+  scanLabels(fullText);
+
+  let type = 'passive';
+  if (hasAction && hasPassive) type = 'mixed';
+  else if (hasAction) type = 'active';
+  else if (hasPassive) type = 'passive';
+
+  if (hasAction || hasPassive){
+    namePart = namePart.replace(/\s*\(([^)]*(action|ritual|passive)[^)]*)\)/gi, '').replace(/\s{2,}/g,' ').trim();
+  }
+
+  const costInfo = parseCosts(fullText);
+  descPart = stripCostMarkers(descPart);
+
+  const vMatch = namePart.match(/\bV\.?\s*(\d+)\b/i);
+  const version = vMatch ? Math.max(1, parseInt(vMatch[1], 10)) : 1;
+  const baseName = vMatch ? namePart.replace(vMatch[0], '').replace(/\s{2,}/g,' ').trim() : namePart;
+
+  let descHtml = '';
+  if (filteredHtml.length){
+    let htmlFirst = filteredHtml[firstIdx] || '';
+    if (colonIdx >= 0 && htmlFirst){
+      const prefix = String(first).slice(0, colonIdx + 1);
+      htmlFirst = sliceHtmlAfterPrefix(htmlFirst, prefix);
+    }
+    const htmlRest = filteredHtml.slice(firstIdx + 1);
+    const parts = [htmlFirst, ...htmlRest].filter(h=> h != null && String(h).trim() !== '');
+    descHtml = stripCostMarkersHtml(parts.join('<br>'));
+  }
+  if (!descHtml) descHtml = textToHtml(descPart.trim());
+
+  return {
+    rank,
+    name: namePart.trim(),
+    base_name: baseName.trim(),
+    version,
+    type,
+    activation,
+    description_text: descPart.trim(),
+    description_html: descHtml,
+    costs: costInfo.costs,
+    costs_active: costInfo.costsActive
+  };
+}
+
+function htmlToText(rawHtml){
+  const text = String(rawHtml || '')
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "\n")
+    .replace(/<tr[^>]*>/gi, "\n")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\u00a0/g, " ");
+  return text;
+}
+
+function parseRankTables(rawHtml){
+  const doc = new DOMParser().parseFromString(rawHtml || '', 'text/html');
+  const tables = Array.from(doc.querySelectorAll('table'));
+  const parsed = [];
+  tables.forEach(table=>{
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const items = [];
+    rows.forEach((row, idx)=>{
+      const cells = Array.from(row.querySelectorAll('th,td'));
+      if (cells.length < 2) return;
+      const c0 = (cells[0].textContent || '').replace(/\s+/g, ' ').trim();
+      const c1 = (cells[1].textContent || '').replace(/\s+/g, ' ').trim();
+      const c1Html = (cells[1].innerHTML || '').trim();
+      if (idx === 0 && /rank/i.test(c0) && /reward/i.test(c1)) return;
+      const rank = parseInt(c0, 10);
+      if (!Number.isFinite(rank)) return;
+      if (!c1) return;
+      items.push({ rank, text: c1, html: c1Html });
+    });
+    if (items.length) parsed.push(items);
+  });
+  return parsed;
+}
+
+function htmlToLineTokens(rawHtml){
+  const doc = new DOMParser().parseFromString(rawHtml || '', 'text/html');
+  const out = [];
+  const pushLine = (html)=>{
+    const parts = String(html || '').split(/<br\s*\/?>/i);
+    parts.forEach((part, idx)=>{
+      if (idx > 0) out.push({ text:'', html:'' });
+      const text = htmlToText(part).trim();
+      if (text || part.trim()){
+        out.push({ text, html: part.trim() });
+      }
+    });
+  };
+  const walk = (node)=>{
+    if (node.nodeType === 3){
+      const txt = (node.textContent || '').trim();
+      if (txt) out.push({ text: txt, html: escapeHtml(txt) });
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'br'){ out.push({ text:'', html:'' }); return; }
+    if (tag === 'table'){ return; }
+    if (tag === 'div' && node.children && node.children.length){
+      Array.from(node.children).forEach(walk);
+      return;
+    }
+    if (tag === 'ul' || tag === 'ol'){
+      node.querySelectorAll('li').forEach(li=> pushLine(li.innerHTML));
+      return;
+    }
+    if (['p','div','li','h1','h2','h3','h4','h5','h6'].includes(tag)){
+      pushLine(node.innerHTML);
+      return;
+    }
+    if (node.children && node.children.length){
+      Array.from(node.children).forEach(walk);
+    }else{
+      pushLine(node.innerHTML);
+    }
+  };
+  Array.from(doc.body.childNodes).forEach(walk);
+  return out;
+}
+
+function sliceHtmlAfterPrefix(html, prefixText){
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html || '';
+  let remaining = String(prefixText || '');
+  const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, null);
+  let node;
+  while ((node = walker.nextNode())){
+    if (!remaining) break;
+    const text = node.textContent || '';
+    if (remaining.length >= text.length){
+      remaining = remaining.slice(text.length);
+      node.textContent = '';
+    }else{
+      node.textContent = text.slice(remaining.length);
+      remaining = '';
+      break;
+    }
+  }
+  wrap.querySelectorAll('*').forEach(el=>{
+    if (el.textContent === '' && el.children.length === 0) el.remove();
+  });
+  return wrap.innerHTML.trim();
+}
+
+function splitHeaderPrereq(line){
+  const m = String(line||'').match(/^(.*?)(\bPrerequisites?\s*:)(.*)$/i);
+  if (!m) return null;
+  return {
+    name: (m[1] || '').trim(),
+    marker: (m[2] || 'Prerequisites:').trim(),
+    after: (m[3] || '').trim()
+  };
+}
+
+function parseBlocks(rawHtml){
+  const tokens = htmlToLineTokens(rawHtml);
+  const tableSets = parseRankTables(rawHtml);
+  const blocks = [];
+  let current = null;
+  let lastBlank = false;
+  const pushCurrent = ()=>{ if (current) blocks.push(current); };
+  tokens.forEach(tok=>{
+    const trimmed = (tok.text || '').trim();
+    const headerMatch = trimmed.match(/^\[[^\]]+\]\s*(.+)$/);
+    if (headerMatch){
+      pushCurrent();
+      current = { header: trimmed, headerName: headerMatch[1].trim(), lines: [] };
+      lastBlank = false;
+      return;
+    }
+    const split = splitHeaderPrereq(trimmed);
+    if (!current){
+      if (trimmed){
+        const name = split ? (split.name || trimmed) : trimmed;
+        current = { header: trimmed, headerName: name, lines: [] };
+        if (split){
+          current.lines.push({ text: split.marker, html: escapeHtml(split.marker) });
+          if (split.after) current.lines.push({ text: split.after, html: escapeHtml(split.after) });
+        }
+        lastBlank = false;
+      }
+      return;
+    }
+    if (lastBlank && trimmed && !/^Rank\b/i.test(trimmed) && !/^\d+\b/.test(trimmed) && !/^Prerequisites?\b/i.test(trimmed)){
+      pushCurrent();
+      current = { header: trimmed, headerName: trimmed, lines: [] };
+      lastBlank = false;
+      return;
+    }
+    if (split){
+      if (split.name){
+        current.headerName = current.headerName || split.name;
+      }
+      current.lines.push({ text: split.marker, html: escapeHtml(split.marker) });
+      if (split.after) current.lines.push({ text: split.after, html: escapeHtml(split.after) });
+      lastBlank = false;
+      return;
+    }
+    current.lines.push({ text: tok.text || '', html: tok.html || '' });
+    lastBlank = !trimmed;
+  });
+  pushCurrent();
+
+  const parsed = [];
+  blocks.forEach(block=>{
+    const name = stripStarsPrefix(block.headerName || block.header || '');
+    const lines = block.lines || [];
+    const prereqIdx = lines.findIndex(l=>/^\s*Prerequisites?\s*:/i.test(l.text || ''));
+    const rankIdx = lines.findIndex(l=>/^\s*Rank\b/i.test(l.text || ''));
+    let prereqText = '';
+    let descLines = [];
+    if (prereqIdx >= 0){
+      const tail = lines.slice(prereqIdx + 1, rankIdx >= 0 ? rankIdx : lines.length);
+      let splitIdx = -1;
+      for (let i = 0; i < tail.length; i++){
+        const raw = String(tail[i].text || '').trim();
+        if (!raw){
+          splitIdx = i;
+          break;
+        }
+        const isBullet = /^[-*]\s+/.test(raw);
+        const hasMust = /\bmust\b/i.test(raw);
+        if (!isBullet && !hasMust && i > 0){
+          splitIdx = i;
+          break;
+        }
+      }
+      const prereqSlice = splitIdx >= 0 ? tail.slice(0, splitIdx) : tail.slice(0, tail.length);
+      const prereqLines = prereqSlice.map(l=> String(l.text || '').trim()).filter(Boolean);
+      prereqText = prereqLines.map(l=> l.replace(/^[-*]\s+/, '').trim()).join('\n').trim();
+      descLines = splitIdx >= 0 ? tail.slice(splitIdx + 1) : tail.slice(prereqSlice.length);
+    }else{
+      descLines = lines.slice(0, rankIdx >= 0 ? rankIdx : lines.length);
+    }
+    const descText = descLines.map(l=> l.text || '').join('\n').trim();
+    const descHtmlParts = descLines.map(l=> l.html || '').filter(h=> String(h).trim() !== '');
+    const descHtml = descHtmlParts.length ? descHtmlParts.join('<br>') : textToHtml(descText);
+    const prereqRules = parsePrereqRules(prereqText);
+
+    const rankLines = rankIdx >= 0 ? lines.slice(rankIdx + 1) : lines.slice();
+    const abilities = [];
+    let currentRank = null;
+    let buffer = [];
+    let bufferHtml = [];
+    const flush = ()=>{
+      if (currentRank == null) return;
+      const ability = parseAbility(currentRank, buffer, bufferHtml);
+      if (ability) abilities.push(ability);
+      buffer = [];
+      bufferHtml = [];
+    };
+    rankLines.forEach(line=>{
+      const trimmed = String(line.text || '').trim();
+      if (!trimmed) {
+        if (currentRank != null){
+          buffer.push('');
+          bufferHtml.push('');
+        }
+        return;
+      }
+      if (/^Rank\s*Reward/i.test(trimmed) || /^Rank\s*$/i.test(trimmed)) return;
+      const m = trimmed.match(/^(\d{1,2})\s*(.*)$/);
+      if (m){
+        const rk = parseInt(m[1], 10);
+        if (rk >= 1 && rk <= 12){
+          flush();
+          currentRank = rk;
+          if (m[2]){
+            buffer.push(m[2].trim());
+            if (line.html){
+              const prefix = String(line.text || '').slice(0, Math.max(0, String(line.text || '').length - m[2].length));
+              const sliced = sliceHtmlAfterPrefix(line.html, prefix);
+              bufferHtml.push(sliced || escapeHtml(m[2].trim()));
+            }else{
+              bufferHtml.push(escapeHtml(m[2].trim()));
+            }
+          }
+          return;
+        }
+      }
+      if (currentRank != null){
+        buffer.push(trimmed);
+        bufferHtml.push(line.html || escapeHtml(trimmed));
+      }
+    });
+    flush();
+
+    if (!abilities.length && tableSets.length){
+      const tableItems = tableSets.shift();
+      tableItems.forEach(entry=>{
+        const ab = parseAbility(entry.rank, entry.text.split(/\n/), entry.html ? [entry.html] : []);
+        if (ab) abilities.push(ab);
+      });
+    }
+
+    parsed.push({
+      name,
+      prereq_text: prereqText,
+      description_text: descText,
+      description_html: descHtml,
+      prereq_rules: prereqRules,
+      abilities
+    });
+  });
+  const dupMap = new Map();
+  const dups = new Set();
+  parsed.forEach(a=>{
+    const key = String(a.name || '').trim().toLowerCase();
+    if (!key) return;
+    if (dupMap.has(key)) dups.add(a.name || key);
+    else dupMap.set(key, true);
+  });
+  if (dups.size){
+    throw new Error('Duplicate names detected: ' + Array.from(dups).join(', '));
+  }
+  return parsed;
+}
+
+function formatCostDisplay(ab){
+  const costs = ab.costs || {};
+  const suffix = ab.costs_active ? ' (A)' : '';
+  const parts = [];
+  const push = (val, label)=>{
+    const num = Number(val);
+    if (!Number.isFinite(num) || num === 0) return;
+    parts.push(`${num} ${label}${suffix}`);
+  };
+  push(costs.HP, 'HP');
+  push(costs.EN, 'EN');
+  push(costs.MP, 'MP');
+  push(costs.FO, 'FO');
+  push(costs.MO, 'MO');
+  push(costs.TX, 'TX');
+  if (costs.other_label && costs.other_value != null){
+    push(costs.other_value, costs.other_label);
+  }
+  return parts.join(' / ');
+}
+
+function renderPreview(blocks){
+  if (!blocks.length){
+    previewPanel.style.display = 'none';
+    previewList.innerHTML = '';
+    return;
+  }
+  previewPanel.style.display = '';
+  previewList.innerHTML = '';
+  blocks.forEach(entry=>{
+    const card = document.createElement('div');
+    card.className = 'preview-card';
+    const prereq = entry.prereq_text ? `<div class="muted">Prereq: ${escapeHtml(entry.prereq_text)}</div>` : '';
+    const desc = entry.description_text ? `<div class="desc-box">${entry.description_html}</div>` : '';
+    card.innerHTML = `
+      <h3>${escapeHtml(entry.name)}</h3>
+      ${prereq}
+      ${desc}
+      <div class="muted" style="margin-top:6px;">Abilities: ${entry.abilities.length}</div>
+    `;
+    const list = document.createElement('div');
+    entry.abilities.forEach(ab=>{
+      const row = document.createElement('div');
+      row.className = 'ability-row';
+      const cost = formatCostDisplay(ab);
+      row.innerHTML = `
+        <div class="row">
+          <span class="pill">Rank ${ab.rank}</span>
+          <strong>${escapeHtml(ab.name)}</strong>
+          <span class="pill">${ab.type}</span>
+          ${ab.activation ? `<span class="pill">${escapeHtml(ab.activation)}</span>` : ''}
+        </div>
+        <div class="muted">${ab.description_html || escapeHtml(ab.description_text || '')}</div>
+        ${cost ? `<div class="muted">Cost: ${escapeHtml(cost)}</div>` : ''}
+      `;
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+    previewList.appendChild(card);
+  });
+}
+
+async function checkMe(){
+  try{
+    const me = await api('/auth/me');
+    loginChip.textContent = me.username + ' (' + me.role + ')';
+    ROLE = (me.role || '').toLowerCase();
+  }catch(e){
+    loginChip.textContent = 'Not logged in.';
+  }
+}
+
+async function findExistingAbilityByName(name, sourceCategory, sourceRef, cache){
+  const key = `${String(name||'').toLowerCase()}||${String(sourceRef||'')}`;
+  if (cache && cache[key]) return cache[key];
+  const res = await api(`/abilities?name=${encodeURIComponent(name)}&source=${encodeURIComponent(sourceCategory)}`);
+  const list = res.abilities || [];
+  const found = list.find(a=>
+    String(a.name||'').toLowerCase() === String(name||'').toLowerCase()
+    && String(a.source_ref||'') === String(sourceRef||'')
+  ) || null;
+  if (cache) cache[key] = found;
+  return found;
+}
+
+async function loadEntityIndex(kindInfo){
+  const res = await api(kindInfo.endpoint);
+  const list = res[kindInfo.listKey] || [];
+  const map = new Map();
+  list.forEach(a=>{
+    if (a?.name) map.set(String(a.name).toLowerCase(), a);
+  });
+  return map;
+}
+
+async function importBlocks(blocks, tags, replaceDup){
+  if (ROLE !== 'moderator' && ROLE !== 'admin'){
+    throw new Error('Only moderators/admins can import entries.');
+  }
+  const kind = getKindInfo();
+  const created = [];
+  const abilityCache = {};
+  const entityIndex = replaceDup ? await loadEntityIndex(kind) : new Map();
+  for (const entry of blocks){
+    const existing = replaceDup ? entityIndex.get(String(entry.name||'').toLowerCase()) : null;
+    statusLine.textContent = `Creating abilities for ${entry.name}...`;
+    const baseMap = {};
+    const abilities = entry.abilities.slice().sort((a,b)=> a.rank - b.rank);
+    for (const ab of abilities){
+      const baseKey = String(ab.base_name || ab.name || '').toLowerCase();
+      const prev = baseMap[baseKey];
+      const originalRank = prev ? prev.original_rank : ab.rank;
+      const replacesId = (ab.version > 1 && prev) ? prev.last_id : '';
+      const payload = {
+        name: ab.name,
+        type: ab.type,
+        source_category: kind.sourceCategory,
+        source_ref: entry.name,
+        tags,
+        description: ab.description_html || ''
+      };
+      if (ab.type === 'active' || ab.type === 'mixed'){
+        payload.active = {
+          activation: ab.activation || 'Action',
+          range: 0,
+          aoe: '',
+          costs: ab.costs || { HP:0, EN:0, MP:0, FO:0, MO:0, TX:0, other_label:'', other_value:0 },
+          costs_active: !!ab.costs_active
+        };
+      }
+      if (ab.type === 'passive' || ab.type === 'mixed'){
+        payload.passive = {
+          description: ab.description_html || '',
+          modifiers: []
+        };
+      }
+      let abilityId = '';
+      if (replaceDup){
+        const existingAb = await findExistingAbilityByName(ab.name, kind.sourceCategory, entry.name, abilityCache);
+        if (existingAb?.id){
+          const upd = await api(`/abilities/${encodeURIComponent(existingAb.id)}`, {
+            method:'PUT',
+            headers:{ 'content-type':'application/json' },
+            body: JSON.stringify(payload)
+          });
+          abilityId = upd.ability?.id || existingAb.id;
+        }
+      }
+      if (!abilityId){
+        const res = await api('/abilities', {
+          method:'POST',
+          headers:{ 'content-type':'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ability?.id){
+          throw new Error('Ability creation failed for ' + ab.name);
+        }
+        abilityId = res.ability.id;
+      }
+      ab.created_id = abilityId;
+      ab.original_rank = originalRank;
+      ab.replaces_id = replacesId || '';
+      baseMap[baseKey] = { last_id: ab.created_id, original_rank: originalRank };
+    }
+
+    statusLine.textContent = `${existing ? 'Updating' : 'Creating'} ${kind.label} ${entry.name}...`;
+    const ranks = abilities.map(ab=>({
+      rank: ab.rank,
+      ability_id: ab.created_id,
+      version: ab.version || 1,
+      original_rank: ab.original_rank || ab.rank,
+      replaces_id: ab.replaces_id || ''
+    }));
+    const payload = {
+      name: entry.name,
+      prereq_text: entry.prereq_text || '',
+      description_html: entry.description_html || '',
+      prereq_rules: entry.prereq_rules || {},
+      ranks
+    };
+    let res = null;
+    if (existing && replaceDup){
+      res = await api(`${kind.endpoint}/${encodeURIComponent(existing.id)}`, {
+        method:'PUT',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }else{
+      res = await api(kind.endpoint, {
+        method:'POST',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
+    created.push({ name: entry.name, id: res[kind.itemKey]?.id || res[kind.itemKey]?.id });
+  }
+  return created;
+}
+
+document.getElementById('btn-parse').addEventListener('click', ()=>{
+  try{
+    const parsed = parseBlocks(rawEditor.getHTML());
+    renderPreview(parsed);
+    statusLine.textContent = parsed.length ? `Parsed ${parsed.length} entry(ies).` : 'No entries detected.';
+  }catch(e){
+    statusLine.textContent = 'Parse failed: ' + e.message;
+  }
+});
+
+document.getElementById('btn-import').addEventListener('click', async ()=>{
+  try{
+    const parsed = parseBlocks(rawEditor.getHTML());
+    if (!parsed.length) throw new Error('No entries to import.');
+    let tags = (abilityTagsEl.value || '').split(',').map(t=>t.trim()).filter(Boolean);
+    if (!tags.length){
+      const input = prompt('Enter tags for imported abilities (comma-separated):', '') || '';
+      tags = input.split(',').map(t=>t.trim()).filter(Boolean);
+    }
+    const created = await importBlocks(parsed, tags, !!replaceDupEl?.checked);
+    statusLine.textContent = `Imported ${created.length} entry(ies).`;
+  }catch(e){
+    statusLine.textContent = 'Import failed: ' + e.message;
+  }
+});
+
+checkMe();
+</script>
+</body>
+</html>

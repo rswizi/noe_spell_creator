@@ -2104,6 +2104,106 @@ def delete_archetype(aid: str, request: Request):
         raise HTTPException(404, "Archetype not found")
     return {"status":"success","deleted": aid}
 
+@app.get("/expertise")
+def list_expertise(request: Request):
+    require_auth(request)
+    docs = list(get_col("expertise").find({}, {"_id":0}))
+    docs.sort(key=lambda d: d.get("name",""))
+    return {"status":"success","expertises": docs}
+
+@app.post("/expertise")
+async def create_expertise(request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    body = await request.json()
+    doc = _validate_expertise_doc(body or {})
+    if role not in ("moderator","admin"):
+        pending = _create_pending_submission(username, role, "expertise", doc)
+        return {"status":"pending","submission": pending}
+    doc["id"] = next_id_str("expertise", padding=4)
+    doc["created_at"] = _now_iso()
+    doc["updated_at"] = doc["created_at"]
+    get_col("expertise").insert_one(dict(doc))
+    return {"status":"success","expertise": {k:v for k,v in doc.items() if k!="_id"}}
+
+@app.get("/expertise/{eid}")
+def get_expertise(eid: str, request: Request):
+    require_auth(request)
+    doc = get_col("expertise").find_one({"id": eid}, {"_id":0})
+    if not doc:
+        raise HTTPException(404, "Expertise not found")
+    return {"status":"success","expertise": doc}
+
+@app.put("/expertise/{eid}")
+async def update_expertise(eid: str, request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    body = await request.json()
+    doc = get_col("expertise").find_one({"id": eid})
+    if not doc:
+        raise HTTPException(404, "Expertise not found")
+    new_doc = _validate_expertise_doc(body or {}, is_update=True)
+    new_doc["updated_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    get_col("expertise").update_one({"id": eid}, {"$set": new_doc})
+    out = get_col("expertise").find_one({"id": eid}, {"_id":0})
+    return {"status":"success","expertise": out}
+
+@app.delete("/expertise/{eid}")
+def delete_expertise(eid: str, request: Request):
+    require_auth(request, roles=["admin"])
+    res = get_col("expertise").delete_one({"id": eid})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Expertise not found")
+    return {"status":"success","deleted": eid}
+
+@app.get("/divine_manifestations")
+def list_divine_manifestations(request: Request):
+    require_auth(request)
+    docs = list(get_col("divine_manifestations").find({}, {"_id":0}))
+    docs.sort(key=lambda d: d.get("name",""))
+    return {"status":"success","divine_manifestations": docs}
+
+@app.post("/divine_manifestations")
+async def create_divine_manifestation(request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    body = await request.json()
+    doc = _validate_divine_manifestation_doc(body or {})
+    if role not in ("moderator","admin"):
+        pending = _create_pending_submission(username, role, "divine_manifestation", doc)
+        return {"status":"pending","submission": pending}
+    doc["id"] = next_id_str("divine_manifestations", padding=4)
+    doc["created_at"] = _now_iso()
+    doc["updated_at"] = doc["created_at"]
+    get_col("divine_manifestations").insert_one(dict(doc))
+    return {"status":"success","divine_manifestation": {k:v for k,v in doc.items() if k!="_id"}}
+
+@app.get("/divine_manifestations/{did}")
+def get_divine_manifestation(did: str, request: Request):
+    require_auth(request)
+    doc = get_col("divine_manifestations").find_one({"id": did}, {"_id":0})
+    if not doc:
+        raise HTTPException(404, "Divine Manifestation not found")
+    return {"status":"success","divine_manifestation": doc}
+
+@app.put("/divine_manifestations/{did}")
+async def update_divine_manifestation(did: str, request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    body = await request.json()
+    doc = get_col("divine_manifestations").find_one({"id": did})
+    if not doc:
+        raise HTTPException(404, "Divine Manifestation not found")
+    new_doc = _validate_divine_manifestation_doc(body or {}, is_update=True)
+    new_doc["updated_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    get_col("divine_manifestations").update_one({"id": did}, {"$set": new_doc})
+    out = get_col("divine_manifestations").find_one({"id": did}, {"_id":0})
+    return {"status":"success","divine_manifestation": out}
+
+@app.delete("/divine_manifestations/{did}")
+def delete_divine_manifestation(did: str, request: Request):
+    require_auth(request, roles=["admin"])
+    res = get_col("divine_manifestations").delete_one({"id": did})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Divine Manifestation not found")
+    return {"status":"success","deleted": did}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
 
@@ -2665,14 +2765,18 @@ def _total_from_invest(v: int) -> int:
     except Exception:
         return 0
 
-def _validate_archetype_doc(doc: dict, is_update=False):
+def _validate_ranked_doc(doc: dict, is_update=False, allow_hybrid=False):
     required = ["name","ranks"]
     if not is_update:
         for k in required:
             if k not in doc: raise HTTPException(400, f"Missing field {k}")
     doc["name"] = (doc.get("name") or "Archetype").strip()
-    doc["hybrid"] = bool(doc.get("hybrid") or False)
-    doc["sources"] = [str(s).strip() for s in (doc.get("sources") or []) if str(s).strip()] if doc.get("hybrid") else []
+    if allow_hybrid:
+        doc["hybrid"] = bool(doc.get("hybrid") or False)
+        doc["sources"] = [str(s).strip() for s in (doc.get("sources") or []) if str(s).strip()] if doc.get("hybrid") else []
+    else:
+        doc.pop("hybrid", None)
+        doc.pop("sources", None)
     doc["prereq_text"] = (doc.get("prereq_text") or "").strip()
     doc["description_html"] = (doc.get("description_html") or doc.get("description") or "").strip()
     rules = doc.get("prereq_rules") or {}
@@ -2777,6 +2881,15 @@ def _validate_archetype_doc(doc: dict, is_update=False):
     cleaned.sort(key=lambda x: x["rank"])
     doc["ranks"] = cleaned
     return doc
+
+def _validate_archetype_doc(doc: dict, is_update=False):
+    return _validate_ranked_doc(doc, is_update=is_update, allow_hybrid=True)
+
+def _validate_expertise_doc(doc: dict, is_update=False):
+    return _validate_ranked_doc(doc, is_update=is_update, allow_hybrid=False)
+
+def _validate_divine_manifestation_doc(doc: dict, is_update=False):
+    return _validate_ranked_doc(doc, is_update=is_update, allow_hybrid=False)
 
 def _compute_archetype_unlocked(archetype: dict, lvl: int) -> list[str]:
     eff_rank = _archetype_rank_for_level(lvl)
@@ -5241,6 +5354,20 @@ async def approve_submission(sid: str, request: Request):
         doc["created_at"] = now
         doc["updated_at"] = now
         get_col("archetypes").insert_one(dict(doc))
+        approved_id = doc["id"]
+    elif sub_type == "expertise":
+        doc = _validate_expertise_doc(payload or {})
+        doc["id"] = next_id_str("expertise", padding=4)
+        doc["created_at"] = now
+        doc["updated_at"] = now
+        get_col("expertise").insert_one(dict(doc))
+        approved_id = doc["id"]
+    elif sub_type == "divine_manifestation":
+        doc = _validate_divine_manifestation_doc(payload or {})
+        doc["id"] = next_id_str("divine_manifestations", padding=4)
+        doc["created_at"] = now
+        doc["updated_at"] = now
+        get_col("divine_manifestations").insert_one(dict(doc))
         approved_id = doc["id"]
     elif sub_type == "upgrade":
         doc = _upgrade_from_body(payload or {})
