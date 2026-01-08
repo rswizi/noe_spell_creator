@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -422,7 +422,7 @@
           </details>
         </div>
 
-        <div class="panel">
+        <div class="panel" id="exp-panel" style="display:none;">
           <details open class="panel">
             <summary class="hdr">
               <strong>Expertise</strong>
@@ -435,7 +435,7 @@
           </details>
         </div>
 
-        <div class="panel">
+        <div class="panel" id="dima-panel" style="display:none;">
           <details open class="panel">
             <summary class="hdr">
               <strong>Divine Manifestation</strong>
@@ -571,7 +571,7 @@
           <div class="modal-card" style="max-width:960px;">
             <header class="row" style="justify-content:space-between; align-items:center;">
               <div class="modal-title" id="sl-add-title">Add Spells</div>
-              <button class="modal-close" id="sl-add-close" aria-label="Close">âœ•</button>
+              <button class="modal-close" id="sl-add-close" aria-label="Close">✕</button>
             </header>
             <div class="row" style="gap:10px; flex-wrap:wrap; margin-bottom:8px;">
               <input id="sl-search-q" placeholder="Search spells..." style="flex:1; min-width:240px;">
@@ -597,7 +597,7 @@
           <div class="modal-card" style="max-width:720px;">
             <header class="row" style="justify-content:space-between; align-items:center;">
               <div class="modal-title" id="sl-sch-title">Add Schools</div>
-              <button class="modal-close" id="sl-sch-close" aria-label="Close" style="font-size:20px;">Ã—</button>
+              <button class="modal-close" id="sl-sch-close" aria-label="Close" style="font-size:20px;">×</button>
             </header>
             <div class="table-wrap">
               <table class="table">
@@ -1251,6 +1251,8 @@ const expSummaryEl    = document.getElementById('exp-summary');
 const expAbilitiesEl  = document.getElementById('exp-abilities');
 const dimaSummaryEl   = document.getElementById('dima-summary');
 const dimaAbilitiesEl = document.getElementById('dima-abilities');
+const expPanelEl = document.getElementById('exp-panel');
+const dimaPanelEl = document.getElementById('dima-panel');
 const expertiseCounterEl = document.getElementById('expertise-counter');
 const dimaCounterEl = document.getElementById('dima-counter');
 /* Inventory tab refs */
@@ -1630,14 +1632,14 @@ function updatePointCounters(){
   const usedSkill = totalSkillInvest();
   const usedStat = totalStatInvest();
   if (OVERRIDE_ENABLED){
-    if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkill} / ∞`;
-    if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStat} / ∞`;
+    if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkill} / 8`;
+    if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStat} / 8`;
     if (skillCapEl){
-      skillCapEl.textContent = 'Max per skill (invest): ∞';
+      skillCapEl.textContent = 'Max per skill (invest): 8';
       skillCapEl.title = 'Override enabled: caps are hints only.';
     }
     if (statCapEl){
-      statCapEl.textContent = 'Max per characteristic (invest): ∞';
+      statCapEl.textContent = 'Max per characteristic (invest): 8';
       statCapEl.title = 'Override enabled: caps are hints only.';
     }
     return;
@@ -1692,7 +1694,7 @@ function buildSkillOptions(){
       opts.push({ value:`${c.key}|${s}`, label:`${s} (${c.name})` });
     }
   }
-  // Allow intensities as targetable â€œskillsâ€ for Excellence
+  // Allow intensities as targetable “skills” for Excellence
   INTENSITIES.forEach(n=>{
     opts.push({ value:`magic|${n}`, label:`${n} (Intensity)` });
   });
@@ -3395,7 +3397,7 @@ function openInvItemModal(it){
   const totalPrice = Number.isFinite(totalPaid) ? totalPaid : 0;
   const cells = [
     { label: "Type", value: it.kind || "object" },
-    { label: "Quality", value: it.quality || "—" },
+    { label: "Quality", value: it.quality || "�" },
     { label: "Enc (unit)", value: encUnit.toFixed(1) },
     { label: "Enc (total)", value: encTotal.toFixed(1) },
     { label: "Quantity", value: qty },
@@ -4028,12 +4030,12 @@ async function renderSchoolSpellCounters(){
   if (cntSpComplexEl)  cntSpComplexEl.textContent  = `Complex spell slots: ${complexPrepared} / ${maxComplexPrepared}`;
 }
 const MS_CATEGORIES = [
-  {name:"Avant-Garde", min:44},
-  {name:"Supreme Archmage", min:40},
-  {name:"Archmage", min:36},
-  {name:"Grand Master", min:32},
-  {name:"Master", min:28},
-  {name:"High Mage", min:24},
+  {name:"Avant-Garde", min:50},
+  {name:"Supreme Archmage", min:46},
+  {name:"Archmage", min:42},
+  {name:"Grand Master", min:35},
+  {name:"Master", min:31},
+  {name:"High Mage", min:27},
   {name:"Magister", min:20},
   {name:"Mage", min:16},
   {name:"Adept", min:12},
@@ -4149,7 +4151,7 @@ async function renderAddedSchools(){
       `Skill (${s.linked_skill || 'skill'}): ${msInfo.skillVal || 0}`,
       `Top nature: ${msInfo.top1 || 0}`,
       `Second nature: ${msInfo.top2 || 0}`,
-      `Used: ${msInfo.natureName ? title(msInfo.natureName) : 'â€”'} ${msInfo.natureBase || 0}${msInfo.magUsed ? ` + MAG ${msInfo.magUsed}` : ''}`,
+      `Used: ${msInfo.natureName ? title(msInfo.natureName) : '—'} ${msInfo.natureBase || 0}${msInfo.magUsed ? ` + MAG ${msInfo.magUsed}` : ''}`,
       `Total MS: ${ms}`,
     ];
     if (msInfo.notes && msInfo.notes.length){
@@ -4297,8 +4299,8 @@ function renderSpellRows(){
     const schools = (sp.schools||[]).map(s=>s.name||s.id).join(', ');
     tr.innerHTML = `
       <td><div class="k">${nameDisplay}</div><div class="muted">id: ${sp.id}</div></td>
-      <td>${schools || 'â€”'}</td>
-      <td>${sp.category || 'â€”'}</td>
+      <td>${schools || '—'}</td>
+      <td>${sp.category || '—'}</td>
       <td>
         <select class="sl-status" data-id="${sp.id}">
         <option value="known" ${status==="known"?"selected":""}>Learnt</option>
@@ -4369,7 +4371,7 @@ function renderAbilitySpellsBucket(){
     const costParts = [];
     if (sp.mp_cost != null) costParts.push(`MP: ${sp.mp_cost}`);
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
-    const cost = costParts.join(' • ');
+    const cost = costParts.join(' � ');
     const range = sp.range != null ? `Range: ${sp.range}` : '';
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
     const div = document.createElement('div');
@@ -4382,7 +4384,7 @@ function renderAbilitySpellsBucket(){
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
         ${effectsDesc ? `<div class="muted" style="font-size:.8rem">Effects: ${effectsDesc}</div>` : ''}
-        <div class="muted" style="font-size:.8rem">${cost} ${range?` • ${range}`:''} ${aoe?` • ${aoe}`:''}</div>
+        <div class="muted" style="font-size:.8rem">${cost} ${range?` � ${range}`:''} ${aoe?` � ${aoe}`:''}</div>
       </div>
       <span class="tag">${sp.category || ''}</span>
     `;
@@ -4498,8 +4500,8 @@ async function renderSpellSearch(){
       const schools = (sp.schools||[]).map(s=>s.name||s.id).join(', ');
       tr.innerHTML = `
         <td>${sp.name || 'Spell'}</td>
-        <td>${schools || 'â€”'}</td>
-        <td>${sp.category || 'â€”'}</td>
+        <td>${schools || '—'}</td>
+        <td>${sp.category || '—'}</td>
         <td><button class="btn small" data-add="${sp.id}">Add</button></td>
       `;
       tr.querySelector('button').addEventListener('click', ()=> addSpellsToList([sp.id]));
@@ -4634,6 +4636,69 @@ function linkedSkillRank(sourceDoc){
   return { rank, bestSkill, bestValue: best };
 }
 
+function prereqErrorsForRules(rules, stats){
+  const out = [];
+  if (!rules || !stats) return out;
+  const charKeys = ["reflex","dexterity","body","wisdom","presence","magic","willpower","tech"];
+  const modMap = {};
+  charKeys.forEach(k=>{
+    const invest = investVal(stats?.[k]?.invest, 0);
+    modMap[k] = totalFromInvest(invest);
+  });
+  if (rules.mag_highest){
+    const mag = modMap.magic;
+    const others = charKeys.filter(k=>k!=="magic").map(k=>modMap[k]);
+    if (!others.every(v=> mag >= v)) out.push("Magic is not highest.");
+  }
+  if (rules.wis_half_mag){
+    const wis = modMap.wisdom;
+    const mag = modMap.magic;
+    if (wis < (mag/2)) out.push("Wisdom below half of Magic.");
+  }
+  const orderRules = rules.char_order || [];
+  if (orderRules.length){
+    const vals = charKeys.map(k=>({ key:k, val:modMap[k] }));
+    vals.sort((a,b)=> (b.val - a.val) || a.key.localeCompare(b.key));
+    for (const r of orderRules){
+      const key = r.key;
+      const pos = Number(r.position || 0);
+      if (!key || !modMap[key] || ![1,2,3].includes(pos)) continue;
+      const myVal = modMap[key];
+      const higher = vals.filter(v=> v.val > myVal).length;
+      if (pos === 1 && higher !== 0) out.push(`${key} not highest.`);
+      if (pos === 2 && higher > 1) out.push(`${key} not top 2.`);
+      if (pos === 3 && higher > 2) out.push(`${key} not top 3.`);
+    }
+  }
+  const anyRules = rules.char_order_any || [];
+  if (anyRules.length){
+    const vals = charKeys.map(k=>({ key:k, val:modMap[k] }));
+    vals.sort((a,b)=> (b.val - a.val) || a.key.localeCompare(b.key));
+    anyRules.forEach(r=>{
+      const pos = Number(r.position || 0);
+      const keys = Array.isArray(r.keys) ? r.keys : [];
+      if (![1,2,3].includes(pos) || !keys.length) return;
+      let ok = false;
+      keys.forEach(k=>{
+        if (!modMap[k]) return;
+        const myVal = modMap[k];
+        const higher = vals.filter(v=> v.val > myVal).length;
+        if (pos === 1 && higher === 0) ok = true;
+        if (pos === 2 && higher <= 1) ok = true;
+        if (pos === 3 && higher <= 2) ok = true;
+      });
+      if (!ok) out.push(`One of ${keys.join(", ")} must be top ${pos}.`);
+    });
+  }
+  const minRules = rules.char_min || {};
+  Object.entries(minRules).forEach(([k, v])=>{
+    const req = Number(v);
+    if (!Number.isFinite(req)) return;
+    if ((modMap[k] ?? 0) < req) out.push(`${k} below minimum ${req}.`);
+  });
+  return out;
+}
+
 async function refreshArchetypeAbilities(){
   if (!CHAR?.archetype_id){
     CHAR.archetype_rank = _archetypeRankForLevel(Math.max(1, Number(CHAR.level)||1));
@@ -4670,22 +4735,36 @@ async function refreshArchetypeAbilities(){
       updateDerived();
       renderSublimations();
       arcSummaryEl.textContent = 'No archetype linked.';
+      if (arcStatusEl){
+        arcStatusEl.textContent = '';
+        arcStatusEl.style.color = '';
+      }
       if (arcDescEl){
         arcDescEl.innerHTML = '';
         arcDescEl.style.display = 'none';
+      }
+      arcAbilitiesEl.innerHTML = '<div class="muted">Select an archetype.</div>';
+      return;
     }
-    arcAbilitiesEl.innerHTML = '<div class="muted">Select an archetype.</div>';
-    return;
-  }
-  const arc = ARCHETYPES.find(a=>a.id===CHAR.archetype_id);
-  const rank = CHAR.archetype_rank || _archetype_rank_for_level(Number(CHAR.level||1));
-  arcSummaryEl.textContent = `${arc?.name || CHAR.archetype_id} • Rank: ${rank}`;
-  if (arcDescEl){
-    const arcDesc = (arc?.description_html || arc?.description || "").toString().trim();
-    arcDescEl.innerHTML = arcDesc;
-    arcDescEl.style.display = arcDesc ? '' : 'none';
-  }
-  COMPUTED_ARC_ABILITIES = (CHAR.computed_archetype_abilities || []).slice();
+    const arc = ARCHETYPES.find(a=>a.id===CHAR.archetype_id);
+    const rank = CHAR.archetype_rank || _archetype_rank_for_level(Number(CHAR.level||1));
+    arcSummaryEl.textContent = `${arc?.name || CHAR.archetype_id} - Rank: ${rank}`;
+    if (arcStatusEl){
+      const errs = prereqErrorsForRules(arc?.prereq_rules || {}, CHAR?.stats || {});
+      if (errs.length){
+        arcStatusEl.textContent = `Prereq not met: ${errs.join(' ')}`;
+        arcStatusEl.style.color = '#f66';
+      }else{
+        arcStatusEl.textContent = '';
+        arcStatusEl.style.color = '';
+      }
+    }
+    if (arcDescEl){
+      const arcDesc = (arc?.description_html || arc?.description || "").toString().trim();
+      arcDescEl.innerHTML = arcDesc;
+      arcDescEl.style.display = arcDesc ? '' : 'none';
+    }
+    COMPUTED_ARC_ABILITIES = (CHAR.computed_archetype_abilities || []).slice();
     if (!COMPUTED_ARC_ABILITIES.length){
       ARC_ASSIGNED = [];
       recomputePassiveAgg();
@@ -4701,16 +4780,16 @@ async function refreshArchetypeAbilities(){
     docs.forEach(d=>{ if(d?.id) byId[d.id]=d; });
     arcAbilitiesEl.innerHTML = '';
     COMPUTED_ARC_ABILITIES.forEach(id=>{
-    const a = byId[id] || { name:id, description:'' };
-    const div = document.createElement('div');
-    div.className = 'abi-item';
-    div.innerHTML = `
-      <div class="grow">
-        <div><strong>${a.name || id}</strong></div>
-        <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
-      </div>
-      <span class="tag">Archetype</span>
-      `;
+      const a = byId[id] || { name:id, description:'' };
+      const div = document.createElement('div');
+      div.className = 'abi-item';
+      div.innerHTML = `
+        <div class="grow">
+          <div><strong>${a.name || id}</strong></div>
+          <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
+        </div>
+        <span class="tag">Archetype</span>
+        `;
       arcAbilitiesEl.appendChild(div);
     });
     recomputePassiveAgg();
@@ -4723,6 +4802,7 @@ async function refreshExpertiseAbilities(){
   const ids = (CHAR?.expertise_ids || []).map(x=> String(x||'').trim()).filter(Boolean);
   if (!expAbilitiesEl) return;
   if (!ids.length){
+    if (expPanelEl) expPanelEl.style.display = 'none';
     EXP_ASSIGNED = [];
     COMPUTED_EXP_ABILITIES = [];
     if (expSummaryEl) expSummaryEl.textContent = 'No expertise linked.';
@@ -4734,6 +4814,7 @@ async function refreshExpertiseAbilities(){
     renderSublimations();
     return;
   }
+  if (expPanelEl) expPanelEl.style.display = '';
   const entries = EXPERTISES.filter(e=> ids.includes(String(e.id)));
   const meta = [];
   let allIds = [];
@@ -4758,6 +4839,7 @@ async function refreshDivineManifestationAbilities(){
   const ids = (CHAR?.divine_manifestation_ids || []).map(x=> String(x||'').trim()).filter(Boolean);
   if (!dimaAbilitiesEl) return;
   if (!ids.length){
+    if (dimaPanelEl) dimaPanelEl.style.display = 'none';
     DIMA_ASSIGNED = [];
     COMPUTED_DIMA_ABILITIES = [];
     if (dimaSummaryEl) dimaSummaryEl.textContent = 'No divine manifestation linked.';
@@ -4769,6 +4851,7 @@ async function refreshDivineManifestationAbilities(){
     renderSublimations();
     return;
   }
+  if (dimaPanelEl) dimaPanelEl.style.display = '';
   const entries = DIVINE_MANIFESTATIONS.filter(e=> ids.includes(String(e.id)));
   const meta = [];
   let allIds = [];
@@ -4796,11 +4879,27 @@ function renderExpertisePanel(meta, docs){
   expAbilitiesEl.innerHTML = '';
   if (expSummaryEl){
     expSummaryEl.textContent = meta.length ? `Linked: ${meta.length}` : 'No expertise linked.';
+    expSummaryEl.style.color = '';
   }
   if (!meta.length){
     expAbilitiesEl.innerHTML = '<div class="muted">No expertise selected.</div>';
     return;
   }
+  if (expSummaryEl){
+    const warn = [];
+    meta.forEach(item=>{
+      const entry = item.entry || {};
+      const errs = prereqErrorsForRules(entry.prereq_rules || {}, CHAR?.stats || {});
+      if (errs.length){
+        warn.push(`${entry.name || entry.id}: ${errs.join(' ')}`);
+      }
+    });
+    if (warn.length){
+      expSummaryEl.textContent = `Linked: ${meta.length} - Prereq not met: ${warn.join(' | ')}`;
+      expSummaryEl.style.color = '#f66';
+    }
+  }
+
   meta.forEach(item=>{
     const entry = item.entry || {};
     const rank = item.rankInfo?.rank ?? 0;
@@ -4848,11 +4947,27 @@ function renderDivineManifestationPanel(meta, docs){
   dimaAbilitiesEl.innerHTML = '';
   if (dimaSummaryEl){
     dimaSummaryEl.textContent = meta.length ? `Linked: ${meta.length}` : 'No divine manifestation linked.';
+    dimaSummaryEl.style.color = '';
   }
   if (!meta.length){
     dimaAbilitiesEl.innerHTML = '<div class="muted">No divine manifestation selected.</div>';
     return;
   }
+  if (dimaSummaryEl){
+    const warn = [];
+    meta.forEach(item=>{
+      const entry = item.entry || {};
+      const errs = prereqErrorsForRules(entry.prereq_rules || {}, CHAR?.stats || {});
+      if (errs.length){
+        warn.push(`${entry.name || entry.id}: ${errs.join(' ')}`);
+      }
+    });
+    if (warn.length){
+      dimaSummaryEl.textContent = `Linked: ${meta.length} - Prereq not met: ${warn.join(' | ')}`;
+      dimaSummaryEl.style.color = '#f66';
+    }
+  }
+
   meta.forEach(item=>{
     const entry = item.entry || {};
     const rank = item.rankInfo?.rank ?? 0;
@@ -5410,14 +5525,14 @@ function updateDerived(){
   const invEnc = LINKED_INV?.enc_total || 0;
   base.et = 1 + Math.floor(lvl/10) + msMAG;
   const etTech = 1 + Math.floor(lvl/10) + msTEC;
-  base._notes = Object.assign(base._notes || {}, { et: [`Alt (TEC): ${etTech}`] });
+  base._notes = Object.assign(base._notes || {}, { et: [`Alt (TEC): ${etTech}`], sublimation_slots: [`Base ${slotsForLevel(lvl)} + PRE milestone ${msPRE * 2}`] });
   base.tx = 2 + msBOD + (2 * msTEC);
   base.talent_max = baseTalentMax(lvl);
   base.max_expertise = 0;
   base.max_divine_manifestation = 0;
   base.skill_points = skillPointPool(lvl);
     base.stat_points = statPointPool(lvl);
-    base.sublimation_slots = slotsForLevel(lvl);
+    base.sublimation_slots = slotsForLevel(lvl) + (2 * msPRE);
 
     // Apply passive modifiers to derived
     const final = applyPassiveModifiersToDerived(base, invEnc);
@@ -5564,7 +5679,7 @@ async function loadCharacter(){
   // Render stats/skills
   renderStatistics();
 
-  // Resolve abilities â†’ recalc passive agg â†’ render abilities â†’ derived
+  // Resolve abilities → recalc passive agg → render abilities → derived
   await resolveAssignedAbilities();
   recomputePassiveAgg();
   renderAbilitiesTab();
@@ -6496,7 +6611,7 @@ function abilityCostText(ab){
   if (costs.other_label && costs.other_value != null){
     push(costs.other_value, costs.other_label);
   }
-  return parts.join(" • ");
+  return parts.join(" � ");
 }
 
 function renderAbilitiesBucket(el, list){
@@ -6520,7 +6635,7 @@ function renderAbilitiesBucket(el, list){
       <span class="tag">${a.source_category||''}</span>
       <div class="row" style="gap:6px; flex-wrap:wrap;">
         ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
-        <button class="btn small mod-remove" title="Remove">×</button>
+        <button class="btn small mod-remove" title="Remove">�</button>
       </div>
     `;
     div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));
@@ -6578,6 +6693,7 @@ function wirePersonal(){
 checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
 wireRichTextPaste();
 </script>
+
 
 
 

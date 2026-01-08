@@ -4705,9 +4705,10 @@ async def update_character(cid: str, request: Request):
             arc = get_col("archetypes").find_one({"id": arc_id}, {"_id":1})
             if not arc:
                 return JSONResponse({"status":"error","message":"Archetype not found"}, status_code=400)
-            errs = _archetype_prereq_errors(arc, updates.get("stats") or before.get("stats") or {})
-            if errs:
-                return JSONResponse({"status":"error","message":"Archetype prerequisites not met", "details": errs}, status_code=400)
+            if arc_id != (before.get("archetype_id") or ""):
+                errs = _archetype_prereq_errors(arc, updates.get("stats") or before.get("stats") or {})
+                if errs:
+                    return JSONResponse({"status":"error","message":"Archetype prerequisites not met", "details": errs}, status_code=400)
         updates["archetype_id"] = arc_id
 
     if "expertise_ids" in body:
@@ -4727,16 +4728,7 @@ async def update_character(cid: str, request: Request):
     if "avatar_id" in body:
         updates["avatar_id"] = str(body.get("avatar_id") or "").strip()
 
-    # Archetype prereq validation (after merging updates)
-    final_stats = updates.get("stats", before.get("stats") or {})
-    final_arc_id = updates.get("archetype_id", before.get("archetype_id",""))
-    if final_arc_id:
-        arc = get_col("archetypes").find_one({"id": final_arc_id}, {"_id":0})
-        if not arc:
-            return JSONResponse({"status":"error","message":"Archetype not found"}, status_code=400)
-        errs = _archetype_prereq_errors(arc, final_stats)
-        if errs:
-            return JSONResponse({"status":"error","message":"Archetype prerequisites not met", "details": errs}, status_code=400)
+    # Archetype prereq validation is handled client-side for warnings.
 
     get_col("characters").update_one({"id": cid}, {"$set": updates})
     after = get_col("characters").find_one({"id": cid}, {"_id":0})
