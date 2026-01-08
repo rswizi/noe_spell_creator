@@ -1573,6 +1573,21 @@ function makeDefaultStats(){
   return stats;
 }
 
+function normalizeStats(stats){
+  const base = makeDefaultStats();
+  const out = Object.assign({}, base, stats || {});
+  for (const c of CHARACS){
+    if (!out[c.key]) out[c.key] = { invest:0, skills:{} };
+    if (!out[c.key].skills) out[c.key].skills = {};
+    for (const s of (c.skills||[])){
+      if (out[c.key].skills[s] === undefined) out[c.key].skills[s] = 0;
+    }
+  }
+  out.intensities = Object.assign({}, base.intensities, out.intensities || {});
+  out.personal = Object.assign({}, base.personal, out.personal || {});
+  return out;
+}
+
 function skillMaxForLevel(lvl){
   if (lvl <= 1) return 4;
   if (lvl <= 11) return 5;
@@ -5276,6 +5291,8 @@ function renderStatistics(){
         const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
         const cap = skillMaxForLevel(lvl);
         const pool = effectiveSkillPointPool(lvl);
+        if (!CHAR.stats[c.key]) CHAR.stats[c.key] = { invest:0, skills:{} };
+        if (!CHAR.stats[c.key].skills) CHAR.stats[c.key].skills = {};
         const currentVal = investVal(CHAR.stats[c.key].skills?.[s], 0);
         const totalOther = totalSkillInvest() - currentVal;
         const desired = Math.max(0, Math.floor(investVal(si.value, 0)));
@@ -5621,8 +5638,7 @@ async function loadCharacter(){
   if (!CID){ statusEl.textContent = 'Missing id'; return; }
   const res = await api('/characters/' + encodeURIComponent(CID));
   CHAR = res.character || {};
-  if (!CHAR.stats) CHAR.stats = makeDefaultStats();
-  if (!CHAR.stats.intensities) CHAR.stats.intensities = makeDefaultStats().intensities;
+  CHAR.stats = normalizeStats(CHAR.stats || {});
   setAddedSchools(CHAR.stats.selected_schools || []);
   XP = numOr(CHAR.xp, 0);
   XP_LEDGER = Array.isArray(CHAR.xp_ledger) ? CHAR.xp_ledger.slice() : [];
