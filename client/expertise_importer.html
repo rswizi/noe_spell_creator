@@ -59,6 +59,48 @@
         </select>
       </div>
       <div class="row" style="margin-top:6px;">
+        <label for="linked-skills">Linked Skills</label>
+        <select id="linked-skills" multiple size="6" style="flex:1;">
+          <option value="Technicity">Technicity (Reflex)</option>
+          <option value="Dodge">Dodge (Reflex)</option>
+          <option value="Counter">Counter (Reflex)</option>
+          <option value="Reactivity">Reactivity (Reflex)</option>
+          <option value="Accuracy">Accuracy (Dexterity)</option>
+          <option value="Evasion">Evasion (Dexterity)</option>
+          <option value="Stealth">Stealth (Dexterity)</option>
+          <option value="Acrobatics">Acrobatics (Dexterity)</option>
+          <option value="Brutality">Brutality (Body)</option>
+          <option value="Blocking">Blocking (Body)</option>
+          <option value="Resistance">Resistance (Body)</option>
+          <option value="Athletics">Athletics (Body)</option>
+          <option value="Survival">Survival (Wisdom)</option>
+          <option value="Education">Education (Wisdom)</option>
+          <option value="Perception">Perception (Wisdom)</option>
+          <option value="Psychology">Psychology (Wisdom)</option>
+          <option value="Investigation">Investigation (Wisdom)</option>
+          <option value="Taming">Taming (Presence)</option>
+          <option value="Charm">Charm (Presence)</option>
+          <option value="Charisma">Charisma (Presence)</option>
+          <option value="Deception">Deception (Presence)</option>
+          <option value="Persuasion">Persuasion (Presence)</option>
+          <option value="Aura">Aura (Magic)</option>
+          <option value="Incantation">Incantation (Magic)</option>
+          <option value="Enchantment">Enchantment (Magic)</option>
+          <option value="Restoration">Restoration (Magic)</option>
+          <option value="Potential">Potential (Magic)</option>
+          <option value="Intimidation">Intimidation (Willpower)</option>
+          <option value="Spirit">Spirit (Willpower)</option>
+          <option value="Instinct">Instinct (Willpower)</option>
+          <option value="Absorption">Absorption (Willpower)</option>
+          <option value="Crafting">Crafting (Tech)</option>
+          <option value="Sleight of hand">Sleight of hand (Tech)</option>
+          <option value="Alchemy">Alchemy (Tech)</option>
+          <option value="Medicine">Medicine (Tech)</option>
+          <option value="Engineering">Engineering (Tech)</option>
+        </select>
+        <span class="muted">Hold Ctrl/⌘ to select multiple.</span>
+      </div>
+      <div class="row" style="margin-top:6px;">
         <label for="ability-tags">Ability Tags</label>
         <input id="ability-tags" placeholder="Comma-separated tags" style="flex:1;">
       </div>
@@ -110,6 +152,7 @@ async function api(path,opt={}){
 
 const loginChip = document.getElementById('login-chip');
 const sourceKindEl = document.getElementById('source-kind');
+const linkedSkillsEl = document.getElementById('linked-skills');
 const abilityTagsEl = document.getElementById('ability-tags');
 const replaceDupEl = document.getElementById('replace-dup');
 const previewPanel = document.getElementById('preview-panel');
@@ -520,7 +563,6 @@ function parseBlocks(rawHtml){
   const tableSets = parseRankTables(rawHtml);
   const blocks = [];
   let current = null;
-  let lastBlank = false;
   const pushCurrent = ()=>{ if (current) blocks.push(current); };
   tokens.forEach(tok=>{
     const trimmed = (tok.text || '').trim();
@@ -528,7 +570,6 @@ function parseBlocks(rawHtml){
     if (headerMatch){
       pushCurrent();
       current = { header: trimmed, headerName: headerMatch[1].trim(), lines: [] };
-      lastBlank = false;
       return;
     }
     const split = splitHeaderPrereq(trimmed);
@@ -540,14 +581,7 @@ function parseBlocks(rawHtml){
           current.lines.push({ text: split.marker, html: escapeHtml(split.marker) });
           if (split.after) current.lines.push({ text: split.after, html: escapeHtml(split.after) });
         }
-        lastBlank = false;
       }
-      return;
-    }
-    if (lastBlank && trimmed && !/^Rank\b/i.test(trimmed) && !/^\d+\b/.test(trimmed) && !/^Prerequisites?\b/i.test(trimmed)){
-      pushCurrent();
-      current = { header: trimmed, headerName: trimmed, lines: [] };
-      lastBlank = false;
       return;
     }
     if (split){
@@ -556,11 +590,9 @@ function parseBlocks(rawHtml){
       }
       current.lines.push({ text: split.marker, html: escapeHtml(split.marker) });
       if (split.after) current.lines.push({ text: split.after, html: escapeHtml(split.after) });
-      lastBlank = false;
       return;
     }
     current.lines.push({ text: tok.text || '', html: tok.html || '' });
-    lastBlank = !trimmed;
   });
   pushCurrent();
 
@@ -870,11 +902,13 @@ async function importBlocks(blocks, tags, replaceDup){
       original_rank: ab.original_rank || ab.rank,
       replaces_id: ab.replaces_id || ''
     }));
+    const linkedSkills = Array.from(linkedSkillsEl?.selectedOptions || []).map(o=> String(o.value || '').trim()).filter(Boolean);
     const payload = {
       name: entry.name,
       prereq_text: entry.prereq_text || '',
       description_html: entry.description_html || '',
       prereq_rules: entry.prereq_rules || {},
+      linked_skills: linkedSkills,
       ranks
     };
     let res = null;

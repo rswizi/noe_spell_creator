@@ -2779,6 +2779,13 @@ def _validate_ranked_doc(doc: dict, is_update=False, allow_hybrid=False):
         doc.pop("sources", None)
     doc["prereq_text"] = (doc.get("prereq_text") or "").strip()
     doc["description_html"] = (doc.get("description_html") or doc.get("description") or "").strip()
+    linked_skills = doc.get("linked_skills") or []
+    if isinstance(linked_skills, list):
+        doc["linked_skills"] = [str(s).strip() for s in linked_skills if str(s).strip()]
+    elif isinstance(linked_skills, str):
+        doc["linked_skills"] = [s.strip() for s in linked_skills.split(",") if s.strip()]
+    else:
+        doc["linked_skills"] = []
     rules = doc.get("prereq_rules") or {}
     # structured prereqs
     allowed_keys = {"mag_highest","wis_half_mag","char_min","char_order","char_order_any"}
