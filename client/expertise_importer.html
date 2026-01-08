@@ -438,13 +438,14 @@ function parseRankTables(rawHtml){
 function htmlToLineTokens(rawHtml){
   const doc = new DOMParser().parseFromString(rawHtml || '', 'text/html');
   const out = [];
-  const pushLine = (html)=>{
+  const pushLine = (html, textPrefix='')=>{
     const parts = String(html || '').split(/<br\s*\/?>/i);
     parts.forEach((part, idx)=>{
       if (idx > 0) out.push({ text:'', html:'' });
       const text = htmlToText(part).trim();
       if (text || part.trim()){
-        out.push({ text, html: part.trim() });
+        const pref = (idx === 0) ? textPrefix : '';
+        out.push({ text: (pref + text).trim(), html: part.trim() });
       }
     });
   };
@@ -463,7 +464,7 @@ function htmlToLineTokens(rawHtml){
       return;
     }
     if (tag === 'ul' || tag === 'ol'){
-      node.querySelectorAll('li').forEach(li=> pushLine(li.innerHTML));
+      node.querySelectorAll('li').forEach(li=> pushLine(li.innerHTML, '\u2022 '));
       return;
     }
     if (['p','div','li','h1','h2','h3','h4','h5','h6'].includes(tag)){
@@ -573,26 +574,44 @@ function parseBlocks(rawHtml){
     let descLines = [];
     if (prereqIdx >= 0){
       const tail = lines.slice(prereqIdx + 1, rankIdx >= 0 ? rankIdx : lines.length);
-      let splitIdx = -1;
+      let endBullets = 0;
       for (let i = 0; i < tail.length; i++){
         const raw = String(tail[i].text || '').trim();
         if (!raw){
-          splitIdx = i;
-          break;
+          if (endBullets > 0) break;
+          continue;
         }
-        const isBullet = /^[-*]\s+/.test(raw);
-        const hasMust = /\bmust\b/i.test(raw);
-        if (!isBullet && !hasMust && i > 0){
-          splitIdx = i;
-          break;
+        const isBullet = /^[-*\u2022]\s+/.test(raw);
+        if (isBullet){
+          endBullets = i + 1;
+          continue;
         }
+        break;
       }
-      const prereqSlice = splitIdx >= 0 ? tail.slice(0, splitIdx) : tail.slice(0, tail.length);
+      const prereqSlice = tail.slice(0, endBullets);
       const prereqLines = prereqSlice.map(l=> String(l.text || '').trim()).filter(Boolean);
-      prereqText = prereqLines.map(l=> l.replace(/^[-*]\s+/, '').trim()).join('\n').trim();
-      descLines = splitIdx >= 0 ? tail.slice(splitIdx + 1) : tail.slice(prereqSlice.length);
+      prereqText = prereqLines.map(l=> l.replace(/^[-*\u2022]\s+/, '').trim()).join('\n').trim();
+      descLines = tail.slice(endBullets);
     }else{
-      descLines = lines.slice(0, rankIdx >= 0 ? rankIdx : lines.length);
+      const head = lines.slice(0, rankIdx >= 0 ? rankIdx : lines.length);
+      let endBullets = 0;
+      for (let i = 0; i < head.length; i++){
+        const raw = String(head[i].text || '').trim();
+        if (!raw){
+          if (endBullets > 0) break;
+          continue;
+        }
+        const isBullet = /^[-*\u2022]\s+/.test(raw);
+        if (isBullet){
+          endBullets = i + 1;
+          continue;
+        }
+        break;
+      }
+      const prereqSlice = head.slice(0, endBullets);
+      const prereqLines = prereqSlice.map(l=> String(l.text || '').trim()).filter(Boolean);
+      prereqText = prereqLines.map(l=> l.replace(/^[-*\u2022]\s+/, '').trim()).join('\n').trim();
+      descLines = head.slice(endBullets);
     }
     const descText = descLines.map(l=> l.text || '').join('\n').trim();
     const descHtmlParts = descLines.map(l=> l.html || '').filter(h=> String(h).trim() !== '');
