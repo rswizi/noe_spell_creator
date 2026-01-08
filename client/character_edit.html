@@ -425,13 +425,45 @@
         <div class="panel">
           <details open class="panel">
             <summary class="hdr">
+              <strong>Expertise</strong>
+              <span class="muted">(unlock by linked skill)</span>
+            </summary>
+            <div class="panel-body">
+              <div id="exp-summary" class="muted"></div>
+              <div class="abi-list" id="exp-abilities"></div>
+            </div>
+          </details>
+        </div>
+
+        <div class="panel">
+          <details open class="panel">
+            <summary class="hdr">
+              <strong>Divine Manifestation</strong>
+              <span class="muted">(unlock by linked skill)</span>
+            </summary>
+            <div class="panel-body">
+              <div id="dima-summary" class="muted"></div>
+              <div class="abi-list" id="dima-abilities"></div>
+            </div>
+          </details>
+        </div>
+
+        <div class="panel">
+          <details open class="panel">
+            <summary class="hdr">
               <strong>Abilities on this Character</strong>
               <span class="muted">(Archetype / Passive / Active)</span>
               <span class="grow"></span>
               <button class="btn small" id="abi-open-add">Add ability</button>
+              <button class="btn small" id="exp-open-add">Add expertise</button>
+              <button class="btn small" id="dima-open-add">Add divine manifestation</button>
             </summary>
             <div class="panel-body">
               <div class="abi-hint" id="talent-counter">Talents: -- / --</div>
+              <div class="stat-counter" style="margin-top:6px;">
+                <span class="pill" id="expertise-counter">Expertise: -- / --</span>
+                <span class="pill" id="dima-counter">Divine Manifestation: -- / --</span>
+              </div>
 
               <div class="abi-grid" style="margin-top:16px;">
                 <div class="abi-bucket">
@@ -827,6 +859,25 @@
   </div>
 </div>
 
+<!-- Expertise / Divine Manifestation modal -->
+<div id="source-add-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="source-add-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="source-add-title">
+  <div class="modal-card" style="max-width:960px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="source-add-title">Add Expertise</div>
+      <button class="modal-close" id="source-add-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="row" style="gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+      <input id="source-search" placeholder="Search..." style="flex:1; min-width:240px;">
+      <button class="btn" id="source-search-btn">Search</button>
+    </div>
+    <div id="source-results" class="abi-list" style="margin-bottom:12px;"></div>
+    <div class="row" style="gap:8px; justify-content:flex-end;">
+      <button class="btn btn-secondary" id="source-add-cancel">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Ability choice config modal -->
 <div id="choice-backdrop" class="modal-backdrop" aria-hidden="true"></div>
 <div id="choice-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="choice-title">
@@ -1014,6 +1065,10 @@ let SAVE_TIMER = null;
 let CHAR = null;
 let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
 let ARC_ASSIGNED = []; // full documents of archetype abilities (resolved by id)
+let EXP_ASSIGNED = []; // full documents of expertise abilities (resolved by id)
+let DIMA_ASSIGNED = []; // full documents of divine manifestation abilities (resolved by id)
+let COMPUTED_EXP_ABILITIES = [];
+let COMPUTED_DIMA_ABILITIES = [];
 let ABILITY_CHOICES = {}; // per-ability user selections for configurable modifiers (choices or groups)
 let ITEM_CHOICES = {}; // per-item (inventory) user selections for choice-based modifiers
 let INVENTORIES = [];
@@ -1042,6 +1097,8 @@ let CURRENT = { hp:null, en:null, fo:null, sp:null };
 let OVERRIDE_ENABLED = false;
 let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, initiative:null, spcap:null, enc:null, et:null, tx:null, talent_max:null, skill_points:null, stat_points:null, sublimation_slots:null, complex_schools:null };
 let ARCHETYPES = [];
+let EXPERTISES = [];
+let DIVINE_MANIFESTATIONS = [];
 let COMPUTED_ARC_ABILITIES = [];
 let UPGRADE_META = {};
 let TALENT_MAX = 1;
@@ -1163,6 +1220,16 @@ const abiFilterSrcEl  = document.getElementById('abi-filter-source');
 const abiFilterTagEl  = document.getElementById('abi-filter-tag');
 const abiSearchBtn = document.getElementById('abi-search-btn');
 const abiResultsEl = document.getElementById('abi-results');
+const expOpenAddBtn = document.getElementById('exp-open-add');
+const dimaOpenAddBtn = document.getElementById('dima-open-add');
+const sourceAddModal = document.getElementById('source-add-modal');
+const sourceAddBackdrop = document.getElementById('source-add-backdrop');
+const sourceAddClose = document.getElementById('source-add-close');
+const sourceAddCancel = document.getElementById('source-add-cancel');
+const sourceAddTitle = document.getElementById('source-add-title');
+const sourceSearchEl = document.getElementById('source-search');
+const sourceSearchBtn = document.getElementById('source-search-btn');
+const sourceResultsEl = document.getElementById('source-results');
 const listPassiveEl   = document.getElementById('abi-list-passive');
 const listActiveEl    = document.getElementById('abi-list-active');
 const listSpellEl     = document.getElementById('abi-list-spells');
@@ -1180,6 +1247,12 @@ const arcStatusEl     = document.getElementById('arc-status');
 const arcSummaryEl    = document.getElementById('arc-summary');
 const arcDescEl       = document.getElementById('arc-description');
 const arcAbilitiesEl  = document.getElementById('arc-abilities');
+const expSummaryEl    = document.getElementById('exp-summary');
+const expAbilitiesEl  = document.getElementById('exp-abilities');
+const dimaSummaryEl   = document.getElementById('dima-summary');
+const dimaAbilitiesEl = document.getElementById('dima-abilities');
+const expertiseCounterEl = document.getElementById('expertise-counter');
+const dimaCounterEl = document.getElementById('dima-counter');
 /* Inventory tab refs */
 const invSelectEl = document.getElementById('inv-select');
 const invLoadBtn = document.getElementById('inv-load-btn');
@@ -1979,7 +2052,10 @@ function resolvedPassiveMods(ab){
 function recomputePassiveAgg(){
   resetPassiveAgg();
     const assignedIds = new Set((ASSIGNED||[]).map(a=> String(a?.id || '')));
-    const combined = (ASSIGNED||[]).concat((ARC_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
+    const combined = (ASSIGNED||[])
+      .concat((ARC_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
+      .concat((EXP_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
+      .concat((DIMA_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
     const passiveAbilities = combined.filter(a=>{
       const t = (a.type||'').toLowerCase();
       return t==='passive' || t==='mixed';
@@ -4509,15 +4585,81 @@ async function computeArchetypeUnlockedIds(archetype, lvl){
   return keep;
 }
 
+async function computeRankedUnlockedIds(sourceDoc, effRank){
+  if (!sourceDoc) return [];
+  const ranks = sourceDoc.ranks || [];
+  const unlocked = ranks.filter(r=> Number(r.rank||0) <= effRank);
+  const byId = {};
+  unlocked.forEach(r=>{
+    const id = r.ability_id || r.ability || r.id;
+    if (id) byId[id] = r;
+  });
+  const replaced = new Set();
+  unlocked.forEach(r=>{
+    const rep = r.replaces_id || r.replaces || '';
+    if (rep && byId[rep]) replaced.add(rep);
+  });
+  const ids = Object.keys(byId);
+  if (ids.length){
+    const docs = await fetchAbilitiesByIds(ids);
+    docs.forEach(d=>{
+      const rep = String(d?.archetype_replaces || '').trim();
+      if (rep && byId[rep]) replaced.add(rep);
+    });
+  }
+  const keep = [];
+  unlocked.forEach(r=>{
+    const id = r.ability_id || r.ability || r.id;
+    if (!id || replaced.has(id)) return;
+    if (!keep.includes(id)) keep.push(id);
+  });
+  return keep;
+}
+
+function linkedSkillRank(sourceDoc){
+  const skills = sourceDoc?.linked_skills || [];
+  let best = 0;
+  let bestSkill = '';
+  for (const s of skills){
+    const ck = charKeyForSkillName(s);
+    if (!ck) continue;
+    const adj = skillAdjTotal(ck, s);
+    const val = numOr(adj.total, 0);
+    if (val > best){
+      best = val;
+      bestSkill = s;
+    }
+  }
+  const rank = Math.max(0, Math.floor(best));
+  return { rank, bestSkill, bestValue: best };
+}
+
 async function refreshArchetypeAbilities(){
-  if (!CHAR?.archetype_id) return;
+  if (!CHAR?.archetype_id){
+    CHAR.archetype_rank = _archetypeRankForLevel(Math.max(1, Number(CHAR.level)||1));
+    CHAR.computed_archetype_abilities = [];
+    COMPUTED_ARC_ABILITIES = [];
+    await renderArchetypePanel();
+    await refreshExpertiseAbilities();
+    await refreshDivineManifestationAbilities();
+    return;
+  }
   const arc = ARCHETYPES.find(a=>a.id===CHAR.archetype_id);
-  if (!arc) return;
+  if (!arc){
+    CHAR.computed_archetype_abilities = [];
+    COMPUTED_ARC_ABILITIES = [];
+    await renderArchetypePanel();
+    await refreshExpertiseAbilities();
+    await refreshDivineManifestationAbilities();
+    return;
+  }
   CHAR.archetype_rank = _archetypeRankForLevel(Math.max(1, Number(CHAR.level)||1));
   const ids = await computeArchetypeUnlockedIds(arc, CHAR.level);
   CHAR.computed_archetype_abilities = ids;
   COMPUTED_ARC_ABILITIES = ids.slice();
-  renderArchetypePanel();
+  await renderArchetypePanel();
+  await refreshExpertiseAbilities();
+  await refreshDivineManifestationAbilities();
 }
 
   async function renderArchetypePanel(){
@@ -4576,6 +4718,198 @@ async function refreshArchetypeAbilities(){
     updateDerived();
     renderSublimations();
   }
+
+async function refreshExpertiseAbilities(){
+  const ids = (CHAR?.expertise_ids || []).map(x=> String(x||'').trim()).filter(Boolean);
+  if (!expAbilitiesEl) return;
+  if (!ids.length){
+    EXP_ASSIGNED = [];
+    COMPUTED_EXP_ABILITIES = [];
+    if (expSummaryEl) expSummaryEl.textContent = 'No expertise linked.';
+    expAbilitiesEl.innerHTML = '<div class="muted">No expertise selected.</div>';
+    updateExpertiseCounters();
+    recomputePassiveAgg();
+    renderStatistics();
+    updateDerived();
+    renderSublimations();
+    return;
+  }
+  const entries = EXPERTISES.filter(e=> ids.includes(String(e.id)));
+  const meta = [];
+  let allIds = [];
+  for (const entry of entries){
+    const rankInfo = linkedSkillRank(entry);
+    const unlocked = await computeRankedUnlockedIds(entry, rankInfo.rank);
+    meta.push({ entry, rankInfo, unlocked });
+    allIds = allIds.concat(unlocked);
+  }
+  const uniqueIds = Array.from(new Set(allIds));
+  const docs = uniqueIds.length ? await fetchAbilitiesByIds(uniqueIds) : [];
+  EXP_ASSIGNED = docs.slice();
+  COMPUTED_EXP_ABILITIES = uniqueIds.slice();
+  renderExpertisePanel(meta, docs);
+  recomputePassiveAgg();
+  renderStatistics();
+  updateDerived();
+  renderSublimations();
+}
+
+async function refreshDivineManifestationAbilities(){
+  const ids = (CHAR?.divine_manifestation_ids || []).map(x=> String(x||'').trim()).filter(Boolean);
+  if (!dimaAbilitiesEl) return;
+  if (!ids.length){
+    DIMA_ASSIGNED = [];
+    COMPUTED_DIMA_ABILITIES = [];
+    if (dimaSummaryEl) dimaSummaryEl.textContent = 'No divine manifestation linked.';
+    dimaAbilitiesEl.innerHTML = '<div class="muted">No divine manifestation selected.</div>';
+    updateExpertiseCounters();
+    recomputePassiveAgg();
+    renderStatistics();
+    updateDerived();
+    renderSublimations();
+    return;
+  }
+  const entries = DIVINE_MANIFESTATIONS.filter(e=> ids.includes(String(e.id)));
+  const meta = [];
+  let allIds = [];
+  for (const entry of entries){
+    const rankInfo = linkedSkillRank(entry);
+    const unlocked = await computeRankedUnlockedIds(entry, rankInfo.rank);
+    meta.push({ entry, rankInfo, unlocked });
+    allIds = allIds.concat(unlocked);
+  }
+  const uniqueIds = Array.from(new Set(allIds));
+  const docs = uniqueIds.length ? await fetchAbilitiesByIds(uniqueIds) : [];
+  DIMA_ASSIGNED = docs.slice();
+  COMPUTED_DIMA_ABILITIES = uniqueIds.slice();
+  renderDivineManifestationPanel(meta, docs);
+  recomputePassiveAgg();
+  renderStatistics();
+  updateDerived();
+  renderSublimations();
+}
+
+function renderExpertisePanel(meta, docs){
+  if (!expAbilitiesEl) return;
+  const byId = {};
+  (docs||[]).forEach(d=>{ if (d?.id) byId[d.id]=d; });
+  expAbilitiesEl.innerHTML = '';
+  if (expSummaryEl){
+    expSummaryEl.textContent = meta.length ? `Linked: ${meta.length}` : 'No expertise linked.';
+  }
+  if (!meta.length){
+    expAbilitiesEl.innerHTML = '<div class="muted">No expertise selected.</div>';
+    return;
+  }
+  meta.forEach(item=>{
+    const entry = item.entry || {};
+    const rank = item.rankInfo?.rank ?? 0;
+    const bestSkill = item.rankInfo?.bestSkill || '';
+    const div = document.createElement('div');
+    div.className = 'abi-item';
+    div.innerHTML = `
+      <div class="grow">
+        <div class="row" style="gap:8px; align-items:center;">
+          <strong>${entry.name || entry.id}</strong>
+          <span class="tag">Rank ${rank}</span>
+        </div>
+        ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
+      </div>
+      <div class="row" style="gap:6px; flex-wrap:wrap;">
+        <button class="btn small exp-remove" data-id="${entry.id}">Remove</button>
+      </div>
+    `;
+    div.querySelector('.exp-remove')?.addEventListener('click', ()=>{
+      removeExpertiseById(entry.id);
+    });
+    const list = document.createElement('div');
+    (item.unlocked || []).forEach(id=>{
+      const a = byId[id] || { name:id, description:'' };
+      const row = document.createElement('div');
+      row.className = 'abi-item';
+      row.innerHTML = `
+        <div class="grow">
+          <div><strong>${a.name || id}</strong></div>
+          <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
+        </div>
+        <span class="tag">Expertise</span>
+      `;
+      list.appendChild(row);
+    });
+    div.appendChild(list);
+    expAbilitiesEl.appendChild(div);
+  });
+}
+
+function renderDivineManifestationPanel(meta, docs){
+  if (!dimaAbilitiesEl) return;
+  const byId = {};
+  (docs||[]).forEach(d=>{ if (d?.id) byId[d.id]=d; });
+  dimaAbilitiesEl.innerHTML = '';
+  if (dimaSummaryEl){
+    dimaSummaryEl.textContent = meta.length ? `Linked: ${meta.length}` : 'No divine manifestation linked.';
+  }
+  if (!meta.length){
+    dimaAbilitiesEl.innerHTML = '<div class="muted">No divine manifestation selected.</div>';
+    return;
+  }
+  meta.forEach(item=>{
+    const entry = item.entry || {};
+    const rank = item.rankInfo?.rank ?? 0;
+    const bestSkill = item.rankInfo?.bestSkill || '';
+    const div = document.createElement('div');
+    div.className = 'abi-item';
+    div.innerHTML = `
+      <div class="grow">
+        <div class="row" style="gap:8px; align-items:center;">
+          <strong>${entry.name || entry.id}</strong>
+          <span class="tag">Rank ${rank}</span>
+        </div>
+        ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
+      </div>
+      <div class="row" style="gap:6px; flex-wrap:wrap;">
+        <button class="btn small dima-remove" data-id="${entry.id}">Remove</button>
+      </div>
+    `;
+    div.querySelector('.dima-remove')?.addEventListener('click', ()=>{
+      removeDivineManifestationById(entry.id);
+    });
+    const list = document.createElement('div');
+    (item.unlocked || []).forEach(id=>{
+      const a = byId[id] || { name:id, description:'' };
+      const row = document.createElement('div');
+      row.className = 'abi-item';
+      row.innerHTML = `
+        <div class="grow">
+          <div><strong>${a.name || id}</strong></div>
+          <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
+        </div>
+        <span class="tag">Divine Manifestation</span>
+      `;
+      list.appendChild(row);
+    });
+    div.appendChild(list);
+    dimaAbilitiesEl.appendChild(div);
+  });
+}
+
+function removeExpertiseById(id){
+  const target = String(id||'').trim();
+  if (!target) return;
+  CHAR.expertise_ids = (CHAR.expertise_ids || []).map(String).filter(x=> x !== target);
+  updateExpertiseCounters();
+  refreshExpertiseAbilities();
+  queueSave();
+}
+
+function removeDivineManifestationById(id){
+  const target = String(id||'').trim();
+  if (!target) return;
+  CHAR.divine_manifestation_ids = (CHAR.divine_manifestation_ids || []).map(String).filter(x=> x !== target);
+  updateExpertiseCounters();
+  refreshDivineManifestationAbilities();
+  queueSave();
+}
 
 async function loadSpellListById(id){
   if (!id){
@@ -4871,6 +5205,8 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
         enc:[`Base = ${base.enc}`],
         spcap:[],
       talent_max:[`Base = ${base.talent_max ?? 0}`],
+      max_expertise:[`Base = ${base.max_expertise ?? 0}`],
+      max_divine_manifestation:[`Base = ${base.max_divine_manifestation ?? 0}`],
       skill_points:[`Base = ${base.skill_points ?? 0}`],
       stat_points:[`Base = ${base.stat_points ?? 0}`],
       sublimation_slots:[`Base = ${base.sublimation_slots ?? 0}`]
@@ -4884,7 +5220,10 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
 
   const ops = { set:[], mul:[], add:[] };
     const assignedIds = new Set((ASSIGNED||[]).map(a=> String(a?.id || '')));
-    const combined = (ASSIGNED||[]).concat((ARC_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
+    const combined = (ASSIGNED||[])
+      .concat((ARC_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
+      .concat((EXP_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
+      .concat((DIMA_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
     const passiveAbilities = combined.filter(a=>{
       const t = (a.type||'').toLowerCase();
       return t==='passive' || t==='mixed';
@@ -4931,6 +5270,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
     const map = {
         'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo','derived.initiative':'initiative',
       'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap','derived.talent_max':'talent_max',
+      'derived.max_expertise':'max_expertise','derived.max_divine_manifestation':'max_divine_manifestation',
       'derived.skill_points':'skill_points','derived.stat_points':'stat_points',
       'derived.sublimation_slots':'sublimation_slots','derived.complex_schools':'complex_schools'
     };
@@ -5004,6 +5344,44 @@ function updateTalentCounter(){
   talentCounterEl.style.color = over ? '#f66' : '';
   talentCounterEl.title = `Base ${base} + TEC milestone ${msTec} + WIS milestone ${msWis}`;
 }
+function expertiseMax(){
+  return Math.max(0, Math.floor(numOr(DERIVED_CACHE?.max_expertise, 0)));
+}
+function divineManifestationMax(){
+  return Math.max(0, Math.floor(numOr(DERIVED_CACHE?.max_divine_manifestation, 0)));
+}
+function updateExpertiseCounters(){
+  if (expertiseCounterEl){
+    const count = (CHAR?.expertise_ids || []).length;
+    const max = expertiseMax();
+    expertiseCounterEl.textContent = `Expertise: ${count} / ${max}`;
+    expertiseCounterEl.style.color = (count > max) ? '#f66' : '';
+  }
+  if (dimaCounterEl){
+    const count = (CHAR?.divine_manifestation_ids || []).length;
+    const max = divineManifestationMax();
+    dimaCounterEl.textContent = `Divine Manifestation: ${count} / ${max}`;
+    dimaCounterEl.style.color = (count > max) ? '#f66' : '';
+  }
+}
+
+async function loadExpertiseList(){
+  try{
+    const res = await api('/expertise');
+    EXPERTISES = res.expertises || [];
+  }catch(e){
+    if (expSummaryEl) expSummaryEl.textContent = 'Load expertise failed: ' + e.message;
+  }
+}
+
+async function loadDivineManifestationsList(){
+  try{
+    const res = await api('/divine_manifestations');
+    DIVINE_MANIFESTATIONS = res.divine_manifestations || [];
+  }catch(e){
+    if (dimaSummaryEl) dimaSummaryEl.textContent = 'Load divine manifestations failed: ' + e.message;
+  }
+}
 function skillTotalAdjustedFor(key, name){
   return skillAdjTotal(key, name).total;
 }
@@ -5033,9 +5411,11 @@ function updateDerived(){
   base.et = 1 + Math.floor(lvl/10) + msMAG;
   const etTech = 1 + Math.floor(lvl/10) + msTEC;
   base._notes = Object.assign(base._notes || {}, { et: [`Alt (TEC): ${etTech}`] });
-    base.tx = 2 + msBOD + (2 * msTEC);
-    base.talent_max = baseTalentMax(lvl);
-    base.skill_points = skillPointPool(lvl);
+  base.tx = 2 + msBOD + (2 * msTEC);
+  base.talent_max = baseTalentMax(lvl);
+  base.max_expertise = 0;
+  base.max_divine_manifestation = 0;
+  base.skill_points = skillPointPool(lvl);
     base.stat_points = statPointPool(lvl);
     base.sublimation_slots = slotsForLevel(lvl);
 
@@ -5116,6 +5496,7 @@ function updateDerived(){
     updatePointCounters();
     renderAddedSchools();
     updateTalentCounter();
+    updateExpertiseCounters();
     if (subSlotPill) renderSublimations();
   }
 
@@ -5136,6 +5517,8 @@ async function loadCharacter(){
   CHAR.xp = XP;
   CHAR.stats.level = CHAR.level;
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
+  if (!Array.isArray(CHAR.expertise_ids)) CHAR.expertise_ids = [];
+  if (!Array.isArray(CHAR.divine_manifestation_ids)) CHAR.divine_manifestation_ids = [];
   ABILITY_CHOICES = CHAR.ability_choices || {};
   ITEM_CHOICES = CHAR.item_choices || {};
   SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
@@ -5190,7 +5573,11 @@ async function loadCharacter(){
   updateDerived();
   renderSublimations();
   await loadArchetypesList();
+  await loadExpertiseList();
+  await loadDivineManifestationsList();
   renderArchetypePanel();
+  await refreshExpertiseAbilities();
+  await refreshDivineManifestationAbilities();
   await loadSpellListsList();
   if (SELECTED_SPELL_LIST_ID) await loadSpellListById(SELECTED_SPELL_LIST_ID);
   await loadInventoriesList();
@@ -5234,6 +5621,8 @@ async function saveNow(){
       stats: { ...CHAR.stats, level: CHAR.level, selected_schools: Array.from(ADDED_SCHOOLS) },
       selected_schools: Array.from(ADDED_SCHOOLS),
       abilities: CHAR.abilities || [],
+      expertise_ids: CHAR.expertise_ids || [],
+      divine_manifestation_ids: CHAR.divine_manifestation_ids || [],
       ability_choices: ABILITY_CHOICES || {},
       item_choices: ITEM_CHOICES || {},
       xp_ledger: XP_LEDGER || [],
@@ -5268,6 +5657,87 @@ function closeAbilityAddModal(){
   abiAddModal.classList.remove('open');
   abiAddBackdrop.classList.remove('open');
 }
+let SOURCE_ADD_KIND = 'expertise';
+function openSourceAddModal(kind){
+  if (!sourceAddModal || !sourceAddBackdrop) return;
+  SOURCE_ADD_KIND = kind === 'dima' ? 'dima' : 'expertise';
+  if (sourceAddTitle) sourceAddTitle.textContent = SOURCE_ADD_KIND === 'dima' ? 'Add Divine Manifestation' : 'Add Expertise';
+  sourceAddModal.classList.remove('hidden');
+  sourceAddModal.classList.add('open');
+  sourceAddBackdrop.classList.add('open');
+  sourceSearchEl.value = '';
+  searchSourceEntries();
+  sourceSearchEl?.focus();
+}
+function closeSourceAddModal(){
+  if (!sourceAddModal || !sourceAddBackdrop) return;
+  sourceAddModal.classList.add('hidden');
+  sourceAddModal.classList.remove('open');
+  sourceAddBackdrop.classList.remove('open');
+}
+function getSourceListForModal(){
+  return SOURCE_ADD_KIND === 'dima' ? (DIVINE_MANIFESTATIONS || []) : (EXPERTISES || []);
+}
+function renderSourceResults(list){
+  if (!sourceResultsEl) return;
+  if (!list.length){
+    sourceResultsEl.innerHTML = '<div class="muted">No results.</div>';
+    return;
+  }
+  sourceResultsEl.innerHTML = '';
+  list.forEach(entry=>{
+    const div = document.createElement('div');
+    div.className = 'abi-item';
+    const linked = (entry.linked_skills || []).join(', ');
+    div.innerHTML = `
+      <div class="grow">
+        <div><strong>${entry.name || entry.id}</strong></div>
+        ${linked ? `<div class="muted" style="font-size:.85rem">Linked skills: ${linked}</div>` : ''}
+      </div>
+      <div class="row" style="gap:6px; flex-wrap:wrap;">
+        <button class="btn small" data-id="${entry.id}">Add</button>
+      </div>
+    `;
+    div.querySelector('button')?.addEventListener('click', ()=> addSourceEntry(entry));
+    sourceResultsEl.appendChild(div);
+  });
+}
+function searchSourceEntries(){
+  const term = (sourceSearchEl.value || '').trim().toLowerCase();
+  const list = getSourceListForModal();
+  const filtered = term ? list.filter(e=> String(e.name||'').toLowerCase().includes(term)) : list.slice();
+  renderSourceResults(filtered);
+}
+function addSourceEntry(entry){
+  const id = String(entry?.id || '').trim();
+  if (!id || !CHAR) return;
+  if (SOURCE_ADD_KIND === 'dima'){
+    const max = divineManifestationMax();
+    const curr = (CHAR.divine_manifestation_ids || []).length;
+    if (curr >= max){
+      alert(`Divine Manifestation limit reached (${max}).`);
+      return;
+    }
+    const arr = new Set((CHAR.divine_manifestation_ids || []).map(String));
+    arr.add(id);
+    CHAR.divine_manifestation_ids = Array.from(arr);
+    updateExpertiseCounters();
+    refreshDivineManifestationAbilities();
+  }else{
+    const max = expertiseMax();
+    const curr = (CHAR.expertise_ids || []).length;
+    if (curr >= max){
+      alert(`Expertise limit reached (${max}).`);
+      return;
+    }
+    const arr = new Set((CHAR.expertise_ids || []).map(String));
+    arr.add(id);
+    CHAR.expertise_ids = Array.from(arr);
+    updateExpertiseCounters();
+    refreshExpertiseAbilities();
+  }
+  queueSave();
+}
 async function searchAbilities(){
   try{
     const params = [];
@@ -5287,8 +5757,14 @@ abiSearchBtn.addEventListener('click', searchAbilities);
 abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
 abiFilterTagEl?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
 abiOpenAddBtn?.addEventListener('click', openAbilityAddModal);
+expOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('expertise'));
+dimaOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('dima'));
 abiAddClose?.addEventListener('click', closeAbilityAddModal);
 abiAddCancel?.addEventListener('click', closeAbilityAddModal);
+sourceAddClose?.addEventListener('click', closeSourceAddModal);
+sourceAddCancel?.addEventListener('click', closeSourceAddModal);
+sourceSearchBtn?.addEventListener('click', searchSourceEntries);
+sourceSearchEl?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchSourceEntries(); });
 abiAddBackdrop?.addEventListener('click', (e)=>{ if (e.target===abiAddBackdrop) closeAbilityAddModal(); });
 deleteBtn?.addEventListener('click', deleteCharacter);
 
@@ -6064,6 +6540,7 @@ function renderAbilitiesTab(){
   renderAbilitiesBucket(listActiveEl,    active);
   renderAbilitySpellsBucket();
   updateTalentCounter();
+  updateExpertiseCounters();
 }
 
 function fillPersonal(){

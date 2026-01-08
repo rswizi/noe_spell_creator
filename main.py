@@ -4616,6 +4616,8 @@ async def create_character(request: Request):
         "sublimations": body.get("sublimations") or [],
         "avatar_id": "",
         "archetype_id": (body.get("archetype_id") or "").strip(),
+        "expertise_ids": body.get("expertise_ids") or [],
+        "divine_manifestation_ids": body.get("divine_manifestation_ids") or [],
     }
     if inv_id:
         doc["inventory_id"] = inv_id
@@ -4707,6 +4709,16 @@ async def update_character(cid: str, request: Request):
             if errs:
                 return JSONResponse({"status":"error","message":"Archetype prerequisites not met", "details": errs}, status_code=400)
         updates["archetype_id"] = arc_id
+
+    if "expertise_ids" in body:
+        exp_ids = body.get("expertise_ids") or []
+        if isinstance(exp_ids, list):
+            updates["expertise_ids"] = [str(x).strip() for x in exp_ids if str(x).strip()]
+
+    if "divine_manifestation_ids" in body:
+        dima_ids = body.get("divine_manifestation_ids") or []
+        if isinstance(dima_ids, list):
+            updates["divine_manifestation_ids"] = [str(x).strip() for x in dima_ids if str(x).strip()]
 
     if "sublimations" in body:
         subs = body.get("sublimations") or []
