@@ -4653,7 +4653,8 @@ function linkedSkillRank(sourceDoc){
       bestSkill = s;
     }
   }
-  const rank = Math.max(0, Math.floor(best));
+  const maxRank = Array.isArray(sourceDoc?.ranks) ? sourceDoc.ranks.length : 0;
+  const rank = Math.max(0, Math.min(Math.floor(best), maxRank));
   return { rank, bestSkill, bestValue: best };
 }
 
@@ -4928,15 +4929,15 @@ function renderExpertisePanel(meta, docs){
     const div = document.createElement('div');
     div.className = 'abi-item';
     div.innerHTML = `
-      <div class="grow">
-        <div class="row" style="gap:8px; align-items:center;">
-          <strong>${entry.name || entry.id}</strong>
-          <span class="tag">Rank ${rank}</span>
+      <div style="display:grid; gap:6px; margin-bottom:8px;">
+        <div class="row" style="gap:8px; align-items:center; justify-content:space-between;">
+          <div class="row" style="gap:8px; align-items:center;">
+            <strong>${entry.name || entry.id}</strong>
+            <span class="tag">Rank ${rank}</span>
+          </div>
+          <button class="btn small exp-remove" data-id="${entry.id}">Remove</button>
         </div>
         ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
-      </div>
-      <div class="row" style="gap:6px; flex-wrap:wrap;">
-        <button class="btn small exp-remove" data-id="${entry.id}">Remove</button>
       </div>
     `;
     div.querySelector('.exp-remove')?.addEventListener('click', ()=>{
@@ -4996,15 +4997,15 @@ function renderDivineManifestationPanel(meta, docs){
     const div = document.createElement('div');
     div.className = 'abi-item';
     div.innerHTML = `
-      <div class="grow">
-        <div class="row" style="gap:8px; align-items:center;">
-          <strong>${entry.name || entry.id}</strong>
-          <span class="tag">Rank ${rank}</span>
+      <div style="display:grid; gap:6px; margin-bottom:8px;">
+        <div class="row" style="gap:8px; align-items:center; justify-content:space-between;">
+          <div class="row" style="gap:8px; align-items:center;">
+            <strong>${entry.name || entry.id}</strong>
+            <span class="tag">Rank ${rank}</span>
+          </div>
+          <button class="btn small dima-remove" data-id="${entry.id}">Remove</button>
         </div>
         ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
-      </div>
-      <div class="row" style="gap:6px; flex-wrap:wrap;">
-        <button class="btn small dima-remove" data-id="${entry.id}">Remove</button>
       </div>
     `;
     div.querySelector('.dima-remove')?.addEventListener('click', ()=>{
