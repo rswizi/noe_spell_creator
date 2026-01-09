@@ -3201,6 +3201,15 @@ def _upgrade_from_body(body: dict) -> dict:
         item_effects = []
 
     desc_html = (body.get("description_html") or body.get("description") or "").strip()
+    tags_in = body.get("tags") or body.get("tag") or body.get("tags_text") or body.get("tags_str") or ""
+    if isinstance(tags_in, list):
+        tags = [str(t).strip().lower() for t in tags_in if str(t).strip()]
+    elif isinstance(tags_in, str):
+        tags = [t.strip().lower() for t in tags_in.split(",") if t.strip()]
+    else:
+        tags = []
+    if not tags:
+        tags = ["phb"]
 
     return {
         "kind": kind,
@@ -3215,6 +3224,7 @@ def _upgrade_from_body(body: dict) -> dict:
         "modifiers": modifiers,
         "holder_modifiers": holder_mods,
         "item_effects": item_effects,
+        "tags": tags,
         "targets": targets or [],
         "exclusive_group": exclusive_group,
         "created_at": datetime.datetime.utcnow().isoformat()+"Z",
@@ -3230,6 +3240,11 @@ def list_upgrades(request: Request, kind: str = "", slot: str = ""):
     if slot.strip():
         filt["slot"] = slot.strip().lower()
     rows = list(col.find(filt, {"_id":0}))
+    for row in rows:
+        tags = row.get("tags")
+        if not tags:
+            row["tags"] = ["phb"]
+            col.update_one({"id": row.get("id")}, {"$set": {"tags": row["tags"]}})
     rows.sort(key=lambda r: r.get("name","").lower())
     return {"status":"success","upgrades": rows}
 
@@ -3398,6 +3413,28 @@ def read_inventory(request: Request, inv_id: str):
         inv["containers"] = recomputed_containers
         inv["enc_total"] = inv_total
     return {"status":"success","inventory": inv, "refresh_report": refresh_report}
+
+@app.post("/inventories/{inv_id}/duplicate")
+def duplicate_inventory(request: Request, inv_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user}, {"_id":0})
+    if not inv:
+        raise HTTPException(404, "Not found")
+    name = (payload.get("name") or "").strip()
+    base_name = name or (inv.get("name") or "Inventory").strip() or "Inventory"
+    now = datetime.datetime.utcnow().isoformat() + "Z"
+    dup = {k: v for k, v in inv.items()}
+    dup["id"] = next_id_str("inventory", padding=4)
+    dup["name"] = base_name
+    dup["owner"] = user
+    dup["created_at"] = now
+    containers = _ensure_self_container(dup.get("containers") or [])
+    containers, inv_total = _recompute_encumbrance(dup.get("items") or [], containers)
+    dup["containers"] = containers
+    dup["enc_total"] = inv_total
+    db.inventories.insert_one(dict(dup))
+    return {"status": "success", "inventory": dup}
 
 @app.post("/inventories/{inv_id}/containers")
 def add_container(request: Request, inv_id: str, payload: dict = Body(...)):

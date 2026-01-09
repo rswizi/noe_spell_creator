@@ -33,6 +33,14 @@
     .upg-row { border:1px solid #1c2637; border-radius:10px; padding:8px; background:#0c111a; }
     .upg-row h4 { margin:0 0 4px; font-size:1rem; }
     .btn-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .price-choice-card{ max-width:520px; width:min(520px, 96vw); }
+    .price-choice-title{ font-weight:700; line-height:1.2; word-break:break-word; }
+    .price-choice-grid{ display:grid; gap:8px; }
+    .price-choice-option{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .price-choice-option input{ margin:0; }
+    .price-choice-custom{ display:grid; gap:8px; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+    .price-choice-field{ display:flex; gap:6px; align-items:center; min-width:0; }
+    .price-choice-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
     @media (min-width: 1100px){
       .container-wide { max-width: 1100px; margin: 0 auto; }
       .searchbar { grid-template-columns: 2fr 1fr; align-items:end; }
@@ -157,10 +165,31 @@
   </div>
 </div>
 
+<!-- Item Choice Modal -->
+<div id="choice-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="choice-title">
+  <div class="modal-card">
+    <button class="modal-close" id="choice-close" aria-label="Close">&times;</button>
+    <h2 id="choice-title">Configure choices</h2>
+    <div id="choice-body" class="list" style="margin-top:10px;"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="choice-cancel">Cancel</button>
+      <button class="btn" id="choice-save">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const $ = s => document.querySelector(s);
 const token = localStorage.getItem("auth_token") || "";
 const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+async function api(path, opt = {}){
+  const headers = Object.assign({}, opt.headers || {}, authHeaders());
+  const resp = await fetch(path, { credentials: "include", ...opt, headers });
+  const ct = resp.headers.get("content-type") || "";
+  const data = ct.includes("application/json") ? await resp.json() : { status: "error", message: await resp.text() };
+  if (!resp.ok || data.status === "error") throw new Error(data.message || ("HTTP " + resp.status));
+  return data;
+}
 const params = new URLSearchParams(location.search);
 const invId = params.get("inv");
 const isEmbed = params.get("embed") === "1";
@@ -170,13 +199,645 @@ let INV = null;
 let LAST_RESULTS = [];
 let FILTERED = [];
 let PRICE_MOD = 1;
+const invPriceModEl = $("#price-mod");
+const choiceModal = $("#choice-modal");
+const choiceTitle = $("#choice-title");
+const choiceBody = $("#choice-body");
+const choiceSave = $("#choice-save");
+const choiceCancel = $("#choice-cancel");
+const choiceClose = $("#choice-close");
 
 const KIND_PLURAL = { object: "objects", weapon: "weapons", equipment: "equipment", tool: "tools" };
 const QUALITIES = ["Adequate","Good","Very Good","Excellent","Legendary","Mythical","Epic","Divine","Unreal"];
 const QUALITY_SLOTS = { "Adequate":1,"Good":2,"Very Good":3,"Excellent":4,"Legendary":5,"Mythical":6,"Epic":7,"Divine":8,"Unreal":9 };
 
+const CHARACS = [
+  { key:"reflex",    code:"REF", name:"Reflex",    skills:["Technicity","Dodge","Counter","Reactivity"] },
+  { key:"dexterity", code:"DEX", name:"Dexterity", skills:["Accuracy","Evasion","Stealth","Acrobatics"] },
+  { key:"body",      code:"BOD", name:"Body",      skills:["Brutality","Blocking","Resistance","Athletics"] },
+  { key:"willpower", code:"WIL", name:"Willpower", skills:["Intimidation","Spirit","Instinct","Absorption"] },
+  { key:"wisdom",    code:"WIS", name:"Wisdom",    skills:["Survival","Education","Perception","Psychology","Investigation"] },
+  { key:"presence",  code:"PRE", name:"Presence",  skills:["Taming","Charm","Charisma","Deception","Persuasion"] },
+  { key:"magic",     code:"MAG", name:"Magic",     skills:["Aura","Incantation","Enchantment","Restoration","Potential"] },
+  { key:"tech",      code:"TECH",name:"Tech",      skills:["Crafting","Sleight of hand","Alchemy","Medicine","Engineering"] },
+];
+const INTENSITIES = ["Fire","Water","Earth","Wind","Lightning","Sun","Moon","Ki"];
+const SKILL_LABEL = {
+  aura: "Aura",
+  incantation: "Incantation",
+  enchantement: "Enchantment",
+  enchantment: "Enchantment",
+  restoration: "Restoration",
+  potential: "Potential",
+  stealth: "Stealth",
+  investigation: "Investigation",
+  charm: "Charm",
+  intimidation: "Intimidation",
+  absorption: "Absorption",
+  spirit: "Spirit",
+};
+const SKILL_TO_CHAR = {
+  aura: "magic", incantation: "magic", enchantement: "magic", enchantment: "magic", restoration: "magic", potential: "magic",
+  stealth: "dexterity", investigation: "wisdom", charm: "presence", intimidation: "willpower", absorption: "willpower", spirit: "willpower",
+};
+let SCHOOLS = [];
+
+const ITEM_CHOICES_KEY = invId ? `inv_item_choices_${invId}` : "";
+let ITEM_CHOICES = {};
+
 function slotsForQuality(q){ return QUALITY_SLOTS[q] || 0; }
 function debounce(fn, ms=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
+
+function lc(v){ return String(v || "").trim().toLowerCase(); }
+function title(str){ return String(str || "").replace(/(^|\\s|_)([a-z])/g, (_,p1,p2)=> p1 + p2.toUpperCase()); }
+function normSkillKey(name){ return lc(name).replace(/[^a-z0-9]+/g, ""); }
+
+function loadItemChoices(){
+  if (!ITEM_CHOICES_KEY) return;
+  try{
+    const raw = localStorage.getItem(ITEM_CHOICES_KEY);
+    ITEM_CHOICES = raw ? JSON.parse(raw) : {};
+  }catch(e){
+    ITEM_CHOICES = {};
+  }
+}
+function saveItemChoices(){
+  if (!ITEM_CHOICES_KEY) return;
+  try{ localStorage.setItem(ITEM_CHOICES_KEY, JSON.stringify(ITEM_CHOICES || {})); }catch(e){}
+}
+
+function skillOptionsList(){
+  const out = [];
+  for (const c of CHARACS){
+    for (const s of c.skills){
+      out.push({ key:`skills.${c.key}.${s}`, label:`${s} (${c.name})`, charKey:c.key });
+    }
+  }
+  return out;
+}
+function charKeyForSkillName(name){
+  const norm = normSkillKey(name);
+  if (SKILL_TO_CHAR[norm]) return SKILL_TO_CHAR[norm];
+  const lcName = String(name||"").toLowerCase();
+  const hit = CHARACS.find(c=> (c.skills||[]).some(s=> String(s||"").toLowerCase() === lcName));
+  return hit ? hit.key : "";
+}
+async function fetchSchools(){
+  if (SCHOOLS.length) return SCHOOLS;
+  const res = await api("/schools");
+  SCHOOLS = res.schools || [];
+  return SCHOOLS;
+}
+
+function normalizeChoiceEntry(val){
+  if (!val) return { base:"", picks:[] };
+  if (Array.isArray(val)) return { base:"", picks: val.filter(Boolean) };
+  const picks = Array.isArray(val.picks) ? val.picks.slice()
+    : Array.isArray(val.selected) ? val.selected.slice()
+    : [];
+  const base = val.base || val.source || "";
+  return { base, picks: picks.filter(Boolean) };
+}
+function normalizeRestrict(choice){
+  if (!choice) return [];
+  const src = choice.choice || choice;
+  if (Array.isArray(src.restrict)) return src.restrict.map(s=> String(s).trim()).filter(Boolean);
+  if (Array.isArray(src.choice_restrict)) return src.choice_restrict.map(s=> String(s).trim()).filter(Boolean);
+  if (Array.isArray(src.restrict_list)) return src.restrict_list.map(s=> String(s).trim()).filter(Boolean);
+  if (Array.isArray(choice.restrict)) return choice.restrict.map(s=> String(s).trim()).filter(Boolean);
+  if (Array.isArray(choice.choice_restrict)) return choice.choice_restrict.map(s=> String(s).trim()).filter(Boolean);
+  if (Array.isArray(choice.restrict_list)) return choice.restrict_list.map(s=> String(s).trim()).filter(Boolean);
+  const txt = src.restrict_text || src.choice_restrict || src.restrict_list || src.restrict || src.restrict_string ||
+    choice.restrict_text || choice.choice_restrict || choice.restrict_list || choice.restrict || choice.restrict_string || "";
+  if (typeof txt === "string"){
+    return String(txt).split(",").map(s=>s.trim()).filter(Boolean);
+  }
+  return [];
+}
+function normalizeChoiceAllowed(choice){
+  if (!choice) return [];
+  const src = choice.choice || choice;
+  if (Array.isArray(src.choices)) return src.choices.map(s=> String(s).trim()).filter(Boolean);
+  const txt = src.choices_text || "";
+  if (typeof txt === "string" && txt.trim()){
+    return txt.split(",").map(s=> s.trim()).filter(Boolean);
+  }
+  return [];
+}
+function itemChoiceState(itemId, kind){
+  const byItem = ITEM_CHOICES[itemId] || {};
+  return normalizeChoiceEntry(byItem[kind]);
+}
+
+function prettyTargetLabel(target){
+  const t = String(target||"").trim();
+  if (!t) return "(unknown target)";
+  if (t.startsWith("choice:")){
+    const inner = t.replace(/^choice:/,"");
+    const base = prettyTargetLabel(inner);
+    return base.startsWith("[Choice]") ? base : `[Choice] ${base}`;
+  }
+  const cm = t.match(/^char\\.(.+)$/i);
+  if (cm){
+    const key = cm[1].toLowerCase();
+    const hit = CHARACS.find(c=> c.key === key);
+    return hit ? `${hit.name} (Characteristic)` : t;
+  }
+  const sm = t.match(/^skills\\.([^.]+)\\.(.+)$/i);
+  if (sm){
+    const ckey = sm[1].toLowerCase();
+    const sk = sm[2];
+    const hit = CHARACS.find(c=> c.key === ckey);
+    return hit ? `${sk} (${hit.name})` : `Skill: ${sk}`;
+  }
+  const im = t.match(/^intensities\\.(.+)$/i);
+  if (im) return `Intensity: ${im[1]}`;
+  const sch = t.match(/^schools\\.(.+)$/i);
+  if (sch){
+    const raw = sch[1];
+    const found = (SCHOOLS||[]).find(s=> String(s.id||"").toLowerCase() === String(raw).toLowerCase());
+    return found ? `${found.name} (School)` : `School: ${raw}`;
+  }
+  const md = t.match(/^magic_damage\\.(spell|weapon)\\.(.+)$/i);
+  if (md) return `${md[2]} magic damage (${md[1]})`;
+  const sg = t.match(/^skills\\.by_char\\.(.+)$/i);
+  if (sg) return `Skills linked to ${sg[1]}`;
+  const sn = t.match(/^schools\\.by_nature\\.(.+)$/i);
+  if (sn) return `Schools linked to ${sn[1]}`;
+  const ss = t.match(/^schools\\.by_skill\\.(.+)$/i);
+  if (ss) return `Schools using ${ss[1]}`;
+  if (t === "skill_ms") return "Magic School (by skill)";
+  if (t === "nature_ms") return "Magic School (by nature)";
+  if (t === "char_skill") return "Skill linked to characteristic";
+  if (t === "school_any" || t === "school_ms") return "Magic School";
+  if (t === "intensity_any") return "Intensity";
+  return t;
+}
+
+async function choiceItemsForKind(kind, restrict, allowed){
+  const rset = new Set((restrict||[]).map(x=> String(x).trim().toLowerCase()));
+  const aset = new Set((allowed||[]).map(x=> String(x).trim().toLowerCase()));
+  const useAllow = aset.size > 0;
+  const isRestricted = (...cands)=>{
+    for (const c of cands){
+      if (c == null) continue;
+      const base = String(c).trim().toLowerCase();
+      if (!base) continue;
+      if (rset.has(base)) return true;
+      const noPrefix = base.replace(/^(skills|schools|intensities)\\./,"");
+      if (rset.has(noPrefix)) return true;
+      const beforeParen = base.split("(")[0].trim();
+      if (beforeParen && rset.has(beforeParen)) return true;
+      const noDots = noPrefix.replace(/[\\.\\s]+/g,"");
+      if (noDots && rset.has(noDots)) return true;
+    }
+    return false;
+  };
+  const isAllowed = (...cands)=>{
+    if (!useAllow) return true;
+    for (const c of cands){
+      if (c == null) continue;
+      const base = String(c).trim().toLowerCase();
+      if (!base) continue;
+      if (aset.has(base)) return true;
+      const noPrefix = base.replace(/^(skills|schools|intensities)\\./,"");
+      if (aset.has(noPrefix)) return true;
+    }
+    return false;
+  };
+  if (kind === "skill_ms"){
+    if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
+    const skillsWithSchools = new Set(
+      (SCHOOLS || [])
+        .filter(s=> s.linked_skill)
+        .map(s=> normSkillKey(s.linked_skill))
+    );
+    if (!skillsWithSchools.size) return [];
+    return skillOptionsList().filter(o=>{
+      const skillName = (o.label || "").split("(")[0].trim();
+      const norm = normSkillKey(skillName);
+      if (skillsWithSchools.size && !skillsWithSchools.has(norm)) return false;
+      return !isRestricted(o.key, o.label, o.charKey, norm, skillName);
+    });
+  }
+  if (kind === "char_skill"){
+    return skillOptionsList().filter(o=>{
+      const skillName = (o.label || "").split("(")[0].trim();
+      const norm = normSkillKey(skillName);
+      if (!isAllowed(o.key, o.label, o.charKey, norm, skillName)) return false;
+      return !isRestricted(o.charKey, skillName, norm, o.key, o.label);
+    });
+  }
+  const charGroup = kind.match(/^skills\\.by_char\\.(.+)$/i);
+  if (charGroup){
+    const key = charGroup[1].toLowerCase();
+    const hit = CHARACS.find(c=> c.key === key);
+    if (!hit) return [];
+    return (hit.skills || []).map(sk=>({ key:`skills.${key}.${sk}`, label:`${sk} (${hit.name||hit.label||key})` })).filter(o=>{
+      const skillName = (o.label || "").split("(")[0].trim();
+      const norm = normSkillKey(skillName);
+      if (!isAllowed(o.key, o.label, key, norm, skillName)) return false;
+      return !isRestricted(o.key, o.label, key, norm, skillName);
+    });
+  }
+  if (kind === "nature_ms" || kind === "magic_weapon" || kind === "magic_spell"){
+    if (kind === "nature_ms" && !SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
+    const linkedNatures = new Set();
+    if (kind === "nature_ms" && SCHOOLS.length){
+      (SCHOOLS||[]).forEach(s=> (s.linked_intensities||[]).forEach(n=> linkedNatures.add(lc(n))));
+    }
+    return INTENSITIES.map(n=>({ key:`intensities.${n}`, label:n })).filter(o=>{
+      const base = lc(o.label);
+      if (kind === "nature_ms" && linkedNatures.size && !linkedNatures.has(base)) return false;
+      if (!isAllowed(o.key, o.label, base)) return false;
+      return !isRestricted(o.label, o.key, base);
+    });
+  }
+  if (kind === "intensity_any"){
+    return INTENSITIES.map(n=>({ key:`intensities.${n}`, label:n })).filter(o=> !isRestricted(o.key, o.label));
+  }
+  const schoolSkill = kind.match(/^schools\\.by_skill\\.(.+)$/i);
+  if (schoolSkill){
+    if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
+    const skillName = schoolSkill[1];
+    return (SCHOOLS||[]).filter(s=> String(s.linked_skill || "").toLowerCase() === String(skillName).toLowerCase())
+      .map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||"simple"})` }))
+      .filter(o=>{
+        const baseLabel = (o.label || "").split("(")[0].trim().toLowerCase();
+        const rawId = String(o.key||"").replace(/^schools\\./i,"");
+        if (!isAllowed(o.key, baseLabel, rawId)) return false;
+        return !isRestricted(o.label, o.key, baseLabel, rawId);
+      });
+  }
+  const schoolNature = kind.match(/^schools\\.by_nature\\.(.+)$/i);
+  if (schoolNature){
+    if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
+    const nature = schoolNature[1];
+    return (SCHOOLS||[]).filter(s=> (s.linked_intensities || []).some(n=> String(n).toLowerCase() === String(nature).toLowerCase()))
+      .map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||"simple"})` }))
+      .filter(o=>{
+        const baseLabel = (o.label || "").split("(")[0].trim().toLowerCase();
+        const rawId = String(o.key||"").replace(/^schools\\./i,"");
+        if (!isAllowed(o.key, baseLabel, rawId)) return false;
+        return !isRestricted(o.label, o.key, baseLabel, rawId);
+      });
+  }
+  if (kind === "school_ms" || kind === "school_any"){
+    if (!SCHOOLS.length){ try{ await fetchSchools(); }catch{} }
+    return (SCHOOLS||[]).map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||"simple"})` })).filter(o=>{
+      const baseLabel = (o.label || "").split("(")[0].trim().toLowerCase();
+      function rawKey(){ return String(o.key||"").replace(/^schools\\./i,""); }
+      if (!isAllowed(o.key, baseLabel, rawKey())) return false;
+      return !isRestricted(o.label, o.key, baseLabel, rawKey());
+    });
+  }
+  return [];
+}
+
+function itemChoiceMods(it){
+  const mods = [];
+  (it.modifiers || []).forEach(m=>{
+    if (String(m.target||"").startsWith("choice:")) mods.push({ ...m, __source:"Item" });
+  });
+  return mods;
+}
+function resolveUpgradeModifiers(u, meta){
+  const holder = (Array.isArray(u?.holder_modifiers) && u.holder_modifiers.length) ? u.holder_modifiers : [];
+  if (holder.length) return holder;
+  const mods = Array.isArray(u?.modifiers) ? u.modifiers : [];
+  if (mods.length) return mods;
+  const metaHolder = (Array.isArray(meta?.holder_modifiers) && meta.holder_modifiers.length) ? meta.holder_modifiers : [];
+  if (metaHolder.length) return metaHolder;
+  return Array.isArray(meta?.modifiers) ? meta.modifiers : [];
+}
+function upgradeChoiceMods(u, meta, choiceKey){
+  const name = meta?.name || u?.name || u?.id || "Upgrade";
+  const mods = resolveUpgradeModifiers(u, meta);
+  return (mods || []).filter(m=> String(m.target||"").startsWith("choice:")).map(m=> ({
+    ...m,
+    __source:`Upgrade: ${name}`,
+    __choice_key: choiceKey || ""
+  }));
+}
+function itemHasChoice(it){
+  return itemChoiceMods(it).length > 0;
+}
+function itemChoiceKey(it){
+  const key = String(it?.item_id || it?.id || "").trim();
+  if (key) return key;
+  const name = String(it?.name || "").trim();
+  return name || "";
+}
+function upgradeChoiceKey(it, upgrade, idx){
+  const itemKey = itemChoiceKey(it);
+  const upgId = String(upgrade?.id || upgrade?.key || upgrade || "").trim() || "upgrade";
+  const target = String(upgrade?.target || "").trim() || "any";
+  const pos = Number.isFinite(idx) ? idx : 0;
+  return `${itemKey}::upg:${upgId}:${target}:${pos}`;
+}
+function pruneItemChoices(){
+  if (!INV) return;
+  const ids = new Set();
+  (INV.items || []).forEach(it=>{
+    const baseKey = itemChoiceKey(it);
+    if (baseKey) ids.add(baseKey);
+    (it.upgrades || []).forEach((u, idx)=>{
+      ids.add(upgradeChoiceKey(it, u, idx));
+    });
+  });
+  Object.keys(ITEM_CHOICES).forEach(id=>{ if (!ids.has(String(id))) delete ITEM_CHOICES[id]; });
+  saveItemChoices();
+}
+
+async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>{}, { titleText = "Configure choices" } = {}){
+  if (!mods.length) return false;
+  try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
+  choiceTitle.textContent = titleText || "Configure choices";
+  choiceBody.innerHTML = '<div class="muted">Loading choices...</div>';
+  choiceModal.classList.remove("hidden");
+
+  const blocks = [];
+  choiceBody.innerHTML = "";
+
+  const normalizeMsBase = (kind, picks)=>{
+    if (!picks || !picks.length || !SCHOOLS.length) return "";
+    const first = String(picks[0]||"").replace(/^schools\\./i, "");
+    const school = (SCHOOLS||[]).find(s=> String(s.id||"").toLowerCase() === first.toLowerCase() || String(s.name||"").toLowerCase() === first.toLowerCase());
+    if (!school) return "";
+    if (kind === "skill_ms" && school.linked_skill){
+      const ck = charKeyForSkillName(school.linked_skill);
+      return ck ? `skills.${ck}.${school.linked_skill}` : "";
+    }
+    if (kind === "nature_ms"){
+      const n = (school.linked_intensities || [])[0];
+      return n ? `intensities.${n}` : "";
+    }
+    return "";
+  };
+  const buildMsBaseOptions = (kind, restrict=[])=>{
+    const rset = new Set((restrict||[]).map(x=> String(x).toLowerCase()));
+    if (kind === "skill_ms"){
+      const map = new Map();
+      (SCHOOLS||[]).forEach(s=>{
+        if (!s.linked_skill) return;
+        const ck = charKeyForSkillName(s.linked_skill);
+        if (!ck) return;
+        const norm = normSkillKey(s.linked_skill);
+        if (rset.has(norm) || rset.has(lc(s.linked_skill)) || rset.has(ck.toLowerCase())) return;
+        const key = `skills.${ck}.${s.linked_skill}`;
+        const list = map.get(key) || [];
+        list.push(s.name || s.id);
+        map.set(key, list);
+      });
+      return Array.from(map.entries()).map(([key, schools])=>{
+        const parts = key.split(".");
+        const skillName = parts.slice(2).join(".");
+        const ck = parts[1] || "";
+        const label = `${skillName} (${title(ck)}) - Schools: ${Array.from(new Set(schools)).join(", ")}`;
+        return { key, label };
+      }).sort((a,b)=> a.label.localeCompare(b.label));
+    }
+    if (kind === "nature_ms"){
+      const map = new Map();
+      (SCHOOLS||[]).forEach(s=>{
+        (s.linked_intensities || []).forEach(n=>{
+          const norm = lc(n);
+          if (rset.has(norm) || rset.has(`intensities.${norm}`)) return;
+          const key = `intensities.${n}`;
+          const list = map.get(key) || [];
+          list.push(s.name || s.id);
+          map.set(key, list);
+        });
+      });
+      return Array.from(map.entries()).map(([key, schools])=>{
+        const label = `${key.replace(/^intensities\\./i,"")} - Schools: ${Array.from(new Set(schools)).join(", ")}`;
+        return { key, label };
+      }).sort((a,b)=> a.label.localeCompare(b.label));
+    }
+    return [];
+  };
+  const schoolsForMsBase = (kind, baseKey, restrict=[])=>{
+    if (!baseKey) return [];
+    const rset = new Set((restrict||[]).map(x=> String(x).toLowerCase()));
+    const matches = (SCHOOLS||[]).filter(s=>{
+      if (kind === "skill_ms"){
+        const skillName = baseKey.split(".").slice(2).join(".");
+        return lc(s.linked_skill) === lc(skillName);
+      }
+      if (kind === "nature_ms"){
+        const nature = baseKey.replace(/^intensities\\./i,"");
+        return (s.linked_intensities || []).some(n=> lc(n) === lc(nature));
+      }
+      return false;
+    });
+    return matches.map(s=>({ key:`schools.${s.id}`, label:`${s.name} (${s.school_type||"simple"})` })).filter(opt=>{
+      const base = (opt.label || "").split("(")[0].trim().toLowerCase();
+      const key = String(opt.key||"").toLowerCase();
+      const plain = key.replace(/^schools\\./i,"");
+      return !(rset.has(base) || rset.has(key) || rset.has(plain));
+    });
+  };
+
+  for (const m of mods){
+    const kind = String(m.target||"").replace("choice:","");
+    const restrict = normalizeRestrict(m);
+    const allowed = normalizeChoiceAllowed(m);
+    const max = Number(m.choice?.max_choices||0);
+    const block = document.createElement("div");
+    block.className = "panel";
+    const titleEl = document.createElement("div");
+    const srcNote = m.__source ? `<div class="muted" style="font-size:0.85rem;">${m.__source}</div>` : "";
+    titleEl.innerHTML = `<strong>${kind.replace(/_/g," ")}</strong> <span class="muted">(max ${max||"no limit"})</span>${srcNote}`;
+    block.appendChild(titleEl);
+
+    if (kind === "skill_ms" || kind === "nature_ms"){
+      const state = normalizeChoiceEntry(existingMap[kind]);
+      const baseOpts = buildMsBaseOptions(kind, restrict);
+      const baseWrap = document.createElement("div");
+      baseWrap.className = "row";
+      const baseLabel = document.createElement("label");
+      baseLabel.className = "muted";
+      baseLabel.textContent = kind === "skill_ms" ? "Select skill" : "Select nature";
+      const baseSelect = document.createElement("select");
+      baseSelect.innerHTML = '<option value="">-- choose --</option>';
+      baseOpts.forEach(opt=>{
+        const o = document.createElement("option");
+        o.value = opt.key; o.textContent = opt.label;
+        baseSelect.appendChild(o);
+      });
+      const inferredBase = state.base || normalizeMsBase(kind, state.picks);
+      if (inferredBase && baseOpts.some(o=> o.key === inferredBase)){
+        baseSelect.value = inferredBase;
+      }
+      baseWrap.appendChild(baseLabel);
+      baseWrap.appendChild(baseSelect);
+
+      const schoolsWrap = document.createElement("div");
+      schoolsWrap.className = "choice-wrap";
+      schoolsWrap.style.display = "grid";
+      schoolsWrap.style.gridTemplateColumns = "repeat(auto-fit,minmax(220px,1fr))";
+      schoolsWrap.style.gap = "8px";
+
+      const counter = document.createElement("div");
+      counter.className = "muted";
+      counter.style.marginTop = "4px";
+
+      const renderSchools = ()=>{
+        schoolsWrap.innerHTML = "";
+        const baseVal = baseSelect.value;
+        if (!baseVal){
+          const hint = document.createElement("div");
+          hint.className = "muted";
+          hint.textContent = "Choose a base option to see linked schools.";
+          schoolsWrap.appendChild(hint);
+          counter.textContent = "Selected 0";
+          return;
+        }
+        const items = schoolsForMsBase(kind, baseVal, restrict);
+        if (!items.length){
+          const empty = document.createElement("div");
+          empty.className = "muted";
+          empty.textContent = "No schools linked to that choice.";
+          schoolsWrap.appendChild(empty);
+          counter.textContent = "Selected 0";
+          return;
+        }
+        const picks = new Set(state.picks);
+        items.forEach(opt=>{
+          const row = document.createElement("label");
+          row.style.display = "flex";
+          row.style.gap = "8px";
+          row.style.alignItems = "center";
+          row.style.margin = "2px 0";
+          const input = document.createElement("input");
+          input.type = max === 1 ? "radio" : "checkbox";
+          input.name = `choice-${kind}`;
+          input.dataset.choice = kind;
+          input.value = opt.key;
+          input.checked = picks.has(opt.key);
+          input.addEventListener("change", ()=>{
+            const checked = schoolsWrap.querySelectorAll(`input[data-choice=\"${kind}\"]:checked`);
+            if (max === 1){
+              checked.forEach(cb=>{ if (cb !== input) cb.checked = false; });
+            }else if (max > 0 && checked.length > max){
+              input.checked = false;
+            }
+            counter.textContent = `Selected ${schoolsWrap.querySelectorAll(`input[data-choice=\"${kind}\"]:checked`).length}${max>0?` / ${max}`:""}`;
+          });
+          row.appendChild(input);
+          const span = document.createElement("span");
+          span.textContent = opt.label;
+          row.appendChild(span);
+          schoolsWrap.appendChild(row);
+        });
+        counter.textContent = `Selected ${schoolsWrap.querySelectorAll(`input[data-choice=\"${kind}\"]:checked`).length}${max>0?` / ${max}`:""}`;
+      };
+      baseSelect.addEventListener("change", ()=>{ state.base = baseSelect.value; renderSchools(); });
+      renderSchools();
+
+      block.appendChild(baseWrap);
+      block.appendChild(schoolsWrap);
+      block.appendChild(counter);
+      choiceBody.appendChild(block);
+      blocks.push({ kind, max, node: schoolsWrap, baseSelect, isMs: true });
+      continue;
+    }
+
+    const list = document.createElement("div");
+    list.style.display = "grid";
+    list.style.gridTemplateColumns = "repeat(auto-fit,minmax(220px,1fr))";
+    list.style.gap = "8px";
+    const counter = document.createElement("div");
+    counter.className = "muted";
+    counter.style.marginTop = "4px";
+
+    const state = normalizeChoiceEntry(existingMap[kind]);
+    const items = await choiceItemsForKind(kind, restrict, allowed);
+    if (!items.length){
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = "No available options.";
+      list.appendChild(empty);
+    }else{
+      items.forEach(opt=>{
+        const row = document.createElement("label");
+        row.style.display = "flex";
+        row.style.gap = "8px";
+        row.style.alignItems = "center";
+        row.style.margin = "2px 0";
+        const input = document.createElement("input");
+        input.type = max === 1 ? "radio" : "checkbox";
+        input.name = `choice-${kind}`;
+        input.dataset.choice = kind;
+        input.value = opt.key;
+        input.checked = state.picks.includes(opt.key);
+        input.addEventListener("change", ()=>{
+          const checked = list.querySelectorAll(`input[data-choice=\"${kind}\"]:checked`);
+          if (max === 1){
+            checked.forEach(cb=>{ if (cb !== input) cb.checked = false; });
+          }else if (max > 0 && checked.length > max){
+            input.checked = false;
+          }
+          counter.textContent = `Selected ${list.querySelectorAll(`input[data-choice=\"${kind}\"]:checked`).length}${max>0?` / ${max}`:""}`;
+        });
+        row.appendChild(input);
+        const span = document.createElement("span");
+        span.textContent = opt.label;
+        row.appendChild(span);
+        list.appendChild(row);
+      });
+    }
+    counter.textContent = `Selected ${list.querySelectorAll(`input[data-choice=\"${kind}\"]:checked`).length}${max>0?` / ${max}`:""}`;
+    block.appendChild(list);
+    block.appendChild(counter);
+    choiceBody.appendChild(block);
+    blocks.push({ kind, max, node: list, isMs: false });
+  }
+
+  return new Promise(resolve=>{
+    const close = (saved=false)=>{
+      choiceModal.classList.add("hidden");
+      resolve(saved);
+    };
+    const save = ()=>{
+      const selections = {};
+      for (const b of blocks){
+        const picks = Array.from(b.node.querySelectorAll(`input[data-choice=\"${b.kind}\"]:checked`)).map(i=> i.value);
+        selections[b.kind] = { base: b.baseSelect?.value || "", picks };
+      }
+      saveHandler(selections);
+      close(true);
+    };
+    const closeBtn = ()=>close(false);
+    choiceClose.onclick = closeBtn;
+    choiceCancel.onclick = closeBtn;
+    choiceSave.onclick = save;
+  });
+}
+
+async function openItemChoiceModal(it){
+  const mods = itemChoiceMods(it);
+  if (!mods.length) return false;
+  const key = itemChoiceKey(it);
+  return openChoiceModalGeneric(mods, ITEM_CHOICES[key] || {}, (selections)=>{
+    if (!key) return;
+    ITEM_CHOICES[key] = selections;
+    saveItemChoices();
+  }, { titleText: `Configure: ${it.alt_name || it.name || "Item"}` });
+}
+
+async function openUpgradeChoiceModal(it, upgrade, idx){
+  const upgId = upgrade?.id || upgrade?.key || upgrade;
+  const meta = (window.UPGRADE_META || {})[upgId] || {};
+  const choiceKey = upgradeChoiceKey(it, upgrade, idx);
+  const mods = upgradeChoiceMods(upgrade, meta, choiceKey);
+  if (!mods.length) return false;
+  if (!choiceKey) return false;
+  return openChoiceModalGeneric(mods, ITEM_CHOICES[choiceKey] || {}, (selections)=>{
+    ITEM_CHOICES[choiceKey] = selections;
+    saveItemChoices();
+  }, { titleText: `Configure: ${meta.name || upgrade?.name || "Upgrade"}` });
+}
 
 
 function broadcastInventoryUpdate(){
@@ -188,12 +849,14 @@ function broadcastInventoryUpdate(){
 
 function applyInventory(inv){
   INV = inv;
+  pruneItemChoices();
   renderInventory();
   populateGlobals();
   broadcastInventoryUpdate();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  loadItemChoices();
   loadInventory();
   $("#search").addEventListener("click", doSearch);
   $("#q").addEventListener("keydown", e=>{ if (e.key==="Enter") doSearch(); });
@@ -202,6 +865,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#add-cont").addEventListener("click", addContainer);
   $("#item-close").addEventListener("click", closeItemModal);
   $("#item-modal").addEventListener("click", (e)=>{ if (e.target === $("#item-modal")) closeItemModal(); });
+  $("#choice-modal").addEventListener("click", (e)=>{ if (e.target === $("#choice-modal")) $("#choice-modal").classList.add("hidden"); });
   $("#cat-select").addEventListener("change", applyCategoryFilter);
   $("#fund-add").addEventListener("click", addFunds);
 });
@@ -290,6 +954,7 @@ function renderInventory(){
         const row = document.createElement("div");
         row.className = "item-row";
         row.title = buildModifierSummary(it) || "";
+        const hasChoice = itemHasChoice(it);
         const displayName = it.alt_name ? `${escapeHtml(it.alt_name)} <span class="muted">(${escapeHtml(it.name||"Item")})</span>` : escapeHtml(it.name||"Item");
         const totalEnc = (Number(it.enc||0) * Number(it.quantity||1)) || 0;
         const equipped = it.equipped !== false;
@@ -353,6 +1018,13 @@ function renderInventory(){
 
         row.appendChild(info);
         row.appendChild(toggle);
+        if (hasChoice){
+          const choices = document.createElement("button");
+          choices.className = "btn small";
+          choices.textContent = "Choices";
+          choices.addEventListener("click", ()=> openItemChoiceModal(it));
+          row.appendChild(choices);
+        }
         row.appendChild(details);
         list.appendChild(row);
       }
@@ -540,6 +1212,127 @@ async function fetchCatalog(kind, q, limit, tags){
   return [];
 }
 
+function invParseCustomPriceInput(inputStr){
+  if (inputStr == null) return null;
+  const raw = String(inputStr).trim();
+  if (!raw) return null;
+  const percentMark = raw.startsWith("%") || raw.endsWith("%");
+  const numeric = raw.replace("%","");
+  const num = Number(numeric);
+  if (!Number.isFinite(num) || num < 0) return null;
+  if (percentMark){
+    return { priceModifier: num / 100 };
+  }
+  return { customPrice: num };
+}
+
+async function invPromptPricingChoice(row){
+  return await new Promise(resolve=>{
+    const basePrice = row?.price != null ? Number(row.price) : 0;
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:4000; display:grid; place-items:center; padding:12px;";
+    const card = document.createElement("div");
+    card.className = "price-choice-card";
+    card.style.cssText = "background:#11121b; border:1px solid #2a2a3a; border-radius:12px; padding:14px; box-shadow:0 12px 40px rgba(0,0,0,0.45); color:#f3f3f5; font-family:inherit;";
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px;">
+        <div style="min-width:0;">
+          <div class="price-choice-title">${escapeHtml(row?.name || row?.title || "Item")}</div>
+          <div class="muted" style="font-size:0.9rem;">Base price: ${basePrice || 0}</div>
+        </div>
+        <button id="price-close" class="btn small" style="background:#222635; border-color:#2f3548;">×</button>
+      </div>
+      <div class="price-choice-grid">
+        <label class="price-choice-option">
+          <input type="radio" name="price-mode" value="market" checked> <span>Buy at market price</span>
+        </label>
+        <label class="price-choice-option">
+          <input type="radio" name="price-mode" value="custom"> <span>Custom</span>
+        </label>
+        <label class="price-choice-option">
+          <input type="radio" name="price-mode" value="take"> <span>Take (price 0)</span>
+        </label>
+        <div class="price-choice-actions">
+          <button id="price-cancel" class="btn small btn-secondary">Cancel</button>
+          <button id="price-apply" class="btn small">Apply</button>
+        </div>
+      </div>
+    `;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const cleanup = (val)=>{ overlay.remove(); resolve(val); };
+    card.querySelector("#price-close").addEventListener("click", ()=>cleanup(null));
+    card.querySelector("#price-cancel").addEventListener("click", ()=>cleanup(null));
+    overlay.addEventListener("click", (e)=>{ if (e.target === overlay) cleanup(null); });
+
+    card.querySelector("#price-apply").addEventListener("click", ()=>{
+      const mode = card.querySelector("input[name=\"price-mode\"]:checked")?.value || "market";
+      if (mode === "take"){ cleanup({ pricingMode:"take", customPrice:0 }); return; }
+      if (mode === "market"){ cleanup({ pricingMode:"market" }); return; }
+      openCustomPriceModal(basePrice).then(choice=>{
+        if (!choice) return;
+        cleanup({ pricingMode:"custom", ...choice });
+      });
+    });
+  });
+}
+
+function openCustomPriceModal(basePrice){
+  return new Promise(resolve=>{
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:4001; display:grid; place-items:center; padding:12px;";
+    const card = document.createElement("div");
+    card.className = "price-choice-card";
+    card.style.cssText = "background:#11121b; border:1px solid #2a2a3a; border-radius:12px; padding:14px; box-shadow:0 12px 40px rgba(0,0,0,0.45); color:#f3f3f5; font-family:inherit;";
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px;">
+        <div style="min-width:0;">
+          <div class="price-choice-title">Custom price</div>
+          <div class="muted" style="font-size:0.9rem;">Base price: ${basePrice || 0}</div>
+        </div>
+        <button id="custom-close" class="btn small" style="background:#222635; border-color:#2f3548;">×</button>
+      </div>
+      <div class="price-choice-grid">
+        <div class="price-choice-custom">
+          <div class="price-choice-field">
+            <span class="muted" style="min-width:80px;">% modifier</span>
+            <input id="price-mod-input" type="number" step="1" min="0" style="flex:1; min-width:0; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" value="${Math.round(((parseFloat(invPriceModEl?.value || "1") || 1) * 100))}">
+          </div>
+          <div class="price-choice-field">
+            <span class="muted" style="min-width:80px;">Exact price</span>
+            <input id="price-exact-input" type="number" step="1" min="0" style="flex:1; min-width:0; padding:8px; border-radius:8px; border:1px solid #2d3042; background:#181b2a; color:#f3f3f5;" placeholder="${basePrice || 0}">
+          </div>
+          <div class="muted" style="grid-column:1/-1; font-size:0.9rem;">Tip: fill either % modifier or exact price. Leave both blank to cancel.</div>
+        </div>
+        <div class="price-choice-actions">
+          <button id="custom-cancel" class="btn small btn-secondary">Cancel</button>
+          <button id="custom-apply" class="btn small">Apply</button>
+        </div>
+      </div>
+    `;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const cleanup = (val)=>{ overlay.remove(); resolve(val); };
+    card.querySelector("#custom-close").addEventListener("click", ()=>cleanup(null));
+    card.querySelector("#custom-cancel").addEventListener("click", ()=>cleanup(null));
+    overlay.addEventListener("click", (e)=>{ if (e.target === overlay) cleanup(null); });
+    card.querySelector("#custom-apply").addEventListener("click", ()=>{
+      const pctRaw = card.querySelector("#price-mod-input").value;
+      const priceRaw = card.querySelector("#price-exact-input").value;
+      const parsedPct = pctRaw ? invParseCustomPriceInput(`%${pctRaw}`) : null;
+      const parsedPrice = priceRaw ? invParseCustomPriceInput(priceRaw) : null;
+      const choice = parsedPrice || parsedPct;
+      if (!choice){
+        alert("Enter a % modifier or an exact price for custom mode.");
+        return;
+      }
+      cleanup(choice);
+    });
+  });
+}
+
 function renderResults(){
   const list = $("#results");
   list.innerHTML = "";
@@ -551,7 +1344,6 @@ function renderResults(){
 
   const globalContainer = $("#global-cont").value;
   const globalCurrency  = $("#global-cur").value || "Jelly";
-  const priceMod = PRICE_MOD || 1;
 
   for (const r of FILTERED){
     const line = document.createElement("div");
@@ -574,7 +1366,9 @@ function renderResults(){
 
     line.querySelector(".buy").addEventListener("click", async ()=>{
       const qty = Math.max(1, parseInt(line.querySelector(".qty").value||"1", 10));
-      await buyItem(r.__kind || "object", r.id, qty, globalContainer, globalCurrency, priceMod);
+      const choice = await invPromptPricingChoice(r);
+      if (!choice) return;
+      await buyItem(r.__kind || "object", r.id, qty, globalContainer, globalCurrency, choice);
     });
 
     list.appendChild(line);
@@ -592,8 +1386,18 @@ function clearSearch(){
 
 /* ------------- Purchase ------------- */
 
-async function buyItem(kind, ref_id, quantity, container_id, currency, price_modifier=1){
-  const payload = { kind, ref_id, quantity, container_id, currency, price_modifier };
+async function buyItem(kind, ref_id, quantity, container_id, currency, opts = {}){
+  const payload = { kind, ref_id, quantity, container_id, currency };
+  const priceModifier = (opts.priceModifier != null) ? opts.priceModifier : (parseFloat(invPriceModEl?.value || "1") || 1);
+  const customPrice = (opts.customPrice != null) ? Number(opts.customPrice) : null;
+  const pricingMode = (opts.pricingMode || "").toString();
+  if (pricingMode) payload.pricing_mode = pricingMode;
+  if (pricingMode === "take"){
+    payload.custom_price = 0;
+  }else{
+    if (priceModifier != null) payload.price_modifier = priceModifier;
+    if (Number.isFinite(customPrice)) payload.custom_price = customPrice;
+  }
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/purchase`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -741,6 +1545,22 @@ function openItemModal(it){
     mods.textContent = `Applies: ${modLine}`;
     body.appendChild(mods);
   }
+  if (itemHasChoice(it)){
+    const choiceHint = document.createElement("div");
+    choiceHint.className = "muted";
+    choiceHint.textContent = "This item has configurable choices.";
+    body.appendChild(choiceHint);
+    const choiceRow = document.createElement("div");
+    choiceRow.className = "btn-row";
+    const choiceBtn = document.createElement("button");
+    choiceBtn.className = "btn small";
+    choiceBtn.textContent = "Configure choices";
+    choiceBtn.addEventListener("click", async ()=>{
+      await openItemChoiceModal(it);
+    });
+    choiceRow.appendChild(choiceBtn);
+    body.appendChild(choiceRow);
+  }
 
   if (it.kind === "weapon" || it.kind === "equipment"){
     const upSection = document.createElement("div");
@@ -791,7 +1611,7 @@ function openItemModal(it){
       empty.textContent = "No upgrades installed.";
       upList.appendChild(empty);
     }else{
-      ups.forEach(u=>{
+      ups.forEach((u, idx)=>{
         const meta = (window.UPGRADE_META || {})[u.id] || {};
         const title = meta.name || u.name || u.id || "Upgrade";
         const desc = u.description_html || u.description || meta.description_html || meta.description || "";
@@ -826,6 +1646,14 @@ function openItemModal(it){
         edit.className = "btn small";
         edit.textContent = "Edit";
         edit.addEventListener("click", ()=>{ window.open(`upgrades_home.html?id=${encodeURIComponent(u.id)}`, "_blank"); });
+        const choiceMods = upgradeChoiceMods(u, meta, upgradeChoiceKey(it, u, idx));
+        if (choiceMods.length){
+          const cfg = document.createElement("button");
+          cfg.className = "btn small";
+          cfg.textContent = "Configure";
+          cfg.addEventListener("click", async ()=>{ await openUpgradeChoiceModal(it, u, idx); });
+          btns.appendChild(cfg);
+        }
         btns.appendChild(rem);
         btns.appendChild(edit);
         row.appendChild(btns);

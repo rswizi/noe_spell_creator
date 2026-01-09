@@ -290,6 +290,8 @@
                 <ul class="mod-list" id="mods-derived-et" style="display:none"></ul></div>
                 <div class="kv"><div class="k">Max Toxicity (TX)</div> <div class="val badge mod-toggle" id="tx-val" data-target="mods-derived-tx" title="">--</div>
                 <ul class="mod-list" id="mods-derived-tx" style="display:none"></ul></div>
+                <div class="kv"><div class="k">Neutral weapon damage</div> <div class="val badge mod-toggle" id="weapon-neutral-val" data-target="mods-derived-weapon-neutral" title="">--</div>
+                <ul class="mod-list" id="mods-derived-weapon-neutral" style="display:none"></ul></div>
               </div>
               <div id="override-inputs">
                 <label>HP <input id="ov-hp" type="number" step="1"></label>
@@ -1008,6 +1010,7 @@ const TARGET_GROUPS = [
     { value:'derived.enc', label:'Encumbrance' },
     { value:'derived.et', label:'Eclipse Threshold (ET)' },
     { value:'derived.tx', label:'Max Toxicity (TX)' },
+    { value:'derived.weapon_neutral', label:'Neutral weapon damage' },
     { value:'derived.talent_max', label:'Talent Max' },
     { value:'derived.skill_points', label:'Skill point pool' },
     { value:'derived.stat_points', label:'Characteristic point pool' },
@@ -1182,6 +1185,7 @@ const spcapEl = document.getElementById('spcap-val');
 const encEl = document.getElementById('enc-val');
 const etEl = document.getElementById('et-val');
 const txEl = document.getElementById('tx-val');
+const weaponNeutralEl = document.getElementById('weapon-neutral-val');
 const skillCounterEl = document.getElementById('skill-counter');
 const statCounterEl = document.getElementById('stat-counter');
 const skillCapEl = document.getElementById('skill-cap');
@@ -1997,6 +2001,7 @@ function prettyTargetLabel(target){
     if (t === 'school_any' || t === 'school_ms') return 'Magic School';
     if (t === 'intensity_any') return 'Intensity';
     if (t === 'derived.skill_points') return 'Skill point pool';
+    if (t === 'derived.weapon_neutral') return 'Neutral weapon damage';
     if (t === 'derived.stat_points') return 'Characteristic point pool';
     if (t === 'derived.sublimation_slots') return 'Sublimation slots';
     if (t === 'derived.complex_schools') return 'Complex schools';
@@ -2575,12 +2580,13 @@ async function createInventoryAndLink(){
 }
 
 async function duplicateAndLinkInventory(){
-  if (!SELECTED_INV_ID){ invStatusEl.textContent = 'Load an inventory first to duplicate.'; return; }
+  const sourceId = SELECTED_INV_ID || LINKED_INV?.id || '';
+  if (!sourceId){ invStatusEl.textContent = 'Load an inventory first to duplicate.'; return; }
   const charName = nameEl.value?.trim() || 'Character';
   const invName = `${charName} Inventory`;
   try{
     invStatusEl.textContent = 'Duplicating inventory...';
-    const res = await api(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/duplicate`, {
+    const res = await api(`/inventories/${encodeURIComponent(sourceId)}/duplicate`, {
       method:'POST',
       headers:{ 'content-type':'application/json' },
       body: JSON.stringify({ name: invName })
@@ -2835,7 +2841,7 @@ function itemHasChoice(it){
 async function invAddContainer(){
   const name = (invNewContNameEl.value || "Container").trim();
   if (!SELECTED_INV_ID) return;
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/containers`, {
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/containers`, {
     method: "POST",
     headers: { "Content-Type":"application/json", ...authHeaders() },
     body: JSON.stringify({ name })
@@ -2856,7 +2862,7 @@ async function invAddFunds(){
   if (!SELECTED_INV_ID){ invFundStatus.textContent = "Link an inventory first."; return; }
   invFundStatus.textContent = "Saving transaction...";
   try{
-    const path = `/inventories/${encodeURIComponent(SELECTED_INV_ID)}/deposit`;
+    const path = `/inventories/${encodeURIComponent(sourceId)}/deposit`;
     const r = await fetch(path, {
       method:"POST",
       headers:{ "Content-Type":"application/json", ...authHeaders() },
@@ -3098,7 +3104,7 @@ async function invBuyItem(kind, ref_id, quantity, container_id, currency, opts =
     } else if (pricingMode === 'take') {
       payload.custom_price = 0;
     }
-    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/purchase`, {
+    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/purchase`, {
       method: "POST",
       headers: { "Content-Type":"application/json", ...authHeaders() },
       body: JSON.stringify(payload)
@@ -3110,7 +3116,7 @@ async function invBuyItem(kind, ref_id, quantity, container_id, currency, opts =
   }
 
 async function saveInvAltName(item_id, alt_name){
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}`, {
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}`, {
     method:"PATCH",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
     body: JSON.stringify({ alt_name })
@@ -3122,7 +3128,7 @@ async function saveInvAltName(item_id, alt_name){
 }
 
   async function upgradeQuality(item_id, to){
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}/upgrade_quality`, {
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/upgrade_quality`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ to })
@@ -3151,7 +3157,7 @@ async function installUpgrade(item_id, upgrade_id, targetOverride=""){
     }
     target = choice;
   }
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}/install_upgrade`, {
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/install_upgrade`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ upgrade_id, target })
@@ -3162,7 +3168,7 @@ async function installUpgrade(item_id, upgrade_id, targetOverride=""){
 }
 
 async function removeUpgrade(item_id, upgrade_id, target=""){
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}/remove_upgrade`, {
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/remove_upgrade`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ upgrade_id, target })
@@ -3186,7 +3192,7 @@ async function removeUpgrade(item_id, upgrade_id, target=""){
   }
 
   async function downgradeQuality(item_id, to){
-    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(item_id)}/downgrade_quality`, {
+    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/downgrade_quality`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ to })
@@ -3257,7 +3263,7 @@ async function loadUpgradeOptions(labelEl, selectEl, it){
 }
 
 async function toggleEquipInline(it){
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}`, {
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}`, {
     method:"PATCH",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
     body: JSON.stringify({ equipped: it.equipped === false })
@@ -3280,7 +3286,7 @@ function alchemyTierFromPrice(price){
 async function sellItemInline(it, price){
   const currency = invGlobalCurEl?.value || "Jelly";
   const payload = { price, currency };
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}/sell`, {
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/sell`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
     body: JSON.stringify(payload)
@@ -3292,7 +3298,7 @@ async function sellItemInline(it, price){
 
 async function disposeItemInline(it){
   const currency = invGlobalCurEl?.value || "Jelly";
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}/dispose`, {
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/dispose`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
     body: JSON.stringify({ currency })
@@ -3304,7 +3310,7 @@ async function disposeItemInline(it){
 
 async function useItemInline(it){
   const currency = invGlobalCurEl?.value || "Jelly";
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}/use`, {
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/use`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
     body: JSON.stringify({ currency })
@@ -3316,7 +3322,7 @@ async function useItemInline(it){
 
 async function refillAlchemyInline(it){
   const currency = invGlobalCurEl?.value || "Jelly";
-  const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}/refill_alchemy`, {
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/refill_alchemy`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
     body: JSON.stringify({ currency })
@@ -3329,7 +3335,7 @@ async function refillAlchemyInline(it){
 async function toggleContainerInclude(containerId, include){
   if (!SELECTED_INV_ID || !containerId) return;
   try{
-    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/containers/${encodeURIComponent(containerId)}`, {
+    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/containers/${encodeURIComponent(containerId)}`, {
       method:"PATCH",
       headers:{ "Content-Type":"application/json", ...authHeaders() },
       body: JSON.stringify({ include })
@@ -3350,7 +3356,7 @@ async function moveItemToContainer(it, containerId){
     return;
   }
   try{
-    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/items/${encodeURIComponent(it.item_id)}`, {
+    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}`, {
       method:"PATCH",
       headers:{ "Content-Type":"application/json", ...authHeaders() },
       body: JSON.stringify({ container_id: containerId })
@@ -3367,7 +3373,7 @@ async function deleteContainer(containerId){
   if (!SELECTED_INV_ID || !containerId) return;
   if (!confirm('Delete this container? Items will be moved to another container.')) return;
   try{
-    const r = await fetch(`/inventories/${encodeURIComponent(SELECTED_INV_ID)}/containers/${encodeURIComponent(containerId)}`, {
+    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/containers/${encodeURIComponent(containerId)}`, {
       method:"DELETE",
       headers:{ ...authHeaders() }
     });
@@ -5334,6 +5340,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
         complex_schools: [`Base = ${base.complex_schools ?? 0}`],
         et: [`Base = ${base.et}`],
         tx: [`Base = ${base.tx}`],
+        weapon_neutral:[`Base = ${base.weapon_neutral ?? 0}`],
         enc:[`Base = ${base.enc}`],
         spcap:[],
       talent_max:[`Base = ${base.talent_max ?? 0}`],
@@ -5404,7 +5411,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
       'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap','derived.talent_max':'talent_max',
       'derived.max_expertise':'max_expertise','derived.max_divine_manifestation':'max_divine_manifestation',
       'derived.skill_points':'skill_points','derived.stat_points':'stat_points',
-      'derived.sublimation_slots':'sublimation_slots','derived.complex_schools':'complex_schools'
+      'derived.sublimation_slots':'sublimation_slots','derived.complex_schools':'complex_schools','derived.weapon_neutral':'weapon_neutral'
     };
   for (const m of allMods){
     if (map[m.target]){
@@ -5550,6 +5557,7 @@ function updateDerived(){
   base.skill_points = skillPointPool(lvl);
     base.stat_points = statPointPool(lvl);
     base.sublimation_slots = slotsForLevel(lvl) + (2 * msPRE);
+    base.weapon_neutral = 0;
 
     // Apply passive modifiers to derived
     const final = applyPassiveModifiersToDerived(base, invEnc);
@@ -5625,6 +5633,7 @@ function updateDerived(){
   })();
   etEl.textContent = etDisplay;
     txEl.textContent = maxVals.tx ?? final.tx;
+    if (weaponNeutralEl) weaponNeutralEl.textContent = maxVals.weapon_neutral ?? final.weapon_neutral ?? 0;
     updatePointCounters();
     renderAddedSchools();
     updateTalentCounter();

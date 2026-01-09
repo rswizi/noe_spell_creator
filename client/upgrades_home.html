@@ -79,6 +79,10 @@
           <label>Name</label>
           <input id="up-name" class="grow" placeholder="Ex: Silver-Lined Stock" />
         </div>
+        <div class="row">
+          <label>Tags</label>
+          <input id="up-tags" class="grow" placeholder="phb, homebrew" />
+        </div>
 
         <div class="row" style="gap:8px;">
           <label style="min-width:140px;">Item Types</label>
@@ -174,6 +178,8 @@
       <div class="row" style="justify-content:space-between; align-items:center;">
         <h2>Existing Upgrades</h2>
         <div class="row" style="gap:8px;">
+          <input id="filter-text" placeholder="Search name/type/tag" style="min-width:220px;">
+          <input id="filter-tags" placeholder="Filter tags (comma)" style="min-width:200px;">
           <select id="filter-kind">
             <option value="">Any type</option>
             <option value="weapon">Weapons</option>
@@ -378,6 +384,7 @@ const PASSIVE_TARGET_GROUPS = (()=> {
       { key:'enc', label:'Encumbrance' },
       { key:'et', label:'Eclipse Threshold (ET)' },
       { key:'tx', label:'Max Toxicity (TX)' },
+      { key:'weapon_neutral', label:'Neutral weapon damage' },
       { key:'talent_max', label:'Talent Max' },
       { key:'sublimation_slots', label:'Sublimation slots' },
     ];
@@ -562,12 +569,18 @@ function resolveKind(kinds){
   return 'equipment';
 }
 
+function parseTags(raw){
+  if (!raw) return [];
+  return String(raw).split(',').map(s=>s.trim()).filter(Boolean);
+}
+
 function buildPayload(){
   const kinds = selectedKinds();
   const slots = selectedSlots();
   const holderMods = collectModifiers(document.getElementById('mod-holder'));
   const itemEffects = collectItemEffects();
   const kind = resolveKind(kinds);
+  const tags = parseTags($("#up-tags").value || "");
   return {
     name: $("#up-name").value || "",
     kind,
@@ -580,7 +593,8 @@ function buildPayload(){
     exclusive_group: $("#up-exclusive").value || "",
     holder_modifiers: holderMods,
     modifiers: holderMods, // compatibility
-    item_effects: itemEffects
+    item_effects: itemEffects,
+    tags
   };
 }
 
@@ -618,6 +632,7 @@ async function saveUpgrade(){
 function resetForm(){
   CURRENT_ID = "";
   $("#up-name").value = "";
+  $("#up-tags").value = "";
   document.querySelectorAll('.chk-kind').forEach(c=> c.checked=false);
   document.querySelector('.chk-kind[value=\"equipment\"]').checked = true;
   document.querySelectorAll('.chk-slot').forEach(c=> c.checked=false);
@@ -632,6 +647,7 @@ function resetForm(){
 function populateForm(u){
   CURRENT_ID = u.id;
   $("#up-name").value = u.name || "";
+  $("#up-tags").value = Array.isArray(u.tags) ? u.tags.join(", ") : "";
   const kinds = u.item_types || (u.kind ? [u.kind] : []);
   document.querySelectorAll('.chk-kind').forEach(c=> c.checked = kinds.includes(c.value));
   const slots = u.slots || (u.slot ? [u.slot] : []);
@@ -652,11 +668,13 @@ function renderList(upgrades){
   box.innerHTML = upgrades.map(u=>{
     const kinds = (u.item_types || [u.kind || '']).filter(Boolean).map(k=>`<span class="badge">${k}</span>`).join(" ");
     const slots = (u.slots || (u.slot?[u.slot]:[])).map(s=>`<span class="badge">${s}</span>`).join(" ");
+    const tags = (u.tags || []).map(t=>`<span class="badge">${t}</span>`).join(" ");
     const effects = (u.item_effects||[]).map(e=> e.type.replace(/_/g,' ')+(e.value!=null?`: ${e.value}`:"")).join(" • ");
     return `
       <div class="upg-card">
         <h4>${u.name || "(unnamed)"} ${kinds ? `<span style="margin-left:6px;">${kinds}</span>` : ""}</h4>
         <div class="muted" style="margin-bottom:6px;">${slots || "Any slot"}</div>
+        ${tags ? `<div class="muted" style="margin-bottom:6px;">${tags}</div>` : ""}
         ${u.description_html || u.description ? `<div class="muted" style="margin-bottom:6px;">${u.description_html || u.description}</div>` : ''}
         ${effects ? `<div class="muted small">Item effects: ${effects}</div>` : ''}
         <div class="row" style="gap:6px; margin-top:8px;">
@@ -686,6 +704,30 @@ function renderList(upgrades){
   });
 }
 
+function filteredUpgrades(){
+  const q = ($("#filter-text")?.value || "").trim().toLowerCase();
+  const tagRaw = ($("#filter-tags")?.value || "").trim().toLowerCase();
+  const tagList = tagRaw ? tagRaw.split(",").map(s=>s.trim()).filter(Boolean) : [];
+  return (UPGRADE_CACHE || []).filter(u=>{
+    const name = (u.name || "").toLowerCase();
+    const id = (u.id || "").toLowerCase();
+    const kinds = (u.item_types || [u.kind || ""]).map(k=> String(k).toLowerCase());
+    const slots = (u.slots || (u.slot?[u.slot]:[])).map(s=> String(s).toLowerCase());
+    const tags = (u.tags || []).map(t=> String(t).toLowerCase());
+    if (q){
+      const hit = name.includes(q) || id.includes(q)
+        || kinds.some(k=>k.includes(q)) || slots.some(s=>s.includes(q))
+        || tags.some(t=>t.includes(q));
+      if (!hit) return false;
+    }
+    if (tagList.length){
+      const hasTag = tagList.some(t=> tags.includes(t));
+      if (!hasTag) return false;
+    }
+    return true;
+  });
+}
+
 async function loadList(){
   try{
     const k = $("#filter-kind").value || "";
@@ -694,7 +736,7 @@ async function loadList(){
     const j = await r.json();
     if (j.status !== "success") throw new Error(j.message || "Load failed");
     UPGRADE_CACHE = j.upgrades || [];
-    renderList(UPGRADE_CACHE);
+    renderList(filteredUpgrades());
   }catch(e){
     console.error(e);
     $("#list").innerHTML = `<div class="muted" style="color:#ff7a7a;">${e.message || "Error"}</div>`;
@@ -709,6 +751,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
   $("#btn-save").addEventListener('click', saveUpgrade);
   $("#btn-reset").addEventListener('click', resetForm);
   $("#btn-refresh").addEventListener('click', loadList);
+  $("#filter-text").addEventListener('input', ()=> renderList(filteredUpgrades()));
+  $("#filter-tags").addEventListener('input', ()=> renderList(filteredUpgrades()));
+  $("#filter-kind").addEventListener('change', loadList);
   pendingRefreshBtn?.addEventListener('click', loadPendingSubmissions);
   loadList();
   checkMe();
