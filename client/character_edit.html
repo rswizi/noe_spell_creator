@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ï»¿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -117,6 +117,7 @@
     .abi-item.abi-block { flex-direction: column; align-items: stretch; }
     .abi-item .tag { border:1px solid #3b3b4b; border-radius:999px; padding:3px 8px; font-size:.75rem; opacity:.9; }
     .abi-item button { padding:6px 10px; font-size:.85rem; }
+    .prereq-warn { color:#f66; font-size:.85rem; }
     .abi-add { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .abi-add input, .abi-add select { flex:1 1 auto; }
     .abi-hint { opacity:.75; font-size:.85rem; margin-top:6px; }
@@ -3419,7 +3420,7 @@ function openInvItemModal(it){
   const totalPrice = Number.isFinite(totalPaid) ? totalPaid : 0;
   const cells = [
     { label: "Type", value: it.kind || "object" },
-    { label: "Quality", value: it.quality || "—" },
+    { label: "Quality", value: it.quality || "X" },
     { label: "Enc (unit)", value: encUnit.toFixed(1) },
     { label: "Enc (total)", value: encTotal.toFixed(1) },
     { label: "Quantity", value: qty },
@@ -4393,7 +4394,7 @@ function renderAbilitySpellsBucket(){
     const costParts = [];
     if (sp.mp_cost != null) costParts.push(`MP: ${sp.mp_cost}`);
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
-    const cost = costParts.join(' • ');
+    const cost = costParts.join(' || ');
     const range = sp.range != null ? `Range: ${sp.range}` : '';
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
     const div = document.createElement('div');
@@ -4406,7 +4407,7 @@ function renderAbilitySpellsBucket(){
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
         ${effectsDesc ? `<div class="muted" style="font-size:.8rem">Effects: ${effectsDesc}</div>` : ''}
-        <div class="muted" style="font-size:.8rem">${cost} ${range?` • ${range}`:''} ${aoe?` • ${aoe}`:''}</div>
+        <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
       </div>
       <span class="tag">${sp.category || ''}</span>
     `;
@@ -4927,6 +4928,8 @@ function renderExpertisePanel(meta, docs){
     const entry = item.entry || {};
     const rank = item.rankInfo?.rank ?? 0;
     const bestSkill = item.rankInfo?.bestSkill || '';
+    const prereqErrors = prereqErrorsForRules(entry.prereq_rules || {}, CHAR?.stats || {});
+    const prereqNote = prereqErrors.length ? `Prereq not met: ${prereqErrors.join(' ')}` : '';
     const div = document.createElement('div');
     div.className = 'abi-item abi-block';
     div.innerHTML = `
@@ -4939,6 +4942,7 @@ function renderExpertisePanel(meta, docs){
           <button class="btn small exp-remove" data-id="${entry.id}">Remove</button>
         </div>
         ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
+        ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
       </div>
     `;
     div.querySelector('.exp-remove')?.addEventListener('click', ()=>{
@@ -4995,6 +4999,8 @@ function renderDivineManifestationPanel(meta, docs){
     const entry = item.entry || {};
     const rank = item.rankInfo?.rank ?? 0;
     const bestSkill = item.rankInfo?.bestSkill || '';
+    const prereqErrors = prereqErrorsForRules(entry.prereq_rules || {}, CHAR?.stats || {});
+    const prereqNote = prereqErrors.length ? `Prereq not met: ${prereqErrors.join(' ')}` : '';
     const div = document.createElement('div');
     div.className = 'abi-item abi-block';
     div.innerHTML = `
@@ -5007,6 +5013,7 @@ function renderDivineManifestationPanel(meta, docs){
           <button class="btn small dima-remove" data-id="${entry.id}">Remove</button>
         </div>
         ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
+        ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
       </div>
     `;
     div.querySelector('.dima-remove')?.addEventListener('click', ()=>{
@@ -6638,7 +6645,7 @@ function abilityCostText(ab){
   if (costs.other_label && costs.other_value != null){
     push(costs.other_value, costs.other_label);
   }
-  return parts.join(" • ");
+  return parts.join(" || ");
 }
 
 function renderAbilitiesBucket(el, list){
@@ -6662,7 +6669,7 @@ function renderAbilitiesBucket(el, list){
       <span class="tag">${a.source_category||''}</span>
       <div class="row" style="gap:6px; flex-wrap:wrap;">
         ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
-        <button class="btn small mod-remove" title="Remove">×</button>
+        <button class="btn small mod-remove" title="Remove">X</button>
       </div>
     `;
     div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));
