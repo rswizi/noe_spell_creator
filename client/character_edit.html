@@ -533,6 +533,16 @@
                       </div>
                       <span class="muted" id="sl-schools-status"></span>
                     </div>
+                    <div class="row" style="margin-bottom:8px; gap:8px; flex-wrap:wrap;">
+                      <label class="muted" for="sl-sch-order">Order</label>
+                      <select id="sl-sch-order" style="min-width:180px;">
+                        <option value="manual">Manual</option>
+                        <option value="name">Name (A-Z)</option>
+                        <option value="ms">MS (high to low)</option>
+                      </select>
+                      <button class="btn small" id="sl-sch-sort">Sort</button>
+                      <span class="muted" id="sl-sch-order-status"></span>
+                    </div>
                     <div id="sl-schools" class="abi-list"></div>
                   </div>
                 </details>
@@ -1091,6 +1101,8 @@ const setAddedSchools = (arr=[])=>{
   ADDED_SCHOOLS = new Set((arr || []).map(String));
   if (CHAR && CHAR.stats) CHAR.stats.selected_schools = Array.from(ADDED_SCHOOLS);
   renderSchoolSpellCounters();
+  if (slSchOrderEl) slSchOrderEl.value = 'manual';
+  setSchoolOrderStatus('');
 };
 let XP = 0;
 let XP_LEDGER = [];
@@ -1369,6 +1381,9 @@ const cntSchComplexEl = document.getElementById('cnt-sch-complex');
 const cntSpSimpleEl = document.getElementById('cnt-sp-simple');
 const cntSpComplexEl = document.getElementById('cnt-sp-complex');
 const slSchoolsEl = document.getElementById('sl-schools');
+const slSchOrderEl = document.getElementById('sl-sch-order');
+const slSchSortBtn = document.getElementById('sl-sch-sort');
+const slSchOrderStatusEl = document.getElementById('sl-sch-order-status');
 const xpBarFillEl = document.getElementById('xp-bar-fill');
 const xpBarTextEl = document.getElementById('xp-bar-text');
 const xpProgressEl = document.getElementById('xp-progress');
@@ -4148,6 +4163,91 @@ function toggleSchoolModal(open){
   }
 }
 
+function setSchoolOrderStatus(msg){
+  if (!slSchOrderStatusEl) return;
+  slSchOrderStatusEl.textContent = msg || '';
+}
+
+function setAddedSchoolsOrder(order, { saveMeta = false } = {}){
+  const cleaned = [];
+  const seen = new Set();
+  (order || []).forEach(id=>{
+    const key = String(id || '');
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    cleaned.push(key);
+  });
+  ADDED_SCHOOLS = new Set(cleaned);
+  if (CHAR && CHAR.stats) CHAR.stats.selected_schools = cleaned.slice();
+  if (saveMeta){
+    const payload = { selected_schools: cleaned, pinned_schools: cleaned };
+    saveSpellListMeta(payload).catch(()=>{});
+  }
+  queueSave();
+  return cleaned;
+}
+
+async function applyAddedSchoolSort(mode){
+  const sortMode = String(mode || '').toLowerCase();
+  if (sortMode !== 'name' && sortMode !== 'ms'){
+    setSchoolOrderStatus('');
+    return false;
+  }
+  if (!ADDED_SCHOOLS.size){
+    setSchoolOrderStatus('No schools to sort.');
+    return false;
+  }
+  if (!SCHOOLS.length){
+    try{ await fetchSchools(); }catch{}
+  }
+  const orderAll = Array.from(ADDED_SCHOOLS).map(String);
+  if (!orderAll.length){
+    setSchoolOrderStatus('No schools to sort.');
+    return false;
+  }
+  const known = [];
+  const unknown = [];
+  orderAll.forEach(id=>{
+    const s = (SCHOOLS||[]).find(x=> String(x.id||x.name) === String(id));
+    if (s) known.push({ id: String(id), s });
+    else unknown.push(id);
+  });
+  if (!known.length && !unknown.length){
+    setSchoolOrderStatus('No schools to sort.');
+    return false;
+  }
+  if (sortMode === 'name'){
+    known.sort((a,b)=> (a.s.name || a.id || '').localeCompare((b.s.name || b.id || ''), undefined, { sensitivity: 'base' }));
+  }else{
+    known.sort((a,b)=>{
+      const ams = msForSchoolWithMods(a.s).ms;
+      const bms = msForSchoolWithMods(b.s).ms;
+      if (bms !== ams) return bms - ams;
+      return (a.s.name || a.id || '').localeCompare((b.s.name || b.id || ''), undefined, { sensitivity: 'base' });
+    });
+  }
+  const order = known.map(entry=> entry.id).concat(unknown);
+  setAddedSchoolsOrder(order, { saveMeta: true });
+  await renderAddedSchools();
+  setSchoolOrderStatus(sortMode === 'name' ? 'Sorted by name.' : 'Sorted by MS (high to low).');
+  return true;
+}
+
+function moveAddedSchool(id, direction){
+  const order = Array.from(ADDED_SCHOOLS).map(String);
+  const idx = order.indexOf(String(id));
+  if (idx < 0) return;
+  const delta = direction === 'up' ? -1 : 1;
+  const next = idx + delta;
+  if (next < 0 || next >= order.length) return;
+  const updated = order.slice();
+  updated.splice(next, 0, updated.splice(idx, 1)[0]);
+  setAddedSchoolsOrder(updated, { saveMeta: true });
+  if (slSchOrderEl) slSchOrderEl.value = 'manual';
+  setSchoolOrderStatus('');
+  renderAddedSchools();
+}
+
 async function renderAddedSchools(){
   if (!slSchoolsEl) return;
   if (!SCHOOLS.length){
@@ -4156,6 +4256,7 @@ async function renderAddedSchools(){
   slSchoolsEl.innerHTML = '';
   if (!ADDED_SCHOOLS.size){
     slSchoolsEl.innerHTML = '<div class="muted">No schools added yet.</div>';
+    setSchoolOrderStatus('');
     return;
   }
   const list = Array.from(ADDED_SCHOOLS).map(id=>{
@@ -4164,9 +4265,10 @@ async function renderAddedSchools(){
   }).filter(Boolean);
   if (!list.length){
     slSchoolsEl.innerHTML = '<div class="muted">No schools added yet.</div>';
+    setSchoolOrderStatus('');
     return;
   }
-  list.forEach(({id,s})=>{
+  list.forEach(({id,s}, idx)=>{
     const msInfo = msForSchoolWithMods(s);
     const ms = msInfo.ms;
     const cat = mapMsCategory(ms) || s.category || s.type || '--';
@@ -4183,15 +4285,24 @@ async function renderAddedSchools(){
     }
     const div = document.createElement('div');
     div.className = 'abi-item';
+    const isFirst = idx === 0;
+    const isLast = idx === list.length - 1;
     div.innerHTML = `
       <div class="grow">
         <div><strong>${s.name || id}</strong></div>
         <div class="muted" title="${tipLines.join('\n').replace(/"/g,'&quot;')}">MS: ${ms} | Category: ${cat}</div>
       </div>
       <span class="tag">${(s.school_type || s.type || '').toUpperCase()}</span>
-      <button class="btn small" data-remove="${id}">Remove</button>
+      <div class="row" style="gap:6px; flex-wrap:wrap;">
+        <button class="btn small" data-move="up" data-id="${id}" ${isFirst ? 'disabled' : ''}>Up</button>
+        <button class="btn small" data-move="down" data-id="${id}" ${isLast ? 'disabled' : ''}>Down</button>
+        <button class="btn small" data-remove="${id}">Remove</button>
+      </div>
     `;
-    div.querySelector('button').addEventListener('click', async ()=>{
+    const remBtn = div.querySelector('button[data-remove]');
+    const upBtn = div.querySelector('button[data-move="up"]');
+    const downBtn = div.querySelector('button[data-move="down"]');
+    remBtn?.addEventListener('click', async ()=>{
       ADDED_SCHOOLS.delete(String(id));
       try{ await saveSpellListMeta({ selected_schools: Array.from(ADDED_SCHOOLS) }); }catch{}
       if (CHAR && CHAR.stats) CHAR.stats.selected_schools = Array.from(ADDED_SCHOOLS);
@@ -4199,6 +4310,8 @@ async function renderAddedSchools(){
       renderAddedSchools();
       renderSchoolSpellCounters();
     });
+    upBtn?.addEventListener('click', ()=> moveAddedSchool(id, 'up'));
+    downBtn?.addEventListener('click', ()=> moveAddedSchool(id, 'down'));
     slSchoolsEl.appendChild(div);
   });
 }
@@ -4218,9 +4331,13 @@ async function quickAddSchools(){
   const addedCount = ADDED_SCHOOLS.size - before.size;
   if (slSchoolsStatusEl) slSchoolsStatusEl.textContent = addedCount ? `Added ${addedCount} school(s).` : 'No new schools met the requirements.';
   CHAR.stats.selected_schools = Array.from(ADDED_SCHOOLS);
-  const payload = { selected_schools: Array.from(ADDED_SCHOOLS), pinned_schools: Array.from(ADDED_SCHOOLS) };
-  try{ await saveSpellListMeta(payload); }catch{}
-  renderAddedSchools();
+  const sortMode = slSchOrderEl ? slSchOrderEl.value : 'manual';
+  const sorted = sortMode !== 'manual' ? await applyAddedSchoolSort(sortMode) : false;
+  if (!sorted){
+    const payload = { selected_schools: Array.from(ADDED_SCHOOLS), pinned_schools: Array.from(ADDED_SCHOOLS) };
+    try{ await saveSpellListMeta(payload); }catch{}
+    await renderAddedSchools();
+  }
   renderSchoolSpellCounters();
   queueSave();
 }
@@ -4262,10 +4379,14 @@ async function applyManualAdd(){
   }
   const selected = Array.from(slSchBody.querySelectorAll('input[type="checkbox"]:checked')).map(el=>el.value);
   selected.forEach(id=> ADDED_SCHOOLS.add(String(id)));
-  const payload = { selected_schools: Array.from(ADDED_SCHOOLS), pinned_schools: Array.from(ADDED_SCHOOLS) };
-  try{ await saveSpellListMeta(payload); }catch{}
   toggleSchoolModal(false);
-  renderAddedSchools();
+  const sortMode = slSchOrderEl ? slSchOrderEl.value : 'manual';
+  const sorted = sortMode !== 'manual' ? await applyAddedSchoolSort(sortMode) : false;
+  if (!sorted){
+    const payload = { selected_schools: Array.from(ADDED_SCHOOLS), pinned_schools: Array.from(ADDED_SCHOOLS) };
+    try{ await saveSpellListMeta(payload); }catch{}
+    await renderAddedSchools();
+  }
   if (slSchoolsStatusEl) slSchoolsStatusEl.textContent = selected.length ? `Added ${selected.length} school(s).` : 'No schools selected.';
   renderSchoolSpellCounters();
   queueSave();
@@ -5976,6 +6097,12 @@ slAddMenuBtn?.addEventListener('click', ()=>{
 });
 slQuickAddBtn?.addEventListener('click', ()=>{ if (slAddMenu) slAddMenu.style.display = 'none'; quickAddSchools(); });
 slManualAddBtn?.addEventListener('click', ()=>{ if (slAddMenu) slAddMenu.style.display = 'none'; openManualAddModal(); });
+slSchSortBtn?.addEventListener('click', async ()=>{
+  const mode = slSchOrderEl ? slSchOrderEl.value : 'manual';
+  const sorted = await applyAddedSchoolSort(mode);
+  if (!sorted) await renderAddedSchools();
+});
+slSchOrderEl?.addEventListener('change', ()=>{ if (slSchOrderEl.value === 'manual') setSchoolOrderStatus(''); });
 slSchApply?.addEventListener('click', applyManualAdd);
 slSchCancel?.addEventListener('click', ()=> toggleSchoolModal(false));
 slSchClose?.addEventListener('click', ()=> toggleSchoolModal(false));
