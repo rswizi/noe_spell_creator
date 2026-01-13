@@ -461,6 +461,23 @@
                 <select id="species-select" class="grow"></select>
                 <span id="species-status" class="muted"></span>
               </div>
+              <div id="species-desc" class="arc-desc" style="display:none;"></div>
+            </div>
+          </details>
+        </div>
+
+        <div class="panel">
+          <details open class="panel">
+            <summary class="hdr">
+              <strong>Boon</strong>
+              <span class="muted">(auto bonus ability)</span>
+            </summary>
+            <div class="panel-body">
+              <div class="row" style="gap:8px; flex-wrap:wrap;">
+                <select id="boon-select" class="grow"></select>
+                <span id="boon-status" class="muted"></span>
+              </div>
+              <div id="boon-desc" class="arc-desc" style="display:none;"></div>
             </div>
           </details>
         </div>
@@ -926,6 +943,7 @@
       <select id="abi-filter-source">
         <option value="">Any source</option>
         <option value="Specie">Specie</option>
+        <option value="Boon">Boon</option>
         <option value="Talent">Talent</option>
         <option value="Archetype">Archetype</option>
         <option value="Expertise">Expertise</option>
@@ -1290,6 +1308,7 @@ let ARCHETYPES = [];
 let EXPERTISES = [];
 let DIVINE_MANIFESTATIONS = [];
 let SPECIES_ABILITIES = [];
+let BOON_ABILITIES = [];
 let COMPUTED_ARC_ABILITIES = [];
 let UPGRADE_META = {};
 let TALENT_MAX = 1;
@@ -1476,6 +1495,10 @@ const condMeticulousEl = document.getElementById('cond-meticulous');
 const choiceTitle = document.getElementById('choice-title');
 const speciesSelectEl = document.getElementById('species-select');
 const speciesStatusEl = document.getElementById('species-status');
+const speciesDescEl = document.getElementById('species-desc');
+const boonSelectEl = document.getElementById('boon-select');
+const boonStatusEl = document.getElementById('boon-status');
+const boonDescEl = document.getElementById('boon-desc');
 const arcSelectEl     = document.getElementById('arc-select');
 const arcApplyBtn     = document.getElementById('arc-apply');
 const arcStatusEl     = document.getElementById('arc-status');
@@ -1985,6 +2008,7 @@ function makeDefaultStats(){
     backstory: "",
   };
   stats.species_ability_id = "";
+  stats.boon_ability_id = "";
   return stats;
 }
 
@@ -5475,6 +5499,21 @@ function ensureSpeciesAbilityLinked(){
   const set = new Set(CHAR.abilities.map(x=> String(x||'').trim()).filter(Boolean));
   if (!set.has(id)) CHAR.abilities.push(id);
 }
+function abilityDescHtml(ability){
+  return String(ability?.description_html || ability?.description || '').trim();
+}
+function updateSpeciesDesc(id){
+  if (!speciesDescEl) return;
+  const hit = SPECIES_ABILITIES.find(a=> String(a.id) === String(id || ''));
+  const html = abilityDescHtml(hit);
+  if (html){
+    speciesDescEl.innerHTML = html;
+    speciesDescEl.style.display = '';
+  }else{
+    speciesDescEl.innerHTML = '';
+    speciesDescEl.style.display = 'none';
+  }
+}
 async function loadSpeciesList(){
   if (!speciesSelectEl) return;
   if (speciesStatusEl) speciesStatusEl.textContent = 'Loading species...';
@@ -5491,6 +5530,7 @@ async function loadSpeciesList(){
     });
     const current = getSpeciesAbilityId();
     if (current) speciesSelectEl.value = current;
+    updateSpeciesDesc(current);
     if (speciesStatusEl) speciesStatusEl.textContent = '';
   }catch(e){
     if (speciesStatusEl) speciesStatusEl.textContent = 'Load species failed: ' + e.message;
@@ -5511,6 +5551,75 @@ async function applySpeciesSelection(id){
   setSpeciesAbilityId(next);
   speciesSelectEl.value = next;
   if (speciesStatusEl) speciesStatusEl.textContent = next ? 'Species applied.' : 'Species cleared.';
+  updateSpeciesDesc(next);
+  queueSave();
+}
+
+function getBoonAbilityId(){
+  return String(CHAR?.stats?.boon_ability_id || '').trim();
+}
+function setBoonAbilityId(id){
+  if (!CHAR) return;
+  if (!CHAR.stats) CHAR.stats = normalizeStats(CHAR.stats || {});
+  CHAR.stats.boon_ability_id = id || '';
+}
+function ensureBoonAbilityLinked(){
+  const id = getBoonAbilityId();
+  if (!id) return;
+  if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
+  const set = new Set(CHAR.abilities.map(x=> String(x||'').trim()).filter(Boolean));
+  if (!set.has(id)) CHAR.abilities.push(id);
+}
+function updateBoonDesc(id){
+  if (!boonDescEl) return;
+  const hit = BOON_ABILITIES.find(a=> String(a.id) === String(id || ''));
+  const html = abilityDescHtml(hit);
+  if (html){
+    boonDescEl.innerHTML = html;
+    boonDescEl.style.display = '';
+  }else{
+    boonDescEl.innerHTML = '';
+    boonDescEl.style.display = 'none';
+  }
+}
+async function loadBoonList(){
+  if (!boonSelectEl) return;
+  if (boonStatusEl) boonStatusEl.textContent = 'Loading boons...';
+  boonSelectEl.innerHTML = '<option value="">-- Select boon --</option>';
+  try{
+    const res = await api('/abilities?source=Boon');
+    BOON_ABILITIES = res.abilities || [];
+    BOON_ABILITIES.sort((a,b)=> String(a.name||a.id||'').localeCompare(String(b.name||b.id||'')));
+    BOON_ABILITIES.forEach(a=>{
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.name || a.id;
+      boonSelectEl.appendChild(opt);
+    });
+    const current = getBoonAbilityId();
+    if (current) boonSelectEl.value = current;
+    updateBoonDesc(current);
+    if (boonStatusEl) boonStatusEl.textContent = '';
+  }catch(e){
+    if (boonStatusEl) boonStatusEl.textContent = 'Load boons failed: ' + e.message;
+  }
+}
+async function applyBoonSelection(id){
+  if (!CHAR || !boonSelectEl) return;
+  const next = String(id || '').trim();
+  const current = getBoonAbilityId();
+  if (next === current) return;
+  if (boonStatusEl) boonStatusEl.textContent = 'Applying...';
+  if (current){
+    await removeAbilityFromChar(current);
+  }
+  if (next){
+    await addAbilityToChar(next);
+  }
+  setBoonAbilityId(next);
+  boonSelectEl.value = next;
+  if (boonStatusEl) boonStatusEl.textContent = next ? 'Boon applied.' : 'Boon cleared.';
+  updateBoonDesc(next);
   queueSave();
 }
 
@@ -6679,6 +6788,7 @@ async function loadCharacter(){
   if (!Array.isArray(CHAR.expertise_ids)) CHAR.expertise_ids = [];
   if (!Array.isArray(CHAR.divine_manifestation_ids)) CHAR.divine_manifestation_ids = [];
   ensureSpeciesAbilityLinked();
+  ensureBoonAbilityLinked();
   ABILITY_CHOICES = CHAR.ability_choices || {};
   ITEM_CHOICES = CHAR.item_choices || {};
   SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
@@ -6734,6 +6844,7 @@ async function loadCharacter(){
   renderSublimations();
   await loadArchetypesList();
   await loadSpeciesList();
+  await loadBoonList();
   await loadExpertiseList();
   await loadDivineManifestationsList();
   renderArchetypePanel();
@@ -6918,6 +7029,7 @@ abiSearchBtn.addEventListener('click', searchAbilities);
 abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
 abiFilterTagEl?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
 speciesSelectEl?.addEventListener('change', ()=> applySpeciesSelection(speciesSelectEl.value));
+boonSelectEl?.addEventListener('change', ()=> applyBoonSelection(boonSelectEl.value));
 abiOpenAddBtn?.addEventListener('click', openAbilityAddModal);
 expOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('expertise'));
 dimaOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('dima'));
@@ -7640,6 +7752,13 @@ async function removeAbilityFromChar(aid){
     setSpeciesAbilityId('');
     if (speciesSelectEl) speciesSelectEl.value = '';
     if (speciesStatusEl) speciesStatusEl.textContent = 'Species cleared.';
+    updateSpeciesDesc('');
+  }
+  if (getBoonAbilityId() === target){
+    setBoonAbilityId('');
+    if (boonSelectEl) boonSelectEl.value = '';
+    if (boonStatusEl) boonStatusEl.textContent = 'Boon cleared.';
+    updateBoonDesc('');
   }
   if (ABILITY_CHOICES[target]) delete ABILITY_CHOICES[target];
   queueSave();
