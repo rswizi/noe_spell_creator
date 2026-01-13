@@ -116,6 +116,19 @@
     .abi-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #2b2b3b; border-radius:12px; background:linear-gradient(145deg, #14141d, #0f0f16); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
     .abi-item.abi-block { flex-direction: column; align-items: stretch; }
     .abi-item .tag { border:1px solid #3b3b4b; border-radius:999px; padding:3px 8px; font-size:.75rem; opacity:.9; }
+    .title-color-target { cursor:pointer; }
+    .title-color-target:hover { text-shadow: 0 0 8px rgba(255,255,255,0.15); }
+    .color-picker-card { max-width:520px; }
+    .color-preview-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+    .color-preview-chip { width:36px; height:36px; border-radius:10px; border:1px solid #2a2a3a; background:#15151d; }
+    .color-preview-title { font-weight:600; }
+    .color-gradient-track { height:16px; border-radius:999px; border:1px solid #2a2a3a; background:linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); padding:2px; }
+    .color-gradient-track input { width:100%; margin:0; background:transparent; appearance:none; height:12px; }
+    .color-gradient-track input::-webkit-slider-thumb { appearance:none; width:16px; height:16px; border-radius:50%; background:#f3f3f5; border:1px solid #2a2a3a; }
+    .color-gradient-track input::-moz-range-thumb { width:16px; height:16px; border-radius:50%; background:#f3f3f5; border:1px solid #2a2a3a; }
+    .color-palette { display:grid; grid-template-columns: repeat(auto-fit, minmax(26px, 1fr)); gap:6px; margin-top:8px; }
+    .color-swatch { width:26px; height:26px; border-radius:8px; border:1px solid #2a2a3a; background:var(--swatch, #333); cursor:pointer; }
+    .color-swatch:focus { outline:2px solid var(--accent); outline-offset:2px; }
     .abi-item button { padding:6px 10px; font-size:.85rem; }
     .prereq-warn { color:#f66; font-size:.85rem; }
     .abi-add { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
@@ -918,6 +931,47 @@
   </div>
 </div>
 
+<!-- Ability title color modal -->
+<div id="title-color-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="title-color-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="title-color-title">
+  <div class="modal-card color-picker-card">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="title-color-title">Title color</div>
+      <button class="modal-close" id="title-color-close" aria-label="Close">x</button>
+    </header>
+    <div class="color-preview-row">
+      <div class="color-preview-chip" id="title-color-preview"></div>
+      <div>
+        <div class="muted" style="font-size:.85rem;">Selected title</div>
+        <div class="color-preview-title" id="title-color-preview-text">Title</div>
+        <div class="muted" id="title-color-preview-value" style="font-size:.8rem;"></div>
+      </div>
+    </div>
+    <label class="muted" for="title-color-hue">Gradient</label>
+    <div class="color-gradient-track" style="margin-top:6px;">
+      <input type="range" id="title-color-hue" min="0" max="360" step="1" value="0">
+    </div>
+    <div class="muted" style="margin-top:10px;">Palette</div>
+    <div class="color-palette" id="title-color-palette">
+      <button class="color-swatch" data-color="#e5484d" data-name="Red" style="--swatch:#e5484d" aria-label="Red"></button>
+      <button class="color-swatch" data-color="#f59f00" data-name="Orange" style="--swatch:#f59f00" aria-label="Orange"></button>
+      <button class="color-swatch" data-color="#f2c94c" data-name="Yellow" style="--swatch:#f2c94c" aria-label="Yellow"></button>
+      <button class="color-swatch" data-color="#30c56b" data-name="Green" style="--swatch:#30c56b" aria-label="Green"></button>
+      <button class="color-swatch" data-color="#2ac9c1" data-name="Teal" style="--swatch:#2ac9c1" aria-label="Teal"></button>
+      <button class="color-swatch" data-color="#3b82f6" data-name="Blue" style="--swatch:#3b82f6" aria-label="Blue"></button>
+      <button class="color-swatch" data-color="#6366f1" data-name="Indigo" style="--swatch:#6366f1" aria-label="Indigo"></button>
+      <button class="color-swatch" data-color="#9b5de5" data-name="Purple" style="--swatch:#9b5de5" aria-label="Purple"></button>
+      <button class="color-swatch" data-color="#ec4899" data-name="Pink" style="--swatch:#ec4899" aria-label="Pink"></button>
+      <button class="color-swatch" data-color="#a0aec0" data-name="Gray" style="--swatch:#a0aec0" aria-label="Gray"></button>
+    </div>
+    <div class="row" style="justify-content:flex-end; gap:8px; margin-top:12px;">
+      <button class="btn btn-secondary" id="title-color-clear">Clear</button>
+      <button class="btn btn-secondary" id="title-color-cancel">Cancel</button>
+      <button class="btn" id="title-color-apply">Apply</button>
+    </div>
+  </div>
+</div>
+
 <!-- XP Ledger modal -->
 <div id="xp-ledger-backdrop" class="modal-backdrop" aria-hidden="true"></div>
 <div id="xp-ledger-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="xp-ledger-title">
@@ -1096,6 +1150,7 @@ let COMPUTED_EXP_ABILITIES = [];
 let COMPUTED_DIMA_ABILITIES = [];
 let ABILITY_CHOICES = {}; // per-ability user selections for configurable modifiers (choices or groups)
 let ITEM_CHOICES = {}; // per-item (inventory) user selections for choice-based modifiers
+let TITLE_COLOR_MAP = {};
 let INVENTORIES = [];
 let LINKED_INV = null;
 let SELECTED_INV_ID = '';
@@ -1271,6 +1326,17 @@ const choiceClose = document.getElementById('choice-close');
 const choiceCancel = document.getElementById('choice-cancel');
 const choiceSave = document.getElementById('choice-save');
 const choiceBody = document.getElementById('choice-body');
+const titleColorModal = document.getElementById('title-color-modal');
+const titleColorBackdrop = document.getElementById('title-color-backdrop');
+const titleColorClose = document.getElementById('title-color-close');
+const titleColorCancel = document.getElementById('title-color-cancel');
+const titleColorApply = document.getElementById('title-color-apply');
+const titleColorClear = document.getElementById('title-color-clear');
+const titleColorHue = document.getElementById('title-color-hue');
+const titleColorPreview = document.getElementById('title-color-preview');
+const titleColorPreviewText = document.getElementById('title-color-preview-text');
+const titleColorPreviewValue = document.getElementById('title-color-preview-value');
+const titleColorPalette = document.getElementById('title-color-palette');
 const choiceTitle = document.getElementById('choice-title');
 const arcSelectEl     = document.getElementById('arc-select');
 const arcApplyBtn     = document.getElementById('arc-apply');
@@ -1446,6 +1512,179 @@ function initAbiSpellsFilter(){
   });
 }
 
+const TITLE_COLOR_STORAGE_PREFIX = 'title_colors:';
+let TITLE_COLOR_ACTIVE_KEY = '';
+let TITLE_COLOR_ACTIVE_LABEL = '';
+let TITLE_COLOR_SELECTED = '';
+function titleColorStorageKey(){
+  return `${TITLE_COLOR_STORAGE_PREFIX}${CID || 'unknown'}`;
+}
+function loadTitleColors(){
+  try{
+    const raw = localStorage.getItem(titleColorStorageKey());
+    TITLE_COLOR_MAP = raw ? JSON.parse(raw) : {};
+  }catch{
+    TITLE_COLOR_MAP = {};
+  }
+}
+function saveTitleColors(){
+  try{ localStorage.setItem(titleColorStorageKey(), JSON.stringify(TITLE_COLOR_MAP || {})); }catch{}
+}
+function setTitleColor(key, color){
+  if (!key) return;
+  if (!color){
+    delete TITLE_COLOR_MAP[key];
+  }else{
+    TITLE_COLOR_MAP[key] = color;
+  }
+  saveTitleColors();
+}
+function getTitleColor(key){
+  return key ? (TITLE_COLOR_MAP[key] || '') : '';
+}
+function cssEscape(val){
+  if (window.CSS && CSS.escape) return CSS.escape(val);
+  return String(val || '').replace(/["\\]/g, '\\$&');
+}
+function applyTitleColor(el, key){
+  if (!el || !key) return;
+  const color = getTitleColor(key);
+  el.style.color = color || '';
+}
+function applyTitleColorByKey(key){
+  if (!key) return;
+  const selector = `[data-color-key="${cssEscape(key)}"]`;
+  document.querySelectorAll(selector).forEach(el=> applyTitleColor(el, key));
+}
+function abilityColorKey(a){
+  const id = String(a?.id || '').trim();
+  return id ? `ability:${id}` : '';
+}
+function spellColorKey(sp){
+  const id = String(sp?.id || '').trim();
+  return id ? `spell:${id}` : '';
+}
+function entryColorKey(kind, entry){
+  const id = String(entry?.id || '').trim();
+  return id ? `${kind}:${id}` : '';
+}
+function registerTitleColorTarget(el, key, label){
+  if (!el || !key) return;
+  el.classList.add('title-color-target');
+  el.dataset.colorKey = key;
+  if (label) el.dataset.colorLabel = label;
+  if (!el.title) el.title = 'Double-click to set title color';
+  applyTitleColor(el, key);
+  el.addEventListener('dblclick', (e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    openTitleColorModal(key, label || el.textContent || 'Title');
+  });
+}
+function rgbToHue(r, g, b){
+  const rr = r / 255;
+  const gg = g / 255;
+  const bb = b / 255;
+  const max = Math.max(rr, gg, bb);
+  const min = Math.min(rr, gg, bb);
+  if (max === min) return 0;
+  let h = 0;
+  if (max === rr){
+    h = (60 * ((gg - bb) / (max - min)) + 360) % 360;
+  }else if (max === gg){
+    h = (60 * ((bb - rr) / (max - min)) + 120) % 360;
+  }else{
+    h = (60 * ((rr - gg) / (max - min)) + 240) % 360;
+  }
+  return Math.round(h);
+}
+function colorToHue(color){
+  if (!color) return 0;
+  const hslMatch = String(color).match(/hsl\(\s*([0-9.]+)/i);
+  if (hslMatch) return Math.round(parseFloat(hslMatch[1]) || 0);
+  const rgbMatch = String(color).match(/rgb\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)/i);
+  if (rgbMatch) return rgbToHue(parseInt(rgbMatch[1],10), parseInt(rgbMatch[2],10), parseInt(rgbMatch[3],10));
+  const hexMatch = String(color).match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hexMatch){
+    let hex = hexMatch[1];
+    if (hex.length === 3){
+      hex = hex.split('').map(ch=> ch + ch).join('');
+    }
+    const r = parseInt(hex.slice(0,2), 16);
+    const g = parseInt(hex.slice(2,4), 16);
+    const b = parseInt(hex.slice(4,6), 16);
+    return rgbToHue(r, g, b);
+  }
+  return 0;
+}
+function hueToColor(hue){
+  const h = Math.max(0, Math.min(360, Number(hue)||0));
+  return `hsl(${h}, 80%, 60%)`;
+}
+function updateTitleColorPreview(){
+  if (titleColorPreview) titleColorPreview.style.background = TITLE_COLOR_SELECTED || '#15151d';
+  if (titleColorPreviewText) titleColorPreviewText.style.color = TITLE_COLOR_SELECTED || '';
+  if (titleColorPreviewValue) titleColorPreviewValue.textContent = TITLE_COLOR_SELECTED || 'Default';
+}
+function setTitleColorSelection(color, { syncSlider = false } = {}){
+  TITLE_COLOR_SELECTED = color || '';
+  if (syncSlider && titleColorHue){
+    titleColorHue.value = String(colorToHue(TITLE_COLOR_SELECTED));
+  }
+  updateTitleColorPreview();
+}
+function openTitleColorModal(key, label){
+  if (!titleColorModal || !titleColorBackdrop) return;
+  TITLE_COLOR_ACTIVE_KEY = key || '';
+  TITLE_COLOR_ACTIVE_LABEL = label || 'Title';
+  if (titleColorPreviewText) titleColorPreviewText.textContent = TITLE_COLOR_ACTIVE_LABEL;
+  setTitleColorSelection(getTitleColor(TITLE_COLOR_ACTIVE_KEY), { syncSlider: true });
+  titleColorModal.classList.remove('hidden');
+  titleColorModal.classList.add('open');
+  titleColorBackdrop.classList.add('open');
+}
+function closeTitleColorModal(){
+  if (!titleColorModal || !titleColorBackdrop) return;
+  titleColorModal.classList.add('hidden');
+  titleColorModal.classList.remove('open');
+  titleColorBackdrop.classList.remove('open');
+  TITLE_COLOR_ACTIVE_KEY = '';
+  TITLE_COLOR_ACTIVE_LABEL = '';
+}
+function wireTitleColorPicker(){
+  if (titleColorClose) titleColorClose.addEventListener('click', closeTitleColorModal);
+  if (titleColorCancel) titleColorCancel.addEventListener('click', closeTitleColorModal);
+  if (titleColorBackdrop){
+    titleColorBackdrop.addEventListener('click', (e)=>{ if (e.target === titleColorBackdrop) closeTitleColorModal(); });
+  }
+  if (titleColorHue){
+    titleColorHue.addEventListener('input', ()=>{
+      setTitleColorSelection(hueToColor(titleColorHue.value));
+    });
+  }
+  if (titleColorPalette){
+    titleColorPalette.querySelectorAll('.color-swatch').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const color = btn.getAttribute('data-color') || '';
+        setTitleColorSelection(color, { syncSlider: true });
+      });
+    });
+  }
+  if (titleColorClear){
+    titleColorClear.addEventListener('click', ()=>{
+      setTitleColorSelection('', { syncSlider: false });
+    });
+  }
+  if (titleColorApply){
+    titleColorApply.addEventListener('click', ()=>{
+      if (!TITLE_COLOR_ACTIVE_KEY) return;
+      setTitleColor(TITLE_COLOR_ACTIVE_KEY, TITLE_COLOR_SELECTED);
+      applyTitleColorByKey(TITLE_COLOR_ACTIVE_KEY);
+      closeTitleColorModal();
+    });
+  }
+}
+
 async function ensureEffectsLoaded(){
   if (Object.keys(EFFECTS_BY_ID).length) return EFFECTS_BY_ID;
   if (EFFECTS_PROMISE) return EFFECTS_PROMISE;
@@ -1475,6 +1714,8 @@ const subBackdrop = document.getElementById('sub-backdrop');
 const subClose = document.getElementById('sub-close');
 const subCancel = document.getElementById('sub-cancel');
 initAbiSpellsFilter();
+loadTitleColors();
+wireTitleColorPicker();
 /* Personal refs */
 const pNickEl = document.getElementById('p-nicknames');
 const pHeightEl = document.getElementById('p-height');
@@ -4561,9 +4802,10 @@ function renderAbilitySpellsBucket(){
     const div = document.createElement('div');
     div.className = 'abi-item';
     const statusLabel = (meta.status === 'learnt') ? 'Prepared' : 'Learnt';
+    const titleKey = spellColorKey(sp);
     div.innerHTML = `
       <div class="grow">
-        <div><strong>${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
+        <div><strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
@@ -4572,6 +4814,7 @@ function renderAbilitySpellsBucket(){
       </div>
       <span class="tag">${sp.category || ''}</span>
     `;
+    registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
     el.appendChild(div);
   });
 }
@@ -4965,16 +5208,19 @@ async function refreshArchetypeAbilities(){
     docs.forEach(d=>{ if(d?.id) byId[d.id]=d; });
     arcAbilitiesEl.innerHTML = '';
     COMPUTED_ARC_ABILITIES.forEach(id=>{
-      const a = byId[id] || { name:id, description:'' };
+      const a = byId[id] || { id, name:id, description:'' };
       const div = document.createElement('div');
       div.className = 'abi-item';
+      const titleKey = abilityColorKey(a);
+      const titleText = a.name || id;
       div.innerHTML = `
         <div class="grow">
-          <div><strong>${a.name || id}</strong></div>
+          <div><strong class="title-color-target">${titleText}</strong></div>
           <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
         </div>
         <span class="tag">Archetype</span>
         `;
+      registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
       arcAbilitiesEl.appendChild(div);
     });
     recomputePassiveAgg();
@@ -5093,11 +5339,13 @@ function renderExpertisePanel(meta, docs){
     const prereqNote = prereqErrors.length ? `Prereq not met: ${prereqErrors.join(' ')}` : '';
     const div = document.createElement('div');
     div.className = 'abi-item abi-block';
+    const entryKey = entryColorKey('expertise', entry);
+    const entryTitle = entry.name || entry.id || 'Expertise';
     div.innerHTML = `
       <div style="display:grid; gap:6px; margin-bottom:8px;">
         <div class="row" style="gap:8px; align-items:center; justify-content:space-between;">
           <div class="row" style="gap:8px; align-items:center;">
-            <strong>${entry.name || entry.id}</strong>
+            <strong class="title-color-target">${entryTitle}</strong>
             <span class="tag">Rank ${rank}</span>
           </div>
           <button class="btn small exp-remove" data-id="${entry.id}">X</button>
@@ -5106,21 +5354,25 @@ function renderExpertisePanel(meta, docs){
         ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
       </div>
     `;
+    registerTitleColorTarget(div.querySelector('.title-color-target'), entryKey, entryTitle);
     div.querySelector('.exp-remove')?.addEventListener('click', ()=>{
       removeExpertiseById(entry.id);
     });
     const list = document.createElement('div');
     (item.unlocked || []).forEach(id=>{
-      const a = byId[id] || { name:id, description:'' };
+      const a = byId[id] || { id, name:id, description:'' };
       const row = document.createElement('div');
       row.className = 'abi-item';
+      const titleKey = abilityColorKey(a);
+      const titleText = a.name || id;
       row.innerHTML = `
         <div class="grow">
-          <div><strong>${a.name || id}</strong></div>
+          <div><strong class="title-color-target">${titleText}</strong></div>
           <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
         </div>
         <span class="tag">Expertise</span>
       `;
+      registerTitleColorTarget(row.querySelector('.title-color-target'), titleKey, titleText);
       list.appendChild(row);
     });
     div.appendChild(list);
@@ -5164,11 +5416,13 @@ function renderDivineManifestationPanel(meta, docs){
     const prereqNote = prereqErrors.length ? `Prereq not met: ${prereqErrors.join(' ')}` : '';
     const div = document.createElement('div');
     div.className = 'abi-item abi-block';
+    const entryKey = entryColorKey('dima', entry);
+    const entryTitle = entry.name || entry.id || 'Divine Manifestation';
     div.innerHTML = `
       <div style="display:grid; gap:6px; margin-bottom:8px;">
         <div class="row" style="gap:8px; align-items:center; justify-content:space-between;">
           <div class="row" style="gap:8px; align-items:center;">
-            <strong>${entry.name || entry.id}</strong>
+            <strong class="title-color-target">${entryTitle}</strong>
             <span class="tag">Rank ${rank}</span>
           </div>
           <button class="btn small dima-remove" data-id="${entry.id}">X</button>
@@ -5177,21 +5431,25 @@ function renderDivineManifestationPanel(meta, docs){
         ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
       </div>
     `;
+    registerTitleColorTarget(div.querySelector('.title-color-target'), entryKey, entryTitle);
     div.querySelector('.dima-remove')?.addEventListener('click', ()=>{
       removeDivineManifestationById(entry.id);
     });
     const list = document.createElement('div');
     (item.unlocked || []).forEach(id=>{
-      const a = byId[id] || { name:id, description:'' };
+      const a = byId[id] || { id, name:id, description:'' };
       const row = document.createElement('div');
       row.className = 'abi-item';
+      const titleKey = abilityColorKey(a);
+      const titleText = a.name || id;
       row.innerHTML = `
         <div class="grow">
-          <div><strong>${a.name || id}</strong></div>
+          <div><strong class="title-color-target">${titleText}</strong></div>
           <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
         </div>
         <span class="tag">Divine Manifestation</span>
       `;
+      registerTitleColorTarget(row.querySelector('.title-color-target'), titleKey, titleText);
       list.appendChild(row);
     });
     div.appendChild(list);
@@ -6826,9 +7084,11 @@ function renderAbilitiesBucket(el, list){
     const hasChoice = abilityHasChoice(a);
     const desc = isPassive ? (a.passive?.description||a.description||'') : (a.description||'');
     const costText = abilityCostText(a);
+    const titleKey = abilityColorKey(a);
+    const titleText = a.name || a.id || 'Ability';
     div.innerHTML = `
       <div class="grow">
-        <div><strong>${a.name}</strong></div>
+        <div><strong class="title-color-target">${titleText}</strong></div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${costText ? `<div class="muted" style="font-size:.8rem">Cost: ${costText}</div>` : ''}
       </div>
@@ -6839,6 +7099,7 @@ function renderAbilitiesBucket(el, list){
         <button class="btn small mod-remove" title="Remove">X</button>
       </div>
     `;
+    registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
     div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));
     if (hasChoice){
       div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
