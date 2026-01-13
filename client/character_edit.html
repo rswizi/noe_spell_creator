@@ -1018,7 +1018,7 @@
     </header>
     <div class="muted" id="roll-details" style="font-size:.85rem; margin-top:6px;"></div>
     <div class="muted" id="roll-desc" style="font-size:.85rem; margin-top:4px;"></div>
-    <div class="roll-grid">
+    <div class="roll-grid" id="roll-grid">
       <label>
         <span class="k" id="roll-base-label">Base value</span>
         <input id="roll-base" type="number" readonly>
@@ -1040,8 +1040,8 @@
         </select>
       </label>
     </div>
-    <div class="muted" style="font-size:.82rem; margin-top:8px;">Jinxed/Motivated apply only when a target is provided.</div>
-    <div class="roll-conditions">
+    <div class="muted" id="roll-conditions-note" style="font-size:.82rem; margin-top:8px;">Jinxed/Motivated apply only when a target is provided.</div>
+    <div class="roll-conditions" id="roll-conditions">
       <div class="muted" style="font-size:.85rem; margin-bottom:6px;">Conditions</div>
       <div class="roll-cond-grid">
         <label><input type="checkbox" id="cond-j1"> Slightly Jinxed (-1 on success)</label>
@@ -1436,6 +1436,9 @@ const rollTitleEl = document.getElementById('roll-title');
 const rollSubtitleEl = document.getElementById('roll-subtitle');
 const rollDetailsEl = document.getElementById('roll-details');
 const rollDescEl = document.getElementById('roll-desc');
+const rollGridEl = document.getElementById('roll-grid');
+const rollConditionsEl = document.getElementById('roll-conditions');
+const rollConditionsNoteEl = document.getElementById('roll-conditions-note');
 const rollBaseLabelEl = document.getElementById('roll-base-label');
 const rollBaseEl = document.getElementById('roll-base');
 const rollModEl = document.getElementById('roll-mod');
@@ -3176,6 +3179,7 @@ function invToggleModal(modal, backdrop, open){
 /* ---------- Rolling ---------- */
 let ROLL_CONTEXT = null;
 let ROLL_LOG_COUNT = 0;
+let ROLL_CLICK_TIMER = null;
 
 function resetRollConditions(){
   if (condJ1El) condJ1El.checked = false;
@@ -3199,18 +3203,35 @@ function openRollModal(ctx){
     rollDetailsEl.style.display = text ? '' : 'none';
   }
   if (rollDescEl){
+    const html = ctx?.descHtml || '';
     const text = ctx?.descText || '';
-    rollDescEl.textContent = text;
-    rollDescEl.style.display = text ? '' : 'none';
+    if (html){
+      rollDescEl.innerHTML = html;
+      rollDescEl.style.display = '';
+    }else{
+      rollDescEl.textContent = text;
+      rollDescEl.style.display = text ? '' : 'none';
+    }
   }
   if (rollBaseLabelEl) rollBaseLabelEl.textContent = ctx?.baseLabel || 'Base value';
   if (rollBaseEl) rollBaseEl.value = Number(ctx?.base || 0);
   if (rollModEl) rollModEl.value = 0;
   if (rollTargetEl) rollTargetEl.value = '';
   if (rollAdvEl) rollAdvEl.value = 'normal';
-  if (rollResultEl) rollResultEl.textContent = '';
+  const infoOnly = !!ctx?.infoOnly;
+  if (rollGridEl) rollGridEl.style.display = infoOnly ? 'none' : '';
+  if (rollConditionsEl) rollConditionsEl.style.display = infoOnly ? 'none' : '';
+  if (rollConditionsNoteEl) rollConditionsNoteEl.style.display = infoOnly ? 'none' : '';
+  if (rollRun) rollRun.style.display = infoOnly ? 'none' : '';
+  if (rollResultEl){
+    rollResultEl.textContent = infoOnly ? 'Info only (no dice roll).' : '';
+    rollResultEl.style.display = infoOnly ? '' : 'none';
+  }
   resetRollConditions();
   invToggleModal(rollModal, rollBackdrop, true);
+  if (infoOnly && ctx?.autoLog !== false){
+    appendInfoLog(ctx);
+  }
 }
 
 function closeRollModal(){
@@ -3288,6 +3309,56 @@ function appendRollLog(entry){
   if (rollLogCountEl) rollLogCountEl.textContent = `(${ROLL_LOG_COUNT})`;
 }
 
+function appendInfoLog(ctx){
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = ctx?.title || 'Info';
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  entry.appendChild(title);
+  entry.appendChild(meta);
+  (ctx?.detailLines || []).forEach(line=>{
+    if (!line) return;
+    const div = document.createElement('div');
+    div.className = 'muted';
+    div.textContent = line;
+    entry.appendChild(div);
+  });
+  if (ctx?.descHtml){
+    const desc = document.createElement('div');
+    desc.innerHTML = ctx.descHtml;
+    entry.appendChild(desc);
+  }else if (ctx?.descText){
+    const desc = document.createElement('div');
+    desc.textContent = ctx.descText;
+    entry.appendChild(desc);
+  }
+  const infoLine = document.createElement('div');
+  infoLine.textContent = 'Info only (no dice roll).';
+  entry.appendChild(infoLine);
+  appendRollLog(entry);
+}
+
+function queueInfoOpen(cb){
+  clearTimeout(ROLL_CLICK_TIMER);
+  ROLL_CLICK_TIMER = setTimeout(cb, 200);
+}
+
+function handleInfoClick(e, cb){
+  if (!e || !cb) return;
+  if (e.target.closest('button')) return;
+  if (e.target.closest('a')) return;
+  if (e.target.closest('input') || e.target.closest('select') || e.target.closest('textarea')) return;
+  if (e.detail > 1){
+    clearTimeout(ROLL_CLICK_TIMER);
+    return;
+  }
+  queueInfoOpen(cb);
+}
+
 function clearRollLog(){
   if (!rollLogEl) return;
   rollLogEl.innerHTML = '';
@@ -3301,6 +3372,7 @@ function clearRollLog(){
 
 function runRoll(){
   if (!ROLL_CONTEXT) return;
+  if (ROLL_CONTEXT.infoOnly) return;
   const base = Number(rollBaseEl?.value || 0) || 0;
   const mod = Number(rollModEl?.value || 0) || 0;
   const targetRaw = rollTargetEl?.value;
@@ -3341,7 +3413,10 @@ function runRoll(){
     ? `Result: ${finalTotal} (target ${target}, ${successState}${conditionDelta ? `, adjusted ${conditionDelta > 0 ? '+' : ''}${conditionDelta}` : ''})`
     : `Result: ${finalTotal}`;
 
-  if (rollResultEl) rollResultEl.textContent = resultText;
+  if (rollResultEl){
+    rollResultEl.textContent = resultText;
+    rollResultEl.style.display = '';
+  }
 
   const entry = document.createElement('div');
   entry.className = 'roll-entry';
@@ -3383,7 +3458,7 @@ function runRoll(){
 
 function abilityRollDetails(a){
   const isPassive = (a?.type || '').toLowerCase() !== 'active';
-  const desc = isPassive ? (a?.passive?.description || a?.description || '') : (a?.description || '');
+  const desc = isPassive ? (a?.passive?.description_html || a?.passive?.description || a?.description_html || a?.description || '') : (a?.description_html || a?.description || '');
   const cost = isPassive ? '' : abilityCostText(a);
   const range = isPassive ? '' : (a?.active?.range || a?.range || '');
   const aoe = isPassive ? '' : (a?.active?.aoe || a?.aoe || '');
@@ -3416,15 +3491,15 @@ function openAbilityRoll(a, sourceLabel){
   const lines = [];
   if (sourceLabel) lines.push(`Source: ${sourceLabel}`);
   if (detailLine) lines.push(detailLine);
-  if (details.desc) lines.push(details.desc);
   openRollModal({
     title: titleText,
     subtitle: sourceLabel ? `${sourceLabel} ability` : 'Ability',
     baseLabel: 'Base value',
     base: 0,
     detailsText: detailLine,
-    descText: details.desc || '',
-    detailLines: lines
+    descHtml: details.desc || '',
+    detailLines: lines,
+    infoOnly: true
   });
 }
 
@@ -3439,7 +3514,6 @@ function openSpellRoll(sp, meta, info){
   const detailLine = parts.join(' | ');
   const lines = [];
   if (detailLine) lines.push(detailLine);
-  if (info?.desc) lines.push(info.desc);
   if (info?.effectsDesc) lines.push(`Effects: ${info.effectsDesc}`);
   openRollModal({
     title: titleText,
@@ -3447,8 +3521,9 @@ function openSpellRoll(sp, meta, info){
     baseLabel: 'Base value',
     base: 0,
     detailsText: detailLine,
-    descText: info?.desc || '',
-    detailLines: lines
+    descHtml: info?.desc || '',
+    detailLines: lines,
+    infoOnly: true
   });
 }
 
@@ -5219,11 +5294,10 @@ function renderAbilitySpellsBucket(){
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap;">
           <span class="tag">${sp.category || ''}</span>
-          <button class="btn small roll-btn" title="Roll">Roll</button>
         </div>
       `;
       registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
-      div.querySelector('.roll-btn')?.addEventListener('click', ()=> openSpellRoll(sp, meta, { cost, range, aoe, desc, effectsDesc, statusLabel, nameDisplay }));
+      div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, meta, { cost, range, aoe, desc, effectsDesc, statusLabel, nameDisplay })));
       el.appendChild(div);
   });
 }
@@ -5626,16 +5700,15 @@ async function refreshArchetypeAbilities(){
         div.innerHTML = `
           <div class="grow">
             <div><strong class="title-color-target">${titleText}</strong></div>
-            <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
+            <div class="muted" style="font-size:.85rem">${a.description_html || a.description || ''}</div>
           </div>
           <div class="row" style="gap:6px; flex-wrap:wrap;">
             <span class="tag">Archetype</span>
-            <button class="btn small roll-btn" title="Roll">Roll</button>
             ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
           </div>
           `;
         registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
-        div.querySelector('.roll-btn')?.addEventListener('click', ()=> openAbilityRoll(a, 'Archetype'));
+        div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openAbilityRoll(a, 'Archetype')));
         if (hasChoice){
           div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
         }
@@ -5787,16 +5860,15 @@ function renderExpertisePanel(meta, docs){
         row.innerHTML = `
           <div class="grow">
             <div><strong class="title-color-target">${titleText}</strong></div>
-            <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
+            <div class="muted" style="font-size:.85rem">${a.description_html || a.description || ''}</div>
           </div>
           <div class="row" style="gap:6px; flex-wrap:wrap;">
             <span class="tag">Expertise</span>
-            <button class="btn small roll-btn" title="Roll">Roll</button>
             ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
           </div>
         `;
         registerTitleColorTarget(row.querySelector('.title-color-target'), titleKey, titleText);
-        row.querySelector('.roll-btn')?.addEventListener('click', ()=> openAbilityRoll(a, 'Expertise'));
+        row.addEventListener('click', (e)=> handleInfoClick(e, ()=> openAbilityRoll(a, 'Expertise')));
         if (hasChoice){
           row.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
         }
@@ -5873,16 +5945,15 @@ function renderDivineManifestationPanel(meta, docs){
         row.innerHTML = `
           <div class="grow">
             <div><strong class="title-color-target">${titleText}</strong></div>
-            <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
+            <div class="muted" style="font-size:.85rem">${a.description_html || a.description || ''}</div>
           </div>
           <div class="row" style="gap:6px; flex-wrap:wrap;">
             <span class="tag">Divine Manifestation</span>
-            <button class="btn small roll-btn" title="Roll">Roll</button>
             ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
           </div>
         `;
         registerTitleColorTarget(row.querySelector('.title-color-target'), titleKey, titleText);
-        row.querySelector('.roll-btn')?.addEventListener('click', ()=> openAbilityRoll(a, 'Divine Manifestation'));
+        row.addEventListener('click', (e)=> handleInfoClick(e, ()=> openAbilityRoll(a, 'Divine Manifestation')));
         if (hasChoice){
           row.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
         }
@@ -6880,7 +6951,7 @@ function renderSearchResults(arr){
     div.innerHTML = `
       <div class="grow">
         <div><strong>${a.name}</strong></div>
-        <div class="muted" style="font-size:.85rem">${a.description||''}</div>
+        <div class="muted" style="font-size:.85rem">${a.description_html || a.description || ''}</div>
         ${costText ? `<div class="muted" style="font-size:.8rem">Cost: ${costText}</div>` : ''}
       </div>
       <span class="tag">${a.type||''}</span>
@@ -7529,7 +7600,7 @@ function renderAbilitiesBucket(el, list){
     div.className = 'abi-item';
     const isPassive = (a.type||'').toLowerCase()!=='active';
     const hasChoice = abilityHasChoice(a);
-    const desc = isPassive ? (a.passive?.description||a.description||'') : (a.description||'');
+    const desc = isPassive ? (a.passive?.description_html||a.passive?.description||a.description_html||a.description||'') : (a.description_html||a.description||'');
     const costText = abilityCostText(a);
     const titleKey = abilityColorKey(a);
     const titleText = a.name || a.id || 'Ability';
@@ -7542,13 +7613,12 @@ function renderAbilitiesBucket(el, list){
       <span class="tag">${a.type||''}</span>
       <span class="tag">${a.source_category||''}</span>
       <div class="row" style="gap:6px; flex-wrap:wrap;">
-        <button class="btn small roll-btn" title="Roll">Roll</button>
         ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
         <button class="btn small mod-remove" title="Remove">X</button>
       </div>
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
-    div.querySelector('.roll-btn')?.addEventListener('click', ()=> openAbilityRoll(a, a.source_category || 'Ability'));
+    div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openAbilityRoll(a, a.source_category || 'Ability')));
     div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));
     if (hasChoice){
       div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));

@@ -54,6 +54,7 @@
         <button class="btn" id="search">Search</button>
         <span class="spacer"></span>
         <span id="count" class="sub"></span>
+        <span id="status" class="sub"></span>
       </div>
 
       <table class="table" id="t">
@@ -172,6 +173,11 @@
     const API_BASE = ""; // set "/api" if you serve behind a prefix
     let token = localStorage.getItem("auth_token") || "";
     const $ = (s)=>document.querySelector(s);
+    const statusEl = document.getElementById("status");
+
+    function isAdmin(){
+      return (localStorage.getItem("auth_role") || "") === "admin";
+    }
 
     // ---------- auth ----------
     async function me(){
@@ -233,18 +239,53 @@
       for(const s of SCHOOLS){
         const tr = document.createElement("tr");
         const ints = (s.linked_intensities||[]).map(x=>`<span class="chip">${x}</span>`).join(" ");
+        const actions = [
+          `<button class="btn btn-secondary small" data-edit="${s.id}">Edit</button>`,
+          isAdmin() ? `<button class="btn small" data-clear="${s.id}" style="border-color:#733;">Clear Effects</button>` : ""
+        ].filter(Boolean).join(" ");
         tr.innerHTML = `
           <td><div class="k">${s.name||s.id}</div><div class="sub">id: ${s.id}</div></td>
           <td>${s.linked_skill || "—"}</td>
           <td>${ints || "—"}</td>
           <td>${s.school_type||"-"} / ${s.range_type||"-"} / ${s.aoe_type||"-"}</td>
-          <td><button class="btn btn-secondary small" data-edit="${s.id}">Edit</button></td>
+          <td>${actions}</td>
         `;
         tb.appendChild(tr);
       }
       tb.querySelectorAll("[data-edit]").forEach(btn=>{
         btn.addEventListener("click", ()=> openEdit(btn.getAttribute("data-edit")));
       });
+      tb.querySelectorAll("[data-clear]").forEach(btn=>{
+        btn.addEventListener("click", ()=> clearSchoolEffects(btn.getAttribute("data-clear")));
+      });
+    }
+
+    
+    async function clearSchoolEffects(id){
+      if (!id) return;
+      if (!isAdmin()){
+        if (statusEl) statusEl.textContent = 'Admin only.';
+        return;
+      }
+      const s = SCHOOLS.find(x=>x.id===id);
+      const name = s ? (s.name || s.id) : id;
+      if (!confirm(`Clear all effects for ${name}? This deletes the effects and updates spells.`)) return;
+      if (statusEl) statusEl.textContent = 'Clearing effects...';
+      const r = await fetch(`${API_BASE}/admin/schools/${encodeURIComponent(id)}/clear_effects`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const j = await r.json().catch(()=>({}));
+      if (!r.ok || j.status !== 'success'){
+        if (statusEl) statusEl.textContent = j.message || `${r.status} ${r.statusText}`;
+        return;
+      }
+      const msg = j.message || `Cleared ${j.deleted_effects || 0} effect(s) from ${j.touched_spells || 0} spell(s).`;
+      if (statusEl) statusEl.textContent = msg;
+      if (j.patch_text){
+        console.log(j.patch_text);
+      }
+      setTimeout(()=>{ if (statusEl && statusEl.textContent === msg) statusEl.textContent = ''; }, 2500);
     }
 
     // ---------- edit modal ----------

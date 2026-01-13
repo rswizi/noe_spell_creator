@@ -1526,6 +1526,71 @@ async def admin_update_school(school_id: str, request: Request):
     patch_text, changed_count = _recompute_spells_for_school(school_id)
     return {"status":"success","updated":school_id,"changed_spells":changed_count,"patch_text":"\n".join(header)+patch_text+"\n"}
 
+@app.post("/admin/schools/{school_id}/clear_effects")
+def admin_clear_school_effects(school_id: str, request: Request):
+    require_auth(request, ["admin"])
+    sch = get_col("schools")
+    eff = get_col("effects")
+
+    school = sch.find_one({"id": school_id}, {"_id": 0})
+    if not school:
+        return JSONResponse({"status":"error","message":"School not found"}, status_code=404)
+
+    eff_ids = [e["id"] for e in eff.find({"school": school_id}, {"_id":0,"id":1})]
+    if not eff_ids:
+        return {"status":"success","deleted_effects":0,"touched_spells":0,"message":"No effects to clear."}
+
+    eff.delete_many({"school": school_id})
+    from_ids = set(eff_ids)
+
+    sp_col = get_col("spells")
+    affected = list(sp_col.find({"effects": {"$in": list(from_ids)}}, {"_id": 0}))
+
+    lines = [f"Cleared Effects for School [{school_id}] {school.get('name','')}", ""]
+    for sp in affected:
+        new_effects = [eid for eid in (sp.get("effects") or []) if eid not in from_ids]
+
+        old_mp, old_en = int(sp.get("mp_cost",0)), int(sp.get("en_cost",0))
+        old_cat = sp.get("category","")
+
+        cc = compute_spell_costs(
+            sp.get("activation","Action"),
+            int(sp.get("range",0)),
+            sp.get("aoe","A Square"),
+            int(sp.get("duration",1)),
+            [str(x) for x in new_effects]
+        )
+
+        sp_col.update_one({"id": sp["id"]}, {"$set":{
+            "effects": new_effects,
+            "mp_cost": cc["mp_cost"],
+            "en_cost": cc["en_cost"],
+            "category": cc["category"]
+        }})
+        lines.append(
+          f"[{sp['id']}] {sp.get('name','(unnamed)')}: "
+          f"MP {old_mp} -> {cc['mp_cost']}, EN {old_en} -> {cc['en_cost']}, Category {old_cat} -> {cc['category']} (effects cleared)"
+        )
+
+    try:
+        username, _ = require_auth(request, ["admin"])
+    except Exception:
+        username = "anonymous"
+    try:
+        write_audit("school.clear_effects", username, school_id, school, {
+            "deleted_effects": eff_ids,
+            "touched_spells": [sp.get("id") for sp in affected]
+        })
+    except Exception:
+        pass
+
+    return {
+        "status":"success",
+        "deleted_effects": len(eff_ids),
+        "touched_spells": len(affected),
+        "patch_text":"\n".join(lines) + "\n"
+    }
+
 
 @app.delete("/admin/schools/{school_id}")
 def admin_delete_school(school_id: str, request: Request, force: bool = Query(default=False)):
