@@ -453,6 +453,21 @@
         <div class="panel">
           <details open class="panel">
             <summary class="hdr">
+              <strong>Species</strong>
+              <span class="muted">(auto bonus ability)</span>
+            </summary>
+            <div class="panel-body">
+              <div class="row" style="gap:8px; flex-wrap:wrap;">
+                <select id="species-select" class="grow"></select>
+                <span id="species-status" class="muted"></span>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="panel">
+          <details open class="panel">
+            <summary class="hdr">
               <strong>Archetype</strong>
               <span class="muted">(auto unlock by level)</span>
             </summary>
@@ -1274,6 +1289,7 @@ let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, initiative:null, spc
 let ARCHETYPES = [];
 let EXPERTISES = [];
 let DIVINE_MANIFESTATIONS = [];
+let SPECIES_ABILITIES = [];
 let COMPUTED_ARC_ABILITIES = [];
 let UPGRADE_META = {};
 let TALENT_MAX = 1;
@@ -1458,6 +1474,8 @@ const condM3El = document.getElementById('cond-m3');
 const condRecklessEl = document.getElementById('cond-reckless');
 const condMeticulousEl = document.getElementById('cond-meticulous');
 const choiceTitle = document.getElementById('choice-title');
+const speciesSelectEl = document.getElementById('species-select');
+const speciesStatusEl = document.getElementById('species-status');
 const arcSelectEl     = document.getElementById('arc-select');
 const arcApplyBtn     = document.getElementById('arc-apply');
 const arcStatusEl     = document.getElementById('arc-status');
@@ -1966,6 +1984,7 @@ function makeDefaultStats(){
     notes: "",
     backstory: "",
   };
+  stats.species_ability_id = "";
   return stats;
 }
 
@@ -5441,6 +5460,60 @@ async function reloadSpellListData(){
   recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
 }
 
+function getSpeciesAbilityId(){
+  return String(CHAR?.stats?.species_ability_id || '').trim();
+}
+function setSpeciesAbilityId(id){
+  if (!CHAR) return;
+  if (!CHAR.stats) CHAR.stats = normalizeStats(CHAR.stats || {});
+  CHAR.stats.species_ability_id = id || '';
+}
+function ensureSpeciesAbilityLinked(){
+  const id = getSpeciesAbilityId();
+  if (!id) return;
+  if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
+  const set = new Set(CHAR.abilities.map(x=> String(x||'').trim()).filter(Boolean));
+  if (!set.has(id)) CHAR.abilities.push(id);
+}
+async function loadSpeciesList(){
+  if (!speciesSelectEl) return;
+  if (speciesStatusEl) speciesStatusEl.textContent = 'Loading species...';
+  speciesSelectEl.innerHTML = '<option value="">-- Select species --</option>';
+  try{
+    const res = await api('/abilities?source=Specie');
+    SPECIES_ABILITIES = res.abilities || [];
+    SPECIES_ABILITIES.sort((a,b)=> String(a.name||a.id||'').localeCompare(String(b.name||b.id||'')));
+    SPECIES_ABILITIES.forEach(a=>{
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.name || a.id;
+      speciesSelectEl.appendChild(opt);
+    });
+    const current = getSpeciesAbilityId();
+    if (current) speciesSelectEl.value = current;
+    if (speciesStatusEl) speciesStatusEl.textContent = '';
+  }catch(e){
+    if (speciesStatusEl) speciesStatusEl.textContent = 'Load species failed: ' + e.message;
+  }
+}
+async function applySpeciesSelection(id){
+  if (!CHAR || !speciesSelectEl) return;
+  const next = String(id || '').trim();
+  const current = getSpeciesAbilityId();
+  if (next === current) return;
+  if (speciesStatusEl) speciesStatusEl.textContent = 'Applying...';
+  if (current){
+    await removeAbilityFromChar(current);
+  }
+  if (next){
+    await addAbilityToChar(next);
+  }
+  setSpeciesAbilityId(next);
+  speciesSelectEl.value = next;
+  if (speciesStatusEl) speciesStatusEl.textContent = next ? 'Species applied.' : 'Species cleared.';
+  queueSave();
+}
+
 async function loadArchetypesList(){
   try{
     const res = await api('/archetypes');
@@ -6403,8 +6476,8 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
 
 /* Derived computations (use characteristic mods & skills that may be adjusted) */
 function milestone(key){
-  // milestone uses the **adjusted** characteristic mod (>=0)
-  return Math.max(0, charAdjMod(key).mod);
+  // milestone uses the **adjusted** characteristic mod, shifted to start at total 4
+  return Math.max(0, charAdjMod(key).mod + 3);
 }
 function baseTalentMax(lvl){
   const levelVal = 1 + Math.floor((Math.max(1, lvl) - 1) / 10);
@@ -6605,6 +6678,7 @@ async function loadCharacter(){
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   if (!Array.isArray(CHAR.expertise_ids)) CHAR.expertise_ids = [];
   if (!Array.isArray(CHAR.divine_manifestation_ids)) CHAR.divine_manifestation_ids = [];
+  ensureSpeciesAbilityLinked();
   ABILITY_CHOICES = CHAR.ability_choices || {};
   ITEM_CHOICES = CHAR.item_choices || {};
   SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
@@ -6659,6 +6733,7 @@ async function loadCharacter(){
   updateDerived();
   renderSublimations();
   await loadArchetypesList();
+  await loadSpeciesList();
   await loadExpertiseList();
   await loadDivineManifestationsList();
   renderArchetypePanel();
@@ -6842,6 +6917,7 @@ async function searchAbilities(){
 abiSearchBtn.addEventListener('click', searchAbilities);
 abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
 abiFilterTagEl?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
+speciesSelectEl?.addEventListener('change', ()=> applySpeciesSelection(speciesSelectEl.value));
 abiOpenAddBtn?.addEventListener('click', openAbilityAddModal);
 expOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('expertise'));
 dimaOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('dima'));
@@ -7560,6 +7636,11 @@ async function removeAbilityFromChar(aid){
   const idx = arr.indexOf(target);
   if (idx >= 0) arr.splice(idx, 1);
   CHAR.abilities = arr;
+  if (getSpeciesAbilityId() === target){
+    setSpeciesAbilityId('');
+    if (speciesSelectEl) speciesSelectEl.value = '';
+    if (speciesStatusEl) speciesStatusEl.textContent = 'Species cleared.';
+  }
   if (ABILITY_CHOICES[target]) delete ABILITY_CHOICES[target];
   queueSave();
   await resolveAssignedAbilities();
