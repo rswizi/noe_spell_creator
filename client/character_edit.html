@@ -162,7 +162,15 @@
   .upg-list { display:grid; gap:10px; }
   .upg-row { border:1px solid #242436; border-radius:10px; padding:8px; background:#12121c; }
   .upg-row h4 { margin:0 0 4px; font-size:1rem; }
-  .btn-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .btn-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .sl-sch-controls { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:nowrap; }
+    .sl-sch-controls .sl-sch-left,
+    .sl-sch-controls .sl-sch-right { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .sl-sch-controls .sl-sch-right { margin-left:auto; }
+    @media (max-width: 900px){
+      .sl-sch-controls { flex-wrap:wrap; }
+      .sl-sch-controls .sl-sch-right { margin-left:0; }
+    }
     .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:3000; display:none; }
     .modal{ position:fixed; inset:0; display:none; z-index:3001; align-items:center; justify-content:center; padding:16px; }
     .modal.open, .modal-backdrop.open{ display:flex; }
@@ -525,23 +533,25 @@
                     <span class="muted">(add and track MS)</span>
                   </summary>
                   <div class="panel-body">
-                    <div class="row" style="margin-bottom:8px; gap:8px; flex-wrap:wrap;">
-                      <button class="btn small" id="sl-add-menu-btn">Add schools</button>
-                      <div id="sl-add-menu" class="row" style="gap:6px; display:none; flex-wrap:wrap;">
-                        <button class="btn small" id="sl-quick-add">Quick Add</button>
-                        <button class="btn small" id="sl-manual-add">Manual Add</button>
+                    <div class="sl-sch-controls">
+                      <div class="sl-sch-left">
+                        <button class="btn small" id="sl-add-menu-btn">Add schools</button>
+                        <div id="sl-add-menu" class="row" style="gap:6px; display:none; flex-wrap:wrap;">
+                          <button class="btn small" id="sl-quick-add">Quick Add</button>
+                          <button class="btn small" id="sl-manual-add">Manual Add</button>
+                        </div>
+                        <span class="muted" id="sl-schools-status"></span>
                       </div>
-                      <span class="muted" id="sl-schools-status"></span>
-                    </div>
-                    <div class="row" style="margin-bottom:8px; gap:8px; flex-wrap:wrap;">
-                      <label class="muted" for="sl-sch-order">Order</label>
-                      <select id="sl-sch-order" style="min-width:180px;">
-                        <option value="manual">Manual</option>
-                        <option value="name">Name (A-Z)</option>
-                        <option value="ms">MS (high to low)</option>
-                      </select>
-                      <button class="btn small" id="sl-sch-sort">Sort</button>
-                      <span class="muted" id="sl-sch-order-status"></span>
+                      <div class="sl-sch-right">
+                        <label class="muted" for="sl-sch-order">Order</label>
+                        <select id="sl-sch-order" style="min-width:180px;">
+                          <option value="manual">Manual</option>
+                          <option value="name">Name (A-Z)</option>
+                          <option value="ms">MS (high to low)</option>
+                        </select>
+                        <button class="btn small" id="sl-sch-sort">Sort</button>
+                        <span class="muted" id="sl-sch-order-status"></span>
+                      </div>
                     </div>
                     <div id="sl-schools" class="abi-list"></div>
                   </div>
@@ -1089,6 +1099,9 @@ let ITEM_CHOICES = {}; // per-item (inventory) user selections for choice-based 
 let INVENTORIES = [];
 let LINKED_INV = null;
 let SELECTED_INV_ID = '';
+function getInventorySourceId(){
+  return SELECTED_INV_ID || LINKED_INV?.id || '';
+}
 let INV_LAST_RESULTS = [];
 let INV_FILTERED = [];
 let SPELL_LISTS = [];
@@ -2857,7 +2870,8 @@ function itemHasChoice(it){
 
 async function invAddContainer(){
   const name = (invNewContNameEl.value || "Container").trim();
-  if (!SELECTED_INV_ID) return;
+  const sourceId = getInventorySourceId();
+  if (!sourceId) return;
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/containers`, {
     method: "POST",
     headers: { "Content-Type":"application/json", ...authHeaders() },
@@ -2876,7 +2890,8 @@ async function invAddFunds(){
   const amountRaw = parseInt(invFundAmtEl.value || "0", 10);
   const note = (invFundNoteEl.value || (amountRaw >= 0 ? "Top up" : "Withdrawal")).trim();
   if (!amountRaw){ invFundStatus.textContent = "Enter a non-zero amount."; return; }
-  if (!SELECTED_INV_ID){ invFundStatus.textContent = "Link an inventory first."; return; }
+  const sourceId = getInventorySourceId();
+  if (!sourceId){ invFundStatus.textContent = "Link an inventory first."; return; }
   invFundStatus.textContent = "Saving transaction...";
   try{
     const path = `/inventories/${encodeURIComponent(sourceId)}/deposit`;
@@ -3107,6 +3122,8 @@ function invClearSearch(){
 
 async function invBuyItem(kind, ref_id, quantity, container_id, currency, opts = {}){
     const equipFlag = invEquippedFlagEl.value === "1";
+    const sourceId = getInventorySourceId();
+    if (!sourceId){ alert("Link an inventory first."); return; }
     if (!equipFlag && container_id === SELF_CONTAINER_ID){
       const firstNonSelf = Array.from(invGlobalContEl.options || []).map(o=>o.value).find(v=>v !== SELF_CONTAINER_ID);
       container_id = firstNonSelf || "";
@@ -3133,6 +3150,8 @@ async function invBuyItem(kind, ref_id, quantity, container_id, currency, opts =
   }
 
 async function saveInvAltName(item_id, alt_name){
+  const sourceId = getInventorySourceId();
+  if (!sourceId) throw new Error("Link an inventory first.");
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}`, {
     method:"PATCH",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
@@ -3145,6 +3164,8 @@ async function saveInvAltName(item_id, alt_name){
 }
 
   async function upgradeQuality(item_id, to){
+  const sourceId = getInventorySourceId();
+  if (!sourceId) throw new Error("Link an inventory first.");
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/upgrade_quality`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -3174,6 +3195,8 @@ async function installUpgrade(item_id, upgrade_id, targetOverride=""){
     }
     target = choice;
   }
+  const sourceId = getInventorySourceId();
+  if (!sourceId) throw new Error("Link an inventory first.");
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/install_upgrade`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -3185,6 +3208,8 @@ async function installUpgrade(item_id, upgrade_id, targetOverride=""){
 }
 
 async function removeUpgrade(item_id, upgrade_id, target=""){
+  const sourceId = getInventorySourceId();
+  if (!sourceId) throw new Error("Link an inventory first.");
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/remove_upgrade`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -3209,6 +3234,8 @@ async function removeUpgrade(item_id, upgrade_id, target=""){
   }
 
   async function downgradeQuality(item_id, to){
+    const sourceId = getInventorySourceId();
+    if (!sourceId) throw new Error("Link an inventory first.");
     const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/downgrade_quality`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -3280,6 +3307,8 @@ async function loadUpgradeOptions(labelEl, selectEl, it){
 }
 
 async function toggleEquipInline(it){
+  const sourceId = getInventorySourceId();
+  if (!sourceId){ alert("Link an inventory first."); return; }
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}`, {
     method:"PATCH",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
@@ -3303,6 +3332,8 @@ function alchemyTierFromPrice(price){
 async function sellItemInline(it, price){
   const currency = invGlobalCurEl?.value || "Jelly";
   const payload = { price, currency };
+  const sourceId = getInventorySourceId();
+  if (!sourceId){ alert("Link an inventory first."); return; }
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/sell`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
@@ -3315,6 +3346,8 @@ async function sellItemInline(it, price){
 
 async function disposeItemInline(it){
   const currency = invGlobalCurEl?.value || "Jelly";
+  const sourceId = getInventorySourceId();
+  if (!sourceId){ alert("Link an inventory first."); return; }
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/dispose`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
@@ -3327,6 +3360,8 @@ async function disposeItemInline(it){
 
 async function useItemInline(it){
   const currency = invGlobalCurEl?.value || "Jelly";
+  const sourceId = getInventorySourceId();
+  if (!sourceId){ alert("Link an inventory first."); return; }
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/use`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
@@ -3339,6 +3374,8 @@ async function useItemInline(it){
 
 async function refillAlchemyInline(it){
   const currency = invGlobalCurEl?.value || "Jelly";
+  const sourceId = getInventorySourceId();
+  if (!sourceId){ alert("Link an inventory first."); return; }
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/refill_alchemy`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
@@ -3350,7 +3387,8 @@ async function refillAlchemyInline(it){
 }
 
 async function toggleContainerInclude(containerId, include){
-  if (!SELECTED_INV_ID || !containerId) return;
+  const sourceId = getInventorySourceId();
+  if (!sourceId || !containerId) return;
   try{
     const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/containers/${encodeURIComponent(containerId)}`, {
       method:"PATCH",
@@ -3367,7 +3405,8 @@ async function toggleContainerInclude(containerId, include){
 }
 
 async function moveItemToContainer(it, containerId){
-  if (!SELECTED_INV_ID || !containerId) return;
+  const sourceId = getInventorySourceId();
+  if (!sourceId || !containerId) return;
   if (it.equipped===false && containerId === SELF_CONTAINER_ID){
     alert('Only equipped items can be on Self.');
     return;
@@ -3387,7 +3426,8 @@ async function moveItemToContainer(it, containerId){
 }
 
 async function deleteContainer(containerId){
-  if (!SELECTED_INV_ID || !containerId) return;
+  const sourceId = getInventorySourceId();
+  if (!sourceId || !containerId) return;
   if (!confirm('Delete this container? Items will be moved to another container.')) return;
   try{
     const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/containers/${encodeURIComponent(containerId)}`, {
@@ -4294,9 +4334,9 @@ async function renderAddedSchools(){
       </div>
       <span class="tag">${(s.school_type || s.type || '').toUpperCase()}</span>
       <div class="row" style="gap:6px; flex-wrap:wrap;">
-        <button class="btn small" data-move="up" data-id="${id}" ${isFirst ? 'disabled' : ''}>Up</button>
-        <button class="btn small" data-move="down" data-id="${id}" ${isLast ? 'disabled' : ''}>Down</button>
-        <button class="btn small" data-remove="${id}">Remove</button>
+        <button class="btn small" data-move="up" data-id="${id}" ${isFirst ? 'disabled' : ''}>↑</button>
+        <button class="btn small" data-move="down" data-id="${id}" ${isLast ? 'disabled' : ''}>↓</button>
+        <button class="btn small" data-remove="${id}">X</button>
       </div>
     `;
     const remBtn = div.querySelector('button[data-remove]');
@@ -4451,7 +4491,7 @@ function renderSpellRows(){
         <option value="learnt" ${status==="learnt"?"selected":""}>Prepared</option>
         </select>
       </td>
-      <td><button class="btn small" data-remove="${sp.id}">Remove</button></td>
+      <td><button class="btn small" data-remove="${sp.id}">X</button></td>
     `;
     slSpellsBody.appendChild(tr);
   });
@@ -5060,7 +5100,7 @@ function renderExpertisePanel(meta, docs){
             <strong>${entry.name || entry.id}</strong>
             <span class="tag">Rank ${rank}</span>
           </div>
-          <button class="btn small exp-remove" data-id="${entry.id}">Remove</button>
+          <button class="btn small exp-remove" data-id="${entry.id}">X</button>
         </div>
         ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
         ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
@@ -5131,7 +5171,7 @@ function renderDivineManifestationPanel(meta, docs){
             <strong>${entry.name || entry.id}</strong>
             <span class="tag">Rank ${rank}</span>
           </div>
-          <button class="btn small dima-remove" data-id="${entry.id}">Remove</button>
+          <button class="btn small dima-remove" data-id="${entry.id}">X</button>
         </div>
         ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
         ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
