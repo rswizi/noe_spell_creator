@@ -278,32 +278,40 @@ function normalizeCharKey(token){
 }
 
 function parsePrereqRules(text){
-  const out = {};
+  const out = { char_order: [], char_order_any: [] };
   const lines = String(text||'')
     .split(/\r?\n/)
     .map(l=> l.replace(/^\s*[-*]\s*/,'').trim())
     .filter(Boolean);
-  if (!lines.length) return out;
-  const highestRe = /([a-zA-Z,\s]+)\s+must be your highest characteristic/i;
-  const secondRe = /([a-zA-Z,\s]+)\s+must be your second highest characteristic/i;
-  const thirdRe = /([a-zA-Z,\s]+)\s+must be your third highest characteristic/i;
+  if (!lines.length) return {};
+  const baseRe = /^(.+?)\s+(?:must|should|needs|need|requires|require|has to|is required to)\s+(?:be\s+)?(?:at\s+least\s+)?(?:your\s+)?(highest|second|third)(?:\s*[-\s]*highest)?\s+characteristic/i;
+  const topRe = /^(.+?)\s+(?:must|should|needs|need|requires|require|has to|is required to)\s+(?:be\s+)?(?:at\s+least\s+)?(?:in|among)\s+your\s+top\s+(1|2|3)\s+characteristics?/i;
   lines.forEach(line=>{
     const clean = line.replace(/\s+/g,' ').trim();
-    const matchHigh = clean.match(highestRe);
-    const matchSecond = clean.match(secondRe);
-    const matchThird = clean.match(thirdRe);
-    const match = matchHigh || matchSecond || matchThird;
-    if (!match) return;
+    let match = clean.match(baseRe);
+    let pos = 0;
+    if (match){
+      pos = match[2] === 'second' ? 2 : (match[2] === 'third' ? 3 : 1);
+    }else{
+      match = clean.match(topRe);
+      if (!match) return;
+      pos = parseInt(match[2], 10);
+    }
     const raw = match[1] || '';
-    const parts = raw.split(/or|,|\//i).map(s=>s.trim()).filter(Boolean);
+    const hasOr = /\bor\b|\/|\\/.test(raw.toLowerCase());
+    const parts = raw.split(/\b(?:or|and)\b|,|\//i).map(s=>s.trim()).filter(Boolean);
     const keys = parts.map(normalizeCharKey).filter(Boolean);
-    const pos = matchSecond ? 2 : (matchThird ? 3 : 1);
+    if (!keys.length || !pos) return;
     if (keys.length === 1){
-      out.char_order = [{ key: keys[0], position: pos }];
-    }else if (keys.length > 1){
-      out.char_order_any = [{ position: pos, keys }];
+      out.char_order.push({ key: keys[0], position: pos });
+    }else if (hasOr){
+      out.char_order_any.push({ position: pos, keys });
+    }else{
+      keys.forEach(k=> out.char_order.push({ key: k, position: pos }));
     }
   });
+  if (!out.char_order.length) delete out.char_order;
+  if (!out.char_order_any.length) delete out.char_order_any;
   return out;
 }
 function normalizeActionLabel(label){
