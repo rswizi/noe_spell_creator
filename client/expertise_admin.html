@@ -239,8 +239,12 @@
   </div>
 
 <script>
-const token = localStorage.getItem('auth_token') || "";
-const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+function getToken(){ return localStorage.getItem('auth_token') || ''; }
+function setCookieToken(tok){ if(!tok) return; document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
+function authHeaders(){
+  const t=getToken(); if(t) setCookieToken(t);
+  return t ? { "Authorization": "Bearer " + t, "X-Auth-Token": t } : {};
+}
 const $ = s=>document.querySelector(s);
 let ABILITIES = [];
 let ITEMS = [];
