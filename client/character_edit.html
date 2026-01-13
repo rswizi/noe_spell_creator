@@ -5213,14 +5213,19 @@ async function refreshArchetypeAbilities(){
       div.className = 'abi-item';
       const titleKey = abilityColorKey(a);
       const titleText = a.name || id;
+      const hasChoice = abilityHasChoice(a);
       div.innerHTML = `
         <div class="grow">
           <div><strong class="title-color-target">${titleText}</strong></div>
           <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
         </div>
         <span class="tag">Archetype</span>
+        ${hasChoice ? '<div class="row" style="gap:6px; flex-wrap:wrap;"><button class="btn small mod-config" title="Configure choices">Configure</button></div>' : ''}
         `;
       registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
+      if (hasChoice){
+        div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
+      }
       arcAbilitiesEl.appendChild(div);
     });
     recomputePassiveAgg();
@@ -5365,14 +5370,19 @@ function renderExpertisePanel(meta, docs){
       row.className = 'abi-item';
       const titleKey = abilityColorKey(a);
       const titleText = a.name || id;
+      const hasChoice = abilityHasChoice(a);
       row.innerHTML = `
         <div class="grow">
           <div><strong class="title-color-target">${titleText}</strong></div>
           <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
         </div>
         <span class="tag">Expertise</span>
+        ${hasChoice ? '<div class="row" style="gap:6px; flex-wrap:wrap;"><button class="btn small mod-config" title="Configure choices">Configure</button></div>' : ''}
       `;
       registerTitleColorTarget(row.querySelector('.title-color-target'), titleKey, titleText);
+      if (hasChoice){
+        row.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
+      }
       list.appendChild(row);
     });
     div.appendChild(list);
@@ -5442,14 +5452,19 @@ function renderDivineManifestationPanel(meta, docs){
       row.className = 'abi-item';
       const titleKey = abilityColorKey(a);
       const titleText = a.name || id;
+      const hasChoice = abilityHasChoice(a);
       row.innerHTML = `
         <div class="grow">
           <div><strong class="title-color-target">${titleText}</strong></div>
           <div class="muted" style="font-size:.85rem">${a.description || ''}</div>
         </div>
         <span class="tag">Divine Manifestation</span>
+        ${hasChoice ? '<div class="row" style="gap:6px; flex-wrap:wrap;"><button class="btn small mod-config" title="Configure choices">Configure</button></div>' : ''}
       `;
       registerTitleColorTarget(row.querySelector('.title-color-target'), titleKey, titleText);
+      if (hasChoice){
+        row.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
+      }
       list.appendChild(row);
     });
     div.appendChild(list);

@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Expertise / Divine Manifestation Admin</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    :root { color-scheme: dark; }
+    body{
+      margin:0;
+      background:radial-gradient(circle at 20% 20%, #18151d 0%, #0b0b0f 45%, #050508 100%);
+      color:#f3f3f5;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      min-height:100vh;
+    }
+    .page{max-width:1080px;margin:0 auto;padding:24px 16px 60px;}
+    h1{margin:0 0 10px;font-size:24px;}
+    .muted{opacity:.8;font-size:.95rem;}
+    .card{
+      border:1px solid #2a2a3a;
+      border-radius:14px;
+      padding:14px;
+      background:linear-gradient(145deg,#12121a,#0e0e14);
+      box-shadow:0 18px 40px rgba(0,0,0,0.45);
+      margin-bottom:14px;
+    }
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+    .stack{display:flex;flex-direction:column;gap:8px;}
+    label{font-size:.92rem;}
+    input,select,textarea{
+      padding:9px 11px;
+      border:1px solid #2a2a3a;
+      border-radius:10px;
+      background:#181821;
+      color:#f3f3f5;
+      min-width:0;
+    }
+    textarea{min-height:70px;resize:vertical;}
+    button{
+      padding:9px 12px;
+      border:1px solid #c53535;
+      border-radius:10px;
+      background:#c53535;
+      color:#fff;
+      cursor:pointer;
+      transition:.15s ease;
+    }
+    button.subtle{background:#1c1c24;border-color:#3a3a46;color:#e5e5e8;}
+    button:hover{filter:brightness(1.08);}
+    table{width:100%;border-collapse:collapse;}
+    th,td{border-bottom:1px solid #222;padding:8px;text-align:left;}
+    .pill{padding:4px 8px;border-radius:999px;border:1px solid #333;background:#14141b;}
+    .section-title{margin:0 0 6px;font-size:16px;}
+    .two-col{display:grid;grid-template-columns:1fr;gap:12px;}
+    @media(min-width:900px){ .two-col{grid-template-columns:2fr 1fr;} }
+    .rule-row,.rank-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+    .rule-row select,.rule-row input{min-width:120px;}
+    .rank-row select{min-width:200px; flex:1;}
+    .pending-item{border:1px solid #2a2a3a;border-radius:12px;padding:10px;margin-top:8px;background:#12121a;}
+    .pending-item.pending{border-color:#5a4f00;box-shadow:0 0 0 1px #5a4f00 inset;}
+    .pending-item.rejected{border-color:#6b1b1b;box-shadow:0 0 0 1px #6b1b1b inset;}
+    .status-pill.pending{color:#ffd34d;border-color:#5a4f00;background:#2b2500;}
+    .status-pill.rejected{color:#ff9090;border-color:#6b1b1b;background:#2a1010;}
+    .status-pill.approved{color:#7dffb0;border-color:#1d4d2d;background:#0f2a18;}
+    .rich-editor { border:1px solid #333; border-radius:12px; background:#0f0f0f; }
+    .rich-toolbar { display:flex; flex-wrap:wrap; gap:6px; padding:6px 8px; border-bottom:1px solid #1f1f1f; }
+    .rich-toolbar button { padding:6px 8px; font-size:.9rem; border-radius:8px; border:1px solid #2d2d2d; background:#161616; color:#f3f3f3; cursor:pointer; }
+    .rich-toolbar button:hover { background:#1f1f1f; }
+    .rich-toolbar button:active { background:#222; }
+    .rich-area { min-height:130px; padding:10px; outline:none; }
+    .rich-area:empty:before { content: attr(data-placeholder); color:#777; }
+    .rich-area table { width:100%; border-collapse:collapse; margin-top:6px; }
+    .rich-area th, .rich-area td { border:1px solid #333; padding:6px; }
+    .modal-backdrop {
+      position:fixed; inset:0; background:rgba(0,0,0,0.7); display:none; align-items:center; justify-content:center; z-index:50;
+    }
+    .modal-card {
+      width:min(720px, 92vw); max-height:86vh; overflow:auto;
+      border:1px solid #2b2b2b; border-radius:14px; background:#121212; padding:16px;
+      box-shadow:0 18px 40px rgba(0,0,0,0.6);
+    }
+    .dup-list { display:grid; gap:8px; margin-top:10px; }
+    .dup-item {
+      display:flex; gap:10px; align-items:flex-start; border:1px solid #2a2a2a; border-radius:10px; padding:8px;
+      background:#141414;
+    }
+    .dup-item input { margin-top:3px; }
+    .dup-name { font-weight:600; }
+    .dup-meta { font-size:.85rem; opacity:.8; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1 id="ed-title">Expertise / Divine Manifestation (Moderator)</h1>
+    <div class="muted" id="ed-subtitle" style="margin-bottom:14px;">Edit linked skills, prereqs, tags, and rank abilities for Expertise or Divine Manifestation entries.</div>
+
+    <div class="row" style="margin-bottom:12px; justify-content:space-between;">
+      <div class="row" style="gap:10px; align-items:center;">
+        <h1 style="margin:0;">Expertise / Divine Manifestation Editor</h1>
+      </div>
+      <a class="subtle" href="abilities_home.html" style="text-decoration:none; padding:8px 12px; border-radius:10px; border:1px solid #3a3a46; background:#1c1c24; color:#e5e5e8;">Back</a>
+    </div>
+    <div class="two-col">
+      <div class="card stack">
+        <div class="row">
+          <label for="ed-kind">Kind</label>
+          <select id="ed-kind">
+            <option value="Expertise">Expertise</option>
+            <option value="Divine Manifestation">Divine Manifestation</option>
+          </select>
+          <input id="ed-name" placeholder="Name" style="flex:1;">
+          <button id="ed-save">Save / Update</button>
+          <button class="subtle" id="ed-new">New</button>
+          <input type="hidden" id="ed-editing" value="">
+        </div>
+        <div class="row">
+          <label for="ed-tags">Tags</label>
+          <input id="ed-tags" placeholder="Comma-separated tags" style="flex:1;">
+        </div>
+        <div class="row">
+          <label for="ed-skills">Linked Skills</label>
+          <select id="ed-skills" multiple size="6" style="flex:1;">
+            <option value="Technicity">Technicity (Reflex)</option>
+            <option value="Dodge">Dodge (Reflex)</option>
+            <option value="Counter">Counter (Reflex)</option>
+            <option value="Reactivity">Reactivity (Reflex)</option>
+            <option value="Accuracy">Accuracy (Dexterity)</option>
+            <option value="Evasion">Evasion (Dexterity)</option>
+            <option value="Stealth">Stealth (Dexterity)</option>
+            <option value="Acrobatics">Acrobatics (Dexterity)</option>
+            <option value="Brutality">Brutality (Body)</option>
+            <option value="Blocking">Blocking (Body)</option>
+            <option value="Resistance">Resistance (Body)</option>
+            <option value="Athletics">Athletics (Body)</option>
+            <option value="Survival">Survival (Wisdom)</option>
+            <option value="Education">Education (Wisdom)</option>
+            <option value="Perception">Perception (Wisdom)</option>
+            <option value="Psychology">Psychology (Wisdom)</option>
+            <option value="Investigation">Investigation (Wisdom)</option>
+            <option value="Taming">Taming (Presence)</option>
+            <option value="Charm">Charm (Presence)</option>
+            <option value="Charisma">Charisma (Presence)</option>
+            <option value="Deception">Deception (Presence)</option>
+            <option value="Persuasion">Persuasion (Presence)</option>
+            <option value="Aura">Aura (Magic)</option>
+            <option value="Incantation">Incantation (Magic)</option>
+            <option value="Enchantment">Enchantment (Magic)</option>
+            <option value="Restoration">Restoration (Magic)</option>
+            <option value="Potential">Potential (Magic)</option>
+            <option value="Intimidation">Intimidation (Willpower)</option>
+            <option value="Spirit">Spirit (Willpower)</option>
+            <option value="Instinct">Instinct (Willpower)</option>
+            <option value="Absorption">Absorption (Willpower)</option>
+            <option value="Crafting">Crafting (Tech)</option>
+            <option value="Sleight of hand">Sleight of hand (Tech)</option>
+            <option value="Alchemy">Alchemy (Tech)</option>
+            <option value="Medicine">Medicine (Tech)</option>
+            <option value="Engineering">Engineering (Tech)</option>
+          </select>
+          <span class="muted">Hold Ctrl to select multiple.</span>
+        </div>
+        <div class="row">
+          <textarea id="ed-prereq-text" placeholder="Prerequisite description" style="flex:1;"></textarea>
+        </div>
+        <div>
+          <label style="display:block; margin:2px 0 6px;">Description</label>
+          <div id="ed-desc-editor" class="rich-editor">
+            <div class="rich-toolbar">
+              <button type="button" data-cmd="bold" title="Bold">Bold</button>
+              <button type="button" data-cmd="italic" title="Italic">Italic</button>
+              <button type="button" data-cmd="underline" title="Underline">Underline</button>
+              <button type="button" data-cmd="table" title="Insert 2x2 table">Table</button>
+              <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+            </div>
+            <div class="rich-area" contenteditable="true" data-placeholder="Describe the source and its theme."></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin:0;">
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <div class="section-title">Prerequisite rules</div>
+            <button class="subtle" id="pr-add">+ Add rule</button>
+          </div>
+          <div id="pr-list" class="stack"></div>
+        </div>
+
+        <div class="card" style="margin:0;">
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <div class="section-title">Ranks</div>
+            <button class="subtle" id="rk-add">+ Add rank</button>
+          </div>
+          <div class="row" style="margin:6px 0 10px;">
+            <label for="ed-ability-tag-filter">Filter abilities by tag</label>
+            <input id="ed-ability-tag-filter" placeholder="Comma-separated tags" style="flex:1;">
+            <label for="ed-ability-source-filter">Source</label>
+            <input id="ed-ability-source-filter" placeholder="Source category or ref" style="flex:1;">
+          </div>
+          <div id="rank-list" class="stack"></div>
+        </div>
+        <div id="ed-status" class="muted"></div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <div>
+            <div class="section-title" id="ed-list-title">Existing entries</div>
+            <div class="muted" id="ed-list-subtitle" style="margin-top:2px;">Select to edit or delete.</div>
+          </div>
+          <div class="row">
+            <button class="subtle" id="ed-refresh">Refresh</button>
+            <button class="subtle" id="ed-clear-dup">Clear Duplicates</button>
+          </div>
+        </div>
+        <div id="ed-list" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card" id="pending-panel" style="display:none;">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <div class="section-title" id="pending-title">Pending submissions</div>
+          <button class="subtle" id="pending-refresh">Refresh</button>
+        </div>
+        <div id="pending-list" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dup-modal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card">
+      <h2 style="margin:0 0 4px;">Clear Duplicates</h2>
+      <div class="muted" id="dup-subtitle">Review duplicates and choose which to keep.</div>
+      <div id="dup-list" class="dup-list"></div>
+      <div class="modal-actions">
+        <button class="subtle" id="dup-skip" type="button">Skip</button>
+        <button id="dup-next" type="button">Next</button>
+        <button class="subtle" id="dup-cancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const token = localStorage.getItem('auth_token') || "";
+const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+const $ = s=>document.querySelector(s);
+let ABILITIES = [];
+let ITEMS = [];
+let DUP_GROUPS = [];
+let DUP_INDEX = 0;
+let ROLE = '';
+const kindEl = document.getElementById('ed-kind');
+const nameEl = document.getElementById('ed-name');
+const tagsEl = document.getElementById('ed-tags');
+const skillsEl = document.getElementById('ed-skills');
+const prereqTextEl = document.getElementById('ed-prereq-text');
+const editingEl = document.getElementById('ed-editing');
+const statusEl = document.getElementById('ed-status');
+const listEl = document.getElementById('ed-list');
+const listTitleEl = document.getElementById('ed-list-title');
+const listSubtitleEl = document.getElementById('ed-list-subtitle');
+const abilityTagFilterEl = document.getElementById('ed-ability-tag-filter');
+const abilitySourceFilterEl = document.getElementById('ed-ability-source-filter');
+const pendingPanel = document.getElementById('pending-panel');
+const pendingListEl = document.getElementById('pending-list');
+const pendingRefreshBtn = document.getElementById('pending-refresh');
+const pendingTitleEl = document.getElementById('pending-title');
+const clearDupBtn = document.getElementById('ed-clear-dup');
+const dupModal = document.getElementById('dup-modal');
+const dupSubtitle = document.getElementById('dup-subtitle');
+const dupListEl = document.getElementById('dup-list');
+const dupNextBtn = document.getElementById('dup-next');
+const dupSkipBtn = document.getElementById('dup-skip');
+const dupCancelBtn = document.getElementById('dup-cancel');
+
+function setupRichTextEditor(containerId, placeholder=''){
+  const container = document.getElementById(containerId);
+  if (!container) throw new Error('Missing rich text container '+containerId);
+  const area = container.querySelector('.rich-area');
+  if (!area) throw new Error('Missing rich text area in '+containerId);
+  if (placeholder) area.setAttribute('data-placeholder', placeholder);
+
+  const sanitizePastedHtml = (html, text) => {
+    if (html){
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll('*').forEach(el=>{
+        el.removeAttribute('color');
+        el.style.color = '';
+        if (el.getAttribute('style') === '') el.removeAttribute('style');
+      });
+      return doc.body.innerHTML;
+    }
+    if (text != null){
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML.replace(/\n/g, '<br>');
+    }
+    return '';
+  };
+  area.addEventListener('paste', (e)=>{
+    const html = e.clipboardData?.getData('text/html');
+    const text = e.clipboardData?.getData('text/plain');
+    if (html || text){
+      e.preventDefault();
+      const cleaned = sanitizePastedHtml(html, text);
+      if (cleaned) document.execCommand('insertHTML', false, cleaned);
+    }
+  });
+
+  const normalizeHtml = (html)=>{
+    const text = (area.textContent || '').replace(/\u00a0/g, ' ').trim();
+    const raw = (html || '').trim();
+    if (!text) return '';
+    return raw;
+  };
+
+  container.querySelectorAll('[data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.preventDefault();
+      area.focus();
+      const cmd = btn.dataset.cmd;
+      if (cmd === 'table'){
+        const tbl = '<table class="rte-table"><tbody><tr><td>Cell 1</td><td>Cell 2</td></tr><tr><td>Cell 3</td><td>Cell 4</td></tr></tbody></table>';
+        document.execCommand('insertHTML', false, tbl);
+      }else{
+        document.execCommand(cmd, false, null);
+      }
+    });
+  });
+
+  return {
+    el: area,
+    getHTML: ()=> normalizeHtml(area.innerHTML),
+    setHTML: (html='')=>{ area.innerHTML = html || ''; },
+  };
+}
+
+function getKindInfo(){
+  const kind = (kindEl.value || 'Expertise').trim().toLowerCase();
+  if (kind.includes('divine')){
+    return {
+      label: 'Divine Manifestation',
+      endpoint: '/divine_manifestations',
+      listKey: 'divine_manifestations',
+      itemKey: 'divine_manifestation',
+      submissionType: 'divine_manifestation'
+    };
+  }
+  return {
+    label: 'Expertise',
+    endpoint: '/expertise',
+    listKey: 'expertises',
+    itemKey: 'expertise',
+    submissionType: 'expertise'
+  };
+}
+
+const descEditor = setupRichTextEditor('ed-desc-editor', 'Describe the source and its theme.');
+
+function parseTagFilter(val){
+  return String(val || '').split(',').map(t=>t.trim().toLowerCase()).filter(Boolean);
+}
+function abilityMatchesTags(a, tags){
+  if (!tags.length) return true;
+  const abTags = (a?.tags || []).map(t=> String(t || '').toLowerCase()).filter(Boolean);
+  return tags.some(t=> abTags.includes(t));
+}
+function parseSourceFilter(val){
+  return String(val || '').trim().toLowerCase();
+}
+function abilityMatchesSource(a, src){
+  if (!src) return true;
+  const cat = String(a?.source_category || '').toLowerCase();
+  const ref = String(a?.source_ref || '').toLowerCase();
+  return cat.includes(src) || ref.includes(src);
+}
+function filteredAbilities(){
+  const tags = parseTagFilter(abilityTagFilterEl?.value);
+  const src = parseSourceFilter(abilitySourceFilterEl?.value);
+  if (!tags.length && !src) return ABILITIES.slice();
+  return ABILITIES.filter(a=> abilityMatchesTags(a, tags) && abilityMatchesSource(a, src));
+}
+
+function optionLabelAbility(a){
+  return `${a.name || 'Ability'} (${a.id})`;
+}
+
+function populateAbilitySelect(sel, selectedId=""){
+  const base = filteredAbilities();
+  const selected = selectedId ? ABILITIES.find(a=> a.id === selectedId) : null;
+  const list = selected && !base.some(a=> a.id === selectedId) ? [selected, ...base] : base;
+  sel.innerHTML = `<option value="">-- choose ability --</option>` + list.map(a=>`<option value="${a.id}" ${a.id===selectedId?'selected':''}>${optionLabelAbility(a)}</option>`).join("");
+}
+
+function populateReplaceSelect(sel, selectedId=""){
+  sel.innerHTML = `<option value="">-- none --</option>` + ABILITIES.map(a=>`<option value="${a.id}" ${a.id===selectedId?'selected':''}>${optionLabelAbility(a)}</option>`).join("");
+}
+
+
+function setDupModalOpen(open){
+  if (!dupModal) return;
+  dupModal.style.display = open ? 'flex' : 'none';
+  dupModal.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+
+function normName(name){
+  return String(name || '').trim().toLowerCase();
+}
+
+function idNum(id){
+  const n = parseInt(String(id || '').replace(/\D/g, ''), 10);
+  return Number.isFinite(n) ? n : -1;
+}
+
+function buildDuplicateGroups(list){
+  const byName = new Map();
+  (list || []).forEach(a=>{
+    const key = normName(a.name);
+    if (!key) return;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(a);
+  });
+  const groups = Array.from(byName.values()).filter(g=>g.length > 1);
+  groups.sort((a,b)=> (a[0]?.name || '').localeCompare(b[0]?.name || ''));
+  return groups;
+}
+
+function getDefaultKeepId(group){
+  if (!group || !group.length) return '';
+  let best = group[0];
+  group.forEach(a=>{
+    if (idNum(a.id) > idNum(best.id)) best = a;
+  });
+  return best.id || '';
+}
+
+function renderDuplicateGroup(){
+  if (!DUP_GROUPS.length || DUP_INDEX >= DUP_GROUPS.length){
+    setDupModalOpen(false);
+    if (statusEl) statusEl.textContent = 'Duplicate cleanup complete.';
+    loadList();
+    return;
+  }
+  const group = DUP_GROUPS[DUP_INDEX];
+  const total = DUP_GROUPS.length;
+  const title = group[0]?.name || 'Duplicate';
+  if (dupSubtitle) dupSubtitle.textContent = `Set ${DUP_INDEX + 1} of ${total} • ${title}`;
+  if (dupListEl) dupListEl.innerHTML = '';
+  const defaultKeep = getDefaultKeepId(group);
+  group.forEach(a=>{
+    const row = document.createElement('label');
+    row.className = 'dup-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = a.id || '';
+    cb.checked = (a.id === defaultKeep);
+    const info = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'dup-name';
+    name.textContent = a.name || '(unnamed)';
+    const meta = document.createElement('div');
+    meta.className = 'dup-meta';
+    meta.textContent = [a.id, a.hybrid ? 'Hybrid' : 'Standard'].filter(Boolean).join(' • ');
+    info.appendChild(name);
+    info.appendChild(meta);
+    row.appendChild(cb);
+    row.appendChild(info);
+    dupListEl.appendChild(row);
+  });
+}
+
+async function deleteItemById(id){
+  const info = getKindInfo();
+  const target = String(id || '').trim();
+  if (!target) throw new Error('Missing id');
+  const r = await fetch(`${info.endpoint}/${encodeURIComponent(target)}`, { method:"DELETE", headers: authHeaders() });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success") throw new Error(j.message || "Delete failed");
+}
+
+async function applyDuplicateSelection(){
+  const group = DUP_GROUPS[DUP_INDEX] || [];
+  const keepIds = Array.from(dupListEl.querySelectorAll('input[type="checkbox"]:checked')).map(cb=>cb.value);
+  if (!keepIds.length){
+    alert('Select at least one entry to keep.');
+    return;
+  }
+  const toDelete = group.filter(a=>!keepIds.includes(a.id));
+  if (!toDelete.length){
+    DUP_INDEX++;
+    renderDuplicateGroup();
+    return;
+  }
+  dupNextBtn.disabled = true;
+  dupSkipBtn.disabled = true;
+  try{
+    for (const a of toDelete){
+      await deleteItemById(a.id);
+    }
+    DUP_INDEX++;
+    renderDuplicateGroup();
+  }catch(err){
+    if (statusEl) statusEl.textContent = 'Duplicate delete failed: ' + (err.message || err);
+  }finally{
+    dupNextBtn.disabled = false;
+    dupSkipBtn.disabled = false;
+  }
+}
+
+function skipDuplicateGroup(){
+  DUP_INDEX++;
+  renderDuplicateGroup();
+}
+
+async function checkMe(){
+  try{
+    const res = await fetch("/auth/me", { headers: authHeaders() });
+    const j = await res.json().catch(()=>({}));
+    if (j.status === "success"){
+      ROLE = (j.role || "").toLowerCase();
+      if (ROLE === "moderator" || ROLE === "admin"){
+        if (pendingPanel) pendingPanel.style.display = "";
+        loadPendingSubmissions().catch(()=>{});
+      }
+    }
+  }catch{}
+}
+
+async function loadPendingSubmissions(){
+  const info = getKindInfo();
+  if (!pendingListEl) return;
+  if (pendingTitleEl) pendingTitleEl.textContent = `Pending ${info.label} Submissions`;
+  const r = await fetch(`/submissions?type=${encodeURIComponent(info.submissionType)}`, { headers: authHeaders() });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){
+    pendingListEl.innerHTML = `<div class="muted">${j.message || "Load failed"}</div>`;
+    return;
+  }
+  const subs = j.submissions || [];
+  if (!subs.length){
+    pendingListEl.innerHTML = '<div class="muted">No submissions.</div>';
+    return;
+  }
+  pendingListEl.innerHTML = "";
+  subs.forEach(s=>{
+    const status = (s.status || "pending").toLowerCase();
+    const name = s.payload?.name || s.id || "Submission";
+    const div = document.createElement("div");
+    div.className = `pending-item ${status}`;
+    div.innerHTML = `
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>${name}</strong>
+        <span class="pill status-pill ${status}">${status}</span>
+      </div>
+      <div class="muted">${s.submitter || "unknown"} - ${s.created_at || ""}</div>
+      ${s.review_note ? `<div class="muted">Note: ${s.review_note}</div>` : ""}
+      <div class="row" style="margin-top:6px;">
+        <button class="subtle" data-action="load">Load</button>
+        <button class="subtle" data-action="approve">Approve</button>
+        <button class="subtle" data-action="reject">Reject</button>
+      </div>
+    `;
+    div.querySelector('[data-action="load"]').addEventListener("click", ()=>{
+      const payload = s.payload || {};
+      loadToForm({ ...payload, id: "" });
+      editingEl.value = "";
+      if (statusEl) statusEl.textContent = "Loaded pending submission.";
+    });
+    const approveBtn = div.querySelector('[data-action="approve"]');
+    const rejectBtn = div.querySelector('[data-action="reject"]');
+    if (status !== "pending"){
+      approveBtn.disabled = true;
+      rejectBtn.disabled = true;
+    }
+    approveBtn.addEventListener("click", async ()=>{
+      await fetch(`/submissions/${encodeURIComponent(s.id)}/approve`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body:"{}" });
+      await loadPendingSubmissions();
+      await loadList();
+    });
+    rejectBtn.addEventListener("click", async ()=>{
+      const note = prompt("Reason for rejection (optional):") || "";
+      await fetch(`/submissions/${encodeURIComponent(s.id)}/reject`, { method:"POST", headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify({ note }) });
+      await loadPendingSubmissions();
+    });
+    pendingListEl.appendChild(div);
+  });
+}
+
+function ruleRow(rule={}){
+  const div = document.createElement('div');
+  div.className = 'rule-row';
+  const val = rule.value ?? '';
+  const type = rule.type || 'highest';
+  const key = rule.key || '';
+  div.innerHTML = `
+    <select class="pr-attr">
+      <option value="">Characteristic</option>
+      <option value="reflex">Reflex</option><option value="dexterity">Dexterity</option><option value="body">Body</option>
+      <option value="wisdom">Wisdom</option><option value="presence">Presence</option><option value="magic">Magic</option>
+      <option value="willpower">Willpower</option><option value="tech">Tech</option>
+    </select>
+    <select class="pr-type">
+      <option value="highest">Highest</option>
+      <option value="second">Second highest</option>
+      <option value="third">Third highest</option>
+      <option value="highest_any">Any of the following are the Highest</option>
+      <option value="second_any">Any of the following are the Second Highest</option>
+      <option value="min">Not lower than</option>
+    </select>
+    <input class="pr-val" type="number" placeholder="Value" style="width:100px; display:${type==='min'?'block':'none'};" value="${type==='min'?val:''}">
+    <input class="pr-any" type="text" placeholder="Any of: REF, BOD, DEX" style="min-width:220px; display:${(type==='highest_any'||type==='second_any')?'block':'none'};" value="${(rule.keys||[]).join(', ')}">
+    <button class="subtle pr-del">Remove</button>
+  `;
+  div.querySelector('.pr-attr').value = key;
+  div.querySelector('.pr-type').value = type;
+  div.querySelector('.pr-type').addEventListener('change', (e)=>{
+    const isMin = e.target.value === 'min';
+    const isAny = e.target.value === 'highest_any' || e.target.value === 'second_any';
+    div.querySelector('.pr-val').style.display = isMin ? 'block' : 'none';
+    div.querySelector('.pr-any').style.display = isAny ? 'block' : 'none';
+    div.querySelector('.pr-attr').disabled = isAny;
+  });
+  if (type === 'highest_any' || type === 'second_any') div.querySelector('.pr-attr').disabled = true;
+  div.querySelector('.pr-del').addEventListener('click', ()=>div.remove());
+  return div;
+}
+
+function rankRow(r={}){
+  const div = document.createElement('div');
+  div.className = 'rank-row';
+  const rankVal = Number.isFinite(r.rank) ? r.rank : '';
+  div.dataset.version = r.version != null ? String(r.version) : '1';
+  div.dataset.originalRank = r.original_rank != null ? String(r.original_rank) : String(rankVal || '');
+  div.dataset.replacesId = r.replaces_id != null ? String(r.replaces_id) : '';
+  div.dataset.note = r.note != null ? String(r.note) : '';
+  div.innerHTML = `
+    <div class="pill">Rank</div>
+    <input class="rk-num" type="number" min="1" value="${rankVal}" style="width:90px;">
+    <select class="rk-abil" style="flex:1; min-width:220px;"></select>
+    <button class="subtle rk-del">Remove</button>
+  `;
+  populateAbilitySelect(div.querySelector('.rk-abil'), r.ability_id || r.ability || r.id || "");
+  div.querySelector('.rk-del').addEventListener('click', ()=>div.remove());
+  return div;
+}
+
+function collectDoc(){
+  const ranks = [];
+  const seen = new Set();
+  const rows = document.querySelectorAll('#rank-list .rank-row');
+  for (const row of rows){
+    const rank = parseInt(row.querySelector('.rk-num').value, 10);
+    const abilityId = row.querySelector('.rk-abil').value.trim();
+    if (!rank || !Number.isFinite(rank)) continue;
+    if (!abilityId) throw new Error(`Rank ${rank} missing ability_id`);
+    if (seen.has(rank)) throw new Error(`Duplicate rank ${rank}`);
+    seen.add(rank);
+    const version = parseInt(row.dataset.version || '1', 10) || 1;
+    const originalRank = parseInt(row.dataset.originalRank || String(rank), 10) || rank;
+    const replacesId = String(row.dataset.replacesId || '').trim();
+    const note = String(row.dataset.note || '').trim();
+    ranks.push({
+      rank,
+      ability_id: abilityId,
+      version,
+      original_rank: originalRank,
+      replaces_id: replacesId,
+      note
+    });
+  }
+  ranks.sort((a,b)=> a.rank - b.rank);
+  const charOrder = [];
+  const charOrderAny = [];
+  const charMin = {};
+  document.querySelectorAll('#pr-list .rule-row').forEach(row=>{
+    const attr = row.querySelector('.pr-attr').value;
+    const typ = row.querySelector('.pr-type').value;
+    const val = row.querySelector('.pr-val').value;
+    if(typ === 'highest_any' || typ === 'second_any'){
+      const raw = (row.querySelector('.pr-any').value || '');
+      const keys = raw.split(',').map(s=>s.trim()).filter(Boolean);
+      const pos = typ === 'second_any' ? 2 : 1;
+      if (keys.length) charOrderAny.push({ position: pos, keys });
+      return;
+    }
+    if(!attr) return;
+    if(typ === 'min'){
+      if(val !== "") charMin[attr] = Number(val);
+    }else{
+      const pos = typ === 'highest' ? 1 : typ === 'second' ? 2 : 3;
+      charOrder.push({key: attr, position: pos});
+    }
+  });
+  const linkedSkills = Array.from(skillsEl?.selectedOptions || []).map(o=> String(o.value || '').trim()).filter(Boolean);
+  const tags = (tagsEl.value || '').split(',').map(t=>t.trim()).filter(Boolean);
+  return {
+    name: (nameEl.value || '').trim(),
+    prereq_text: (prereqTextEl.value || '').trim(),
+    description_html: descEditor.getHTML(),
+    prereq_rules:{
+      char_order: charOrder,
+      char_min: charMin,
+      char_order_any: charOrderAny
+    },
+    linked_skills: linkedSkills,
+    tags,
+    ranks
+  };
+}
+
+function clearForm(){
+  editingEl.value = '';
+  nameEl.value = '';
+  tagsEl.value = '';
+  prereqTextEl.value = '';
+  descEditor.setHTML('');
+  Array.from(skillsEl.options || []).forEach(o=>{ o.selected = false; });
+  const pl = $("#pr-list"); pl.innerHTML = '';
+  pl.appendChild(ruleRow({}));
+  const rl = $("#rank-list"); rl.innerHTML = '';
+  rl.appendChild(rankRow({}));
+  if (statusEl) statusEl.textContent = '';
+}
+
+async function saveDoc(){
+  let body = null;
+  try{
+    body = collectDoc();
+  }catch(err){
+    if (statusEl) statusEl.textContent = err.message || "Validation failed";
+    return;
+  }
+  const info = getKindInfo();
+  const editing = editingEl.value;
+  const path = editing ? `${info.endpoint}/${encodeURIComponent(editing)}` : info.endpoint;
+  const method = editing ? "PUT" : "POST";
+  if (statusEl) statusEl.textContent = "Saving...";
+  const r = await fetch(path, { method, headers:{ "Content-Type":"application/json", ...authHeaders() }, body: JSON.stringify(body)});
+  const j = await r.json().catch(()=>({}));
+  if (j.status === "pending"){ if (statusEl) statusEl.textContent = "Submitted for review."; return; }
+  if (j.status !== "success"){ if (statusEl) statusEl.textContent = j.message || "Save failed"; return; }
+  if (statusEl) statusEl.textContent = "Saved.";
+  editingEl.value = editing || j[info.itemKey]?.id || "";
+  loadList();
+}
+
+function loadToForm(doc){
+  editingEl.value = doc.id || "";
+  nameEl.value = doc.name || "";
+  tagsEl.value = Array.isArray(doc.tags) ? doc.tags.join(", ") : (doc.tags || "");
+  prereqTextEl.value = doc.prereq_text || "";
+  descEditor.setHTML(doc.description_html || doc.description || "");
+  const skillSet = new Set((doc.linked_skills || []).map(s=>String(s)));
+  Array.from(skillsEl.options || []).forEach(o=>{ o.selected = skillSet.has(o.value); });
+  const rl = $("#rank-list"); rl.innerHTML = "";
+  const ranks = doc.ranks || [];
+  if (!ranks.length){
+    rl.appendChild(rankRow({}));
+  }else{
+    ranks.slice().sort((a,b)=> (a.rank||0) - (b.rank||0)).forEach(r=> rl.appendChild(rankRow(r)));
+  }
+  const pl = $("#pr-list"); pl.innerHTML = "";
+  const rules = [];
+  const order = doc.prereq_rules?.char_order || [];
+  order.forEach(r=> rules.push({key:r.key, type: r.position===2?'second': r.position===3?'third':'highest'}));
+  const anyOrder = doc.prereq_rules?.char_order_any || [];
+  anyOrder.forEach(r=>{
+    const pos = Number(r.position || 1);
+    rules.push({ type: pos === 2 ? 'second_any' : 'highest_any', keys: r.keys || [] });
+  });
+  const charMin = doc.prereq_rules?.char_min || {};
+  Object.keys(charMin).forEach(k=> rules.push({key:k, type:'min', value: charMin[k]}));
+  if (!rules.length) rules.push({});
+  rules.forEach(r=> pl.appendChild(ruleRow(r)));
+}
+
+async function loadList(){
+  const info = getKindInfo();
+  if (listTitleEl) listTitleEl.textContent = `Existing ${info.label} Entries`;
+  if (listSubtitleEl) listSubtitleEl.textContent = `Select to edit or delete ${info.label} entries.`;
+  listEl.innerHTML = "Loading...";
+  const r = await fetch(info.endpoint, { headers: authHeaders() });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ listEl.textContent = j.message || "Load failed"; return; }
+  ITEMS = j[info.listKey] || [];
+  listEl.innerHTML = "";
+  ITEMS.forEach(a=>{
+    const div = document.createElement('div'); div.className='card';
+    div.style.marginBottom = "10px";
+    div.innerHTML = `
+      <div class="row" style="justify-content:space-between;">
+        <div><b>${a.name || 'Untitled'}</b></div>
+        <div class="row">
+          <button class="subtle edit">Edit</button>
+          <button class="subtle del">Delete</button>
+        </div>
+      </div>
+      <div class="muted">${a.prereq_text || ''}</div>
+      <div class="muted" style="margin-top:4px;">Ranks: ${(a.ranks||[]).length}</div>
+    `;
+    div.querySelector('.edit').addEventListener('click', ()=> loadToForm(a));
+    div.querySelector('.del').addEventListener('click', async ()=>{
+      if (!confirm(`Delete ${info.label} ${a.name}?`)) return;
+      try{
+        await deleteItemById(a.id);
+        loadList();
+      }catch(err){
+        alert(err.message || "Delete failed");
+      }
+    });
+    listEl.appendChild(div);
+  });
+}
+
+async function loadAbilities(){
+  const resp = await fetch("/abilities", { headers: authHeaders() });
+  const j = await resp.json().catch(()=>({}));
+  if (j.status !== "success") { console.error("Failed to load abilities", j); return; }
+  ABILITIES = j.abilities || [];
+  // refresh selects
+  document.querySelectorAll('.rk-abil').forEach(sel=> populateAbilitySelect(sel, sel.value));
+}
+
+function refreshFilters(){
+  document.querySelectorAll('.rk-abil').forEach(sel=> populateAbilitySelect(sel, sel.value));
+}
+
+function onKindChange(){
+  clearForm();
+  loadList();
+  loadPendingSubmissions();
+}
+
+document.getElementById("ed-save").addEventListener("click", saveDoc);
+document.getElementById("ed-refresh").addEventListener("click", loadList);
+document.getElementById("ed-new").addEventListener("click", clearForm);
+document.getElementById("pr-add").addEventListener("click", ()=> document.getElementById("pr-list").appendChild(ruleRow({})));
+document.getElementById("rk-add").addEventListener("click", ()=>{
+  const rl = document.getElementById("rank-list");
+  rl.appendChild(rankRow({}));
+});
+clearDupBtn?.addEventListener("click", async ()=>{
+  if (statusEl) statusEl.textContent = "Scanning for duplicates...";
+  try{
+    const info = getKindInfo();
+    const r = await fetch(info.endpoint, { headers: authHeaders() });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== "success") throw new Error(j.message || "Load failed");
+    ITEMS = j[info.listKey] || [];
+    DUP_GROUPS = buildDuplicateGroups(ITEMS);
+    DUP_INDEX = 0;
+    if (!DUP_GROUPS.length){
+      if (statusEl) statusEl.textContent = "No duplicates found.";
+      return;
+    }
+    setDupModalOpen(true);
+    renderDuplicateGroup();
+  }catch(err){
+    if (statusEl) statusEl.textContent = "Duplicate scan failed: " + (err.message || err);
+  }
+});
+dupNextBtn?.addEventListener("click", applyDuplicateSelection);
+dupSkipBtn?.addEventListener("click", skipDuplicateGroup);
+dupCancelBtn?.addEventListener("click", ()=> setDupModalOpen(false));
+pendingRefreshBtn?.addEventListener("click", loadPendingSubmissions);
+kindEl.addEventListener('change', onKindChange);
+abilityTagFilterEl?.addEventListener('input', refreshFilters);
+abilitySourceFilterEl?.addEventListener('input', refreshFilters);
+
+(()=>{
+  const rl = document.getElementById("rank-list");
+  rl.innerHTML = "";
+  rl.appendChild(rankRow({}));
+})();
+document.getElementById("pr-list").appendChild(ruleRow({}));
+
+loadAbilities().then(loadList);
+checkMe();
+</script>
+</body>
+</html>
