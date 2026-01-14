@@ -547,10 +547,28 @@
               <div class="abi-grid" style="margin-top:16px;">
                 <div class="abi-bucket">
                   <h3>Passive</h3>
+                  <div class="row" style="gap:6px; align-items:center; margin-bottom:6px;">
+                    <label class="muted" for="abi-passive-order">Order</label>
+                    <select id="abi-passive-order" style="min-width:160px;">
+                      <option value="manual">Manual</option>
+                      <option value="az">A->Z</option>
+                      <option value="za">Z->A</option>
+                    </select>
+                    <button class="btn small" id="abi-passive-sort">Sort</button>
+                  </div>
                   <div id="abi-list-passive" class="abi-list"></div>
                 </div>
                 <div class="abi-bucket">
                   <h3>Active</h3>
+                  <div class="row" style="gap:6px; align-items:center; margin-bottom:6px;">
+                    <label class="muted" for="abi-active-order">Order</label>
+                    <select id="abi-active-order" style="min-width:160px;">
+                      <option value="manual">Manual</option>
+                      <option value="az">A->Z</option>
+                      <option value="za">Z->A</option>
+                    </select>
+                    <button class="btn small" id="abi-active-sort">Sort</button>
+                  </div>
                   <div id="abi-list-active" class="abi-list"></div>
                 </div>
                 <div class="abi-bucket">
@@ -1269,6 +1287,8 @@ let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
 let ARC_ASSIGNED = []; // full documents of archetype abilities (resolved by id)
 let EXP_ASSIGNED = []; // full documents of expertise abilities (resolved by id)
 let DIMA_ASSIGNED = []; // full documents of divine manifestation abilities (resolved by id)
+let ABI_SORT_PASSIVE = 'manual';
+let ABI_SORT_ACTIVE = 'manual';
 let COMPUTED_EXP_ABILITIES = [];
 let COMPUTED_DIMA_ABILITIES = [];
 let ABILITY_CHOICES = {}; // per-ability user selections for configurable modifiers (choices or groups)
@@ -1444,6 +1464,10 @@ const sourceResultsEl = document.getElementById('source-results');
 const listPassiveEl   = document.getElementById('abi-list-passive');
 const listActiveEl    = document.getElementById('abi-list-active');
 const listSpellEl     = document.getElementById('abi-list-spells');
+const abiPassiveOrderEl = document.getElementById('abi-passive-order');
+const abiActiveOrderEl  = document.getElementById('abi-active-order');
+const abiPassiveSortBtn = document.getElementById('abi-passive-sort');
+const abiActiveSortBtn  = document.getElementById('abi-active-sort');
 const talentCounterEl = document.getElementById('talent-counter');
 const choiceModal = document.getElementById('choice-modal');
 const choiceBackdrop = document.getElementById('choice-backdrop');
@@ -5725,7 +5749,13 @@ function linkedSkillRank(sourceDoc){
     }
   }
   const maxRank = Array.isArray(sourceDoc?.ranks) ? sourceDoc.ranks.length : 0;
-  const rank = Math.max(0, Math.min(Math.floor(best), maxRank));
+  const thresholds = [6, 8, 10, 12, 14, 16];
+  const total = Math.floor(best);
+  let rank = 0;
+  for (let i = 0; i < thresholds.length; i++){
+    if (total >= thresholds[i]) rank = i + 1;
+  }
+  rank = Math.min(rank, maxRank);
   return { rank, bestSkill, bestValue: best };
 }
 
@@ -5824,6 +5854,7 @@ async function refreshArchetypeAbilities(){
     if (!CHAR?.archetype_id){
       ARC_ASSIGNED = [];
       recomputePassiveAgg();
+      renderAbilitiesTab();
       renderStatistics();
       updateDerived();
       renderSublimations();
@@ -5861,6 +5892,7 @@ async function refreshArchetypeAbilities(){
     if (!COMPUTED_ARC_ABILITIES.length){
       ARC_ASSIGNED = [];
       recomputePassiveAgg();
+      renderAbilitiesTab();
       renderStatistics();
       updateDerived();
       renderSublimations();
@@ -5869,33 +5901,9 @@ async function refreshArchetypeAbilities(){
     }
     const docs = await fetchAbilitiesByIds(COMPUTED_ARC_ABILITIES);
     ARC_ASSIGNED = docs.slice();
-    const byId = {};
-    docs.forEach(d=>{ if(d?.id) byId[d.id]=d; });
-    arcAbilitiesEl.innerHTML = '';
-    COMPUTED_ARC_ABILITIES.forEach(id=>{
-      const a = byId[id] || { id, name:id, description:'' };
-      const div = document.createElement('div');
-      div.className = 'abi-item';
-      const titleKey = abilityColorKey(a);
-      const titleText = a.name || id;
-      const hasChoice = abilityHasChoice(a);
-        div.innerHTML = `
-          <div class="grow">
-            <div><strong class="title-color-target">${titleText}</strong></div>
-            <div class="muted" style="font-size:.85rem">${a.description_html || a.description || ''}</div>
-          </div>
-          <div class="row" style="gap:6px; flex-wrap:wrap;">
-            <span class="tag">Archetype</span>
-            ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
-          </div>
-          `;
-        registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
-        div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openAbilityRoll(a, 'Archetype')));
-        if (hasChoice){
-          div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
-        }
-      arcAbilitiesEl.appendChild(div);
-    });
+    const count = COMPUTED_ARC_ABILITIES.length;
+    arcAbilitiesEl.innerHTML = `<div class="muted">${count} ${count === 1 ? 'ability' : 'abilities'} shown under Passive / Active.</div>`;
+    renderAbilitiesTab();
     recomputePassiveAgg();
     renderStatistics();
     updateDerived();
@@ -5912,6 +5920,7 @@ async function refreshExpertiseAbilities(){
     if (expSummaryEl) expSummaryEl.textContent = 'No expertise linked.';
     expAbilitiesEl.innerHTML = '<div class="muted">No expertise selected.</div>';
     updateExpertiseCounters();
+    renderAbilitiesTab();
     recomputePassiveAgg();
     renderStatistics();
     updateDerived();
@@ -5933,6 +5942,7 @@ async function refreshExpertiseAbilities(){
   EXP_ASSIGNED = docs.slice();
   COMPUTED_EXP_ABILITIES = uniqueIds.slice();
   renderExpertisePanel(meta, docs);
+  renderAbilitiesTab();
   recomputePassiveAgg();
   renderStatistics();
   updateDerived();
@@ -5949,6 +5959,7 @@ async function refreshDivineManifestationAbilities(){
     if (dimaSummaryEl) dimaSummaryEl.textContent = 'No divine manifestation linked.';
     dimaAbilitiesEl.innerHTML = '<div class="muted">No divine manifestation selected.</div>';
     updateExpertiseCounters();
+    renderAbilitiesTab();
     recomputePassiveAgg();
     renderStatistics();
     updateDerived();
@@ -5970,6 +5981,7 @@ async function refreshDivineManifestationAbilities(){
   DIMA_ASSIGNED = docs.slice();
   COMPUTED_DIMA_ABILITIES = uniqueIds.slice();
   renderDivineManifestationPanel(meta, docs);
+  renderAbilitiesTab();
   recomputePassiveAgg();
   renderStatistics();
   updateDerived();
@@ -5978,8 +5990,6 @@ async function refreshDivineManifestationAbilities(){
 
 function renderExpertisePanel(meta, docs){
   if (!expAbilitiesEl) return;
-  const byId = {};
-  (docs||[]).forEach(d=>{ if (d?.id) byId[d.id]=d; });
   expAbilitiesEl.innerHTML = '';
   if (expSummaryEl){
     expSummaryEl.textContent = meta.length ? `Linked: ${meta.length}` : 'No expertise linked.';
@@ -6010,6 +6020,10 @@ function renderExpertisePanel(meta, docs){
     const bestSkill = item.rankInfo?.bestSkill || '';
     const prereqErrors = prereqErrorsForRules(entry.prereq_rules || {}, CHAR?.stats || {});
     const prereqNote = prereqErrors.length ? `Prereq not met: ${prereqErrors.join(' ')}` : '';
+    const unlockedCount = (item.unlocked || []).length;
+    const unlockedNote = unlockedCount
+      ? `${unlockedCount} ${unlockedCount === 1 ? 'ability' : 'abilities'} shown under Passive / Active.`
+      : 'No unlocked abilities yet.';
     const div = document.createElement('div');
     div.className = 'abi-item abi-block';
     const entryKey = entryColorKey('expertise', entry);
@@ -6025,46 +6039,19 @@ function renderExpertisePanel(meta, docs){
         </div>
         ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
         ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
+        <div class="muted" style="font-size:.85rem">${unlockedNote}</div>
       </div>
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), entryKey, entryTitle);
     div.querySelector('.exp-remove')?.addEventListener('click', ()=>{
       removeExpertiseById(entry.id);
     });
-    const list = document.createElement('div');
-    (item.unlocked || []).forEach(id=>{
-      const a = byId[id] || { id, name:id, description:'' };
-      const row = document.createElement('div');
-      row.className = 'abi-item';
-      const titleKey = abilityColorKey(a);
-      const titleText = a.name || id;
-      const hasChoice = abilityHasChoice(a);
-        row.innerHTML = `
-          <div class="grow">
-            <div><strong class="title-color-target">${titleText}</strong></div>
-            <div class="muted" style="font-size:.85rem">${a.description_html || a.description || ''}</div>
-          </div>
-          <div class="row" style="gap:6px; flex-wrap:wrap;">
-            <span class="tag">Expertise</span>
-            ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
-          </div>
-        `;
-        registerTitleColorTarget(row.querySelector('.title-color-target'), titleKey, titleText);
-        row.addEventListener('click', (e)=> handleInfoClick(e, ()=> openAbilityRoll(a, 'Expertise')));
-        if (hasChoice){
-          row.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
-        }
-      list.appendChild(row);
-    });
-    div.appendChild(list);
     expAbilitiesEl.appendChild(div);
   });
 }
 
 function renderDivineManifestationPanel(meta, docs){
   if (!dimaAbilitiesEl) return;
-  const byId = {};
-  (docs||[]).forEach(d=>{ if (d?.id) byId[d.id]=d; });
   dimaAbilitiesEl.innerHTML = '';
   if (dimaSummaryEl){
     dimaSummaryEl.textContent = meta.length ? `Linked: ${meta.length}` : 'No divine manifestation linked.';
@@ -6095,6 +6082,10 @@ function renderDivineManifestationPanel(meta, docs){
     const bestSkill = item.rankInfo?.bestSkill || '';
     const prereqErrors = prereqErrorsForRules(entry.prereq_rules || {}, CHAR?.stats || {});
     const prereqNote = prereqErrors.length ? `Prereq not met: ${prereqErrors.join(' ')}` : '';
+    const unlockedCount = (item.unlocked || []).length;
+    const unlockedNote = unlockedCount
+      ? `${unlockedCount} ${unlockedCount === 1 ? 'ability' : 'abilities'} shown under Passive / Active.`
+      : 'No unlocked abilities yet.';
     const div = document.createElement('div');
     div.className = 'abi-item abi-block';
     const entryKey = entryColorKey('dima', entry);
@@ -6110,38 +6101,13 @@ function renderDivineManifestationPanel(meta, docs){
         </div>
         ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
         ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
+        <div class="muted" style="font-size:.85rem">${unlockedNote}</div>
       </div>
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), entryKey, entryTitle);
     div.querySelector('.dima-remove')?.addEventListener('click', ()=>{
       removeDivineManifestationById(entry.id);
     });
-    const list = document.createElement('div');
-    (item.unlocked || []).forEach(id=>{
-      const a = byId[id] || { id, name:id, description:'' };
-      const row = document.createElement('div');
-      row.className = 'abi-item';
-      const titleKey = abilityColorKey(a);
-      const titleText = a.name || id;
-      const hasChoice = abilityHasChoice(a);
-        row.innerHTML = `
-          <div class="grow">
-            <div><strong class="title-color-target">${titleText}</strong></div>
-            <div class="muted" style="font-size:.85rem">${a.description_html || a.description || ''}</div>
-          </div>
-          <div class="row" style="gap:6px; flex-wrap:wrap;">
-            <span class="tag">Divine Manifestation</span>
-            ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
-          </div>
-        `;
-        registerTitleColorTarget(row.querySelector('.title-color-target'), titleKey, titleText);
-        row.addEventListener('click', (e)=> handleInfoClick(e, ()=> openAbilityRoll(a, 'Divine Manifestation')));
-        if (hasChoice){
-          row.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
-        }
-      list.appendChild(row);
-    });
-    div.appendChild(list);
     dimaAbilitiesEl.appendChild(div);
   });
 }
@@ -7028,6 +6994,14 @@ async function searchAbilities(){
 abiSearchBtn.addEventListener('click', searchAbilities);
 abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
 abiFilterTagEl?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
+abiPassiveSortBtn?.addEventListener('click', ()=>{
+  ABI_SORT_PASSIVE = abiPassiveOrderEl?.value || 'manual';
+  renderAbilitiesTab();
+});
+abiActiveSortBtn?.addEventListener('click', ()=>{
+  ABI_SORT_ACTIVE = abiActiveOrderEl?.value || 'manual';
+  renderAbilitiesTab();
+});
 speciesSelectEl?.addEventListener('change', ()=> applySpeciesSelection(speciesSelectEl.value));
 boonSelectEl?.addEventListener('change', ()=> applyBoonSelection(boonSelectEl.value));
 abiOpenAddBtn?.addEventListener('click', openAbilityAddModal);
@@ -7791,11 +7765,41 @@ function abilityCostText(ab){
   return parts.join(" || ");
 }
 
-function renderAbilitiesBucket(el, list){
+function collectDisplayAbilities(){
+  const combined = (ASSIGNED || []).slice();
+  const seen = new Set((ASSIGNED || []).map(a=> String(a?.id || '')));
+  const addUnique = (list)=>{
+    (list || []).forEach(a=>{
+      const id = String(a?.id || '');
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      combined.push(a);
+    });
+  };
+  addUnique(ARC_ASSIGNED);
+  addUnique(EXP_ASSIGNED);
+  addUnique(DIMA_ASSIGNED);
+  return combined;
+}
+
+function applyAbilitySort(list, mode){
+  const sortMode = String(mode || '').toLowerCase();
+  if (sortMode !== 'az' && sortMode !== 'za') return list;
+  const sorted = list.slice().sort((a,b)=>{
+    const aName = String(a?.name || a?.id || '');
+    const bName = String(b?.name || b?.id || '');
+    return aName.localeCompare(bName, undefined, { sensitivity: 'base' });
+  });
+  if (sortMode === 'za') sorted.reverse();
+  return sorted;
+}
+
+function renderAbilitiesBucket(el, list, { assignedIds } = {}){
   if (!el) return;
   el.innerHTML = '';
   if (!list.length){ el.innerHTML = '<div class="muted">--</div>'; return; }
   for (const a of list){
+    const canRemove = assignedIds ? assignedIds.has(String(a?.id || '')) : true;
     const div = document.createElement('div');
     div.className = 'abi-item';
     const isPassive = (a.type||'').toLowerCase()!=='active';
@@ -7814,12 +7818,14 @@ function renderAbilitiesBucket(el, list){
       <span class="tag">${a.source_category||''}</span>
       <div class="row" style="gap:6px; flex-wrap:wrap;">
         ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
-        <button class="btn small mod-remove" title="Remove">X</button>
+        ${canRemove ? '<button class="btn small mod-remove" title="Remove">X</button>' : ''}
       </div>
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
     div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openAbilityRoll(a, a.source_category || 'Ability')));
-    div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));
+    if (canRemove){
+      div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));
+    }
     if (hasChoice){
       div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
     }
@@ -7828,12 +7834,15 @@ function renderAbilitiesBucket(el, list){
 }
 
 function renderAbilitiesTab(){
-  const docs = ASSIGNED.slice();
+  const docs = collectDisplayAbilities();
+  const assignedIds = new Set((ASSIGNED||[]).map(a=> String(a?.id || '')));
   const passive   = docs.filter(a=> ((a.type||'').toLowerCase()!=='active'));
   const active    = docs.filter(a=> ((a.type||'').toLowerCase()==='active'));
+  const sortedPassive = applyAbilitySort(passive, ABI_SORT_PASSIVE);
+  const sortedActive = applyAbilitySort(active, ABI_SORT_ACTIVE);
 
-  renderAbilitiesBucket(listPassiveEl,   passive);
-  renderAbilitiesBucket(listActiveEl,    active);
+  renderAbilitiesBucket(listPassiveEl,   sortedPassive, { assignedIds });
+  renderAbilitiesBucket(listActiveEl,    sortedActive, { assignedIds });
   renderAbilitySpellsBucket();
   updateTalentCounter();
   updateExpertiseCounters();
