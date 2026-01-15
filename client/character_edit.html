@@ -3040,11 +3040,11 @@ function combatState(){
 
 function skillMaxForLevel(lvl){
   if (lvl <= 1) return 4;
-  if (lvl <= 11) return 5;
-  if (lvl <= 21) return 6;
-  if (lvl <= 31) return 7;
-  if (lvl <= 41) return 8;
-  if (lvl <= 51) return 9;
+  if (lvl <= 10) return 5;
+  if (lvl <= 20) return 6;
+  if (lvl <= 30) return 7;
+  if (lvl <= 40) return 8;
+  if (lvl <= 50) return 9;
   return 10;
 }
 function skillPointPool(lvl){
@@ -9184,7 +9184,7 @@ function milestone(key){
   return Math.max(0, charAdjMod(key).mod + 3);
 }
 function baseTalentMax(lvl){
-  const levelVal = 1 + Math.floor((Math.max(1, lvl) - 1) / 10);
+  const levelVal = 1 + Math.floor(Math.max(1, lvl) / 10);
   return levelVal + milestone('tech') + milestone('wisdom');
 }
 function talentMax(){
@@ -9196,7 +9196,7 @@ function talentCount(){
 function updateTalentCounter(){
   if (!talentCounterEl) return;
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const base = 1 + Math.floor((lvl - 1) / 10);
+  const base = 1 + Math.floor(lvl / 10);
   const msTec = milestone('tech');
   const msWis = milestone('wisdom');
   const max = talentMax();
