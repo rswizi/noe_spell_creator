@@ -191,8 +191,11 @@
   </div>
 
 <script>
-const token = localStorage.getItem('auth_token') || "";
-const authHeaders = () => token ? { "Authorization": "Bearer " + token } : {};
+const getToken = () => localStorage.getItem('auth_token') || "";
+const authHeaders = () => {
+  const token = getToken();
+  return token ? { "Authorization": "Bearer " + token } : {};
+};
 const $ = s=>document.querySelector(s);
 let ABILITIES = [];
 let ARCHETYPES = [];
@@ -670,7 +673,15 @@ function loadToForm(a){
 
 async function loadList(){
   const box = $("#arc-list"); box.innerHTML = "Loading...";
+  if (!getToken()){
+    box.textContent = "Login required. Please sign in and reload.";
+    return;
+  }
   const r = await fetch("/archetypes", { headers: authHeaders() });
+  if (r.status === 401){
+    box.textContent = "Unauthorized. Please sign in again.";
+    return;
+  }
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ box.textContent = j.message || "Load failed"; return; }
   ARCHETYPES = j.archetypes || [];
@@ -703,7 +714,15 @@ async function loadList(){
 }
 
 async function loadAbilities(){
+  if (!getToken()){
+    console.warn("Login required to load abilities.");
+    return;
+  }
   const resp = await fetch("/abilities", { headers: authHeaders() });
+  if (resp.status === 401){
+    console.warn("Unauthorized while loading abilities. Please sign in again.");
+    return;
+  }
   const j = await resp.json().catch(()=>({}));
   if (j.status !== "success") { console.error("Failed to load abilities", j); return; }
   ABILITIES = j.abilities || [];

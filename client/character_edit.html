@@ -1344,6 +1344,7 @@ let INITIAL_LOAD = true;
 
 let REFRESH_NOTICE_QUEUE = [];
 let REFRESH_NOTICE_TIMER = null;
+const ABI_ORDER_STORAGE_PREFIX = 'abi_order:';
 function queueRefreshNotice(msg){
   if (!msg) return;
   REFRESH_NOTICE_QUEUE.push(msg);
@@ -7845,14 +7846,66 @@ function assignedAbilityTypeMap(){
   return map;
 }
 
-function moveAssignedAbility(id, direction, bucketType){
+function spellDisplayName(sp, metaMap){
+  const meta = metaMap[String(sp?.id || '')] || {};
+  return meta.alt_name || sp?.name || sp?.id || 'Spell';
+}
+
+function abilityOrderKey(bucket){
+  return `${ABI_ORDER_STORAGE_PREFIX}${CID || 'unknown'}:${bucket || 'unknown'}`;
+}
+function loadAbilityOrder(bucket){
+  try{
+    const raw = localStorage.getItem(abilityOrderKey(bucket));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  }catch{
+    return [];
+  }
+}
+function saveAbilityOrder(bucket, order){
+  try{ localStorage.setItem(abilityOrderKey(bucket), JSON.stringify(order || [])); }catch{}
+}
+function applyAbilityManualOrder(list, bucket){
+  const order = loadAbilityOrder(bucket);
+  if (!order.length) return list;
+  const remaining = (list || []).slice();
+  const out = [];
+  order.forEach(id=>{
+    const idx = remaining.findIndex(a=> String(a?.id || '') === String(id));
+    if (idx >= 0){
+      out.push(remaining[idx]);
+      remaining.splice(idx, 1);
+    }
+  });
+  return out.concat(remaining);
+}
+function updateAssignedOrderFromBucket(bucketType, orderedIds){
   if (!CHAR || !Array.isArray(CHAR.abilities)) return;
-  const orderIds = (CHAR.abilities || []).map(String).filter(Boolean);
+  const current = (CHAR.abilities || []).map(String).filter(Boolean);
+  if (!current.length) return;
   const typeMap = assignedAbilityTypeMap();
-  const subsetIds = orderIds.filter(aid => typeMap[aid] === bucketType);
-  const updated = moveSubsetOrder(orderIds, subsetIds, id, direction);
-  if (!updated || updated === orderIds) return;
+  const orderedSubset = (orderedIds || []).filter(id => typeMap[id] === bucketType);
+  if (!orderedSubset.length) return;
+  let cursor = 0;
+  const updated = current.map(id=>{
+    if (typeMap[id] !== bucketType) return id;
+    const next = orderedSubset[cursor++];
+    return next || id;
+  });
   CHAR.abilities = updated;
+  queueSave();
+}
+function moveAbilityInBucket(index, direction, bucketType, list){
+  const orderIds = (list || []).map(a=> String(a?.id || '')).filter(Boolean);
+  const idx = Number(index);
+  if (!Number.isFinite(idx) || idx < 0 || idx >= orderIds.length) return;
+  const next = direction === 'up' ? idx - 1 : idx + 1;
+  if (next < 0 || next >= orderIds.length) return;
+  const updated = orderIds.slice();
+  updated.splice(next, 0, updated.splice(idx, 1)[0]);
+  saveAbilityOrder(bucketType, updated);
+  updateAssignedOrderFromBucket(bucketType, updated);
   if (bucketType === 'active'){
     ABI_SORT_ACTIVE = 'manual';
     if (abiActiveOrderEl) abiActiveOrderEl.value = 'manual';
@@ -7860,19 +7913,7 @@ function moveAssignedAbility(id, direction, bucketType){
     ABI_SORT_PASSIVE = 'manual';
     if (abiPassiveOrderEl) abiPassiveOrderEl.value = 'manual';
   }
-  queueSave();
-  const byId = {};
-  (ASSIGNED || []).forEach(a=>{
-    const key = String(a?.id || '').trim();
-    if (key && !byId[key]) byId[key] = a;
-  });
-  ASSIGNED = updated.map(aid => byId[aid]).filter(Boolean);
   renderAbilitiesTab();
-}
-
-function spellDisplayName(sp, metaMap){
-  const meta = metaMap[String(sp?.id || '')] || {};
-  return meta.alt_name || sp?.name || sp?.id || 'Spell';
 }
 
 function getSpellOrderIds(list, metaMap){
@@ -7964,18 +8005,13 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
   el.innerHTML = '';
   if (!list.length){ el.innerHTML = '<div class="muted">--</div>'; return; }
   const manualMode = String(sortMode || '').toLowerCase() === 'manual';
-  const moveableIds = (list || [])
-    .filter(a=> assignedIds && assignedIds.has(String(a?.id || '')))
-    .map(a=> String(a?.id || ''));
-  const moveIndexById = {};
-  moveableIds.forEach((id, idx)=>{ moveIndexById[id] = idx; });
-  for (const a of list){
+  for (let idx = 0; idx < list.length; idx++){
+    const a = list[idx];
     const id = String(a?.id || '');
     const canRemove = assignedIds ? assignedIds.has(id) : true;
-    const canMove = assignedIds ? assignedIds.has(id) : false;
-    const moveIdx = moveIndexById[id];
-    const isFirst = moveIdx === 0;
-    const isLast = moveIdx === moveableIds.length - 1;
+    const canMove = !!bucketType;
+    const isFirst = idx === 0;
+    const isLast = idx === list.length - 1;
     const disableMove = !manualMode;
     const div = document.createElement('div');
     div.className = 'abi-item';
@@ -8011,8 +8047,8 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
       div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
     }
     if (canMove && bucketType){
-      div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveAssignedAbility(a.id, 'up', bucketType));
-      div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveAssignedAbility(a.id, 'down', bucketType));
+      div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveAbilityInBucket(idx, 'up', bucketType, list));
+      div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveAbilityInBucket(idx, 'down', bucketType, list));
     }
     el.appendChild(div);
   }
@@ -8025,9 +8061,15 @@ function renderAbilitiesTab(){
   const active    = docs.filter(a=> ((a.type||'').toLowerCase()==='active'));
   const sortedPassive = applyAbilitySort(passive, ABI_SORT_PASSIVE);
   const sortedActive = applyAbilitySort(active, ABI_SORT_ACTIVE);
+  const orderedPassive = String(ABI_SORT_PASSIVE || '').toLowerCase() === 'manual'
+    ? applyAbilityManualOrder(sortedPassive, 'passive')
+    : sortedPassive;
+  const orderedActive = String(ABI_SORT_ACTIVE || '').toLowerCase() === 'manual'
+    ? applyAbilityManualOrder(sortedActive, 'active')
+    : sortedActive;
 
-  renderAbilitiesBucket(listPassiveEl,   sortedPassive, { assignedIds, bucketType: 'passive', sortMode: ABI_SORT_PASSIVE });
-  renderAbilitiesBucket(listActiveEl,    sortedActive, { assignedIds, bucketType: 'active', sortMode: ABI_SORT_ACTIVE });
+  renderAbilitiesBucket(listPassiveEl,   orderedPassive, { assignedIds, bucketType: 'passive', sortMode: ABI_SORT_PASSIVE });
+  renderAbilitiesBucket(listActiveEl,    orderedActive, { assignedIds, bucketType: 'active', sortMode: ABI_SORT_ACTIVE });
   renderAbilitySpellsBucket();
   updateTalentCounter();
   updateExpertiseCounters();
