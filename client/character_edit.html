@@ -151,6 +151,7 @@
     .combat-grid { display:grid; gap:12px; grid-template-columns: 1fr; }
     .combat-col { display:grid; gap:12px; }
     .combat-vitals { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .combat-vitals input { width:6ch; min-width:6ch; }
     .combat-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .combat-inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .combat-actions-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
@@ -7968,7 +7969,9 @@ function renderCombatEtUsage(){
   const spellIds = new Set((st.active_spells || []).map(String));
   let used = 0;
   (collectDisplayAbilities() || []).forEach(a=>{
-    if (!abilityIds.has(String(a?.id || ''))) return;
+    const id = String(a?.id || '');
+    if (!abilityIds.has(id)) return;
+    if (!abilityHasActiveCost(a)) return;
     const costs = a?.active?.costs || {};
     const hpCost = Number(costs.HP || 0);
     if (hpCost) used += Math.ceil(hpCost / 5);
@@ -7978,11 +7981,14 @@ function renderCombatEtUsage(){
     });
     if (costs.other_value != null){
       const v = Number(costs.other_value || 0);
-      if (Number.isFinite(v)) used += v;
+      const label = String(costs.other_label || '').trim().toLowerCase().replace(/\s+/g, '');
+      if (Number.isFinite(v) && label !== 'ms') used += v;
     }
   });
   (SPELLLIST_SPELLS || []).forEach(sp=>{
-    if (!spellIds.has(String(sp?.id || ''))) return;
+    const id = String(sp?.id || '');
+    if (!spellIds.has(id)) return;
+    if (!spellHasActiveCost(sp)) return;
     const mpCost = Number(sp?.mp_cost || 0);
     const enCost = Number(sp?.en_cost || 0);
     if (Number.isFinite(mpCost)) used += mpCost;
@@ -8149,6 +8155,12 @@ function weaponHasAttribute(it, name){
   const attrs = (it?.attributes || []).map(a=> String(a||'').toLowerCase());
   return attrs.includes(String(name || '').toLowerCase());
 }
+function weaponDamageValue(it){
+  const direct = it?.damage ?? it?.dmg ?? it?.details?.damage ?? it?.details?.dmg
+    ?? it?.stats?.damage ?? it?.base_damage ?? it?.base?.damage ?? it?.weapon?.damage
+    ?? it?.item?.damage ?? it?.catalog?.damage;
+  return direct == null ? '' : String(direct);
+}
 function weaponStateKey(it){
   return String(it?.id || it?.name || it?.alt_name || 'weapon');
 }
@@ -8162,7 +8174,7 @@ function getWeaponState(it){
   return st.weapon_states[key];
 }
 function weaponDamageParts(it){
-  const raw = String(it?.damage || '').trim();
+  const raw = String(weaponDamageValue(it) || '').trim();
   const m = raw.match(/^(\d+)\s*(d6|ID)\s*\\+\\s*(\\d+)\\s*\\+\\s*M\\(([^)]+)\\)/i);
   if (!m) return null;
   return {
@@ -8185,6 +8197,26 @@ function rollDamageDice(count, die){
   for (let i=0; i<count; i++) rolls.push(rollDie(sides));
   const total = rolls.reduce((a,b)=>a+b,0);
   return { rolls, total, sides, label: die.toLowerCase() === 'id' ? 'ID' : `d${sides}` };
+}
+function abilityHasActiveCost(a){
+  const active = a?.active || {};
+  if (!active.costs_active) return false;
+  const costs = active.costs || {};
+  const values = [
+    costs.HP, costs.EN, costs.MP, costs.FO, costs.MO, costs.TX,
+    costs.other_value
+  ].map(v=> Number(v || 0));
+  return values.some(v=> Number.isFinite(v) && v !== 0);
+}
+function spellHasActiveCost(sp){
+  const direct = sp?.active_cost ?? sp?.active_costs ?? sp?.sustain_cost ?? sp?.sustain ?? sp?.upkeep;
+  if (direct != null){
+    if (direct === true) return true;
+    return Number(direct || 0) !== 0;
+  }
+  const duration = String(sp?.duration || '').trim().toLowerCase();
+  if (duration && !['--','—','instant','instantaneous','0','none'].includes(duration)) return true;
+  return false;
 }
 let ATTACK_MODAL_CTX = null;
 function renderAttackSpecialList(selected){
@@ -8297,7 +8329,7 @@ function renderCombatWeapons(){
   items.forEach(it=>{
     const name = it.alt_name || it.name || 'Weapon';
     const skill = it.skill || 'Technicity';
-    const dmg = it.damage || '--';
+    const dmg = weaponDamageValue(it) || '--';
     const attrs = (it.attributes || []).join(', ') || 'No properties';
     const neutral = Number(DERIVED_CACHE?.weapon_neutral || 0);
     const nature = String(it?.nature || it?.linked_nature || '').toLowerCase();
@@ -8377,7 +8409,10 @@ function renderCombatAbilityList(){
   const search = String(combatAbilitySearchEl?.value || '').trim().toLowerCase();
   const list = (collectDisplayAbilities() || []).filter(a=> String(a?.type || '').toLowerCase() === 'active');
   const validIds = new Set(list.map(a=> String(a?.id || '')));
-  Array.from(activeSet).forEach(id=>{ if (!validIds.has(id)) activeSet.delete(id); });
+  const eligibleIds = new Set(list.filter(abilityHasActiveCost).map(a=> String(a?.id || '')));
+  Array.from(activeSet).forEach(id=>{
+    if (!validIds.has(id) || !eligibleIds.has(id)) activeSet.delete(id);
+  });
   st.active_abilities = Array.from(activeSet);
   combatAbilityListEl.innerHTML = '';
   if (!list.length){
@@ -8391,36 +8426,35 @@ function renderCombatAbilityList(){
     rendered += 1;
     const cost = abilityCostText(a);
     const id = String(a?.id || '');
+    const canStayActive = eligibleIds.has(id);
+    const isActive = activeSet.has(id);
     const row = document.createElement('div');
     row.className = 'combat-entry';
     row.innerHTML = `
       <div class="grow">
-        <div><strong>${invEscapeHtml(name)}</strong></div>
+        <div><strong>${invEscapeHtml(name)}</strong>${isActive ? ' <span class="tag">Active</span>' : ''}</div>
         ${cost ? `<div class="muted">Cost: ${invEscapeHtml(cost)}</div>` : ''}
       </div>
       <div class="combat-actions-row">
-        <label class="muted"><input type="checkbox" class="abi-active" ${activeSet.has(id) ? 'checked' : ''}> Active</label>
-        <button class="btn small">Use</button>
+        ${isActive ? '<button class="btn btn-secondary small abi-deactivate">Deactivate</button>' : ''}
+        <button class="btn small abi-use">Use</button>
       </div>
     `;
-    row.querySelector('.abi-active')?.addEventListener('change', (e)=>{
-      const checked = e.target.checked;
-      if (checked){
-        activeSet.add(id);
-      }else{
-        activeSet.delete(id);
-      }
+    row.querySelector('.abi-deactivate')?.addEventListener('click', ()=>{
+      activeSet.delete(id);
       st.active_abilities = Array.from(activeSet);
       renderCombatEtUsage();
+      renderCombatAbilityList();
       queueSave();
     });
-    row.querySelector('button')?.addEventListener('click', ()=>{
+    row.querySelector('.abi-use')?.addEventListener('click', ()=>{
       applyAbilityCosts(a);
-      if (!activeSet.has(id)){
+      if (canStayActive && !activeSet.has(id)){
         activeSet.add(id);
         st.active_abilities = Array.from(activeSet);
       }
       renderCombatEtUsage();
+      renderCombatAbilityList();
       queueSave();
       openCombatAbilityRoll(a, a?.source_category || '');
     });
@@ -8443,7 +8477,10 @@ function renderCombatSpellList(){
     return;
   }
   const validIds = new Set(SPELLLIST_SPELLS.map(sp=> String(sp?.id || '')));
-  Array.from(activeSet).forEach(id=>{ if (!validIds.has(id)) activeSet.delete(id); });
+  const eligibleIds = new Set(SPELLLIST_SPELLS.filter(spellHasActiveCost).map(sp=> String(sp?.id || '')));
+  Array.from(activeSet).forEach(id=>{
+    if (!validIds.has(id) || !eligibleIds.has(id)) activeSet.delete(id);
+  });
   st.active_spells = Array.from(activeSet);
   let rendered = 0;
   SPELLLIST_SPELLS.forEach(sp=>{
@@ -8456,36 +8493,35 @@ function renderCombatSpellList(){
     if (sp.mp_cost != null) costParts.push(`MP: ${sp.mp_cost}`);
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
+    const canStayActive = eligibleIds.has(id);
+    const isActive = activeSet.has(id);
     const row = document.createElement('div');
     row.className = 'combat-entry';
     row.innerHTML = `
       <div class="grow">
-        <div><strong>${invEscapeHtml(name)}</strong>${meta.status ? ` <span class="tag">${invEscapeHtml(meta.status)}</span>` : ''}</div>
+        <div><strong>${invEscapeHtml(name)}</strong>${meta.status ? ` <span class="tag">${invEscapeHtml(meta.status)}</span>` : ''}${isActive ? ' <span class="tag">Active</span>' : ''}</div>
         ${cost ? `<div class="muted">Cost: ${invEscapeHtml(cost)}</div>` : ''}
       </div>
       <div class="combat-actions-row">
-        <label class="muted"><input type="checkbox" class="spell-active" ${activeSet.has(id) ? 'checked' : ''}> Active</label>
-        <button class="btn small">Use</button>
+        ${isActive ? '<button class="btn btn-secondary small spell-deactivate">Deactivate</button>' : ''}
+        <button class="btn small spell-use">Use</button>
       </div>
     `;
-    row.querySelector('.spell-active')?.addEventListener('change', (e)=>{
-      const checked = e.target.checked;
-      if (checked){
-        activeSet.add(id);
-      }else{
-        activeSet.delete(id);
-      }
+    row.querySelector('.spell-deactivate')?.addEventListener('click', ()=>{
+      activeSet.delete(id);
       st.active_spells = Array.from(activeSet);
       renderCombatEtUsage();
+      renderCombatSpellList();
       queueSave();
     });
-    row.querySelector('button')?.addEventListener('click', ()=>{
+    row.querySelector('.spell-use')?.addEventListener('click', ()=>{
       applySpellCosts(sp);
-      if (!activeSet.has(id)){
+      if (canStayActive && !activeSet.has(id)){
         activeSet.add(id);
         st.active_spells = Array.from(activeSet);
       }
       renderCombatEtUsage();
+      renderCombatSpellList();
       queueSave();
       openCombatSpellRoll(sp, metaMap[id] || {}, { cost, range: sp.range, aoe: sp.aoe, desc: sp.description_html || sp.description || '', effectsDesc: sp.effects_desc || '', nameDisplay: name, statusLabel: meta.status || '' });
     });
@@ -8501,30 +8537,30 @@ function renderCombatConditions(){
   const st = combatState();
   const active = new Set((st.conditions || []).map(String));
   if (st.exhausted) active.add('exhausted');
-  const activeList = CONDITION_DEFS.filter(cond=> active.has(cond.id));
   conditionsListEl.innerHTML = '';
-  if (!activeList.length){
-    conditionsListEl.innerHTML = '<div class="muted">No active conditions.</div>';
-    return;
-  }
-  activeList.forEach(cond=>{
+  CONDITION_DEFS.forEach(cond=>{
+    const isActive = active.has(cond.id);
     const row = document.createElement('div');
     row.className = 'combat-entry';
     row.title = cond.effect || '';
     row.innerHTML = `
       <div class="grow">
-        <div><strong>${invEscapeHtml(cond.name)}</strong> <span class="tag">${invEscapeHtml(cond.kind)}</span></div>
+        <div><strong>${invEscapeHtml(cond.name)}</strong> <span class="tag">${invEscapeHtml(cond.kind)}</span>${isActive ? ' <span class="tag">Active</span>' : ''}</div>
         <div class="muted">${invEscapeHtml(cond.effect || '')}</div>
       </div>
-      <button class="btn small" data-cond="${invEscapeHtml(cond.id)}">Remove</button>
+      <button class="btn small" data-cond="${invEscapeHtml(cond.id)}">${isActive ? 'Remove' : 'Add'}</button>
     `;
     row.querySelector('button')?.addEventListener('click', (e)=>{
       const id = e.target.getAttribute('data-cond');
       if (!id) return;
-      active.delete(id);
+      if (active.has(id)){
+        active.delete(id);
+      }else{
+        active.add(id);
+      }
       st.conditions = Array.from(active);
       if (id === 'exhausted'){
-        st.exhausted = false;
+        st.exhausted = active.has('exhausted');
         renderCombatTension();
       }
       renderCombatActions();
@@ -8548,20 +8584,21 @@ function renderCombatConditionModal(){
     const row = document.createElement('div');
     row.className = 'combat-entry';
     row.title = cond.effect || '';
+    const isActive = active.has(cond.id);
     row.innerHTML = `
       <div class="grow">
         <div><strong>${invEscapeHtml(cond.name)}</strong> <span class="tag">${invEscapeHtml(cond.kind)}</span></div>
         <div class="muted">${invEscapeHtml(cond.effect || '')}</div>
       </div>
-      <label class="muted"><input type="checkbox" data-cond="${invEscapeHtml(cond.id)}" ${active.has(cond.id) ? 'checked' : ''}> Active</label>
+      <button class="btn small" data-cond="${invEscapeHtml(cond.id)}">${isActive ? 'Remove' : 'Add'}</button>
     `;
-    row.querySelector('input')?.addEventListener('change', (e)=>{
+    row.querySelector('button')?.addEventListener('click', (e)=>{
       const id = e.target.getAttribute('data-cond');
       if (!id) return;
-      if (e.target.checked){
-        active.add(id);
-      }else{
+      if (active.has(id)){
         active.delete(id);
+      }else{
+        active.add(id);
       }
       st.conditions = Array.from(active);
       if (id === 'exhausted'){
@@ -8572,6 +8609,7 @@ function renderCombatConditionModal(){
       renderCombatEtUsage();
       updateDerived();
       renderCombatConditions();
+      renderCombatConditionModal();
       queueSave();
     });
     conditionsModalListEl.appendChild(row);
