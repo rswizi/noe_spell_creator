@@ -1700,7 +1700,7 @@ const TARGET_GROUPS = [
     { value:'derived.enc', label:'Encumbrance' },
     { value:'derived.et', label:'Eclipse Threshold (ET)' },
     { value:'derived.tx', label:'Max Toxicity (TX)' },
-    { value:'derived.weapon_neutral', label:'Neutral weapon damage' },
+  { value:'derived.weapon_neutral', label:'Neutral weapon damage' },
     { value:'derived.talent_max', label:'Talent Max' },
     { value:'derived.skill_points', label:'Skill point pool' },
     { value:'derived.stat_points', label:'Characteristic point pool' },
@@ -1950,6 +1950,10 @@ let TITLE_COLOR_MAP = {};
 let INVENTORIES = [];
 let LINKED_INV = null;
 let SELECTED_INV_ID = '';
+let WEAPON_CATALOG_BY_ID = {};
+let WEAPON_CATALOG_BY_NAME = {};
+let WEAPON_CATALOG_PROMISE = null;
+let WEAPON_CATALOG_READY = false;
 function getInventorySourceId(){
   return SELECTED_INV_ID || LINKED_INV?.id || '';
 }
@@ -5612,7 +5616,7 @@ function openInvItemModal(it){
           </label>
           <span class="pill-soft">${invEscapeHtml(catText || "Category")}</span>
         </div>
-        <div class="muted">${invEscapeHtml(metaLine || "Craft details")}${cm.is_complex ? " | Focus 3 slots | +10 MP" : " | Focus 1 slot"}</div>
+        <div class="muted">${invEscapeHtml(metaLine || "Craft details")}${cm.is_complex ? " | Focus 3 slots" : " | Focus 1 slot"}</div>
         ${cm.supreme ? `<div class="muted">Supreme Enchantment applied.</div>` : ""}
       `;
       const checkbox = row.querySelector("input[type='checkbox']");
@@ -6687,7 +6691,6 @@ function renderAbilitySpellsBucket(){
       if (rawEffect) effectsDesc = String(rawEffect);
     }
     const costParts = [];
-    if (sp.mp_cost != null) costParts.push(`MP: ${sp.mp_cost}`);
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
     const range = sp.range != null ? `Range: ${sp.range}` : '';
@@ -6761,10 +6764,6 @@ function renderAbilitySpellsBucket(){
       effectsDesc = effectsDesc ? `${effectsDesc} | ${resolvedEffects.join(' | ')}` : resolvedEffects.join(' | ');
     }
     const costParts = [];
-    if (sp.mp_cost != null){
-      const mpVal = Number(sp.mp_cost) + (cm.is_complex ? 10 : 0);
-      costParts.push(`MP: ${mpVal}`);
-    }
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
     const range = sp.range != null ? `Range: ${sp.range}` : '';
@@ -7976,7 +7975,7 @@ function renderCombatEtUsage(){
     const costs = a?.active?.costs || {};
     const hpCost = Number(costs.HP || 0);
     if (hpCost) used += Math.ceil(hpCost / 5);
-    ['EN','MP','FO','MO','TX'].forEach(k=>{
+    ['EN','FO','MO','TX'].forEach(k=>{
       const v = Number(costs[k] || 0);
       if (Number.isFinite(v)) used += v;
     });
@@ -7990,9 +7989,7 @@ function renderCombatEtUsage(){
     const id = String(sp?.id || '');
     if (!spellIds.has(id)) return;
     if (!spellHasActiveCost(sp)) return;
-    const mpCost = Number(sp?.mp_cost || 0);
     const enCost = Number(sp?.en_cost || 0);
-    if (Number.isFinite(mpCost)) used += mpCost;
     if (Number.isFinite(enCost)) used += enCost;
   });
   const maxEt = numOr(DERIVED_CACHE?.et, 0);
@@ -8157,11 +8154,47 @@ function weaponHasAttribute(it, name){
   const attrs = (it?.attributes || []).map(a=> String(a||'').toLowerCase());
   return attrs.includes(String(name || '').toLowerCase());
 }
+function ensureWeaponCatalog(){
+  if (WEAPON_CATALOG_READY) return Promise.resolve(WEAPON_CATALOG_BY_ID);
+  if (WEAPON_CATALOG_PROMISE) return WEAPON_CATALOG_PROMISE;
+  WEAPON_CATALOG_PROMISE = fetch('/weapons', { headers: authHeaders() })
+    .then(r=> r.json().catch(()=> ({})))
+    .then(j=>{
+      const list = j.weapons || j.weapon || j.items || j.rows || [];
+      WEAPON_CATALOG_BY_ID = {};
+      WEAPON_CATALOG_BY_NAME = {};
+      (list || []).forEach(w=>{
+        const id = String(w?.id ?? '').trim();
+        if (id) WEAPON_CATALOG_BY_ID[id] = w;
+        const nameKey = String(w?.name || '').trim().toLowerCase();
+        if (nameKey) WEAPON_CATALOG_BY_NAME[nameKey] = w;
+      });
+      WEAPON_CATALOG_READY = true;
+      return WEAPON_CATALOG_BY_ID;
+    })
+    .catch(err=>{
+      console.warn('Failed to load weapon catalog', err);
+      WEAPON_CATALOG_READY = true;
+      return WEAPON_CATALOG_BY_ID;
+    });
+  return WEAPON_CATALOG_PROMISE;
+}
+function weaponCatalogLookup(it){
+  const id = String(it?.item_id ?? it?.weapon_id ?? it?.catalog_id ?? it?.id ?? '').trim();
+  if (id && WEAPON_CATALOG_BY_ID[id]) return WEAPON_CATALOG_BY_ID[id];
+  const nameKey = String(it?.name || it?.alt_name || it?.title || '').trim().toLowerCase();
+  if (nameKey && WEAPON_CATALOG_BY_NAME[nameKey]) return WEAPON_CATALOG_BY_NAME[nameKey];
+  return null;
+}
 function weaponDamageValue(it){
-  const direct = it?.damage ?? it?.dmg ?? it?.details?.damage ?? it?.details?.dmg
+  const direct = it?.damage ?? it?.dmg ?? it?.details?.damage ?? it?.details?.dmg ?? it?.details?.Damage
     ?? it?.stats?.damage ?? it?.base_damage ?? it?.base?.damage ?? it?.weapon?.damage
     ?? it?.item?.damage ?? it?.catalog?.damage;
-  return direct == null ? '' : String(direct);
+  if (direct != null) return String(direct);
+  const catalog = weaponCatalogLookup(it);
+  const fallback = catalog?.damage ?? catalog?.dmg ?? catalog?.details?.damage ?? catalog?.details?.Damage
+    ?? catalog?.stats?.damage ?? catalog?.base_damage ?? catalog?.base?.damage ?? catalog?.weapon?.damage;
+  return fallback == null ? '' : String(fallback);
 }
 function weaponStateKey(it){
   return String(it?.id || it?.name || it?.alt_name || 'weapon');
@@ -8205,7 +8238,7 @@ function abilityHasActiveCost(a){
   if (!active.costs_active) return false;
   const costs = active.costs || {};
   const values = [
-    costs.HP, costs.EN, costs.MP, costs.FO, costs.MO, costs.TX,
+    costs.HP, costs.EN, costs.FO, costs.MO, costs.TX,
     costs.other_value
   ].map(v=> Number(v || 0));
   return values.some(v=> Number.isFinite(v) && v !== 0);
@@ -8327,6 +8360,12 @@ function renderCombatWeapons(){
   if (!items.length){
     combatWeaponsEl.innerHTML = '<div class="muted">No equipped weapons.</div>';
     return;
+  }
+  const needsCatalog = items.some(it=> !weaponDamageValue(it));
+  if (needsCatalog && !WEAPON_CATALOG_READY && !WEAPON_CATALOG_PROMISE){
+    ensureWeaponCatalog().then(()=> renderCombatWeapons());
+  }else if (needsCatalog && WEAPON_CATALOG_PROMISE && !WEAPON_CATALOG_READY){
+    WEAPON_CATALOG_PROMISE.then(()=> renderCombatWeapons());
   }
   items.forEach(it=>{
     const name = it.alt_name || it.name || 'Weapon';
@@ -8492,7 +8531,6 @@ function renderCombatSpellList(){
     rendered += 1;
     const id = String(sp?.id || '');
     const costParts = [];
-    if (sp.mp_cost != null) costParts.push(`MP: ${sp.mp_cost}`);
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
     const canStayActive = eligibleIds.has(id);
@@ -8540,29 +8578,30 @@ function renderCombatConditions(){
   const active = new Set((st.conditions || []).map(String));
   if (st.exhausted) active.add('exhausted');
   conditionsListEl.innerHTML = '';
-  CONDITION_DEFS.forEach(cond=>{
-    const isActive = active.has(cond.id);
+  const activeDefs = CONDITION_DEFS.filter(cond=> active.has(cond.id));
+  const unknownIds = Array.from(active).filter(id=> !activeDefs.some(cond=> cond.id === id));
+  if (!activeDefs.length && !unknownIds.length){
+    conditionsListEl.innerHTML = '<div class="muted">No active conditions.</div>';
+    return;
+  }
+  const renderRow = (condId, name, kind, effect)=>{
     const row = document.createElement('div');
     row.className = 'combat-entry';
-    row.title = cond.effect || '';
+    row.title = effect || '';
     row.innerHTML = `
       <div class="grow">
-        <div><strong>${invEscapeHtml(cond.name)}</strong> <span class="tag">${invEscapeHtml(cond.kind)}</span>${isActive ? ' <span class="tag">Active</span>' : ''}</div>
-        <div class="muted">${invEscapeHtml(cond.effect || '')}</div>
+        <div><strong>${invEscapeHtml(name)}</strong>${kind ? ` <span class="tag">${invEscapeHtml(kind)}</span>` : ''}</div>
+        <div class="muted">${invEscapeHtml(effect || '')}</div>
       </div>
-      <button class="btn small" data-cond="${invEscapeHtml(cond.id)}">${isActive ? 'Remove' : 'Add'}</button>
+      <button class="btn small" data-cond="${invEscapeHtml(condId)}">Remove</button>
     `;
     row.querySelector('button')?.addEventListener('click', (e)=>{
       const id = e.target.getAttribute('data-cond');
       if (!id) return;
-      if (active.has(id)){
-        active.delete(id);
-      }else{
-        active.add(id);
-      }
+      active.delete(id);
       st.conditions = Array.from(active);
       if (id === 'exhausted'){
-        st.exhausted = active.has('exhausted');
+        st.exhausted = false;
         renderCombatTension();
       }
       renderCombatActions();
@@ -8572,6 +8611,12 @@ function renderCombatConditions(){
       queueSave();
     });
     conditionsListEl.appendChild(row);
+  };
+  activeDefs.forEach(cond=>{
+    renderRow(cond.id, cond.name, cond.kind, cond.effect);
+  });
+  unknownIds.forEach(id=>{
+    renderRow(id, id, '', '');
   });
   st.conditions = Array.from(active);
 }
@@ -8762,7 +8807,7 @@ function applyAbilityCosts(a){
   };
   applyCurrentDelta(delta);
   const missing = [];
-  ['MP','MO','TX'].forEach(k=>{
+  ['MO','TX'].forEach(k=>{
     const v = Number(costs[k] || 0);
     if (Number.isFinite(v) && v !== 0) missing.push(`${k}: ${v}`);
   });
@@ -8777,12 +8822,8 @@ function applyAbilityCosts(a){
 
 function applySpellCosts(sp){
   const en = Number(sp?.en_cost || 0);
-  const mp = Number(sp?.mp_cost || 0);
   if (Number.isFinite(en) && en !== 0){
     applyCurrentDelta({ en: -en });
-  }
-  if (Number.isFinite(mp) && mp !== 0){
-    openRollModal({ title: 'Spell Cost', infoOnly:true, descText:`MP cost (${mp}) is not tracked on the sheet.` });
   }
 }
 
@@ -10469,7 +10510,6 @@ function abilityCostText(ab){
   };
   push(costs.HP, "HP");
   push(costs.EN, "EN");
-  push(costs.MP, "MP");
   push(costs.FO, "FO");
   push(costs.MO, "MO");
   push(costs.TX, "TX");
