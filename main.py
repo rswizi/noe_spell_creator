@@ -1963,6 +1963,13 @@ async def update_apotheosis(aid: str, request: Request):
 def _can_access_list(doc, username, role):
     return (doc and (doc.get("owner") == username or role in ("admin","moderator")))
 
+def _can_view_list(doc, username, role):
+    if _can_access_list(doc, username, role):
+        return True
+    if doc and _public_character_ref("spell_list_id", doc.get("id")):
+        return True
+    return False
+
 @app.post("/spell_lists")
 async def create_spell_list(request: Request):
     username, _ = require_auth(request, roles=["user","moderator","admin"])
@@ -1999,9 +2006,9 @@ def my_spell_lists(request: Request):
 
 @app.get("/spell_lists/{list_id}")
 def get_spell_list(list_id: str, request: Request):
-    username, role = require_auth(request, roles=["user","moderator","admin"])
+    username, role = _optional_auth(request)
     doc = get_col("spell_lists").find_one({"id": list_id}, {"_id":0})
-    if not _can_access_list(doc, username, role):
+    if not _can_view_list(doc, username, role):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return {"status":"success","list":doc}
 
@@ -2052,9 +2059,9 @@ def duplicate_spell_list(list_id: str, request: Request):
 
 @app.get("/spell_lists/{list_id}/spells")
 def spell_list_spells(list_id: str, request: Request):
-    username, role = require_auth(request, roles=["user","moderator","admin"])
+    username, role = _optional_auth(request)
     sl = get_col("spell_lists").find_one({"id": list_id}, {"_id":0})
-    if not _can_access_list(sl, username, role):
+    if not _can_view_list(sl, username, role):
         raise HTTPException(status_code=401, detail="Unauthorized")
     ids = [str(x) for x in (sl.get("spells") or [])]
     if not ids:
@@ -2121,7 +2128,6 @@ def delete_spell_list(list_id: str, request: Request):
 
 @app.get("/archetypes")
 def list_archetypes(request: Request):
-    require_auth(request)
     docs = list(get_col("archetypes").find({}, {"_id":0}))
     docs.sort(key=lambda d: d.get("name",""))
     return {"status":"success","archetypes": docs}
@@ -2142,7 +2148,6 @@ async def create_archetype(request: Request):
 
 @app.get("/archetypes/{aid}")
 def get_archetype(aid: str, request: Request):
-    require_auth(request)
     doc = get_col("archetypes").find_one({"id": aid}, {"_id":0})
     if not doc:
         raise HTTPException(404, "Archetype not found")
@@ -2171,7 +2176,6 @@ def delete_archetype(aid: str, request: Request):
 
 @app.get("/expertise")
 def list_expertise(request: Request):
-    require_auth(request)
     docs = list(get_col("expertise").find({}, {"_id":0}))
     docs.sort(key=lambda d: d.get("name",""))
     return {"status":"success","expertises": docs}
@@ -2192,7 +2196,6 @@ async def create_expertise(request: Request):
 
 @app.get("/expertise/{eid}")
 def get_expertise(eid: str, request: Request):
-    require_auth(request)
     doc = get_col("expertise").find_one({"id": eid}, {"_id":0})
     if not doc:
         raise HTTPException(404, "Expertise not found")
@@ -2221,7 +2224,6 @@ def delete_expertise(eid: str, request: Request):
 
 @app.get("/divine_manifestations")
 def list_divine_manifestations(request: Request):
-    require_auth(request)
     docs = list(get_col("divine_manifestations").find({}, {"_id":0}))
     docs.sort(key=lambda d: d.get("name",""))
     return {"status":"success","divine_manifestations": docs}
@@ -2242,7 +2244,6 @@ async def create_divine_manifestation(request: Request):
 
 @app.get("/divine_manifestations/{did}")
 def get_divine_manifestation(did: str, request: Request):
-    require_auth(request)
     doc = get_col("divine_manifestations").find_one({"id": did}, {"_id":0})
     if not doc:
         raise HTTPException(404, "Divine Manifestation not found")
@@ -2476,10 +2477,10 @@ def bulk_create_tools(request: Request, payload: dict = Body(...)):
 # --- NEW: Spell list meta (variants, bonuses, per-spell meta) ---
 @app.get("/spell_lists/{list_id}/meta")
 def get_spell_list_meta(list_id: str, request: Request):
-    username, role = require_auth(request, roles=["user","moderator","admin"])
+    username, role = _optional_auth(request)
     col = get_col("spell_lists")
     doc = col.find_one({"id": list_id}, {"_id":0})
-    if not _can_access_list(doc, username, role):
+    if not _can_view_list(doc, username, role):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return {
         "status": "success",
@@ -3462,10 +3463,15 @@ def list_inventories(request: Request):
 
 @app.get("/inventories/{inv_id}")
 def read_inventory(request: Request, inv_id: str):
-    user, role = require_auth(request)
+    user, role = _optional_auth(request)
     db = get_db()
-    inv = db.inventories.find_one({"id": inv_id, "owner": user}, {"_id":0})
-    if not inv: raise HTTPException(404, "Not found")
+    inv = None
+    if user:
+        inv = db.inventories.find_one({"id": inv_id, "owner": user}, {"_id":0})
+    if not inv and _public_character_ref("inventory_id", inv_id):
+        inv = db.inventories.find_one({"id": inv_id}, {"_id":0})
+    if not inv:
+        raise HTTPException(404, "Not found")
     inv, refresh_report = _refresh_inventory_items_from_catalog(inv_id, inv)
     containers = _ensure_self_container(inv.get("containers") or [])
     recomputed_containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
@@ -4852,7 +4858,30 @@ def list_users_for_assignment(request: Request):
 
 
 # ---------- Characters (minimal v1) ----------
+def _bool_from(val):
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        return val.strip().lower() in ("1", "true", "yes", "y", "on")
+    if isinstance(val, (int, float)):
+        return bool(val)
+    return False
+
+def _optional_auth(request: Request):
+    token = get_auth_token(request)
+    if token and token in SESSIONS:
+        return SESSIONS[token]
+    return None, None
+
+def _public_character_ref(field: str, value: str) -> bool:
+    if not value:
+        return False
+    hit = get_col("characters").find_one({field: value, "public": True}, {"_id": 1})
+    return bool(hit)
+
 def _can_view(doc, username, role):
+    if doc.get("public"):
+        return True
     if role == "admin":
         return True
     return doc.get("owner") == username
@@ -4904,12 +4933,14 @@ async def create_character(request: Request):
             return JSONResponse({"status": "error", "message": "Spell list not found or not owned by you"}, status_code=400)
 
     cid = next_id_str("characters", padding=4)
+    public_flag = _bool_from(body.get("public"))
     doc = {
         "id": cid,
         "owner": owner,
         "name": name,
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "public": public_flag,
         "sublimations": body.get("sublimations") or [],
         "avatar_id": "",
         "archetype_id": (body.get("archetype_id") or "").strip(),
@@ -4925,11 +4956,13 @@ async def create_character(request: Request):
 
 @app.get("/characters/{cid}")
 def get_character(cid: str, request: Request):
-    username, role = require_auth(request, roles=["user","moderator","admin"])
+    username, role = _optional_auth(request)
     doc = get_col("characters").find_one({"id": cid}, {"_id":0})
     if not doc:
         raise HTTPException(404, "Character not found")
     if not _can_view(doc, username, role):
+        if not username:
+            raise HTTPException(401, "Not authenticated")
         raise HTTPException(403, "Forbidden")
     lvl = int(doc.get("level") or doc.get("stats",{}).get("level") or 1)
     arc_id = doc.get("archetype_id") or ""
@@ -4959,6 +4992,8 @@ async def update_character(cid: str, request: Request):
     abilities_in = body.get("abilities", before.get("abilities"))
 
     updates = {"name": name, "updated_at": datetime.datetime.utcnow().isoformat() + "Z"}
+    if "public" in body:
+        updates["public"] = _bool_from(body.get("public"))
     if isinstance(stats, dict):
         updates["stats"] = stats
         
@@ -5401,7 +5436,6 @@ def list_abilities(
     typ: str | None = Query(default=None),
     tags: str | None = Query(default=None),
 ):
-    username, role = require_auth(request, roles=["user", "moderator", "admin"])
     col = get_col("abilities")
     q: dict = {}
     if name:   q["name"] = {"$regex": name, "$options": "i"}
@@ -5423,7 +5457,6 @@ async def bulk_abilities(
     request: Request,
     ids: str = Query(..., description="Comma-separated ability IDs")
 ):
-    username, role = require_auth(request, roles=["user","moderator","admin"])
     id_list = [s.strip() for s in (ids or "").split(",") if s.strip()]
     if not id_list:
         return {"status":"success","abilities": []}
@@ -5435,7 +5468,6 @@ async def bulk_abilities(
 
 @app.get("/abilities/{aid}")
 async def get_ability(aid: str, request: Request):
-    username, role = require_auth(request, roles=["user","moderator","admin"])
     doc = get_col("abilities").find_one({"id": aid}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Not found")

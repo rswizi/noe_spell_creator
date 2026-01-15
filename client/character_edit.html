@@ -151,11 +151,18 @@
       .override-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
       #override-inputs { display:none; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap:8px; margin-top:10px; }
   /* Avatar */
-  .avatar-card { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
-  .avatar-frame { width:124px; height:124px; border:1px solid #333; border-radius:14px; overflow:hidden; background:#08080e; display:grid; place-items:center; }
+  .avatar-card { display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+  .avatar-frame { width:180px; height:180px; border:1px solid #333; border-radius:18px; overflow:hidden; background:#08080e; display:grid; place-items:center; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
   .avatar-frame img { width:100%; height:100%; object-fit:cover; }
-  .avatar-tools { display:grid; gap:6px; min-width:280px; }
+  .avatar-tools { display:grid; gap:8px; min-width:280px; flex:1 1 320px; }
+  .name-input { font-size:1.3rem; font-weight:600; letter-spacing:0.2px; }
+  .avatar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .public-toggle { display:flex; align-items:center; gap:8px; }
+  .public-toggle input { width:auto; }
   .avatar-crop { border:1px solid #333; border-radius:14px; background:#0b0b12; }
+  @media (max-width: 720px){
+    .avatar-frame { width:160px; height:160px; }
+  }
   /* Inventory UI */
   .home-card { border:1px solid var(--border); border-radius:14px; padding:12px; background: #14141d; margin-bottom:12px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.02); }
   .container-card { border:1px solid #2a2a38; border-radius:12px; padding:12px; margin-bottom:10px; background: linear-gradient(135deg, #12121a, #0f0f17); box-shadow: inset 0 1px 0 rgba(255,255,255,0.02); }
@@ -267,6 +274,7 @@
             <strong>Name</strong>
             <span class="muted">(autosaves)</span>
             <span class="muted status" id="status">Loaded.</span>
+            <span class="pill" id="readonly-pill" style="display:none;">Read-only</span>
           </div>
           <div class="hdr-right xp-card">
             <div class="xp-top">
@@ -286,8 +294,14 @@
             <div class="avatar-card">
               <div class="avatar-frame"><img id="avatar-preview" alt="Avatar preview"></div>
               <div class="avatar-tools">
-                <input id="name" placeholder="Enter a name..." class="grow" maxlength="22" />
-                <button id="avatar-open" class="btn small">Set avatar</button>
+                <input id="name" placeholder="Enter a name..." class="grow name-input" maxlength="22" />
+                <div class="avatar-actions">
+                  <button id="avatar-open" class="btn small">Set avatar</button>
+                  <label class="public-toggle muted">
+                    <input type="checkbox" id="public-toggle">
+                    <span>Public Character</span>
+                  </label>
+                </div>
                 <div id="avatar-status" class="muted"></div>
               </div>
             </div>
@@ -1356,6 +1370,9 @@ function levelFromXp(xp){
 const params = new URLSearchParams(location.search);
 const CID = params.get('id');
 let ROLE = 'user';
+let CURRENT_USER = null;
+let READ_ONLY = false;
+let CAN_EDIT = false;
 let SAVE_TIMER = null;
 let CHAR = null;
 let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
@@ -1477,6 +1494,8 @@ const adminLink = document.getElementById('admin-link');
 const titleEl   = document.getElementById('title');
 const statusEl  = document.getElementById('status');
 const nameEl    = document.getElementById('name');
+const publicToggle = document.getElementById('public-toggle');
+const readonlyPill = document.getElementById('readonly-pill');
 const deleteBtn = document.getElementById('delete-char');
 const gridEl    = document.getElementById('stats-grid');
 
@@ -2093,12 +2112,40 @@ async function checkMe() {
     loginChip.textContent = `${me.username} (${me.role})`;
     if ((me.role||'').toLowerCase()==='admin') adminLink.style.display='';
     ROLE = me.role||'user';
+    CURRENT_USER = me;
     return me;
   } catch(e){
     loginChip.textContent = 'Not logged in';
     adminLink.style.display='none';
-    throw e;
+    ROLE = 'guest';
+    CURRENT_USER = null;
+    return null;
   }
+}
+
+function applyReadOnlyState(){
+  if (readonlyPill) readonlyPill.style.display = READ_ONLY ? '' : 'none';
+  if (READ_ONLY && statusEl) statusEl.textContent = 'Read-only (public link)';
+  const fields = document.querySelectorAll('input, select, textarea, button');
+  fields.forEach(el=>{
+    if (el.dataset.readonlyAllow === 'true') return;
+    if (READ_ONLY){
+      if (el.dataset.prevDisabled === undefined) el.dataset.prevDisabled = el.disabled ? '1' : '0';
+      el.disabled = true;
+    }else if (el.dataset.prevDisabled !== undefined){
+      el.disabled = el.dataset.prevDisabled === '1';
+      delete el.dataset.prevDisabled;
+    }
+  });
+  document.querySelectorAll('[contenteditable]').forEach(el=>{
+    if (READ_ONLY){
+      if (el.dataset.prevEditable === undefined) el.dataset.prevEditable = el.contentEditable || '';
+      el.contentEditable = 'false';
+    }else if (el.dataset.prevEditable !== undefined){
+      el.contentEditable = el.dataset.prevEditable;
+      delete el.dataset.prevEditable;
+    }
+  });
 }
 
 /* defaults */
@@ -7087,6 +7134,7 @@ function updateDerived(){
   const msREF = milestone('reflex');
   const msDEX = milestone('dexterity');
   const msWIS = milestone('wisdom');
+  const magTotal = totalFromInvest(investVal(CHAR.stats.magic?.invest, 0));
 
   // Base
   const base = {};
@@ -7097,14 +7145,16 @@ function updateDerived(){
     base.mo = 4 + msDEX + msREF;
     base.initiative = base.mo;
     base.spcap = Math.floor(base.hp * 0.10);
-    base.complex_schools = msMAG || 0;
+    const complexSchools = magTotal >= 10 ? (1 + Math.floor((magTotal - 10) / 2)) : 0;
+    base.complex_schools = complexSchools;
   base.enc = 10 + (10 * msBOD) + (5 * msWIL);
   const invEnc = LINKED_INV?.enc_total || 0;
   base.et = 1 + Math.floor(lvl/10) + msMAG;
   const etTech = 1 + Math.floor(lvl/10) + msTEC;
   base._notes = Object.assign(base._notes || {}, {
     et: [`Alt (TEC): ${etTech}`],
-    sublimation_slots: [`Base ${slotsForLevel(lvl)} + PRE milestone ${msPRE * 2}`]
+    sublimation_slots: [`Base ${slotsForLevel(lvl)} + PRE milestone ${msPRE * 2}`],
+    complex_schools: [`MAG total ${magTotal} -> ${complexSchools}`],
   });
   base.tx = 2 + msBOD + (2 * msTEC);
   base.talent_max = baseTalentMax(lvl);
@@ -7207,6 +7257,13 @@ async function loadCharacter(){
   if (!CID){ statusEl.textContent = 'Missing id'; return; }
   const res = await api('/characters/' + encodeURIComponent(CID));
   CHAR = res.character || {};
+  CHAR.public = !!CHAR.public;
+  const owner = String(CHAR.owner || '');
+  const role = (CURRENT_USER?.role || '').toLowerCase();
+  const isOwner = !!(CURRENT_USER?.username && CURRENT_USER.username === owner);
+  const isAdmin = role === 'admin';
+  CAN_EDIT = !!(isOwner || isAdmin);
+  READ_ONLY = !CAN_EDIT;
   CHAR.stats = normalizeStats(CHAR.stats || {});
   setAddedSchools(CHAR.stats.selected_schools || []);
   XP = numOr(CHAR.xp, 0);
@@ -7245,6 +7302,13 @@ async function loadCharacter(){
     if (nameEl.value.length > 22) nameEl.value = nameEl.value.slice(0,22);
     queueSave();
   });
+  if (publicToggle){
+    publicToggle.checked = !!CHAR.public;
+    publicToggle.addEventListener('change', ()=>{
+      CHAR.public = !!publicToggle.checked;
+      queueSave();
+    });
+  }
   avatarPreview.src = `/characters/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
 
   // Level
@@ -7282,15 +7346,20 @@ async function loadCharacter(){
   renderArchetypePanel();
   await refreshExpertiseAbilities();
   await refreshDivineManifestationAbilities();
-  await loadSpellListsList();
+  if (CAN_EDIT) await loadSpellListsList();
   if (SELECTED_SPELL_LIST_ID) await loadSpellListById(SELECTED_SPELL_LIST_ID);
-  await loadInventoriesList();
+  if (CAN_EDIT) await loadInventoriesList();
   if (SELECTED_INV_ID) await loadInventoryById(SELECTED_INV_ID);
   wirePersonal();
   INITIAL_LOAD = false;
+  applyReadOnlyState();
 }
 
 function queueSave(){
+  if (READ_ONLY){
+    if (statusEl) statusEl.textContent = 'Read-only (public link)';
+    return;
+  }
   statusEl.textContent = 'Saving...';
   if (SAVE_TIMER) clearTimeout(SAVE_TIMER);
   SAVE_TIMER = setTimeout(saveNow, 350);
@@ -7320,6 +7389,7 @@ async function saveNow(){
   try{
     const payload = {
       name: nameEl.value || '',
+      public: !!CHAR.public,
       level: CHAR.level || 1,
       xp: Math.max(0, Math.floor(XP||0)),
       stats: { ...CHAR.stats, level: CHAR.level, selected_schools: Array.from(ADDED_SCHOOLS) },
@@ -8552,7 +8622,7 @@ function wirePersonal(){
 }
 
 /* boot */
-checkMe().then(loadCharacter).catch(()=>{ statusEl.textContent='Please log in.'; });
+checkMe().then(loadCharacter).catch((e)=>{ statusEl.textContent = 'Load failed: ' + (e?.message || e); });
 wireRichTextPaste();
 </script>
 
