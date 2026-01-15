@@ -573,8 +573,15 @@
                 </div>
                 <div class="abi-bucket">
                   <h3>Spells (from linked list)</h3>
-                  <div class="row" style="gap:8px; align-items:center; margin-bottom:6px;">
-                    <label class="row muted" style="gap:6px; align-items:center;">
+                  <div class="row" style="gap:6px; align-items:center; margin-bottom:6px;">
+                    <label class="muted" for="abi-spell-order">Order</label>
+                    <select id="abi-spell-order" style="min-width:160px;">
+                      <option value="manual">Manual</option>
+                      <option value="az">A->Z</option>
+                      <option value="za">Z->A</option>
+                    </select>
+                    <button class="btn small" id="abi-spell-sort">Sort</button>
+                    <label class="row muted" style="gap:6px; align-items:center; margin-left:8px;">
                       <input type="checkbox" id="abi-spells-only-learned" checked> Prepared Only
                     </label>
                   </div>
@@ -1289,6 +1296,7 @@ let EXP_ASSIGNED = []; // full documents of expertise abilities (resolved by id)
 let DIMA_ASSIGNED = []; // full documents of divine manifestation abilities (resolved by id)
 let ABI_SORT_PASSIVE = 'manual';
 let ABI_SORT_ACTIVE = 'manual';
+let ABI_SORT_SPELLS = 'manual';
 let COMPUTED_EXP_ABILITIES = [];
 let COMPUTED_DIMA_ABILITIES = [];
 let ABILITY_CHOICES = {}; // per-ability user selections for configurable modifiers (choices or groups)
@@ -1468,6 +1476,8 @@ const abiPassiveOrderEl = document.getElementById('abi-passive-order');
 const abiActiveOrderEl  = document.getElementById('abi-active-order');
 const abiPassiveSortBtn = document.getElementById('abi-passive-sort');
 const abiActiveSortBtn  = document.getElementById('abi-active-sort');
+const abiSpellOrderEl = document.getElementById('abi-spell-order');
+const abiSpellSortBtn = document.getElementById('abi-spell-sort');
 const talentCounterEl = document.getElementById('talent-counter');
 const choiceModal = document.getElementById('choice-modal');
 const choiceBackdrop = document.getElementById('choice-backdrop');
@@ -5314,10 +5324,14 @@ function renderAbilitySpellsBucket(){
   }
   const metaMap = SPELLLIST_META.spell_meta || {};
   const onlyLearned = !!(abiSpellsOnlyLearnedEl && abiSpellsOnlyLearnedEl.checked);
-  SPELLLIST_SPELLS.filter(sp=> !onlyLearned || (metaMap[sp.id]?.status === 'learnt')).forEach(sp=>{
+  const ordered = applySpellSort(SPELLLIST_SPELLS, ABI_SORT_SPELLS, metaMap);
+  const visible = ordered.filter(sp=> !onlyLearned || (metaMap[sp.id]?.status === 'learnt'));
+  const manualMode = String(ABI_SORT_SPELLS || '').toLowerCase() === 'manual';
+  const moveIndexById = {};
+  visible.forEach((sp, idx)=>{ moveIndexById[String(sp?.id || '')] = idx; });
+  visible.forEach(sp=>{
     const meta = metaMap[sp.id] || {};
-    const alt = meta.alt_name || '';
-    const nameDisplay = alt || sp.name || 'Spell';
+    const nameDisplay = spellDisplayName(sp, metaMap);
     const desc = meta.description || sp.description || sp.description_long || sp.desc || '';
     const flavor = sp.flavor || sp.flavour || '';
     const userFlavor = meta.flavor || meta.flavour || '';
@@ -5350,7 +5364,12 @@ function renderAbilitySpellsBucket(){
     div.className = 'abi-item';
     const statusLabel = (meta.status === 'learnt') ? 'Prepared' : 'Learnt';
     const titleKey = spellColorKey(sp);
-      div.innerHTML = `
+    const id = String(sp?.id || '');
+    const moveIdx = moveIndexById[id];
+    const isFirst = moveIdx === 0;
+    const isLast = moveIdx === visible.length - 1;
+    const disableMove = !manualMode;
+    div.innerHTML = `
         <div class="grow">
           <div><strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
           <div class="muted" style="font-size:.85rem">${desc}</div>
@@ -5360,12 +5379,16 @@ function renderAbilitySpellsBucket(){
           <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap;">
+          <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
+          <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           <span class="tag">${sp.category || ''}</span>
         </div>
       `;
-      registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
-      div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, meta, { cost, range, aoe, desc, effectsDesc, statusLabel, nameDisplay })));
-      el.appendChild(div);
+    registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
+    div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, meta, { cost, range, aoe, desc, effectsDesc, statusLabel, nameDisplay })));
+    div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveSpellOrder(sp.id, 'up', { onlyLearned }));
+    div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveSpellOrder(sp.id, 'down', { onlyLearned }));
+    el.appendChild(div);
   });
 }
 
@@ -6643,7 +6666,10 @@ function updateDerived(){
   const invEnc = LINKED_INV?.enc_total || 0;
   base.et = 1 + Math.floor(lvl/10) + msMAG;
   const etTech = 1 + Math.floor(lvl/10) + msTEC;
-  base._notes = Object.assign(base._notes || {}, { et: [`Alt (TEC): ${etTech}`], sublimation_slots: [`Base ${slotsForLevel(lvl)} + PRE milestone ${msPRE * 2}`] });
+  base._notes = Object.assign(base._notes || {}, {
+    et: [`Alt (TEC): ${etTech}`],
+    sublimation_slots: [`Base ${slotsForLevel(lvl)} + PRE milestone ${msPRE * 2}`]
+  });
   base.tx = 2 + msBOD + (2 * msTEC);
   base.talent_max = baseTalentMax(lvl);
   base.max_expertise = 0;
@@ -6651,7 +6677,8 @@ function updateDerived(){
   base.skill_points = skillPointPool(lvl);
     base.stat_points = statPointPool(lvl);
     base.sublimation_slots = slotsForLevel(lvl) + (2 * msPRE);
-    base.weapon_neutral = 0;
+    base.weapon_neutral = msDEX;
+    base._notes = Object.assign(base._notes || {}, { weapon_neutral: [`DEX milestone ${msDEX}`] });
 
     // Apply passive modifiers to derived
     const final = applyPassiveModifiersToDerived(base, invEnc);
@@ -7001,6 +7028,10 @@ abiPassiveSortBtn?.addEventListener('click', ()=>{
 abiActiveSortBtn?.addEventListener('click', ()=>{
   ABI_SORT_ACTIVE = abiActiveOrderEl?.value || 'manual';
   renderAbilitiesTab();
+});
+abiSpellSortBtn?.addEventListener('click', ()=>{
+  ABI_SORT_SPELLS = abiSpellOrderEl?.value || 'manual';
+  renderAbilitySpellsBucket();
 });
 speciesSelectEl?.addEventListener('change', ()=> applySpeciesSelection(speciesSelectEl.value));
 boonSelectEl?.addEventListener('change', ()=> applyBoonSelection(boonSelectEl.value));
@@ -7782,6 +7813,140 @@ function collectDisplayAbilities(){
   return combined;
 }
 
+function moveSubsetOrder(orderIds, subsetIds, targetId, direction){
+  const order = (orderIds || []).map(String);
+  const subset = (subsetIds || []).map(String);
+  if (!order.length || subset.length < 2) return orderIds;
+  const idx = subset.indexOf(String(targetId));
+  if (idx < 0) return orderIds;
+  const next = direction === 'up' ? idx - 1 : idx + 1;
+  if (next < 0 || next >= subset.length) return orderIds;
+  const updatedSubset = subset.slice();
+  updatedSubset[idx] = subset[next];
+  updatedSubset[next] = subset[idx];
+  const subsetSet = new Set(subset);
+  const updatedOrder = order.slice();
+  let cursor = 0;
+  updatedOrder.forEach((id, i)=>{
+    if (subsetSet.has(id)){
+      updatedOrder[i] = updatedSubset[cursor++];
+    }
+  });
+  return updatedOrder;
+}
+
+function assignedAbilityTypeMap(){
+  const map = {};
+  (ASSIGNED || []).forEach(a=>{
+    const id = String(a?.id || '').trim();
+    if (!id) return;
+    map[id] = String(a?.type || '').toLowerCase() === 'active' ? 'active' : 'passive';
+  });
+  return map;
+}
+
+function moveAssignedAbility(id, direction, bucketType){
+  if (!CHAR || !Array.isArray(CHAR.abilities)) return;
+  const orderIds = (CHAR.abilities || []).map(String).filter(Boolean);
+  const typeMap = assignedAbilityTypeMap();
+  const subsetIds = orderIds.filter(aid => typeMap[aid] === bucketType);
+  const updated = moveSubsetOrder(orderIds, subsetIds, id, direction);
+  if (!updated || updated === orderIds) return;
+  CHAR.abilities = updated;
+  if (bucketType === 'active'){
+    ABI_SORT_ACTIVE = 'manual';
+    if (abiActiveOrderEl) abiActiveOrderEl.value = 'manual';
+  }else{
+    ABI_SORT_PASSIVE = 'manual';
+    if (abiPassiveOrderEl) abiPassiveOrderEl.value = 'manual';
+  }
+  queueSave();
+  const byId = {};
+  (ASSIGNED || []).forEach(a=>{
+    const key = String(a?.id || '').trim();
+    if (key && !byId[key]) byId[key] = a;
+  });
+  ASSIGNED = updated.map(aid => byId[aid]).filter(Boolean);
+  renderAbilitiesTab();
+}
+
+function spellDisplayName(sp, metaMap){
+  const meta = metaMap[String(sp?.id || '')] || {};
+  return meta.alt_name || sp?.name || sp?.id || 'Spell';
+}
+
+function getSpellOrderIds(list, metaMap){
+  const withOrder = [];
+  const withoutOrder = [];
+  (list || []).forEach((sp, idx)=>{
+    const id = String(sp?.id || '').trim();
+    if (!id) return;
+    const rawOrder = metaMap[id]?.order;
+    const order = Number(rawOrder);
+    if (Number.isFinite(order)){
+      withOrder.push({ id, order, idx });
+    }else{
+      withoutOrder.push({ id, idx });
+    }
+  });
+  if (!withOrder.length){
+    return (list || []).map(sp=> String(sp?.id || '')).filter(Boolean);
+  }
+  withOrder.sort((a,b)=> (a.order - b.order) || (a.idx - b.idx));
+  return withOrder.map(x=> x.id).concat(withoutOrder.map(x=> x.id));
+}
+
+function applySpellSort(list, mode, metaMap){
+  const sortMode = String(mode || '').toLowerCase();
+  if (sortMode === 'az' || sortMode === 'za'){
+    const sorted = (list || []).slice().sort((a,b)=>{
+      const aName = spellDisplayName(a, metaMap);
+      const bName = spellDisplayName(b, metaMap);
+      return String(aName).localeCompare(String(bName), undefined, { sensitivity: 'base' });
+    });
+    if (sortMode === 'za') sorted.reverse();
+    return sorted;
+  }
+  if (sortMode !== 'manual') return list;
+  const orderIds = getSpellOrderIds(list, metaMap);
+  const byId = {};
+  (list || []).forEach(sp=>{
+    const id = String(sp?.id || '').trim();
+    if (id) byId[id] = sp;
+  });
+  return orderIds.map(id => byId[id]).filter(Boolean);
+}
+
+function setSpellOrder(orderIds){
+  if (!Array.isArray(orderIds) || !orderIds.length) return;
+  const metaMap = SPELLLIST_META.spell_meta || {};
+  const updated = { ...metaMap };
+  orderIds.forEach((id, idx)=>{
+    const key = String(id || '').trim();
+    if (!key) return;
+    const cur = metaMap[key] || {};
+    updated[key] = { ...cur, order: idx };
+  });
+  SPELLLIST_META.spell_meta = updated;
+  saveSpellListMeta({ spell_meta: updated }).catch(()=>{});
+}
+
+function moveSpellOrder(id, direction, { onlyLearned = false } = {}){
+  if (!SPELLLIST_SPELLS.length) return;
+  const metaMap = SPELLLIST_META.spell_meta || {};
+  const orderIds = getSpellOrderIds(SPELLLIST_SPELLS, metaMap);
+  const subsetIds = orderIds.filter(spId => {
+    if (!onlyLearned) return true;
+    return (metaMap[spId]?.status || 'known') === 'learnt';
+  });
+  const updated = moveSubsetOrder(orderIds, subsetIds, id, direction);
+  if (!updated || updated === orderIds) return;
+  ABI_SORT_SPELLS = 'manual';
+  if (abiSpellOrderEl) abiSpellOrderEl.value = 'manual';
+  setSpellOrder(updated);
+  renderAbilitySpellsBucket();
+}
+
 function applyAbilitySort(list, mode){
   const sortMode = String(mode || '').toLowerCase();
   if (sortMode !== 'az' && sortMode !== 'za') return list;
@@ -7794,12 +7959,24 @@ function applyAbilitySort(list, mode){
   return sorted;
 }
 
-function renderAbilitiesBucket(el, list, { assignedIds } = {}){
+function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } = {}){
   if (!el) return;
   el.innerHTML = '';
   if (!list.length){ el.innerHTML = '<div class="muted">--</div>'; return; }
+  const manualMode = String(sortMode || '').toLowerCase() === 'manual';
+  const moveableIds = (list || [])
+    .filter(a=> assignedIds && assignedIds.has(String(a?.id || '')))
+    .map(a=> String(a?.id || ''));
+  const moveIndexById = {};
+  moveableIds.forEach((id, idx)=>{ moveIndexById[id] = idx; });
   for (const a of list){
-    const canRemove = assignedIds ? assignedIds.has(String(a?.id || '')) : true;
+    const id = String(a?.id || '');
+    const canRemove = assignedIds ? assignedIds.has(id) : true;
+    const canMove = assignedIds ? assignedIds.has(id) : false;
+    const moveIdx = moveIndexById[id];
+    const isFirst = moveIdx === 0;
+    const isLast = moveIdx === moveableIds.length - 1;
+    const disableMove = !manualMode;
     const div = document.createElement('div');
     div.className = 'abi-item';
     const isPassive = (a.type||'').toLowerCase()!=='active';
@@ -7817,6 +7994,10 @@ function renderAbilitiesBucket(el, list, { assignedIds } = {}){
       <span class="tag">${a.type||''}</span>
       <span class="tag">${a.source_category||''}</span>
       <div class="row" style="gap:6px; flex-wrap:wrap;">
+        ${canMove ? `
+        <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
+        <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
+        ` : ''}
         ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
         ${canRemove ? '<button class="btn small mod-remove" title="Remove">X</button>' : ''}
       </div>
@@ -7828,6 +8009,10 @@ function renderAbilitiesBucket(el, list, { assignedIds } = {}){
     }
     if (hasChoice){
       div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
+    }
+    if (canMove && bucketType){
+      div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveAssignedAbility(a.id, 'up', bucketType));
+      div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveAssignedAbility(a.id, 'down', bucketType));
     }
     el.appendChild(div);
   }
@@ -7841,8 +8026,8 @@ function renderAbilitiesTab(){
   const sortedPassive = applyAbilitySort(passive, ABI_SORT_PASSIVE);
   const sortedActive = applyAbilitySort(active, ABI_SORT_ACTIVE);
 
-  renderAbilitiesBucket(listPassiveEl,   sortedPassive, { assignedIds });
-  renderAbilitiesBucket(listActiveEl,    sortedActive, { assignedIds });
+  renderAbilitiesBucket(listPassiveEl,   sortedPassive, { assignedIds, bucketType: 'passive', sortMode: ABI_SORT_PASSIVE });
+  renderAbilitiesBucket(listActiveEl,    sortedActive, { assignedIds, bucketType: 'active', sortMode: ABI_SORT_ACTIVE });
   renderAbilitySpellsBucket();
   updateTalentCounter();
   updateExpertiseCounters();
