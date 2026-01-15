@@ -446,6 +446,37 @@
             <div id="inv-item-actions" style="margin-top:12px;"></div>
           </div>
         </div>
+
+        <!-- Craftomancy modal -->
+        <div id="craft-add-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+        <div id="craft-add-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="craft-add-title">
+          <div class="modal-card" style="max-width:980px;">
+            <header class="row" style="justify-content:space-between; align-items:center;">
+              <div class="modal-title" id="craft-add-title">Add Craftomancy</div>
+              <button class="modal-close" id="craft-add-close" aria-label="Close">&times;</button>
+            </header>
+            <div id="craft-add-info" class="muted" style="margin:6px 0 8px;"></div>
+            <div class="row" style="gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+              <input id="craft-search-q" placeholder="Search approved spells..." style="flex:1; min-width:240px;">
+              <label class="row muted" style="gap:6px; align-items:center;">
+                <input type="checkbox" id="craft-supreme"> Supreme Enchantment (+1 category)
+              </label>
+              <button class="btn" id="craft-search-btn">Search</button>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Name</th><th>Category</th><th>Cost</th><th>Craft</th></tr></thead>
+                <tbody id="craft-search-body">
+                  <tr><td colspan="4" class="empty">Use search to list approved spells.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="row" style="margin-top:10px; gap:8px;">
+              <button class="btn btn-secondary" id="craft-add-cancel">Close</button>
+            </div>
+            <div id="craft-add-status" class="muted" style="margin-top:6px;"></div>
+          </div>
+        </div>
       </div>
 
       <!-- ABILITIES TAB -->
@@ -542,6 +573,7 @@
               <div class="stat-counter" style="margin-top:6px;">
                 <span class="pill" id="expertise-counter">Expertise: -- / --</span>
                 <span class="pill" id="dima-counter">Divine Manifestation: -- / --</span>
+                <span class="pill" id="craftomancy-counter">Craftomancy Focus: -- / --</span>
               </div>
 
               <div class="abi-grid" style="margin-top:16px;">
@@ -1165,6 +1197,20 @@ const SUB_TYPES = [
   { key:'endurance', label:'Endurance' },
 ];
 const QUALITY_ORDER = ['Very Mediocre','Mediocre','Adequate','Good','Very Good','Excellent','Legendary','Mythical','Epic','Divine','Unreal'];
+const CRAFT_CATEGORY_ORDER = ['Novice','Apprentice','Disciple','Adept','Mage','Magister','High Mage','Master','Grand Master','Archmage','Supreme Archmage','Avant-Garde'];
+const CRAFTOMANCY_TABLE = {
+  'Very Mediocre': { category:'Novice', skill:5, die:'d4', dc:3, price:200, hours:10 },
+  'Mediocre': { category:'Apprentice', skill:6, die:'d4', dc:5, price:300, hours:15 },
+  'Adequate': { category:'Disciple', skill:7, die:'d4', dc:7, price:400, hours:20 },
+  'Good': { category:'Adept', skill:8, die:'d6', dc:8, price:500, hours:25 },
+  'Very Good': { category:'Mage', skill:9, die:'d6', dc:10, price:750, hours:30 },
+  'Excellent': { category:'Magister', skill:10, die:'d8', dc:13, price:875, hours:35 },
+  'Legendary': { category:'High Mage', skill:11, die:'d8', dc:15, price:1600, hours:40 },
+  'Mythical': { category:'Master', skill:12, die:'d10', dc:23, price:2500, hours:50 },
+  'Epic': { category:'Grand Master', skill:13, die:'d10', dc:25, price:6000, hours:60 },
+  'Divine': { category:'Archmage', skill:14, die:'d12', dc:30, price:14000, hours:70 },
+  'Unreal': { category:'Supreme Archmage', skill:15, die:'d12', dc:25, price:32000, hours:80 },
+};
 
 function _archetypeRankForLevel(lvl){
   const thresholds = [[80,12],[70,11],[60,10],[50,9],[40,8],[30,7],[20,6],[10,5],[1,4]];
@@ -1238,6 +1284,7 @@ const TARGET_GROUPS = [
     { value:'derived.talent_max', label:'Talent Max' },
     { value:'derived.skill_points', label:'Skill point pool' },
     { value:'derived.stat_points', label:'Characteristic point pool' },
+    { value:'derived.craftomancy_max', label:'Max Craftomancies' },
     { value:'derived.sublimation_slots', label:'Sublimation slots' },
     { value:'derived.complex_schools', label:'Complex schools' },
   ]},
@@ -1267,6 +1314,27 @@ function qualityStepFromNote(note){
   if (!note) return 0;
   const m = String(note).match(/([+-]?\d+(?:\.\d+)?)\s*(?:per\s+quality|\/\s*quality)/i);
   return m ? Number(m[1]) || 0 : 0;
+}
+function craftRowForQuality(q){
+  const key = String(q || '').trim();
+  return { ...(CRAFTOMANCY_TABLE[key] || CRAFTOMANCY_TABLE['Adequate']) };
+}
+function craftCategoryIndex(cat){
+  const idx = CRAFT_CATEGORY_ORDER.indexOf(String(cat || '').trim());
+  return idx < 0 ? -1 : idx;
+}
+function craftNextCategory(cat){
+  const idx = craftCategoryIndex(cat);
+  if (idx < 0 || idx + 1 >= CRAFT_CATEGORY_ORDER.length) return null;
+  return CRAFT_CATEGORY_ORDER[idx + 1];
+}
+function craftSpellIsComplex(sp){
+  if (!sp || !Array.isArray(sp.schools) || !SCHOOLS.length) return false;
+  return sp.schools.some(s=>{
+    const hit = (SCHOOLS || []).find(sc=> String(sc.id) === String(s.id));
+    const st = (hit?.school_type || hit?.type || '').toLowerCase();
+    return st === 'complex';
+  });
 }
 const MAX_LEVEL = 100;
 function xpForLevel(level){
@@ -1308,6 +1376,8 @@ let SELECTED_INV_ID = '';
 function getInventorySourceId(){
   return SELECTED_INV_ID || LINKED_INV?.id || '';
 }
+let CRAFT_TARGET_ITEM = null;
+let CRAFT_SEARCH_RESULTS = [];
 let INV_LAST_RESULTS = [];
 let INV_FILTERED = [];
 let SPELL_LISTS = [];
@@ -1582,6 +1652,17 @@ const invItemBackdrop = document.getElementById('inv-item-backdrop');
 const invItemTitle = document.getElementById('inv-item-title');
 const invItemBody = document.getElementById('inv-item-body');
 const invItemActions = document.getElementById('inv-item-actions');
+const craftAddModal = document.getElementById('craft-add-modal');
+const craftAddBackdrop = document.getElementById('craft-add-backdrop');
+const craftAddTitle = document.getElementById('craft-add-title');
+const craftAddInfo = document.getElementById('craft-add-info');
+const craftAddClose = document.getElementById('craft-add-close');
+const craftAddCancel = document.getElementById('craft-add-cancel');
+const craftSearchQ = document.getElementById('craft-search-q');
+const craftSearchBtn = document.getElementById('craft-search-btn');
+const craftSearchBody = document.getElementById('craft-search-body');
+const craftAddStatus = document.getElementById('craft-add-status');
+const craftSupremeEl = document.getElementById('craft-supreme');
 const invFundOpenBtn = document.getElementById('inv-fund-open');
 const invFundModal = document.getElementById('inv-fund-modal');
 const invFundBackdrop = document.getElementById('inv-fund-backdrop');
@@ -2473,6 +2554,7 @@ function prettyTargetLabel(target){
     if (t === 'derived.skill_points') return 'Skill point pool';
     if (t === 'derived.weapon_neutral') return 'Neutral weapon damage';
     if (t === 'derived.stat_points') return 'Characteristic point pool';
+    if (t === 'derived.craftomancy_max') return 'Max Craftomancies';
     if (t === 'derived.sublimation_slots') return 'Sublimation slots';
     if (t === 'derived.complex_schools') return 'Complex schools';
     if (t === 'derived.initiative') return 'Initiative';
@@ -3641,7 +3723,7 @@ function wireRollModal(){
 function itemHasChoice(it){
   return itemChoiceMods(it).length > 0;
 }
-  function itemChoiceKey(it){
+function itemChoiceKey(it){
     const key = String(it?.item_id || it?.id || '').trim();
     if (key) return key;
     const name = String(it?.name || '').trim();
@@ -3664,8 +3746,214 @@ function itemHasChoice(it){
         ids.add(upgradeChoiceKey(it, u, idx));
       });
     });
-    Object.keys(ITEM_CHOICES).forEach(id=>{ if (!ids.has(String(id))) delete ITEM_CHOICES[id]; });
+  Object.keys(ITEM_CHOICES).forEach(id=>{ if (!ids.has(String(id))) delete ITEM_CHOICES[id]; });
   }
+
+function craftomancyMax(){
+  return Math.max(0, Math.floor(numOr(DERIVED_CACHE?.craftomancy_max, 0)));
+}
+function collectFocusedCraftomancies(){
+  const list = [];
+  (LINKED_INV?.items || []).forEach(it=>{
+    (it.craftomancies || []).forEach(cm=>{
+      if (!cm || !cm.focused) return;
+      list.push({ item: it, craft: cm });
+    });
+  });
+  return list;
+}
+function craftomancyFocusUsed(){
+  return collectFocusedCraftomancies().reduce((sum, entry)=>{
+    const cost = Number(entry.craft?.focus_cost) || (entry.craft?.is_complex ? 3 : 1);
+    return sum + cost;
+  }, 0);
+}
+function updateCraftomancyCounter(){
+  const el = document.getElementById('craftomancy-counter');
+  if (!el) return;
+  const used = craftomancyFocusUsed();
+  const max = craftomancyMax();
+  el.textContent = `Craftomancy Focus: ${used} / ${max}`;
+  el.style.color = used > max ? '#f66' : '';
+}
+
+function craftInfoForSpell(sp, quality, supreme){
+  const row = craftRowForQuality(quality);
+  const baseCat = sp?.category || 'Novice';
+  const allowedIdx = craftCategoryIndex(row.category);
+  const catIdx = craftCategoryIndex(baseCat);
+  const allowed = (catIdx >= 0 && allowedIdx >= 0 && catIdx <= allowedIdx);
+  const effectiveCategory = (supreme ? (craftNextCategory(baseCat) || baseCat) : baseCat);
+  const complex = craftSpellIsComplex(sp);
+  const price = row.price * (complex ? 2 : 1);
+  const hours = row.hours * (complex ? 2 : 1);
+  const focusCost = complex ? 3 : 1;
+  return {
+    allowed,
+    baseCat,
+    effectiveCategory,
+    allowedCat: row.category,
+    skill: row.skill,
+    dc: row.dc,
+    die: row.die,
+    price,
+    hours,
+    complex,
+    focusCost
+  };
+}
+
+function openCraftomancyModal(it){
+  if (!craftAddModal || !craftAddBackdrop) return;
+  CRAFT_TARGET_ITEM = it;
+  CRAFT_SEARCH_RESULTS = [];
+  craftSearchQ.value = '';
+  craftAddStatus.textContent = '';
+  if (craftSupremeEl) craftSupremeEl.checked = false;
+  if (craftAddTitle) craftAddTitle.textContent = `Add Craftomancy - ${it?.alt_name || it?.name || 'Item'}`;
+  const quality = it?.quality || 'Adequate';
+  const row = craftRowForQuality(quality);
+  const count = (it?.craftomancies || []).length;
+  const warn = count >= 1 ? 'Second craftomancy requires advanced Craftomancer.' : '';
+  craftAddInfo.textContent = `Quality: ${quality} | Max category: ${row.category} | Skill ${row.skill} (DC ${row.dc}, ID ${row.die}) | Base price ${row.price} Jelly | Time ${row.hours}h. ${warn}`;
+  craftSearchBody.innerHTML = '<tr><td colspan="4" class="empty">Use search to list approved spells.</td></tr>';
+  craftAddModal.classList.remove('hidden');
+  craftAddModal.classList.add('open');
+  craftAddBackdrop.classList.add('open');
+}
+
+function closeCraftomancyModal(){
+  if (!craftAddModal || !craftAddBackdrop) return;
+  CRAFT_TARGET_ITEM = null;
+  craftAddModal.classList.add('hidden');
+  craftAddModal.classList.remove('open');
+  craftAddBackdrop.classList.remove('open');
+}
+
+async function searchCraftomancySpells(){
+  if (!CRAFT_TARGET_ITEM) return;
+  const q = (craftSearchQ.value || '').trim();
+  craftAddStatus.textContent = '';
+  craftSearchBody.innerHTML = '<tr><td colspan="4" class="empty">Searching...</td></tr>';
+  try{
+    if (!SCHOOLS.length) await fetchSchools();
+  }catch{}
+  try{
+    const qs = q ? `?name=${encodeURIComponent(q)}&status=green&limit=200` : `?status=green&limit=200`;
+    const res = await fetch(`/spells${qs}`);
+    const data = await res.json().catch(()=>({}));
+    const spells = data.spells || [];
+    CRAFT_SEARCH_RESULTS = spells;
+    renderCraftSearchResults();
+  }catch(e){
+    craftSearchBody.innerHTML = `<tr><td colspan="4" class="empty">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderCraftSearchResults(){
+  if (!CRAFT_TARGET_ITEM) return;
+  const spells = CRAFT_SEARCH_RESULTS || [];
+  const supreme = !!craftSupremeEl?.checked;
+  const quality = CRAFT_TARGET_ITEM.quality || 'Adequate';
+  if (!spells.length){
+    craftSearchBody.innerHTML = '<tr><td colspan="4" class="empty">No results.</td></tr>';
+    return;
+  }
+  craftSearchBody.innerHTML = '';
+  spells.forEach(sp=>{
+    const info = craftInfoForSpell(sp, quality, supreme);
+    const schools = (sp.schools || []).map(s=>s.name||s.id).join(', ');
+    const tr = document.createElement('tr');
+    const costTxt = info.allowed
+      ? `${info.price} Jelly | ${info.hours}h | DC ${info.dc} | Skill ${info.skill} (${info.die})${info.complex ? ' | complex x2' : ''}`
+      : `Requires ${info.allowedCat} or lower`;
+    const catTxt = info.effectiveCategory ? `${info.baseCat}${info.effectiveCategory !== info.baseCat ? ` -> ${info.effectiveCategory}` : ''}` : info.baseCat;
+    tr.innerHTML = `
+      <td>${invEscapeHtml(sp.name || 'Spell')}<div class="muted">Schools: ${invEscapeHtml(schools || '-')}</div></td>
+      <td>${invEscapeHtml(catTxt)}</td>
+      <td>${invEscapeHtml(costTxt)}</td>
+      <td><button class="btn small" ${info.allowed ? '' : 'disabled'}>Add</button></td>
+    `;
+    tr.querySelector('button')?.addEventListener('click', ()=> addCraftomancyFromSpell(sp));
+    craftSearchBody.appendChild(tr);
+  });
+}
+
+async function addCraftomancyFromSpell(sp){
+  if (!CRAFT_TARGET_ITEM) return;
+  const crafts = CRAFT_TARGET_ITEM.craftomancies || [];
+  if (crafts.length >= 2){
+    craftAddStatus.textContent = 'This item already has 2 craftomancies.';
+    return;
+  }
+  const supreme = !!craftSupremeEl?.checked;
+  const quality = CRAFT_TARGET_ITEM.quality || 'Adequate';
+  const info = craftInfoForSpell(sp, quality, supreme);
+  if (!info.allowed){
+    craftAddStatus.textContent = `Spell exceeds quality limit (${info.allowedCat}).`;
+    return;
+  }
+  const note = `Add craftomancy ${sp.name || sp.id} for ${info.price} Jelly (${info.hours}h, DC ${info.dc}, Skill ${info.skill})?`;
+  if (!confirm(note)) return;
+  try{
+    craftAddStatus.textContent = 'Adding craftomancy...';
+    const currency = invGlobalCurEl?.value || 'Jelly';
+    const r = await fetch(`/inventories/${encodeURIComponent(getInventorySourceId())}/items/${encodeURIComponent(CRAFT_TARGET_ITEM.item_id)}/craftomancy`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ spell_id: sp.id, supreme, currency })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== 'success') throw new Error(j.message || 'Add failed');
+    if (j.warning) alert(j.warning);
+    LINKED_INV = j.inventory;
+    renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+    renderAbilitySpellsBucket();
+    closeCraftomancyModal();
+  }catch(e){
+    craftAddStatus.textContent = `Failed: ${e.message}`;
+  }
+}
+
+async function setCraftomancyFocus(it, cm, focused){
+  const sourceId = getInventorySourceId();
+  if (!sourceId) return;
+  try{
+    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/craftomancy/${encodeURIComponent(cm.id)}`, {
+      method:'PATCH',
+      headers:{ 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ focused })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== 'success') throw new Error(j.message || 'Update failed');
+    LINKED_INV = j.inventory;
+    renderAbilitySpellsBucket();
+    updateCraftomancyCounter();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function removeCraftomancy(it, cm){
+  const sourceId = getInventorySourceId();
+  if (!sourceId) return;
+  if (!confirm(`Remove craftomancy ${cm.spell_name || cm.spell_id}? Cost: 500 Jelly.`)) return;
+  try{
+    const currency = invGlobalCurEl?.value || 'Jelly';
+    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/craftomancy/${encodeURIComponent(cm.id)}/remove`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ currency })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== 'success') throw new Error(j.message || 'Remove failed');
+    LINKED_INV = j.inventory;
+    renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+    renderAbilitySpellsBucket();
+  }catch(e){
+    alert(e.message);
+  }
+}
 
 async function invAddContainer(){
   const name = (invNewContNameEl.value || "Container").trim();
@@ -4303,6 +4591,82 @@ function openInvItemModal(it){
     mods.textContent = `Applies: ${modLine}`;
     invItemBody.appendChild(mods);
   }
+
+  const craftSection = document.createElement("div");
+  craftSection.className = "home-card";
+  const craftHead = document.createElement("div");
+  craftHead.className = "row";
+  craftHead.style.alignItems = "center";
+  craftHead.style.gap = "10px";
+  const craftCount = (it.craftomancies || []).length;
+  craftHead.innerHTML = `<h3 style="margin:0;">Craftomancy</h3><span class="pill-soft">${craftCount} / 1</span>`;
+  const craftAddBtn = document.createElement("button");
+  craftAddBtn.className = "btn small";
+  craftAddBtn.textContent = "Add craftomancy";
+  if (!it.quality){
+    craftAddBtn.disabled = true;
+    craftAddBtn.title = "Item quality required.";
+  }else if (craftCount >= 2){
+    craftAddBtn.disabled = true;
+    craftAddBtn.title = "Craftomancy limit reached.";
+  }
+  craftAddBtn.addEventListener("click", ()=> openCraftomancyModal(it));
+  craftHead.appendChild(craftAddBtn);
+  craftSection.appendChild(craftHead);
+  if (craftCount >= 1){
+    const warn = document.createElement("div");
+    warn.className = "muted";
+    warn.textContent = "Second craftomancy requires advanced Craftomancer.";
+    craftSection.appendChild(warn);
+  }
+
+  const craftList = document.createElement("div");
+  craftList.className = "upg-list";
+  const crafts = it.craftomancies || [];
+  if (!crafts.length){
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "No craftomancy installed.";
+    craftList.appendChild(empty);
+  }else{
+    crafts.forEach(cm=>{
+      const row = document.createElement("div");
+      row.className = "upg-row";
+      const cmName = cm.spell_name || cm.spell_id || "Spell";
+      const catText = cm.effective_category || cm.spell_category || "";
+      const metaLine = [
+        cm.craft_skill != null ? `Skill ${cm.craft_skill}` : "",
+        cm.craft_dc != null ? `DC ${cm.craft_dc}` : "",
+        cm.craft_die ? `ID ${cm.craft_die}` : "",
+        cm.craft_hours != null ? `${cm.craft_hours}h` : "",
+        cm.craft_price != null ? `${cm.craft_price} Jelly` : ""
+      ].filter(Boolean).join(" | ");
+      row.innerHTML = `
+        <div class="row" style="justify-content:space-between; align-items:center; gap:8px;">
+          <label class="row" style="gap:6px; align-items:center;">
+            <input type="checkbox" ${cm.focused ? "checked" : ""}>
+            <strong>${invEscapeHtml(cmName)}</strong>
+          </label>
+          <span class="pill-soft">${invEscapeHtml(catText || "Category")}</span>
+        </div>
+        <div class="muted">${invEscapeHtml(metaLine || "Craft details")}${cm.is_complex ? " | Focus 3 slots | +10 MP" : " | Focus 1 slot"}</div>
+        ${cm.supreme ? `<div class="muted">Supreme Enchantment applied.</div>` : ""}
+      `;
+      const checkbox = row.querySelector("input[type='checkbox']");
+      checkbox?.addEventListener("change", ()=> setCraftomancyFocus(it, cm, checkbox.checked));
+      const btnRow = document.createElement("div");
+      btnRow.className = "btn-row";
+      const rem = document.createElement("button");
+      rem.className = "btn btn-secondary small";
+      rem.textContent = "Remove";
+      rem.addEventListener("click", async ()=>{ await removeCraftomancy(it, cm); closeInvItemModal(); });
+      btnRow.appendChild(rem);
+      row.appendChild(btnRow);
+      craftList.appendChild(row);
+    });
+  }
+  craftSection.appendChild(craftList);
+  invItemBody.appendChild(craftSection);
 
   if (hasChoice){
     const choiceHint = document.createElement("div");
@@ -5318,7 +5682,11 @@ function renderAbilitySpellsBucket(){
   const el = document.getElementById('abi-list-spells');
   if (!el) return;
   el.innerHTML = '';
-  if (!SPELLLIST_SPELLS.length){ el.innerHTML = '<div class="muted">No linked spells.</div>'; return; }
+  const craftEntries = collectFocusedCraftomancies();
+  if (!SPELLLIST_SPELLS.length && !craftEntries.length){
+    el.innerHTML = '<div class="muted">No linked spells.</div>';
+    return;
+  }
   // lazy-load effects for descriptions
   if (!Object.keys(EFFECTS_BY_ID).length && !EFFECTS_PROMISE){
     ensureEffectsLoaded().then(()=> renderAbilitySpellsBucket());
@@ -5389,6 +5757,72 @@ function renderAbilitySpellsBucket(){
     div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, meta, { cost, range, aoe, desc, effectsDesc, statusLabel, nameDisplay })));
     div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveSpellOrder(sp.id, 'up', { onlyLearned }));
     div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveSpellOrder(sp.id, 'down', { onlyLearned }));
+    el.appendChild(div);
+  });
+
+  craftEntries.forEach(entry=>{
+    const cm = entry.craft || {};
+    const sp = {
+      id: cm.spell_id || '',
+      name: cm.spell_name || '',
+      category: cm.effective_category || cm.spell_category || '',
+      description: cm.spell_description || '',
+      description_long: cm.spell_description_long || '',
+      desc: cm.spell_description || '',
+      flavor: cm.spell_flavor || '',
+      effects: cm.spell_effects || [],
+      effects_detail: cm.spell_effects_detail || [],
+      mp_cost: cm.spell_mp_cost,
+      en_cost: cm.spell_en_cost,
+      range: cm.spell_range,
+      aoe: cm.spell_aoe,
+      duration: cm.spell_duration
+    };
+    const nameDisplay = sp.name || 'Spell';
+    const desc = sp.description || sp.description_long || sp.desc || '';
+    const flavor = sp.flavor || '';
+    const effectDetails = Array.isArray(sp.effects_detail) ? sp.effects_detail : [];
+    let effectsDesc = effectDetails.map(e=> e.description || e.detail || e).filter(Boolean).join(' | ');
+    const effectCounts = {};
+    (sp.effects || []).forEach(eid=>{
+      const k = String(eid||'').toLowerCase();
+      effectCounts[k] = (effectCounts[k]||0) + 1;
+    });
+    const resolvedEffects = Object.entries(effectCounts).map(([id,count])=>{
+      const eff = EFFECTS_BY_ID[id] || {};
+      const base = eff.description || eff.effect || eff.text || eff.name || id;
+      const countTxt = count > 1 ? ` x${count}` : '';
+      return `${base}${countTxt}`;
+    }).filter(Boolean);
+    if (resolvedEffects.length){
+      effectsDesc = effectsDesc ? `${effectsDesc} | ${resolvedEffects.join(' | ')}` : resolvedEffects.join(' | ');
+    }
+    const costParts = [];
+    if (sp.mp_cost != null){
+      const mpVal = Number(sp.mp_cost) + (cm.is_complex ? 10 : 0);
+      costParts.push(`MP: ${mpVal}`);
+    }
+    if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
+    const cost = costParts.join(' || ');
+    const range = sp.range != null ? `Range: ${sp.range}` : '';
+    const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
+    const div = document.createElement('div');
+    div.className = 'abi-item';
+    const statusLabel = 'Craftomancy';
+    div.innerHTML = `
+      <div class="grow">
+        <div><strong>${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
+        <div class="muted" style="font-size:.85rem">${desc}</div>
+        ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
+        ${effectsDesc ? `<div class="muted" style="font-size:.8rem">Effects: ${effectsDesc}</div>` : ''}
+        <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
+      </div>
+      <div class="row" style="gap:6px; flex-wrap:wrap;">
+        <span class="tag">${sp.category || ''}</span>
+        <span class="tag">Craftomancy</span>
+      </div>
+    `;
+    div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, {}, { cost, range, aoe, desc, effectsDesc, statusLabel, nameDisplay })));
     el.appendChild(div);
   });
 }
@@ -6459,6 +6893,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
       talent_max:[`Base = ${base.talent_max ?? 0}`],
       max_expertise:[`Base = ${base.max_expertise ?? 0}`],
       max_divine_manifestation:[`Base = ${base.max_divine_manifestation ?? 0}`],
+      craftomancy_max:[`Base = ${base.craftomancy_max ?? 0}`],
       skill_points:[`Base = ${base.skill_points ?? 0}`],
       stat_points:[`Base = ${base.stat_points ?? 0}`],
       sublimation_slots:[`Base = ${base.sublimation_slots ?? 0}`]
@@ -6523,7 +6958,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
         'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo','derived.initiative':'initiative',
       'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap','derived.talent_max':'talent_max',
       'derived.max_expertise':'max_expertise','derived.max_divine_manifestation':'max_divine_manifestation',
-      'derived.skill_points':'skill_points','derived.stat_points':'stat_points',
+      'derived.craftomancy_max':'craftomancy_max','derived.skill_points':'skill_points','derived.stat_points':'stat_points',
       'derived.sublimation_slots':'sublimation_slots','derived.complex_schools':'complex_schools','derived.weapon_neutral':'weapon_neutral'
     };
   for (const m of allMods){
@@ -6679,7 +7114,9 @@ function updateDerived(){
     base.stat_points = statPointPool(lvl);
     base.sublimation_slots = slotsForLevel(lvl) + (2 * msPRE);
     base.weapon_neutral = msDEX;
+    base.craftomancy_max = Math.floor(lvl / 9) + msTEC;
     base._notes = Object.assign(base._notes || {}, { weapon_neutral: [`DEX milestone ${msDEX}`] });
+    base._notes = Object.assign(base._notes || {}, { craftomancy_max: [`Base ${Math.floor(lvl / 9)} + TEC milestone ${msTEC}`] });
 
     // Apply passive modifiers to derived
     const final = applyPassiveModifiersToDerived(base, invEnc);
@@ -6760,6 +7197,7 @@ function updateDerived(){
     renderAddedSchools();
     updateTalentCounter();
     updateExpertiseCounters();
+    updateCraftomancyCounter();
     if (subSlotPill) renderSublimations();
   }
 
@@ -7134,6 +7572,12 @@ xpLedgerClose?.addEventListener('click', ()=> toggleXpLedger(false));
 xpLedgerBackdrop?.addEventListener('click', (e)=>{ if (e.target===xpLedgerBackdrop) toggleXpLedger(false); });
 slSearchBtn.addEventListener('click', renderSpellSearch);
 slSearchQ.addEventListener('keydown', (e)=>{ if (e.key==='Enter') renderSpellSearch(); });
+craftSearchBtn?.addEventListener('click', searchCraftomancySpells);
+craftSearchQ?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchCraftomancySpells(); });
+craftSupremeEl?.addEventListener('change', renderCraftSearchResults);
+craftAddClose?.addEventListener('click', closeCraftomancyModal);
+craftAddCancel?.addEventListener('click', closeCraftomancyModal);
+craftAddBackdrop?.addEventListener('click', (e)=>{ if (e.target===craftAddBackdrop) closeCraftomancyModal(); });
 
 function renderSearchResults(arr){
   abiResultsEl.innerHTML = '';
@@ -8073,6 +8517,7 @@ function renderAbilitiesTab(){
   renderAbilitySpellsBucket();
   updateTalentCounter();
   updateExpertiseCounters();
+  updateCraftomancyCounter();
 }
 
 function fillPersonal(){

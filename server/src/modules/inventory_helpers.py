@@ -63,3 +63,40 @@ def _pick_currency(inv: dict, preferred: str | None = None) -> str:
         # return the first key deterministically
         return sorted(cur.keys())[0]
     return "Jelly"
+
+CRAFTOMANCY_CATEGORY_ORDER = [
+    "Novice", "Apprentice", "Disciple", "Adept", "Mage", "Magister",
+    "High Mage", "Master", "Grand Master", "Archmage", "Supreme Archmage", "Avant-Garde"
+]
+CRAFTOMANCY_TABLE = {
+    "Very Mediocre": {"category": "Novice", "skill": 5, "die": "d4", "dc": 3, "price": 200, "hours": 10},
+    "Mediocre": {"category": "Apprentice", "skill": 6, "die": "d4", "dc": 5, "price": 300, "hours": 15},
+    "Adequate": {"category": "Disciple", "skill": 7, "die": "d4", "dc": 7, "price": 400, "hours": 20},
+    "Good": {"category": "Adept", "skill": 8, "die": "d6", "dc": 8, "price": 500, "hours": 25},
+    "Very Good": {"category": "Mage", "skill": 9, "die": "d6", "dc": 10, "price": 750, "hours": 30},
+    "Excellent": {"category": "Magister", "skill": 10, "die": "d8", "dc": 13, "price": 875, "hours": 35},
+    "Legendary": {"category": "High Mage", "skill": 11, "die": "d8", "dc": 15, "price": 1600, "hours": 40},
+    "Mythical": {"category": "Master", "skill": 12, "die": "d10", "dc": 23, "price": 2500, "hours": 50},
+    "Epic": {"category": "Grand Master", "skill": 13, "die": "d10", "dc": 25, "price": 6000, "hours": 60},
+    "Divine": {"category": "Archmage", "skill": 14, "die": "d12", "dc": 30, "price": 14000, "hours": 70},
+    "Unreal": {"category": "Supreme Archmage", "skill": 15, "die": "d12", "dc": 25, "price": 32000, "hours": 80},
+}
+
+def craftomancy_row_for_quality(q: str | None) -> dict:
+    key = (q or "Adequate").strip()
+    return dict(CRAFTOMANCY_TABLE.get(key) or CRAFTOMANCY_TABLE["Adequate"])
+
+def craftomancy_category_index(cat: str | None) -> int:
+    c = (cat or "").strip()
+    if not c:
+        return -1
+    try:
+        return CRAFTOMANCY_CATEGORY_ORDER.index(c)
+    except ValueError:
+        return -1
+
+def craftomancy_next_category(cat: str | None) -> str | None:
+    idx = craftomancy_category_index(cat)
+    if idx < 0 or idx + 1 >= len(CRAFTOMANCY_CATEGORY_ORDER):
+        return None
+    return CRAFTOMANCY_CATEGORY_ORDER[idx + 1]

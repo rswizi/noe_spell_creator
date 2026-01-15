@@ -20,7 +20,7 @@ from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS
 from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect, recompute_all_spells
 from server.src.modules.objects_helpers import _object_from_body
-from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER
+from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER, craftomancy_row_for_quality, craftomancy_category_index, craftomancy_next_category
 EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 from server.src.modules.allowed_pages import ALLOWED_PAGES
 CAMPAIGN_COL = get_col("campaigns")
@@ -3937,6 +3937,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "equipped": is_equipped,
         "consumable": bool(src.get("consumable")),
         "alchemy_tool": bool(src.get("alchemy_tool")),
+        "craftomancies": [],
     }
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
@@ -4127,6 +4128,200 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
 
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
     return {"status": "success", "inventory": inv2}
+
+def _spell_school_info(spell: dict) -> tuple[list[dict], bool]:
+    eff_ids = [str(eid) for eid in (spell.get("effects") or [])]
+    if not eff_ids:
+        return [], False
+    eff_col = get_col("effects")
+    sch_col = get_col("schools")
+    eff_docs = list(eff_col.find({"id": {"$in": eff_ids}}, {"_id": 0, "id": 1, "school": 1}))
+    school_ids = {str(d.get("school") or "") for d in eff_docs if d.get("school")}
+    if not school_ids:
+        return [], False
+    sch_docs = list(sch_col.find({"id": {"$in": list(school_ids)}}, {"_id": 0, "id": 1, "name": 1, "school_type": 1, "type": 1, "upgrade": 1}))
+    schools = []
+    is_complex = False
+    for s in sch_docs:
+        if s.get("upgrade"):
+            continue
+        stype = (s.get("school_type") or s.get("type") or "").strip()
+        schools.append({"id": s.get("id"), "name": s.get("name") or s.get("id"), "school_type": stype})
+        if stype.lower() == "complex":
+            is_complex = True
+    return schools, is_complex
+
+@app.post("/inventories/{inv_id}/items/{item_id}/craftomancy")
+def add_craftomancy(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    spell_id = str(payload.get("spell_id") or "").strip()
+    if not spell_id:
+        raise HTTPException(400, "spell_id required")
+    supreme = bool(payload.get("supreme", False))
+    currency = (payload.get("currency") or "").strip() or None
+
+    items = inv.get("items") or []
+    idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Item not found")
+    it = dict(items[idx])
+
+    quality = (it.get("quality") or "").strip()
+    if not quality:
+        raise HTTPException(400, "Item quality required for craftomancy")
+
+    sp = get_col("spells").find_one({"id": spell_id}, {"_id": 0})
+    if not sp:
+        raise HTTPException(404, "Spell not found")
+    if str(sp.get("status") or "").lower() != "green":
+        raise HTTPException(400, "Spell is not approved")
+
+    row = craftomancy_row_for_quality(quality)
+    allowed_cat = row.get("category") or "Novice"
+    spell_cat = sp.get("category") or "Novice"
+    spell_idx = craftomancy_category_index(spell_cat)
+    allowed_idx = craftomancy_category_index(allowed_cat)
+    if spell_idx < 0 or allowed_idx < 0:
+        raise HTTPException(400, "Invalid spell category")
+    if spell_idx > allowed_idx:
+        raise HTTPException(400, f"Spell category exceeds quality limit ({allowed_cat})")
+
+    effective_cat = craftomancy_next_category(spell_cat) if supreme else None
+    if not effective_cat:
+        effective_cat = spell_cat
+
+    schools, is_complex = _spell_school_info(sp)
+    price = int(row.get("price") or 0)
+    hours = int(row.get("hours") or 0)
+    if is_complex:
+        price *= 2
+        hours *= 2
+    focus_cost = 3 if is_complex else 1
+
+    crafts = it.get("craftomancies") or []
+    if len(crafts) >= 2:
+        raise HTTPException(400, "Craftomancy limit reached for this item")
+
+    import uuid
+    craft_entry = {
+        "id": f"cm_{uuid.uuid4().hex[:8]}",
+        "spell_id": sp.get("id"),
+        "spell_name": sp.get("name") or sp.get("id"),
+        "spell_category": spell_cat,
+        "effective_category": effective_cat,
+        "spell_description": sp.get("description") or sp.get("desc") or "",
+        "spell_description_long": sp.get("description_long") or "",
+        "spell_flavor": sp.get("flavor") or sp.get("flavour") or "",
+        "spell_mp_cost": sp.get("mp_cost"),
+        "spell_en_cost": sp.get("en_cost"),
+        "spell_range": sp.get("range"),
+        "spell_aoe": sp.get("aoe"),
+        "spell_duration": sp.get("duration"),
+        "spell_effects": sp.get("effects") or [],
+        "spell_effects_detail": sp.get("effects_detail") or [],
+        "schools": schools,
+        "supreme": supreme,
+        "focused": False,
+        "is_complex": is_complex,
+        "focus_cost": focus_cost,
+        "craft_quality": quality,
+        "craft_skill": row.get("skill"),
+        "craft_die": row.get("die"),
+        "craft_dc": row.get("dc"),
+        "craft_price": price,
+        "craft_hours": hours,
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+    crafts.append(craft_entry)
+    it["craftomancies"] = crafts
+
+    cur = inv.get("currencies") or {}
+    cur_key = _pick_currency(inv, currency)
+    cur[cur_key] = int(cur.get(cur_key, 0)) - price
+    tx = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "currency": cur_key,
+        "amount": -price,
+        "note": f"Craftomancy {craft_entry['spell_name']} ({spell_cat}) on {it.get('name')}",
+        "source": "craftomancy"
+    }
+
+    items[idx] = it
+    db.inventories.update_one({"id": inv_id, "owner": user}, {"$set": {"items": items, "currencies": cur}, "$push": {"transactions": tx}})
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    warning = "Second craftomancy requires advanced Craftomancer." if len(crafts) > 1 else ""
+    return {"status": "success", "inventory": inv2, "craftomancy": craft_entry, "warning": warning}
+
+@app.patch("/inventories/{inv_id}/items/{item_id}/craftomancy/{craft_id}")
+def update_craftomancy(request: Request, inv_id: str, item_id: str, craft_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    focused = payload.get("focused", None)
+    if focused is None:
+        raise HTTPException(400, "focused required")
+
+    items = inv.get("items") or []
+    idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Item not found")
+    it = dict(items[idx])
+    crafts = it.get("craftomancies") or []
+    hit = next((c for c in crafts if c.get("id") == craft_id), None)
+    if not hit:
+        raise HTTPException(404, "Craftomancy not found")
+    hit["focused"] = bool(focused)
+    it["craftomancies"] = crafts
+    items[idx] = it
+    db.inventories.update_one({"id": inv_id, "owner": user}, {"$set": {"items": items}})
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2}
+
+@app.post("/inventories/{inv_id}/items/{item_id}/craftomancy/{craft_id}/remove")
+def remove_craftomancy(request: Request, inv_id: str, item_id: str, craft_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+
+    currency = (payload.get("currency") or "").strip() or None
+    items = inv.get("items") or []
+    idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Item not found")
+    it = dict(items[idx])
+    crafts = it.get("craftomancies") or []
+    hit_idx = next((i for i, c in enumerate(crafts) if c.get("id") == craft_id), -1)
+    if hit_idx < 0:
+        raise HTTPException(404, "Craftomancy not found")
+    removed = crafts.pop(hit_idx)
+    it["craftomancies"] = crafts
+
+    price = 500
+    cur = inv.get("currencies") or {}
+    cur_key = _pick_currency(inv, currency)
+    cur[cur_key] = int(cur.get(cur_key, 0)) - price
+    tx = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "currency": cur_key,
+        "amount": -price,
+        "note": f"Remove craftomancy {removed.get('spell_name') or removed.get('spell_id')}",
+        "source": "craftomancy_remove"
+    }
+
+    items[idx] = it
+    db.inventories.update_one({"id": inv_id, "owner": user}, {"$set": {"items": items, "currencies": cur}, "$push": {"transactions": tx}})
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2, "removed": craft_id, "cost": price}
 
 @app.post("/inventories/{inv_id}/items/{item_id}/upgrade_quality")
 def upgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
