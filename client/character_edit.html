@@ -148,6 +148,38 @@
     .current-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:8px; margin-top:8px; }
     .current-row label { display:flex; align-items:center; gap:6px; }
     .current-row input { width:100%; }
+    .combat-grid { display:grid; gap:12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .combat-col { display:grid; gap:12px; }
+    .combat-vitals { display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+    .combat-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .combat-actions-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .combat-list { display:grid; gap:8px; }
+    .combat-entry {
+      display:flex; align-items:center; gap:10px; padding:8px 10px;
+      border:1px solid #2a2a38; border-radius:12px; background:#151520;
+    }
+    .combat-entry .meta { font-size:.82rem; opacity:.8; }
+    .combat-entry .muted { font-size:.82rem; }
+    .combat-entry .tag { border:1px solid #343446; border-radius:999px; padding:2px 8px; font-size:.75rem; }
+    .combat-entry .grow { min-width:0; }
+    .combat-pill-list { display:flex; gap:6px; flex-wrap:wrap; }
+    .combat-pill { border:1px solid #2d2d3d; border-radius:999px; padding:4px 10px; background:#141420; font-size:.82rem; }
+    .combat-pill button { padding:0 6px; border:none; background:none; color:inherit; cursor:pointer; }
+    .combat-mini { font-size:.82rem; opacity:.85; }
+    .combat-table { width:100%; border-collapse:collapse; }
+    .combat-table th, .combat-table td { text-align:left; padding:6px 8px; border-bottom:1px solid #222233; vertical-align:top; font-size:.9rem; }
+    .combat-table th { font-size:.8rem; opacity:.8; }
+    .combat-block { border:1px solid #242436; border-radius:12px; padding:10px; background:#12121c; }
+    .combat-header { display:flex; align-items:center; gap:10px; }
+    .combat-header .right { margin-left:auto; }
+    .combat-subtitle { font-size:.85rem; opacity:.75; }
+    .combat-badge { border:1px solid #2f2f3f; border-radius:999px; padding:3px 8px; background:#181821; font-variant-numeric: tabular-nums; }
+    .combat-actions-grid { display:grid; gap:8px; }
+    .combat-actions-grid .combat-entry { align-items:flex-start; }
+    .combat-actions-grid .btn { white-space:nowrap; }
+    @media (max-width: 1100px){
+      .combat-grid { grid-template-columns: 1fr; }
+    }
       .override-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
       #override-inputs { display:none; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap:8px; margin-top:10px; }
   /* Avatar */
@@ -778,23 +810,264 @@
         </div>
       </div>
 
-      <!-- COMBAT / PERSONAL placeholders -->
+      <!-- COMBAT -->
       <div id="tab-com" class="tabpane" style="display:none;">
-        <div class="panel">
-          <details open class="panel">
-            <summary class="hdr">
-              <strong>Current values</strong>
-              <span class="muted">(HP/EN/FO/SP)</span>
-            </summary>
-            <div class="panel-body">
-              <div class="current-row">
-                <label class="muted">Current HP <input id="cur-hp" type="number" min="0"></label>
-                <label class="muted">Current EN <input id="cur-en" type="number" min="0"></label>
-                <label class="muted">Current FO <input id="cur-fo" type="number" min="0"></label>
-                <label class="muted">Current SP <input id="cur-sp" type="number" min="0"></label>
-              </div>
+        <div class="combat-grid">
+          <div class="combat-col">
+            <div class="panel">
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Vitals</strong>
+                  <span class="muted">(resources and damage)</span>
+                </summary>
+                <div class="panel-body">
+                  <div class="combat-vitals">
+                    <label class="muted">Current HP <input id="cur-hp" type="number" min="0"></label>
+                    <label class="muted">Current EN <input id="cur-en" type="number" min="0"></label>
+                    <label class="muted">Current FO <input id="cur-fo" type="number" min="0"></label>
+                    <label class="muted">Current SP <input id="cur-sp" type="number" min="0"></label>
+                    <label class="muted">Max HP Damage <input id="max-hp-dmg" type="number" min="0" step="1"></label>
+                  </div>
+                  <div class="combat-row">
+                    <input id="combat-dmg-amt" type="number" min="0" step="1" placeholder="Damage amount" style="width:160px;">
+                    <button class="btn small" id="combat-take-dmg">Take Damage (SP then HP)</button>
+                    <button class="btn small" id="combat-take-true">Take True Damage</button>
+                    <input id="combat-heal-amt" type="number" min="0" step="1" placeholder="Heal amount" style="width:140px;">
+                    <button class="btn small" id="combat-heal">Heal</button>
+                  </div>
+                  <div class="muted combat-mini">Max HP Damage reduces max HP and SP cap.</div>
+                </div>
+              </details>
             </div>
-          </details>
+
+            <div class="panel">
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Defense & Initiative</strong>
+                  <span class="muted">(quick rolls)</span>
+                </summary>
+                <div class="panel-body">
+                  <div class="combat-row">
+                    <label class="muted">Defense skill
+                      <select id="def-skill"></select>
+                    </label>
+                    <label class="muted">Mod
+                      <input id="def-mod" type="number" step="1" value="0" style="width:90px;">
+                    </label>
+                    <button class="btn small" id="def-roll">Roll Defense</button>
+                  </div>
+                  <div class="combat-block">
+                    <div class="combat-header">
+                      <strong>Defense list</strong>
+                      <span class="muted">Add/remove skills</span>
+                    </div>
+                    <div id="def-skill-list" class="combat-pill-list" style="margin:8px 0;"></div>
+                    <div class="combat-row">
+                      <select id="def-add-skill" style="min-width:220px;"></select>
+                      <input id="def-add-custom" placeholder="Custom skill name" style="min-width:180px;">
+                      <button class="btn small" id="def-add-btn">Add</button>
+                    </div>
+                  </div>
+                  <div class="combat-row">
+                    <span class="combat-badge">Base Initiative <span id="init-base">--</span></span>
+                    <button class="btn small" id="init-roll">Roll Initiative</button>
+                    <span class="muted" id="init-last"></span>
+                  </div>
+                  <div class="muted combat-mini">Initiative roll: 1d10 + initiative. On 10, reroll and add. On 1, reroll and subtract.</div>
+                </div>
+              </details>
+            </div>
+
+            <div class="panel">
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Weapons</strong>
+                  <span class="muted">(equipped)</span>
+                </summary>
+                <div class="panel-body">
+                  <div id="combat-weapon-list" class="combat-list"></div>
+                </div>
+              </details>
+            </div>
+
+            <div class="panel">
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Active Abilities & Spells</strong>
+                  <span class="muted">(use and toggle)</span>
+                </summary>
+                <div class="panel-body">
+                  <div class="combat-row">
+                    <input id="combat-ability-search" placeholder="Filter abilities" style="flex:1; min-width:200px;">
+                    <span class="combat-badge">ET Used: <span id="combat-et-used">0</span></span>
+                  </div>
+                  <div id="combat-ability-list" class="combat-list"></div>
+                  <hr style="border-color:#222233; width:100%;">
+                  <div class="combat-row">
+                    <input id="combat-spell-search" placeholder="Filter spells" style="flex:1; min-width:200px;">
+                  </div>
+                  <div id="combat-spell-list" class="combat-list"></div>
+                </div>
+              </details>
+            </div>
+
+            <div class="panel">
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Special Attacks</strong>
+                  <span class="muted">(weapon maneuvers)</span>
+                </summary>
+                <div class="panel-body">
+                  <div id="combat-special-attacks" class="combat-actions-grid"></div>
+                </div>
+              </details>
+            </div>
+          </div>
+
+          <div class="combat-col">
+            <div class="panel">
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Tension</strong>
+                  <span class="muted">(team strategy)</span>
+                </summary>
+                <div class="panel-body">
+                  <div class="combat-row">
+                    <label class="muted">Tension
+                      <input id="tension-value" type="number" min="0" step="1" style="width:120px;">
+                    </label>
+                    <span class="combat-badge">Cap <span id="tension-cap">--</span></span>
+                    <label class="muted">Strategy
+                      <select id="tension-strategy">
+                        <option>Offensive</option>
+                        <option>Defensive</option>
+                        <option>Supportive</option>
+                        <option>Magical</option>
+                        <option>Mobile</option>
+                      </select>
+                    </label>
+                    <label class="muted">
+                      <input type="checkbox" id="combat-exhausted"> Exhausted
+                    </label>
+                  </div>
+                  <div class="muted combat-mini">Base tension at start: 3. Tension increases on attacks, KO, and fades if no threat.</div>
+                </div>
+              </details>
+            </div>
+
+            <div class="panel">
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Secondary Actions</strong>
+                  <span class="muted">(once per round)</span>
+                </summary>
+                <div class="panel-body">
+                  <div id="combat-actions" class="combat-actions-grid"></div>
+                </div>
+              </details>
+            </div>
+
+            <div class="panel">
+              <details class="panel">
+                <summary class="hdr">
+                  <strong>Contextual Actions</strong>
+                  <span class="muted">(situational)</span>
+                </summary>
+                <div class="panel-body">
+                  <div id="combat-context-actions" class="combat-actions-grid"></div>
+                </div>
+              </details>
+            </div>
+
+            <div class="panel">
+              <details class="panel">
+                <summary class="hdr">
+                  <strong>Special Actions</strong>
+                  <span class="muted">(spend Tension)</span>
+                </summary>
+                <div class="panel-body">
+                  <div id="combat-special-actions" class="combat-actions-grid"></div>
+                </div>
+              </details>
+            </div>
+
+            <div class="panel">
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Critical Injuries & KO</strong>
+                  <span class="muted">(tracking)</span>
+                </summary>
+                <div class="panel-body">
+                  <div class="combat-row">
+                    <button class="btn small" id="crit-add">Take Critical Injury</button>
+                    <label class="muted"><input type="checkbox" id="ko-toggle"> KO</label>
+                    <button class="btn small" id="death-save-roll">Roll Death Save</button>
+                    <span class="combat-badge">Successes <span id="death-save-success">0</span></span>
+                    <span class="combat-badge">Failures <span id="death-save-fail">0</span></span>
+                  </div>
+                  <div id="crit-list" class="combat-list" style="margin-top:8px;"></div>
+                  <div class="muted combat-mini">Unstabilized injuries apply -1 to death saves. Stabilizing is a Medicine roll vs DC.</div>
+                </div>
+              </details>
+            </div>
+
+            <div class="panel">
+              <details class="panel">
+                <summary class="hdr">
+                  <strong>Rest & Eat</strong>
+                  <span class="muted">(recovery)</span>
+                </summary>
+                <div class="panel-body">
+                  <div class="combat-row">
+                    <label class="muted">Rest type
+                      <select id="rest-type">
+                        <option value="total">Total Rest (24h)</option>
+                        <option value="long">Long Rest (8h)</option>
+                        <option value="nap">Nap (1h)</option>
+                        <option value="light">Light Sleep (6h)</option>
+                        <option value="watch">Watch Shift (2h)</option>
+                      </select>
+                    </label>
+                    <label class="muted">Quality
+                      <select id="rest-quality">
+                        <option value="abysmal">Abysmal</option>
+                        <option value="rudimentary">Rudimentary</option>
+                        <option value="adequate" selected>Adequate</option>
+                        <option value="good">Good Quality</option>
+                        <option value="luxurious">Luxurious</option>
+                      </select>
+                    </label>
+                    <button class="btn small" id="rest-apply">Apply Rest</button>
+                  </div>
+                  <div class="combat-row">
+                    <label class="muted">Food quality
+                      <select id="eat-quality">
+                        <option value="spoiled">Spoiled</option>
+                        <option value="mediocre">Mediocre</option>
+                        <option value="adequate" selected>Adequate</option>
+                        <option value="good">Good Quality</option>
+                        <option value="excellent">Excellent</option>
+                      </select>
+                    </label>
+                    <button class="btn small" id="eat-apply">Eat</button>
+                  </div>
+                  <div class="muted combat-mini">Rest applies recovery to current HP/EN/FO. Food affects rest quality and may grant a reroll.</div>
+                </div>
+              </details>
+            </div>
+
+            <div class="panel">
+              <details class="panel">
+                <summary class="hdr">
+                  <strong>Conditions</strong>
+                  <span class="muted">(active effects)</span>
+                </summary>
+                <div class="panel-body">
+                  <div id="conditions-list" class="combat-actions-grid"></div>
+                </div>
+              </details>
+            </div>
+          </div>
         </div>
       </div>
       <div id="tab-per" class="tabpane" style="display:none;">
@@ -1178,6 +1451,32 @@
   </div>
 </div>
 
+<!-- Critical Injury modal -->
+<div id="crit-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="crit-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="crit-title">
+  <div class="modal-card" style="max-width:480px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="crit-title">Take Critical Injury</div>
+      <button class="modal-close" id="crit-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="row" style="gap:10px; margin-top:8px; flex-wrap:wrap;">
+      <label class="muted">Type
+        <select id="crit-type">
+          <option value="severe">Severe (DC 10)</option>
+          <option value="very">Very Severe (DC 14)</option>
+          <option value="mortal">Mortal Injury (DC 16)</option>
+        </select>
+      </label>
+      <label class="muted"><input type="checkbox" id="crit-stable"> Stabilized</label>
+    </div>
+    <div class="muted" id="crit-note" style="margin-top:8px;"></div>
+    <div class="row" style="margin-top:12px; gap:8px;">
+      <button class="btn btn-secondary" id="crit-cancel">Cancel</button>
+      <button class="btn" id="crit-confirm">Add Injury</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* --- auth helper --- */
 function getToken(){ return localStorage.getItem('auth_token') || ''; }
@@ -1303,6 +1602,158 @@ const TARGET_GROUPS = [
     { value:'derived.complex_schools', label:'Complex schools' },
   ]},
   { label:'Custom', options:[{ value:'__custom__', label:'Custom path...' }]}
+];
+
+const SPECIAL_ATTACKS = [
+  { name:'Repelling Attack', prereq:'No projectile', effect:'Push the opponent in a straight line. Target is pushed 1 unit for every 2 damage that would have been inflicted.' },
+  { name:'Debilitating Attack', prereq:'No projectile', effect:'For every 5 damage you would deal, reduce target EN by 1 (max 5 EN).' },
+  { name:'Swiping Attack', prereq:'No projectile', effect:'Attack all individuals in a horizontal Line (3) in front of you. Walls and blocking opponents stop the motion.' },
+  { name:'Tackle', prereq:'None', effect:'Force the opponent to fall Prone (True).' },
+  { name:'Charge', prereq:'None', effect:'Run straight toward a target within MO. If successful, target suffers 1d4 Neutral damage per square crossed. If movement remains, push them back. If they avoid, you continue and may hit an obstacle, taking Push damage for total distance.' },
+  { name:'Suppression Fire', prereq:'Shooting weapon', effect:'Fire a full magazine. If your attack exceeds opponent Spirit, they have Disadvantage on their next attack.' },
+  { name:'Grabbing', prereq:'Free hand, Brutality, melee', effect:'Grab target. They are Paralyzed (True). Each turn, roll Brutality vs defense to maintain. MO halved while holding. One grab per free hand.' },
+  { name:'Disarmament', prereq:'Free hand, Technicity, melee', effect:'Make an opponent drop their weapon if you succeed.' },
+  { name:'Arm Lock', prereq:'Free hand, Accuracy, melee', effect:'Arm lock target, making them Hindered (True). Roll Accuracy vs defense each of their turns to maintain. MO halved while holding. One arm lock per free hand.' },
+  { name:'Heavy Attack', prereq:'Two-handed melee', effect:'Use an extra Action to double damage. +1 to Condition DC on hit.' },
+  { name:'Destructive Attack', prereq:'Two-handed melee', effect:'No damage unless critical injury. Reduce critical injury threshold by 4.' },
+  { name:'Unsettling Attack', prereq:'None', effect:'Reduce target FO by 2. Each Active Effect or Duration-Based Spell has 50% chance to end.' },
+  { name:'Kick', prereq:'Range 2 or less', effect:'Unarmed attack deals damage with Reach. If successful, push target 2 units and you become Disturbed (True) for one round.' },
+  { name:'Channel Attacks', prereq:'None', effect:'Target becomes Aether-Drained (True) for one round.' },
+  { name:'Acrobatic Attack', prereq:'Accuracy', effect:'Perform an Acrobatics to add inertia, deal weapon damage, move 2 squares, and avoid opportunity attacks if success.' },
+  { name:'Throw', prereq:'Brutality, melee, free hand', effect:'Athletics vs Athletics. If success, throw target a number of squares equal to roll difference (min 1, max 10). Target must pass Acrobatics vs your Athletics or fall Prone (True). You may lift 25 kg per Athletics point.' },
+  { name:'Ultra-Fast Attack', prereq:'Technicity', effect:'Spend an extra Action to perform a Simple Attack and a second attack with Reactivity.' },
+  { name:'Weapon Throw', prereq:'Weapon without Ferm, no projectile', effect:'Throw weapon at range = half Athletics. On success, deal Simple Attack damage. Weapon stops at first obstacle.' }
+];
+
+const SECONDARY_ACTIONS = [
+  { name:'Intimidate', attack:'Intimidation', defense:'Spirit', effect:'Target becomes Disturbed for 1 round. Overwhelming success: Afraid for 1 round.' },
+  { name:'Charm', attack:'Charm', defense:'Spirit', effect:'Target becomes Disturbed for 1 round. Overwhelming success: Charmed for 1 round.' },
+  { name:'Insult', attack:'Persuasion', defense:'Spirit', effect:'Target becomes Taunted for 1 round. Overwhelming success: Obsessed for 1 round.' },
+  { name:'Hide', attack:'Stealth', defense:'Perception', effect:'Hide in cover or darkness. Invisible to those who fail. Overwhelming success: Slightly Motivated for next attack.' },
+  { name:'Feign', attack:'Deception', defense:'Psychology', effect:'Gain +1 to next attack. Overwhelming success: +2 instead.' },
+  { name:'Analyze', attack:'Investigation', defense:'Deception', effect:'Gain Advantage on next defensive act vs them. Overwhelming success: Advantage on next offensive act too.' },
+  { name:'Gauge', attack:'Potential', defense:'Potential', effect:'Estimate opponent magic mastery, eclipse nature, and remaining EN. Overwhelming success: Advantage on defensive act vs their next spell.' },
+  { name:'Command', attack:'Charisma', defense:'Intimidation', effect:'Allies gain +1 to acts needed to fulfill your order until next round. Overwhelming success: they may act immediately (skip next regular turn).' },
+  { name:'Detect', attack:'Instinct or Potential', defense:'Stealth or Potential', effect:'Roll with Disadvantage to sense a concealed opponent. If success, guess exact position within 20m. Overwhelming success: no penalty vs them for 5 rounds.' }
+];
+
+const CONTEXTUAL_ACTIONS = [
+  { name:'Disengage', effect:'You are no longer threatened by anyone this round.' },
+  { name:'Move Aside', effect:'Move a target to a free square in melee range with Athletics vs Athletics. If they consent, no roll.' },
+  { name:'Turnaround', effect:'You cannot be flanked this round.' },
+  { name:'Defensive Stance', effect:'You are Motivated for all defenses until next round.' }
+];
+
+const SPECIAL_ACTIONS = [
+  { tier:3, name:'Small Dash', effect:'Move by half your mobility in one direction (not upward). Triggers at most one opportunity attack.' },
+  { tier:3, name:'Small Purification', effect:'Cleanse a random condition and reduce Toxicity by 2.' },
+  { tier:3, name:'Small Anti-Heal', effect:'Target suffers Slowed Metabolism for 2 rounds.' },
+  { tier:3, name:'Precise Strike', effect:'Your next attack deals 12 True damage.' },
+  { tier:3, name:'Substitution', effect:'Swap positions with a substitution tool (scroll, beads, etc).' },
+  { tier:6, name:'Dash', effect:'Move by your mobility in one direction (not upward). Triggers at most one opportunity attack.' },
+  { tier:6, name:'Purification', effect:'Cleanse a random negative or positive condition and reduce Toxicity by 4.' },
+  { tier:6, name:'Anti-Heal', effect:'Target suffers Slowed Metabolism for 4 rounds.' },
+  { tier:6, name:'Lethal Strike', effect:'Your next attack deals 24 True damage.' },
+  { tier:6, name:'Higher Substitution', effect:'Swap positions with a substitution tool or target marked by substitution.' },
+  { tier:9, name:'Small Interruption', effect:'Predict the opponent next action type; if correct, stop their turn.' },
+  { tier:9, name:'Rush', effect:'Move by your mobility in one direction (also upward). No opportunity attacks.' },
+  { tier:9, name:'Superior Anti-Heal', effect:'Target suffers Deficient Metabolism for 4 rounds.' },
+  { tier:9, name:'Surgical Strike', effect:'Your next attack deals 36 True damage.' },
+  { tier:9, name:'Total Substitution', effect:'Swap positions with a substitution tool or invocation target.' },
+  { tier:9, name:'Higher Purification', effect:'Cleanse a chosen negative or positive condition and reduce Toxicity by 6.' },
+  { tier:9, name:'Propulsion', effect:'If target fails Athletics or Reactivity vs your Condition DC, throw them half your Athletics base value in a line.' },
+  { tier:12, name:'Interruption', effect:'Predict next action type; if correct, stop their turn and take an attack action.' },
+  { tier:12, name:'Super Rush', effect:'Move by your mobility; no opportunity attacks. You may change direction once.' },
+  { tier:12, name:'Extra Action', effect:'Immediately use any of your actions as a free action.' },
+  { tier:12, name:'Ultimate Block', effect:'Before your next turn, ignore the next damage unless it is True Damage or exceeds your max HP.' },
+  { tier:12, name:'True Strike', effect:'This round, your attacks ignore all SP.' },
+  { tier:12, name:'Light-speed Propulsion', effect:'If target fails Athletics or Reactivity vs your Condition DC, throw them then rush into melee and gain an attack action.' },
+  { tier:15, name:'Legendary Defense', effect:'If you would suffer a Critical Injury, you do not.' },
+  { tier:15, name:'Initiative Boost', effect:'Increase initiative by 5 (affects order).' },
+  { tier:15, name:'Fighting Control', effect:'Other teams cannot use a Special Action for one round.' },
+  { tier:15, name:'Legendary Tempo', effect:'Reset all cooldowns.' },
+  { tier:15, name:'Disruption', effect:'Your next Offensive Act forces a Resistance or Potential check vs your Condition DC, or drops one chosen Active Ability.' },
+  { tier:18, name:'Tactical Advantage', effect:'Use any lower-tier Special Action without being Exhausted. Cannot use this again before another Special Action.' },
+  { tier:18, name:'Second Wind', effect:'With team agreement, reset Tension to 0 and revive a KO ally to 25% max HP.' },
+  { tier:18, name:'Perfect Purification', effect:'Reset Toxicity to 0 and cleanse all negative effects.' },
+  { tier:18, name:'One-Time Opening', effect:'With team agreement, reset Tension to 0 and take another turn immediately.' },
+  { tier:18, name:'No Mistakes', effect:'First team to fail an act suffers -2 on all acts for one round.' },
+  { tier:18, name:'Real Interruption', effect:'Predict next action type (two guesses allowed); if correct, stop their turn and take an attack action.' }
+];
+
+const CONDITION_DEFS = [
+  { id:'bleeding-1', name:'Slightly Bleeding', kind:'negative', effect:'Lose 2% max HP as True damage. End with Medicine DC 8.' },
+  { id:'bleeding-2', name:'Bleeding', kind:'negative', effect:'Lose 5% max HP as True damage. End with Medicine DC 10.' },
+  { id:'bleeding-3', name:'Severely Bleeding', kind:'negative', effect:'Lose 10% max HP as True damage. End with Medicine DC 14.' },
+  { id:'burned-1', name:'Slightly Burned', kind:'negative', effect:'Take 5% max HP as Neutral damage. End with Medicine DC 8.' },
+  { id:'burned-2', name:'Burned', kind:'negative', effect:'Take 10% max HP as Neutral damage. End with Medicine DC 10.' },
+  { id:'burned-3', name:'Severely Burned', kind:'negative', effect:'Take 15% max HP as Neutral damage. End with Medicine DC 14.' },
+  { id:'obstructed-1', name:'Slightly Magically Obstructed', kind:'negative', effect:'Whenever you lose EN, lose 1 more. End with Medicine DC 8.' },
+  { id:'obstructed-2', name:'Magically Obstructed', kind:'negative', effect:'Whenever you lose EN, lose 2 more. End with Medicine DC 10.' },
+  { id:'obstructed-3', name:'Severely Magically Obstructed', kind:'negative', effect:'Whenever you lose EN, lose 3 more. End with Medicine DC 14.' },
+  { id:'poisoned-1', name:'Minorly Poisoned', kind:'negative', effect:'Take 2 TX. End with Medicine DC 8.' },
+  { id:'poisoned-2', name:'Poisoned', kind:'negative', effect:'Take 4 TX. End with Medicine DC 10.' },
+  { id:'poisoned-3', name:'Majorly Poisoned', kind:'negative', effect:'Take 6 TX. End with Medicine DC 14.' },
+  { id:'contagious', name:'Contagious', kind:'negative', effect:'Suffer 10 True damage. Spreads to all in melee range. End with Medicine DC 10.' },
+  { id:'airborne-contagious', name:'Airborne Contagious', kind:'negative', effect:'Suffer 10 True damage. Spreads in Circle (7). End with Medicine DC 14.' },
+  { id:'stunned', name:'Stunned', kind:'negative', effect:'-2 to all defensive acts. End with an Action.' },
+  { id:'disturbed', name:'Disturbed', kind:'negative', effect:'-2 to all offensive acts. End with an Action.' },
+  { id:'hindered', name:'Hindered', kind:'negative', effect:'-2 to all offensive and defensive acts. End with an Action.' },
+  { id:'prone', name:'Prone', kind:'negative', effect:'Disadvantage on offensive acts. Melee attacks against you have Advantage; ranged attacks against you have Disadvantage. End with a full movement action.' },
+  { id:'panicked', name:'Panicked', kind:'negative', effect:'Lose 1 FO at start of turn; active effects have 50% chance to end. End with a full turn to calm.' },
+  { id:'entangled', name:'Entangled', kind:'negative', effect:'Cannot glide or fly. Movement costs double MO.' },
+  { id:'immobilized', name:'Immobilized', kind:'negative', effect:'Cannot move from your square by yourself.' },
+  { id:'deafened', name:'Deafened', kind:'negative', effect:'Cannot hear. Automatically fail acts requiring hearing.' },
+  { id:'muted', name:'Muted', kind:'negative', effect:'Cannot speak. Automatically fail acts requiring speaking.' },
+  { id:'blinded', name:'Blinded', kind:'negative', effect:'Automatically fail acts requiring sight. Disadvantage on attack and defense rolls until sight returns.' },
+  { id:'nauseous', name:'Nauseous', kind:'negative', effect:'Cannot consume objects that increase TX.' },
+  { id:'charmed', name:'Charmed', kind:'negative', effect:'Cannot target the creature you are charmed by with damaging or negative acts.' },
+  { id:'frightened', name:'Frightened', kind:'negative', effect:'Disadvantage on acts targeting the feared creature; cannot move closer to them.' },
+  { id:'reckless', name:'Reckless', kind:'negative', effect:'On a dice roll for an act, you cannot roll higher than 5.' },
+  { id:'confused', name:'Confused', kind:'negative', effect:'Once per round, if you fail an act targeting an enemy, you lose your next action.' },
+  { id:'paralyzed', name:'Paralyzed', kind:'negative', effect:'Unable to defend. Physical defense is 3 + relevant base value.' },
+  { id:'aether-drained', name:'Aether-Drained', kind:'negative', effect:'Cannot regenerate or restore EN by any means.' },
+  { id:'slowed-metabolism', name:'Slowed Metabolism', kind:'negative', effect:'Every HP heal or shield you receive is halved.' },
+  { id:'deficient-metabolism', name:'Deficient Metabolism', kind:'negative', effect:'Every HP heal or shield you receive is ignored.' },
+  { id:'taunted', name:'Taunted', kind:'negative', effect:'You must prioritize the creature that taunted you as your target.' },
+  { id:'obsessed', name:'Obsessed', kind:'negative', effect:'You must use movement to reach the creature and attack with a weapon.' },
+  { id:'unbalanced', name:'Unbalanced', kind:'negative', effect:'-2 to all offensive and defensive acts. When hit or moving, Athletics or Acrobatics DC 11 or fall Prone.' },
+  { id:'jinxed-1', name:'Slightly Jinxed', kind:'negative', effect:'If an act would succeed, reduce score by 1.' },
+  { id:'jinxed-2', name:'Jinxed', kind:'negative', effect:'If an act would succeed, reduce score by 2.' },
+  { id:'jinxed-3', name:'Severely Jinxed', kind:'negative', effect:'If an act would succeed, reduce score by 3.' },
+  { id:'incapacitated', name:'Incapacitated', kind:'system', effect:'You cannot take any action or movement.' },
+  { id:'unconscious', name:'Unconscious', kind:'system', effect:'Incapacitated, Prone, Muted, Immobilized, and cannot defend.' },
+  { id:'exhausted', name:'Exhausted', kind:'system', effect:'Cannot use Special Actions or benefit from Tension. End by spending a full turn to catch your breath.' },
+  { id:'locked-down', name:'Locked Down', kind:'magic', effect:'Unable to defend against the next attack; paralyzed until you suffer an attack.' },
+  { id:'suppressed', name:'Suppressed', kind:'magic', effect:'All non-True positive conditions you receive are dismissed.' },
+  { id:'toughened', name:'Toughened', kind:'positive', effect:'Increase max SP threshold by 15% of max HP.' },
+  { id:'accelerated', name:'Accelerated', kind:'positive', effect:'Increase MO by 2.' },
+  { id:'improved-metabolism', name:'Improved Metabolism', kind:'positive', effect:'If healing 4 HP or more, heal another 4 HP.' },
+  { id:'optimized-metabolism', name:'Optimized Metabolism', kind:'positive', effect:'If healing 4 HP or more, heal another 8 HP.' },
+  { id:'inspired', name:'Inspired', kind:'positive', effect:'Your team Tension counts as 2 levels higher.' },
+  { id:'relaxed', name:'Relaxed', kind:'positive', effect:'Half FO damage and consumption.' },
+  { id:'deeply-relaxed', name:'Deeply Relaxed', kind:'positive', effect:'Ignore FO damage and consumption.' },
+  { id:'optimized-magic-1', name:'Slightly Magically Optimized', kind:'positive', effect:'At end of turn, reduce EN consumption by 1.' },
+  { id:'optimized-magic-2', name:'Magically Optimized', kind:'positive', effect:'At end of turn, reduce EN consumption by 3.' },
+  { id:'optimized-magic-3', name:'Extremely Magically Optimized', kind:'positive', effect:'At end of turn, reduce EN consumption by 5.' },
+  { id:'camouflaged', name:'Camouflaged', kind:'positive', effect:'Advantage on Stealth rolls and +1 to all defensive acts.' },
+  { id:'meticulous', name:'Meticulous', kind:'positive', effect:'On a dice roll for an act, you cannot roll lower than 5.' },
+  { id:'nimble', name:'Nimble', kind:'positive', effect:'Ignore penalties from difficult terrain.' },
+  { id:'anchored', name:'Anchored', kind:'positive', effect:'Cannot be forcibly moved by spells or effects.' },
+  { id:'sharpened-hearing', name:'Sharpened Hearing', kind:'positive', effect:'You can sense without sight as long as you are not deafened.' },
+  { id:'immune', name:'Immune', kind:'magic', effect:'All non-True negative conditions you receive while suppressed are dismissed.' },
+  { id:'invisible', name:'Invisible', kind:'magic', effect:'Cannot be seen with normal or dark vision. You may hide as if heavily obscured. Advantage on attack; attacks against you have Disadvantage.' },
+  { id:'hasted', name:'Hasted', kind:'magic', effect:'Once per round, if you succeed on an act targeting an enemy, it does not consume your action.' },
+  { id:'parachuted', name:'Parachuted', kind:'magic', effect:'Jump value doubled and you do not suffer fall damage.' },
+  { id:'cooled-down', name:'Cooled Down', kind:'magic', effect:'All abilities and spells you cast have cooldown reduced by 1.' },
+  { id:'blessed', name:'Blessed', kind:'magic', effect:'Deal 6 more damage to all undead creatures and summons.' },
+  { id:'infused-1', name:'Slightly Infused', kind:'magic', effect:'Add 2 damage to offensive acts (once per action).' },
+  { id:'infused-2', name:'Infused', kind:'magic', effect:'Add 4 damage to offensive acts (once per action).' },
+  { id:'infused-3', name:'Extremely Infused', kind:'magic', effect:'Add 6 damage to offensive acts (once per action).' },
+  { id:'magical-weapon', name:'Magical Weapon', kind:'magic', effect:'No EN penalty from holding a Technicity, Brutality, or Accuracy weapon.' },
+  { id:'motivated-1', name:'Slightly Motivated', kind:'positive', effect:'If an act would fail, add 1 to the score.' },
+  { id:'motivated-2', name:'Motivated', kind:'positive', effect:'If an act would fail, add 2 to the score.' },
+  { id:'motivated-3', name:'Severely Motivated', kind:'positive', effect:'If an act would fail, add 3 to the score.' }
 ];
 function totalFromInvest(v){ return (parseInt(v||0,10) || 0) + 4; }
 function modFromTotal(total){ return Math.floor((Number(total)-10)/2); }
@@ -1535,6 +1986,56 @@ const curHpEl = document.getElementById('cur-hp');
 const curEnEl = document.getElementById('cur-en');
 const curFoEl = document.getElementById('cur-fo');
 const curSpEl = document.getElementById('cur-sp');
+const maxHpDmgEl = document.getElementById('max-hp-dmg');
+const combatDmgAmtEl = document.getElementById('combat-dmg-amt');
+const combatHealAmtEl = document.getElementById('combat-heal-amt');
+const combatTakeDmgBtn = document.getElementById('combat-take-dmg');
+const combatTakeTrueBtn = document.getElementById('combat-take-true');
+const combatHealBtn = document.getElementById('combat-heal');
+const defSkillSelectEl = document.getElementById('def-skill');
+const defModEl = document.getElementById('def-mod');
+const defRollBtn = document.getElementById('def-roll');
+const defSkillListEl = document.getElementById('def-skill-list');
+const defAddSkillEl = document.getElementById('def-add-skill');
+const defAddCustomEl = document.getElementById('def-add-custom');
+const defAddBtn = document.getElementById('def-add-btn');
+const initBaseEl = document.getElementById('init-base');
+const initRollBtn = document.getElementById('init-roll');
+const initLastEl = document.getElementById('init-last');
+const combatWeaponsEl = document.getElementById('combat-weapon-list');
+const combatAbilityListEl = document.getElementById('combat-ability-list');
+const combatAbilitySearchEl = document.getElementById('combat-ability-search');
+const combatSpellListEl = document.getElementById('combat-spell-list');
+const combatSpellSearchEl = document.getElementById('combat-spell-search');
+const combatEtUsedEl = document.getElementById('combat-et-used');
+const tensionValueEl = document.getElementById('tension-value');
+const tensionCapEl = document.getElementById('tension-cap');
+const tensionStrategyEl = document.getElementById('tension-strategy');
+const exhaustedToggleEl = document.getElementById('combat-exhausted');
+const combatActionsEl = document.getElementById('combat-actions');
+const combatContextActionsEl = document.getElementById('combat-context-actions');
+const combatSpecialActionsEl = document.getElementById('combat-special-actions');
+const combatSpecialAttacksEl = document.getElementById('combat-special-attacks');
+const critListEl = document.getElementById('crit-list');
+const critAddBtn = document.getElementById('crit-add');
+const koToggleEl = document.getElementById('ko-toggle');
+const deathSaveRollBtn = document.getElementById('death-save-roll');
+const deathSaveSuccessEl = document.getElementById('death-save-success');
+const deathSaveFailEl = document.getElementById('death-save-fail');
+const restTypeEl = document.getElementById('rest-type');
+const restQualityEl = document.getElementById('rest-quality');
+const restApplyBtn = document.getElementById('rest-apply');
+const eatQualityEl = document.getElementById('eat-quality');
+const eatApplyBtn = document.getElementById('eat-apply');
+const conditionsListEl = document.getElementById('conditions-list');
+const critModal = document.getElementById('crit-modal');
+const critBackdrop = document.getElementById('crit-backdrop');
+const critClose = document.getElementById('crit-close');
+const critCancel = document.getElementById('crit-cancel');
+const critTypeEl = document.getElementById('crit-type');
+const critStableEl = document.getElementById('crit-stable');
+const critConfirm = document.getElementById('crit-confirm');
+const critNoteEl = document.getElementById('crit-note');
 let DERIVED_CACHE = {};
 
 /* Abilities tab refs */
@@ -2093,6 +2594,73 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
     queueSave();
   });
 
+  maxHpDmgEl?.addEventListener('input', ()=>{
+    const st = combatState();
+    st.max_hp_damage = Math.max(0, Number(maxHpDmgEl.value || 0));
+    updateDerived();
+    queueSave();
+  });
+  combatTakeDmgBtn?.addEventListener('click', ()=> applyDamageAmount(combatDmgAmtEl?.value, false));
+  combatTakeTrueBtn?.addEventListener('click', ()=> applyDamageAmount(combatDmgAmtEl?.value, true));
+  combatHealBtn?.addEventListener('click', ()=> applyHealAmount(combatHealAmtEl?.value));
+  defAddBtn?.addEventListener('click', ()=>{
+    const st = combatState();
+    const picked = String(defAddSkillEl?.value || '').trim();
+    const custom = String(defAddCustomEl?.value || '').trim();
+    const val = custom || picked;
+    if (!val) return;
+    const existing = new Set((st.defense_skills || []).map(s=> String(s)));
+    existing.add(val);
+    st.defense_skills = Array.from(existing);
+    if (defAddCustomEl) defAddCustomEl.value = '';
+    if (defAddSkillEl) defAddSkillEl.value = '';
+    renderCombatDefenseSkills();
+    queueSave();
+  });
+  defRollBtn?.addEventListener('click', rollDefense);
+  initRollBtn?.addEventListener('click', rollInitiativeSpecial);
+  combatAbilitySearchEl?.addEventListener('input', renderCombatAbilityList);
+  combatSpellSearchEl?.addEventListener('input', renderCombatSpellList);
+  tensionValueEl?.addEventListener('input', ()=>{
+    const st = combatState();
+    st.tension = Math.max(0, Number(tensionValueEl.value || 0));
+    queueSave();
+  });
+  tensionStrategyEl?.addEventListener('change', ()=>{
+    const st = combatState();
+    st.tension_strategy = tensionStrategyEl.value || 'Offensive';
+    queueSave();
+  });
+  exhaustedToggleEl?.addEventListener('change', ()=>{
+    const st = combatState();
+    st.exhausted = !!exhaustedToggleEl.checked;
+    const active = new Set((st.conditions || []).map(String));
+    if (st.exhausted) active.add('exhausted');
+    else active.delete('exhausted');
+    st.conditions = Array.from(active);
+    renderCombatConditions();
+    queueSave();
+  });
+  critAddBtn?.addEventListener('click', ()=> toggleCritModal(true));
+  koToggleEl?.addEventListener('change', ()=>{
+    const st = combatState();
+    st.death_saves = st.death_saves || { ko:false, successes:0, failures:0 };
+    st.death_saves.ko = !!koToggleEl.checked;
+    renderCombatDeathSaves();
+    queueSave();
+  });
+  deathSaveRollBtn?.addEventListener('click', rollDeathSave);
+  restApplyBtn?.addEventListener('click', applyRest);
+  eatApplyBtn?.addEventListener('click', applyEat);
+  critClose?.addEventListener('click', ()=> toggleCritModal(false));
+  critCancel?.addEventListener('click', ()=> toggleCritModal(false));
+  critBackdrop?.addEventListener('click', (e)=>{ if (e.target === critBackdrop) toggleCritModal(false); });
+  critTypeEl?.addEventListener('change', updateCritNote);
+  critConfirm?.addEventListener('click', ()=>{
+    addCriticalInjury(critTypeEl?.value || 'severe', !!critStableEl?.checked);
+    toggleCritModal(false);
+  });
+
 /* tabs switching */
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click', ()=>{
@@ -2170,6 +2738,18 @@ function makeDefaultStats(){
     notes: "",
     backstory: "",
   };
+  stats.combat = {
+    max_hp_damage: 0,
+    defense_skills: ["Dodge", "Evasion", "Blocking", "Absorption"],
+    tension: 3,
+    tension_strategy: "Offensive",
+    exhausted: false,
+    conditions: [],
+    critical_injuries: [],
+    death_saves: { ko: false, successes: 0, failures: 0 },
+    active_abilities: [],
+    active_spells: []
+  };
   stats.species_ability_id = "";
   stats.boon_ability_id = "";
   return stats;
@@ -2187,7 +2767,23 @@ function normalizeStats(stats){
   }
   out.intensities = Object.assign({}, base.intensities, out.intensities || {});
   out.personal = Object.assign({}, base.personal, out.personal || {});
+  out.combat = Object.assign({}, base.combat, out.combat || {});
+  if (!Array.isArray(out.combat.defense_skills)) out.combat.defense_skills = base.combat.defense_skills.slice();
+  if (!Array.isArray(out.combat.conditions)) out.combat.conditions = [];
+  if (!Array.isArray(out.combat.critical_injuries)) out.combat.critical_injuries = [];
+  if (!Array.isArray(out.combat.active_abilities)) out.combat.active_abilities = [];
+  if (!Array.isArray(out.combat.active_spells)) out.combat.active_spells = [];
+  if (!out.combat.death_saves || typeof out.combat.death_saves !== 'object'){
+    out.combat.death_saves = { ko: false, successes: 0, failures: 0 };
+  }
   return out;
+}
+
+function combatState(){
+  if (!CHAR?.stats) CHAR.stats = normalizeStats(CHAR?.stats || {});
+  if (!CHAR.stats.combat) CHAR.stats.combat = normalizeStats({}).combat;
+  if (!Number.isFinite(Number(CHAR.stats.combat.max_hp_damage))) CHAR.stats.combat.max_hp_damage = 0;
+  return CHAR.stats.combat;
 }
 
 function skillMaxForLevel(lvl){
@@ -3307,6 +3903,7 @@ function renderInventoryUI(){
   // Transactions
   const txs = (LINKED_INV.transactions || []).slice(-12).reverse();
   invTxEl.innerHTML = txs.length ? txs.map(t=>`<div class="row"><span class="pill">${t.currency||''} ${t.amount||0}</span><span class="muted">${invEscapeHtml(t.note||'')}</span><span class="muted">${t.ts||''}</span></div>`).join('') : '<div class="muted">No transactions.</div>';
+  renderCombatWeapons();
 }
 
 async function loadInventoryById(id){
@@ -3399,6 +3996,18 @@ function resetRollConditions(){
   if (condMeticulousEl) condMeticulousEl.checked = false;
 }
 
+function applyRollConditionDefaults(conds){
+  if (!conds) return;
+  if (conds.jinxed >= 1 && condJ1El) condJ1El.checked = true;
+  if (conds.jinxed >= 2 && condJ2El) condJ2El.checked = true;
+  if (conds.jinxed >= 3 && condJ3El) condJ3El.checked = true;
+  if (conds.motivated >= 1 && condM1El) condM1El.checked = true;
+  if (conds.motivated >= 2 && condM2El) condM2El.checked = true;
+  if (conds.motivated >= 3 && condM3El) condM3El.checked = true;
+  if (conds.reckless && condRecklessEl) condRecklessEl.checked = true;
+  if (conds.meticulous && condMeticulousEl) condMeticulousEl.checked = true;
+}
+
 function openRollModal(ctx){
   if (!rollModal || !rollBackdrop) return;
   ROLL_CONTEXT = ctx || {};
@@ -3422,9 +4031,9 @@ function openRollModal(ctx){
   }
   if (rollBaseLabelEl) rollBaseLabelEl.textContent = ctx?.baseLabel || 'Base value';
   if (rollBaseEl) rollBaseEl.value = Number(ctx?.base || 0);
-  if (rollModEl) rollModEl.value = 0;
-  if (rollTargetEl) rollTargetEl.value = '';
-  if (rollAdvEl) rollAdvEl.value = 'normal';
+  if (rollModEl) rollModEl.value = Number(ctx?.mod || 0);
+  if (rollTargetEl) rollTargetEl.value = ctx?.target != null ? ctx.target : '';
+  if (rollAdvEl) rollAdvEl.value = ctx?.adv || 'normal';
   const infoOnly = !!ctx?.infoOnly;
   if (rollGridEl) rollGridEl.style.display = infoOnly ? 'none' : '';
   if (rollConditionsEl) rollConditionsEl.style.display = infoOnly ? 'none' : '';
@@ -3435,6 +4044,7 @@ function openRollModal(ctx){
     rollResultEl.style.display = infoOnly ? '' : 'none';
   }
   resetRollConditions();
+  applyRollConditionDefaults(ctx?.autoConds || {});
   invToggleModal(rollModal, rollBackdrop, true);
   if (infoOnly && ctx?.autoLog !== false){
     appendInfoLog(ctx);
@@ -3675,11 +4285,15 @@ function abilityRollDetails(a){
 
 function openSkillRoll(charKey, charLabel, skillName){
   const adj = skillAdjTotal(charKey, skillName);
+  const cond = getCombatRollModifiers('skill', skillName);
   openRollModal({
     title: skillName,
     subtitle: `${charLabel} skill`,
     baseLabel: 'Skill value',
     base: adj.total,
+    mod: cond.mod,
+    adv: cond.adv || 'normal',
+    autoConds: cond.conds,
     detailsText: `Skill: ${skillName} (${charLabel})`,
     descText: '',
     detailLines: [`Skill: ${skillName} (${charLabel})`]
@@ -3710,6 +4324,30 @@ function openAbilityRoll(a, sourceLabel){
   });
 }
 
+function openCombatAbilityRoll(a, sourceLabel){
+  const details = abilityRollDetails(a);
+  const titleText = a?.name || a?.id || 'Ability';
+  const parts = [];
+  if (details.type) parts.push(`Type: ${details.type}`);
+  if (details.cost) parts.push(`Cost: ${details.cost}`);
+  if (details.range) parts.push(`Range: ${details.range}`);
+  if (details.aoe) parts.push(`AoE: ${details.aoe}`);
+  const detailLine = parts.join(' | ');
+  const lines = [];
+  if (sourceLabel) lines.push(`Source: ${sourceLabel}`);
+  if (detailLine) lines.push(detailLine);
+  openRollModal({
+    title: titleText,
+    subtitle: sourceLabel ? `${sourceLabel} ability` : 'Ability',
+    baseLabel: 'Base value',
+    base: 0,
+    detailsText: detailLine,
+    descHtml: details.desc || '',
+    detailLines: lines,
+    infoOnly: false
+  });
+}
+
 function openSpellRoll(sp, meta, info){
   const titleText = info?.nameDisplay || meta?.alt_name || sp?.name || 'Spell';
   const parts = [];
@@ -3731,6 +4369,30 @@ function openSpellRoll(sp, meta, info){
     descHtml: info?.desc || '',
     detailLines: lines,
     infoOnly: true
+  });
+}
+
+function openCombatSpellRoll(sp, meta, info){
+  const titleText = info?.nameDisplay || meta?.alt_name || sp?.name || 'Spell';
+  const parts = [];
+  if (sp?.category) parts.push(`Type: ${sp.category}`);
+  if (info?.statusLabel) parts.push(`Status: ${info.statusLabel}`);
+  if (info?.cost) parts.push(`Cost: ${info.cost}`);
+  if (info?.range) parts.push(info.range);
+  if (info?.aoe) parts.push(info.aoe);
+  const detailLine = parts.join(' | ');
+  const lines = [];
+  if (detailLine) lines.push(detailLine);
+  if (info?.effectsDesc) lines.push(`Effects: ${info.effectsDesc}`);
+  openRollModal({
+    title: titleText,
+    subtitle: 'Spell',
+    baseLabel: 'Base value',
+    base: 0,
+    detailsText: detailLine,
+    descHtml: info?.desc || '',
+    detailLines: lines,
+    infoOnly: false
   });
 }
 
@@ -5998,7 +6660,7 @@ async function reloadSpellListData(){
   if (!SELECTED_SPELL_LIST_ID){
     SPELLLIST_SPELLS=[]; SPELLLIST_META={};
     if (CHAR && CHAR.stats) setAddedSchools(CHAR.stats.selected_schools || []);
-    renderSpellRows(); renderAddedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); renderSchoolSpellCounters(); recomputePassiveAgg(); renderStatistics(); updateDerived(); return;
+    renderSpellRows(); renderAddedSchools(); renderSpellListSummary(); renderAbilitySpellsBucket(); renderSchoolSpellCounters(); recomputePassiveAgg(); renderStatistics(); updateDerived(); renderCombatSpellList(); renderCombatEtUsage(); return;
   }
   await loadSpellListMeta(SELECTED_SPELL_LIST_ID);
   SPELLLIST_SPELLS = await fetchSpellListSpells(SELECTED_SPELL_LIST_ID);
@@ -6010,7 +6672,7 @@ async function reloadSpellListData(){
   renderSpellRows();
   renderAbilitySpellsBucket();
   renderSchoolSpellCounters();
-  recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+  recomputePassiveAgg(); renderStatistics(); updateDerived(); renderCombatSpellList(); renderCombatEtUsage(); queueSave();
 }
 
 function getSpeciesAbilityId(){
@@ -6915,10 +7577,1012 @@ function renderStatistics(){
   }
   updatePointCounters();
 }
-/* simple defense placeholder */
-function renderDefenseSummary(){
-  const box = document.getElementById('defense-summary');
-  box.innerHTML = '<div class="muted">--</div>';
+function activeConditionSet(){
+  const st = combatState();
+  return new Set((st.conditions || []).map(s=> String(s || '').trim()).filter(Boolean));
+}
+function conditionLevel(prefix){
+  const active = activeConditionSet();
+  let max = 0;
+  active.forEach(id=>{
+    if (id.startsWith(prefix)){
+      const n = Number(id.replace(prefix, '').replace(/[^0-9]/g, ''));
+      if (Number.isFinite(n)) max = Math.max(max, n);
+    }
+  });
+  return max;
+}
+function getCombatConditionFlags(){
+  const active = activeConditionSet();
+  return {
+    toughened: active.has('toughened'),
+    accelerated: active.has('accelerated'),
+  };
+}
+function getCombatRollModifiers(kind, skillName){
+  const active = activeConditionSet();
+  const out = { mod: 0, adv: null, conds: { jinxed: 0, motivated: 0, reckless: false, meticulous: false } };
+  const isDefense = kind === 'defense';
+  const isOffense = kind === 'offense';
+  if (isDefense){
+    if (active.has('stunned')) out.mod -= 2;
+    if (active.has('hindered')) out.mod -= 2;
+    if (active.has('unbalanced')) out.mod -= 2;
+    if (active.has('camouflaged')) out.mod += 1;
+  }
+  if (isOffense){
+    if (active.has('disturbed')) out.mod -= 2;
+    if (active.has('hindered')) out.mod -= 2;
+    if (active.has('unbalanced')) out.mod -= 2;
+  }
+  if (active.has('blinded')){
+    if (isDefense || isOffense) out.adv = 'dis';
+  }
+  if (active.has('prone') && isOffense){
+    out.adv = 'dis';
+  }
+  if (skillName && active.has('camouflaged')){
+    if (String(skillName).toLowerCase() === 'stealth') out.adv = 'adv';
+  }
+  out.conds.jinxed = conditionLevel('jinxed-');
+  out.conds.motivated = conditionLevel('motivated-');
+  out.conds.reckless = active.has('reckless');
+  out.conds.meticulous = active.has('meticulous');
+  return out;
+}
+
+function tensionCapForLevel(lvl){
+  const v = Math.max(1, Math.floor(Number(lvl)||1));
+  if (v <= 10) return 3;
+  if (v <= 20) return 6;
+  if (v <= 30) return 9;
+  if (v <= 40) return 12;
+  if (v <= 50) return 15;
+  return 18;
+}
+function allSkillNames(){
+  const set = new Set();
+  for (const c of CHARACS){ (c.skills || []).forEach(s=> set.add(String(s))); }
+  return Array.from(set).sort((a,b)=> a.localeCompare(b));
+}
+function safeSetValue(el, val){
+  if (!el) return;
+  if (document.activeElement === el) return;
+  el.value = val;
+}
+
+function renderCombatDefenseSkills(){
+  const st = combatState();
+  const list = (st.defense_skills || []).map(s=> String(s||'').trim()).filter(Boolean);
+  if (defSkillSelectEl){
+    const current = defSkillSelectEl.value;
+    defSkillSelectEl.innerHTML = '';
+    list.forEach(skill=>{
+      const opt = document.createElement('option');
+      opt.value = skill;
+      opt.textContent = skill;
+      defSkillSelectEl.appendChild(opt);
+    });
+    if (current && list.includes(current)) defSkillSelectEl.value = current;
+  }
+  if (defSkillListEl){
+    defSkillListEl.innerHTML = '';
+    list.forEach(skill=>{
+      const pill = document.createElement('span');
+      pill.className = 'combat-pill';
+      pill.innerHTML = `${invEscapeHtml(skill)} <button data-skill="${invEscapeHtml(skill)}" title="Remove">x</button>`;
+      pill.querySelector('button')?.addEventListener('click', ()=>{
+        st.defense_skills = (st.defense_skills || []).filter(s=> String(s) !== String(skill));
+        renderCombatDefenseSkills();
+        queueSave();
+      });
+      defSkillListEl.appendChild(pill);
+    });
+  }
+  if (defAddSkillEl){
+    const names = allSkillNames();
+    defAddSkillEl.innerHTML = '<option value="">Select skill...</option>';
+    names.forEach(n=>{
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n;
+      defAddSkillEl.appendChild(opt);
+    });
+  }
+}
+
+function renderCombatTension(){
+  const st = combatState();
+  if (st.tension == null) st.tension = 3;
+  const cap = tensionCapForLevel(CHAR?.level || 1);
+  const inspired = activeConditionSet().has('inspired');
+  if (tensionCapEl){
+    tensionCapEl.textContent = cap;
+    tensionCapEl.title = inspired ? 'Inspired: effective tension +2' : '';
+  }
+  safeSetValue(tensionValueEl, Math.max(0, Number(st.tension ?? 3)));
+  if (tensionStrategyEl && document.activeElement !== tensionStrategyEl){
+    tensionStrategyEl.value = st.tension_strategy || 'Offensive';
+  }
+  if (exhaustedToggleEl && document.activeElement !== exhaustedToggleEl){
+    exhaustedToggleEl.checked = !!st.exhausted;
+  }
+}
+
+function renderCombatEtUsage(){
+  if (!combatEtUsedEl) return;
+  const st = combatState();
+  const abilityIds = new Set((st.active_abilities || []).map(String));
+  const spellIds = new Set((st.active_spells || []).map(String));
+  let used = 0;
+  (collectDisplayAbilities() || []).forEach(a=>{
+    if (!abilityIds.has(String(a?.id || ''))) return;
+    const costs = a?.active?.costs || {};
+    const hpCost = Number(costs.HP || 0);
+    if (hpCost) used += Math.ceil(hpCost / 5);
+    ['EN','MP','FO','MO','TX'].forEach(k=>{
+      const v = Number(costs[k] || 0);
+      if (Number.isFinite(v)) used += v;
+    });
+    if (costs.other_value != null){
+      const v = Number(costs.other_value || 0);
+      if (Number.isFinite(v)) used += v;
+    }
+  });
+  (SPELLLIST_SPELLS || []).forEach(sp=>{
+    if (!spellIds.has(String(sp?.id || ''))) return;
+    const mpCost = Number(sp?.mp_cost || 0);
+    const enCost = Number(sp?.en_cost || 0);
+    if (Number.isFinite(mpCost)) used += mpCost;
+    if (Number.isFinite(enCost)) used += enCost;
+  });
+  const maxEt = numOr(DERIVED_CACHE?.et, 0);
+  combatEtUsedEl.textContent = `${used} / ${maxEt}`;
+}
+
+function renderCombatActions(){
+  if (combatActionsEl){
+    combatActionsEl.innerHTML = '';
+    SECONDARY_ACTIONS.forEach(action=>{
+      const row = document.createElement('div');
+      row.className = 'combat-entry';
+      const skillOptions = String(action.attack || '').split(/\\s+or\\s+|\\//i).map(s=> s.trim()).filter(Boolean);
+      const pick = skillOptions[0] || '';
+      row.innerHTML = `
+        <div class="grow">
+          <div><strong>${invEscapeHtml(action.name)}</strong></div>
+          <div class="meta">Attack: ${invEscapeHtml(action.attack || '--')} | Defense: ${invEscapeHtml(action.defense || '--')}</div>
+          <div class="muted">${invEscapeHtml(action.effect || '')}</div>
+        </div>
+        <div class="combat-actions-row">
+          ${skillOptions.length > 1 ? `<select class="sec-skill">${skillOptions.map(s=>`<option>${invEscapeHtml(s)}</option>`).join('')}</select>` : ''}
+          <button class="btn small">Roll</button>
+        </div>
+      `;
+      const btn = row.querySelector('button');
+      btn?.addEventListener('click', ()=>{
+        const pickEl = row.querySelector('.sec-skill');
+        const skill = pickEl ? pickEl.value : pick;
+        const charKey = charKeyForSkillName(skill);
+        const adj = charKey ? skillAdjTotal(charKey, skill).total : 0;
+        const cond = getCombatRollModifiers('offense', skill);
+        const adv = action.name === 'Detect' ? 'dis' : (cond.adv || 'normal');
+        openRollModal({
+          title: `${action.name}`,
+          subtitle: 'Secondary Action',
+          baseLabel: 'Skill value',
+          base: adj,
+          mod: cond.mod,
+          adv,
+          autoConds: cond.conds,
+          detailsText: `Attack: ${action.attack} | Defense: ${action.defense}`,
+          descText: action.effect
+        });
+      });
+      combatActionsEl.appendChild(row);
+    });
+  }
+  if (combatContextActionsEl){
+    combatContextActionsEl.innerHTML = '';
+    CONTEXTUAL_ACTIONS.forEach(action=>{
+      const row = document.createElement('div');
+      row.className = 'combat-entry';
+      const isRoll = action.name === 'Move Aside';
+      row.innerHTML = `
+        <div class="grow">
+          <div><strong>${invEscapeHtml(action.name)}</strong></div>
+          <div class="muted">${invEscapeHtml(action.effect || '')}</div>
+        </div>
+        <button class="btn small">${isRoll ? 'Roll' : 'Info'}</button>
+      `;
+      row.querySelector('button')?.addEventListener('click', ()=>{
+        if (isRoll){
+          const skill = 'Athletics';
+          const key = charKeyForSkillName(skill);
+          const adj = key ? skillAdjTotal(key, skill).total : 0;
+          const cond = getCombatRollModifiers('offense', skill);
+          openRollModal({
+            title: action.name,
+            subtitle: 'Contextual Action',
+            baseLabel: 'Skill value',
+            base: adj,
+            mod: cond.mod,
+            adv: cond.adv || 'normal',
+            autoConds: cond.conds,
+            detailsText: 'Athletics vs Athletics',
+            descText: action.effect
+          });
+        }else{
+          openRollModal({
+            title: action.name,
+            subtitle: 'Contextual Action',
+            infoOnly: true,
+            descText: action.effect
+          });
+        }
+      });
+      combatContextActionsEl.appendChild(row);
+    });
+  }
+  if (combatSpecialActionsEl){
+    combatSpecialActionsEl.innerHTML = '';
+    const exhausted = combatState().exhausted;
+    SPECIAL_ACTIONS.forEach(action=>{
+      const row = document.createElement('div');
+      row.className = 'combat-entry';
+      row.innerHTML = `
+        <div class="grow">
+          <div><strong>${invEscapeHtml(action.name)}</strong> <span class="tag">Tension ${action.tier}</span></div>
+          <div class="muted">${invEscapeHtml(action.effect || '')}</div>
+        </div>
+        <button class="btn small"${exhausted ? ' disabled' : ''}>Use</button>
+      `;
+      row.querySelector('button')?.addEventListener('click', ()=>{
+        if (exhausted) return;
+        const st = combatState();
+        const cap = tensionCapForLevel(CHAR?.level || 1);
+        const cur = Math.max(0, Number(st.tension || 0));
+        if (cur < action.tier){
+          alert('Not enough Tension for this Special Action.');
+          return;
+        }
+        st.exhausted = true;
+        if (!activeConditionSet().has('exhausted')){
+          st.conditions = Array.from(new Set([...(st.conditions || []), 'exhausted']));
+        }
+        renderCombatTension();
+        renderCombatConditions();
+        renderCombatActions();
+        queueSave();
+        openRollModal({
+          title: action.name,
+          subtitle: 'Special Action',
+          infoOnly: true,
+          detailsText: `Tension ${action.tier}`,
+          descText: action.effect
+        });
+      });
+      combatSpecialActionsEl.appendChild(row);
+    });
+  }
+}
+
+function renderCombatSpecialAttacks(){
+  if (!combatSpecialAttacksEl) return;
+  combatSpecialAttacksEl.innerHTML = '';
+  SPECIAL_ATTACKS.forEach(atk=>{
+    const row = document.createElement('div');
+    row.className = 'combat-entry';
+    row.innerHTML = `
+      <div class="grow">
+        <div><strong>${invEscapeHtml(atk.name)}</strong></div>
+        <div class="meta">Prereq: ${invEscapeHtml(atk.prereq || 'None')}</div>
+        <div class="muted">${invEscapeHtml(atk.effect || '')}</div>
+      </div>
+      <button class="btn small">Info</button>
+    `;
+    row.querySelector('button')?.addEventListener('click', ()=>{
+      openRollModal({ title: atk.name, subtitle: 'Special Attack', infoOnly:true, descText: atk.effect, detailsText:`Prereq: ${atk.prereq}` });
+    });
+    combatSpecialAttacksEl.appendChild(row);
+  });
+}
+
+function weaponHasAttribute(it, name){
+  const attrs = (it?.attributes || []).map(a=> String(a||'').toLowerCase());
+  return attrs.includes(String(name || '').toLowerCase());
+}
+function weaponDamageParts(it){
+  const raw = String(it?.damage || '').trim();
+  const m = raw.match(/^(\d+)\s*(d6|ID)\s*\\+\\s*(\\d+)\\s*\\+\\s*M\\(([^)]+)\\)/i);
+  if (!m) return null;
+  return {
+    dice: Math.max(1, Number(m[1] || 1)),
+    die: m[2],
+    flat: Number(m[3] || 0),
+    ms: String(m[4] || '').toUpperCase()
+  };
+}
+function milestoneKeyFromCode(code){
+  const map = { REF:'reflex', DEX:'dexterity', BODY:'body', WIS:'wisdom', PRE:'presence', MAG:'magic', WILL:'willpower', TECH:'tech' };
+  return map[String(code || '').toUpperCase()] || '';
+}
+function rollDie(sides){
+  return Math.floor(Math.random() * sides) + 1;
+}
+function rollDamageDice(count, die){
+  const sides = die.toLowerCase() === 'id' ? 6 : 6;
+  const rolls = [];
+  for (let i=0; i<count; i++) rolls.push(rollDie(sides));
+  const total = rolls.reduce((a,b)=>a+b,0);
+  return { rolls, total, sides, label: die.toLowerCase() === 'id' ? 'ID' : `d${sides}` };
+}
+function renderCombatWeapons(){
+  if (!combatWeaponsEl) return;
+  combatWeaponsEl.innerHTML = '';
+  const items = (LINKED_INV?.items || []).filter(it=> String(it?.kind || it?.type || '').toLowerCase() === 'weapon' && it?.equipped !== false);
+  if (!items.length){
+    combatWeaponsEl.innerHTML = '<div class="muted">No equipped weapons.</div>';
+    return;
+  }
+  items.forEach(it=>{
+    const name = it.alt_name || it.name || 'Weapon';
+    const skill = it.skill || 'Technicity';
+    const dmg = it.damage || '--';
+    const attrs = (it.attributes || []).join(', ') || 'No properties';
+    const row = document.createElement('div');
+    row.className = 'combat-entry';
+    const range = it.range != null ? String(it.range) : '';
+    const hands = it.hands != null ? String(it.hands) : '';
+    row.innerHTML = `
+      <div class="grow">
+        <div><strong>${invEscapeHtml(name)}</strong></div>
+        <div class="meta">Skill: ${invEscapeHtml(skill)} | Damage: ${invEscapeHtml(dmg)}${range ? ` | Range: ${invEscapeHtml(range)}` : ''}${hands ? ` | Hands: ${invEscapeHtml(hands)}` : ''}</div>
+        <div class="muted">${invEscapeHtml(attrs)}</div>
+        <div class="combat-row" style="margin-top:6px;">
+          <label class="muted">Attack
+            <select class="atk-type">
+              <option value="simple">Simple</option>
+              <option value="special">Special</option>
+            </select>
+          </label>
+          <label class="muted">Special
+            <select class="atk-special">
+              ${SPECIAL_ATTACKS.map(s=>`<option value="${invEscapeHtml(s.name)}">${invEscapeHtml(s.name)}</option>`).join('')}
+            </select>
+          </label>
+          <label class="muted"><input type="checkbox" class="atk-offhand"> Offhand</label>
+        </div>
+      </div>
+      <div class="combat-actions-row">
+        <button class="btn small atk-roll">Attack Roll</button>
+        <button class="btn small dmg-roll">Deal Damage</button>
+      </div>
+    `;
+    const typeEl = row.querySelector('.atk-type');
+    const specialEl = row.querySelector('.atk-special');
+    const offhandEl = row.querySelector('.atk-offhand');
+    if (specialEl){
+      specialEl.disabled = (typeEl?.value || 'simple') !== 'special';
+    }
+    typeEl?.addEventListener('change', ()=>{
+      if (specialEl) specialEl.disabled = (typeEl.value || 'simple') !== 'special';
+    });
+    row.querySelector('.atk-roll')?.addEventListener('click', ()=>{
+      const attackType = typeEl?.value || 'simple';
+      const specialName = specialEl?.value || '';
+      const isOffhand = !!offhandEl?.checked;
+      const charKey = charKeyForSkillName(skill);
+      const base = charKey ? skillAdjTotal(charKey, skill).total : 0;
+      const cond = getCombatRollModifiers('offense', skill);
+      const acuity = weaponHasAttribute(it, 'Acuity') ? 1 : 0;
+      const penalty = attackType === 'special'
+        ? (isOffhand ? -4 : -2)
+        : (isOffhand ? -2 : 0);
+      const mod = cond.mod + acuity + penalty;
+      const adv = isOffhand ? 'dis' : (cond.adv || 'normal');
+      const details = [
+        `Weapon: ${name}`,
+        `Type: ${attackType === 'special' ? 'Special' : 'Simple'}`,
+        attackType === 'special' ? `Special: ${specialName}` : '',
+        acuity ? 'Acuity +1' : '',
+        isOffhand ? 'Offhand penalty' : ''
+      ].filter(Boolean);
+      openRollModal({
+        title: `${name} Attack`,
+        subtitle: `${skill} skill`,
+        baseLabel: 'Skill value',
+        base,
+        mod,
+        adv,
+        autoConds: cond.conds,
+        detailsText: details.join(' | ')
+      });
+    });
+    row.querySelector('.dmg-roll')?.addEventListener('click', ()=>{
+      const parts = weaponDamageParts(it);
+      const offhand = !!offhandEl?.checked;
+      if (!parts){
+        openRollModal({ title: `${name} Damage`, infoOnly:true, descText:`Damage: ${dmg}` });
+        return;
+      }
+      const msKey = milestoneKeyFromCode(parts.ms);
+      const msVal = msKey ? milestone(msKey) : 0;
+      const neutral = Number(DERIVED_CACHE?.weapon_neutral || 0);
+      const nature = String(it?.nature || it?.linked_nature || '').toLowerCase();
+      let magic = 0;
+      if (nature && PASSIVE.magic_damage.weapon && PASSIVE.magic_damage.weapon[nature]){
+        magic = applyOps(0, PASSIVE.magic_damage.weapon[nature]).value || 0;
+      }
+      const diceRoll = rollDamageDice(parts.dice, parts.die);
+      let total = diceRoll.total + parts.flat + msVal + neutral + magic;
+      if (offhand) total = Math.floor(total / 2);
+      const entry = document.createElement('div');
+      entry.className = 'roll-entry';
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.textContent = `${name} Damage`;
+      entry.appendChild(title);
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = new Date().toLocaleTimeString();
+      entry.appendChild(meta);
+      const line = document.createElement('div');
+      line.textContent = `Result: ${total}`;
+      entry.appendChild(line);
+      const breakdown = document.createElement('div');
+      breakdown.className = 'muted';
+      breakdown.textContent = `${parts.dice}${diceRoll.label} (${diceRoll.rolls.join(' + ')} = ${diceRoll.total}) + ${parts.flat} + M(${parts.ms}) ${msVal >= 0 ? '+' : ''}${msVal} + Neutral ${neutral} + Magic ${magic}${offhand ? ' | Offhand halved' : ''}`;
+      entry.appendChild(breakdown);
+      appendRollLog(entry);
+    });
+    combatWeaponsEl.appendChild(row);
+  });
+}
+
+function renderCombatAbilityList(){
+  if (!combatAbilityListEl) return;
+  const st = combatState();
+  const activeSet = new Set((st.active_abilities || []).map(String));
+  const search = String(combatAbilitySearchEl?.value || '').trim().toLowerCase();
+  const list = (collectDisplayAbilities() || []).filter(a=> String(a?.type || '').toLowerCase() === 'active');
+  const validIds = new Set(list.map(a=> String(a?.id || '')));
+  Array.from(activeSet).forEach(id=>{ if (!validIds.has(id)) activeSet.delete(id); });
+  st.active_abilities = Array.from(activeSet);
+  combatAbilityListEl.innerHTML = '';
+  if (!list.length){
+    combatAbilityListEl.innerHTML = '<div class="muted">No active abilities.</div>';
+    return;
+  }
+  let rendered = 0;
+  list.forEach(a=>{
+    const name = a?.name || a?.id || 'Ability';
+    if (search && !name.toLowerCase().includes(search)) return;
+    rendered += 1;
+    const cost = abilityCostText(a);
+    const id = String(a?.id || '');
+    const row = document.createElement('div');
+    row.className = 'combat-entry';
+    row.innerHTML = `
+      <div class="grow">
+        <div><strong>${invEscapeHtml(name)}</strong></div>
+        ${cost ? `<div class="muted">Cost: ${invEscapeHtml(cost)}</div>` : ''}
+      </div>
+      <div class="combat-actions-row">
+        <label class="muted"><input type="checkbox" class="abi-active" ${activeSet.has(id) ? 'checked' : ''}> Active</label>
+        <button class="btn small">Use</button>
+      </div>
+    `;
+    row.querySelector('.abi-active')?.addEventListener('change', (e)=>{
+      const checked = e.target.checked;
+      if (checked){
+        activeSet.add(id);
+      }else{
+        activeSet.delete(id);
+      }
+      st.active_abilities = Array.from(activeSet);
+      renderCombatEtUsage();
+      queueSave();
+    });
+    row.querySelector('button')?.addEventListener('click', ()=>{
+      applyAbilityCosts(a);
+      if (!activeSet.has(id)){
+        activeSet.add(id);
+        st.active_abilities = Array.from(activeSet);
+      }
+      renderCombatEtUsage();
+      queueSave();
+      openCombatAbilityRoll(a, a?.source_category || '');
+    });
+    combatAbilityListEl.appendChild(row);
+  });
+  if (!rendered){
+    combatAbilityListEl.innerHTML = '<div class="muted">No matching abilities.</div>';
+  }
+}
+
+function renderCombatSpellList(){
+  if (!combatSpellListEl) return;
+  const st = combatState();
+  const activeSet = new Set((st.active_spells || []).map(String));
+  const search = String(combatSpellSearchEl?.value || '').trim().toLowerCase();
+  const metaMap = SPELLLIST_META.spell_meta || {};
+  combatSpellListEl.innerHTML = '';
+  if (!SPELLLIST_SPELLS.length){
+    combatSpellListEl.innerHTML = '<div class="muted">No spells linked.</div>';
+    return;
+  }
+  const validIds = new Set(SPELLLIST_SPELLS.map(sp=> String(sp?.id || '')));
+  Array.from(activeSet).forEach(id=>{ if (!validIds.has(id)) activeSet.delete(id); });
+  st.active_spells = Array.from(activeSet);
+  let rendered = 0;
+  SPELLLIST_SPELLS.forEach(sp=>{
+    const meta = metaMap[String(sp?.id || '')] || {};
+    const name = spellDisplayName(sp, metaMap);
+    if (search && !String(name).toLowerCase().includes(search)) return;
+    rendered += 1;
+    const id = String(sp?.id || '');
+    const costParts = [];
+    if (sp.mp_cost != null) costParts.push(`MP: ${sp.mp_cost}`);
+    if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
+    const cost = costParts.join(' || ');
+    const row = document.createElement('div');
+    row.className = 'combat-entry';
+    row.innerHTML = `
+      <div class="grow">
+        <div><strong>${invEscapeHtml(name)}</strong>${meta.status ? ` <span class="tag">${invEscapeHtml(meta.status)}</span>` : ''}</div>
+        ${cost ? `<div class="muted">Cost: ${invEscapeHtml(cost)}</div>` : ''}
+      </div>
+      <div class="combat-actions-row">
+        <label class="muted"><input type="checkbox" class="spell-active" ${activeSet.has(id) ? 'checked' : ''}> Active</label>
+        <button class="btn small">Use</button>
+      </div>
+    `;
+    row.querySelector('.spell-active')?.addEventListener('change', (e)=>{
+      const checked = e.target.checked;
+      if (checked){
+        activeSet.add(id);
+      }else{
+        activeSet.delete(id);
+      }
+      st.active_spells = Array.from(activeSet);
+      renderCombatEtUsage();
+      queueSave();
+    });
+    row.querySelector('button')?.addEventListener('click', ()=>{
+      applySpellCosts(sp);
+      if (!activeSet.has(id)){
+        activeSet.add(id);
+        st.active_spells = Array.from(activeSet);
+      }
+      renderCombatEtUsage();
+      queueSave();
+      openCombatSpellRoll(sp, metaMap[id] || {}, { cost, range: sp.range, aoe: sp.aoe, desc: sp.description_html || sp.description || '', effectsDesc: sp.effects_desc || '', nameDisplay: name, statusLabel: meta.status || '' });
+    });
+    combatSpellListEl.appendChild(row);
+  });
+  if (!rendered){
+    combatSpellListEl.innerHTML = '<div class="muted">No matching spells.</div>';
+  }
+}
+
+function renderCombatConditions(){
+  if (!conditionsListEl) return;
+  const st = combatState();
+  const active = new Set((st.conditions || []).map(String));
+  if (st.exhausted) active.add('exhausted');
+  conditionsListEl.innerHTML = '';
+  CONDITION_DEFS.forEach(cond=>{
+    const row = document.createElement('div');
+    row.className = 'combat-entry';
+    row.innerHTML = `
+      <div class="grow">
+        <div><strong>${invEscapeHtml(cond.name)}</strong> <span class="tag">${invEscapeHtml(cond.kind)}</span></div>
+        <div class="muted">${invEscapeHtml(cond.effect || '')}</div>
+      </div>
+      <label class="muted"><input type="checkbox" data-cond="${invEscapeHtml(cond.id)}" ${active.has(cond.id) ? 'checked' : ''}> Active</label>
+    `;
+    row.querySelector('input')?.addEventListener('change', (e)=>{
+      const id = e.target.getAttribute('data-cond');
+      if (!id) return;
+      if (e.target.checked){
+        active.add(id);
+      }else{
+        active.delete(id);
+      }
+      st.conditions = Array.from(active);
+      if (id === 'exhausted'){
+        st.exhausted = active.has('exhausted');
+        renderCombatTension();
+      }
+      renderCombatEtUsage();
+      updateDerived();
+      queueSave();
+    });
+    conditionsListEl.appendChild(row);
+  });
+  st.conditions = Array.from(active);
+}
+
+function renderCombatCritList(){
+  if (!critListEl) return;
+  const st = combatState();
+  const list = Array.isArray(st.critical_injuries) ? st.critical_injuries : [];
+  critListEl.innerHTML = '';
+  if (!list.length){
+    critListEl.innerHTML = '<div class="muted">No critical injuries.</div>';
+    return;
+  }
+  list.forEach((entry, idx)=>{
+    const row = document.createElement('div');
+    row.className = 'combat-entry';
+    row.innerHTML = `
+      <div class="grow">
+        <div><strong>${invEscapeHtml(entry.type || 'Injury')}</strong></div>
+        <div class="muted">HP loss: ${Number(entry.hp_loss || 0)} | True damage: ${Number(entry.true_damage || 0)}</div>
+      </div>
+      <div class="combat-actions-row">
+        <label class="muted"><input type="checkbox" class="crit-stable" ${entry.stabilized ? 'checked' : ''}> Stabilized</label>
+        <button class="btn small">Remove</button>
+      </div>
+    `;
+    row.querySelector('.crit-stable')?.addEventListener('change', (e)=>{
+      entry.stabilized = !!e.target.checked;
+      queueSave();
+    });
+    row.querySelector('button')?.addEventListener('click', ()=>{
+      st.critical_injuries = list.filter((_, i)=> i !== idx);
+      st.max_hp_damage = Math.max(0, Number(st.max_hp_damage || 0) - Number(entry.hp_loss || 0));
+      renderCombatCritList();
+      if (maxHpDmgEl) safeSetValue(maxHpDmgEl, st.max_hp_damage);
+      updateDerived();
+      queueSave();
+    });
+    critListEl.appendChild(row);
+  });
+}
+
+function renderCombatDeathSaves(){
+  const st = combatState();
+  if (koToggleEl && document.activeElement !== koToggleEl){
+    koToggleEl.checked = !!st.death_saves?.ko;
+  }
+  if (deathSaveSuccessEl) deathSaveSuccessEl.textContent = String(st.death_saves?.successes || 0);
+  if (deathSaveFailEl) deathSaveFailEl.textContent = String(st.death_saves?.failures || 0);
+}
+
+function renderCombatTab(){
+  renderCombatDefenseSkills();
+  renderCombatWeapons();
+  renderCombatAbilityList();
+  renderCombatSpellList();
+  renderCombatActions();
+  renderCombatSpecialAttacks();
+  renderCombatConditions();
+  renderCombatCritList();
+  renderCombatDeathSaves();
+  renderCombatTension();
+  renderCombatEtUsage();
+  if (initBaseEl) initBaseEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
+  if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(combatState().max_hp_damage || 0)));
+  if (initLastEl){
+    const last = combatState().initiative_last;
+    initLastEl.textContent = last ? `Last roll: ${last}` : '';
+  }
+}
+
+function applyCurrentDelta(delta){
+  const hp = numOr(CURRENT.hp ?? DERIVED_CACHE?.hp, 0);
+  const en = numOr(CURRENT.en ?? DERIVED_CACHE?.en, 0);
+  const fo = numOr(CURRENT.fo ?? DERIVED_CACHE?.fo, 0);
+  const sp = numOr(CURRENT.sp ?? DERIVED_CACHE?.spcap, 0);
+  CURRENT = {
+    hp: hp + numOr(delta.hp, 0),
+    en: en + numOr(delta.en, 0),
+    fo: fo + numOr(delta.fo, 0),
+    sp: sp + numOr(delta.sp, 0),
+  };
+  updateDerived();
+  queueSave();
+}
+
+function applyDamageAmount(amount, trueDamage){
+  let dmg = Math.max(0, Number(amount || 0));
+  if (!dmg) return;
+  const hp = numOr(CURRENT.hp ?? DERIVED_CACHE?.hp, 0);
+  const sp = numOr(CURRENT.sp ?? DERIVED_CACHE?.spcap, 0);
+  let newHp = hp;
+  let newSp = sp;
+  if (trueDamage){
+    newHp = Math.max(0, hp - dmg);
+  }else{
+    const spLoss = Math.min(newSp, dmg);
+    newSp -= spLoss;
+    dmg -= spLoss;
+    newHp = Math.max(0, newHp - dmg);
+  }
+  CURRENT = { ...CURRENT, hp: newHp, sp: newSp };
+  updateDerived();
+  queueSave();
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = trueDamage ? 'True Damage' : 'Damage Taken';
+  entry.appendChild(title);
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  entry.appendChild(meta);
+  const line = document.createElement('div');
+  line.textContent = `Amount: ${Number(amount || 0)} | HP ${newHp} | SP ${newSp}`;
+  entry.appendChild(line);
+  appendRollLog(entry);
+}
+
+function applyHealAmount(amount){
+  const heal = Math.max(0, Number(amount || 0));
+  if (!heal) return;
+  applyCurrentDelta({ hp: heal });
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = 'Heal';
+  entry.appendChild(title);
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  entry.appendChild(meta);
+  const line = document.createElement('div');
+  line.textContent = `Healed: ${heal}`;
+  entry.appendChild(line);
+  appendRollLog(entry);
+}
+
+function applyAbilityCosts(a){
+  const costs = a?.active?.costs || {};
+  const delta = {
+    hp: -Number(costs.HP || 0),
+    en: -Number(costs.EN || 0),
+    fo: -Number(costs.FO || 0),
+  };
+  applyCurrentDelta(delta);
+  const missing = [];
+  ['MP','MO','TX'].forEach(k=>{
+    const v = Number(costs[k] || 0);
+    if (Number.isFinite(v) && v !== 0) missing.push(`${k}: ${v}`);
+  });
+  if (costs.other_label && costs.other_value != null){
+    const v = Number(costs.other_value || 0);
+    if (Number.isFinite(v) && v !== 0) missing.push(`${costs.other_label}: ${v}`);
+  }
+  if (missing.length){
+    openRollModal({ title: 'Ability Cost', infoOnly:true, descText:`Untracked cost: ${missing.join(', ')}` });
+  }
+}
+
+function applySpellCosts(sp){
+  const en = Number(sp?.en_cost || 0);
+  const mp = Number(sp?.mp_cost || 0);
+  if (Number.isFinite(en) && en !== 0){
+    applyCurrentDelta({ en: -en });
+  }
+  if (Number.isFinite(mp) && mp !== 0){
+    openRollModal({ title: 'Spell Cost', infoOnly:true, descText:`MP cost (${mp}) is not tracked on the sheet.` });
+  }
+}
+
+function rollInitiativeSpecial(){
+  const base = numOr(DERIVED_CACHE?.initiative, 0);
+  const rolls = [];
+  const first = rollD10();
+  rolls.push({ v: first, sign:'+' });
+  let total = first;
+  if (first === 10){
+    let cur = rollD10();
+    rolls.push({ v: cur, sign:'+' });
+    total += cur;
+    while (cur === 10){
+      cur = rollD10();
+      rolls.push({ v: cur, sign:'+' });
+      total += cur;
+    }
+  }else if (first === 1){
+    const cur = rollD10();
+    rolls.push({ v: cur, sign:'-' });
+    total -= cur;
+  }
+  const result = base + total;
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = 'Initiative Roll';
+  entry.appendChild(title);
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  entry.appendChild(meta);
+  const line = document.createElement('div');
+  line.textContent = `Result: ${result}`;
+  entry.appendChild(line);
+  const detail = document.createElement('div');
+  detail.className = 'muted';
+  detail.textContent = `Rolls: ${rolls.map(r=>`${r.sign}${r.v}`).join(' ')} | Base ${base}`;
+  entry.appendChild(detail);
+  appendRollLog(entry);
+  if (initLastEl) initLastEl.textContent = `Last roll: ${result}`;
+  const st = combatState();
+  st.initiative_last = result;
+  queueSave();
+}
+
+function rollDeathSave(){
+  const st = combatState();
+  if (!st.death_saves) st.death_saves = { ko:false, successes:0, failures:0 };
+  const penalty = (st.critical_injuries || []).filter(i=> !i.stabilized).length;
+  const raw = rollD10();
+  const result = raw - penalty;
+  if (result <= 1){
+    st.death_saves.failures = (st.death_saves.failures || 0) + 2;
+  }else if (result <= 5){
+    st.death_saves.failures = (st.death_saves.failures || 0) + 1;
+  }else if (result <= 9){
+    st.death_saves.successes = (st.death_saves.successes || 0) + 1;
+  }else{
+    st.death_saves.successes = 0;
+    st.death_saves.failures = 0;
+    st.death_saves.ko = false;
+    CURRENT = { ...CURRENT, hp: Math.max(1, numOr(CURRENT.hp, 0)) };
+    updateDerived();
+  }
+  if (st.death_saves.successes >= 3){
+    st.death_saves.successes = 3;
+  }
+  if (st.death_saves.failures >= 3){
+    st.death_saves.failures = 3;
+  }
+  renderCombatDeathSaves();
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = 'Death Save';
+  entry.appendChild(title);
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  entry.appendChild(meta);
+  const line = document.createElement('div');
+  line.textContent = `Roll: ${raw} ${penalty ? `- ${penalty}` : ''} = ${result}`;
+  entry.appendChild(line);
+  const state = document.createElement('div');
+  state.className = 'muted';
+  state.textContent = `Successes: ${st.death_saves.successes} | Failures: ${st.death_saves.failures}`;
+  entry.appendChild(state);
+  appendRollLog(entry);
+  queueSave();
+}
+
+function applyRest(){
+  const type = restTypeEl?.value || 'long';
+  const quality = restQualityEl?.value || 'adequate';
+  const mult = ({
+    abysmal: 0.25,
+    rudimentary: 0.5,
+    adequate: 1,
+    good: 2,
+    luxurious: 4
+  })[quality] || 1;
+  const bod = totalFromInvest(investVal(CHAR.stats.body?.invest, 0));
+  const wil = totalFromInvest(investVal(CHAR.stats.willpower?.invest, 0));
+  let hpGain = 0;
+  let enGain = 0;
+  let foGain = 0;
+  if (type === 'nap'){
+    hpGain = rollD10() + bod;
+    enGain = 1;
+    foGain = 1;
+  }else if (type === 'long'){
+    hpGain = (rollD10() + bod) * 5;
+    enGain = wil;
+    foGain = wil;
+  }else if (type === 'light'){
+    hpGain = ((rollD10() + bod) * 5) * 0.5;
+    enGain = wil * 0.5;
+    foGain = wil * 0.5;
+  }else if (type === 'total'){
+    hpGain = ((rollD10() + bod) * 5) * 2;
+    enGain = wil * 2;
+    foGain = wil * 2;
+  }else if (type === 'watch'){
+    hpGain = ((rollD10() + bod) * 5) * 0.25;
+    enGain = wil * 0.25;
+    foGain = wil * 0.25;
+  }
+  hpGain = Math.floor(hpGain * mult);
+  enGain = Math.floor(enGain * mult);
+  foGain = Math.floor(foGain * mult);
+  applyCurrentDelta({ hp: hpGain, en: enGain, fo: foGain });
+  openRollModal({ title:'Rest', infoOnly:true, descText:`Recovered HP ${hpGain}, EN ${enGain}, FO ${foGain} (${type}, ${quality})` });
+}
+
+function applyEat(){
+  const quality = eatQualityEl?.value || 'adequate';
+  let note = '';
+  if (quality === 'spoiled') note = 'Spoiled: Resistance check DC 12 or fall ill.';
+  if (quality === 'mediocre') note = 'Mediocre: next rest quality -1 step.';
+  if (quality === 'adequate') note = 'Adequate: no additional effect.';
+  if (quality === 'good') note = 'Good: next rest quality +1 step.';
+  if (quality === 'excellent') note = 'Excellent: reroll one roll within 24h and next rest quality +1 step.';
+  openRollModal({ title:'Eat', infoOnly:true, descText: note || 'Food consumed.' });
+}
+
+function rollDefense(){
+  const skill = defSkillSelectEl?.value || '';
+  const modInput = Number(defModEl?.value || 0);
+  const key = charKeyForSkillName(skill);
+  const base = key ? skillAdjTotal(key, skill).total : 0;
+  const cond = getCombatRollModifiers('defense', skill);
+  openRollModal({
+    title: `Defense: ${skill || 'Roll'}`,
+    subtitle: 'Defense',
+    baseLabel: 'Skill value',
+    base,
+    mod: modInput + cond.mod,
+    adv: cond.adv || 'normal',
+    autoConds: cond.conds,
+    detailsText: `Defense skill: ${skill || 'None'}`
+  });
+}
+
+function addCriticalInjury(type, stabilized){
+  const st = combatState();
+  const map = {
+    severe: { label:'Severe', hp_loss: 20, true_damage: 10 },
+    very: { label:'Very Severe', hp_loss: 40, true_damage: 20 },
+    mortal: { label:'Mortal Injury', hp_loss: 80, true_damage: 60 }
+  };
+  const entry = map[type] || map.severe;
+  st.critical_injuries = st.critical_injuries || [];
+  st.critical_injuries.push({
+    type: entry.label,
+    hp_loss: entry.hp_loss,
+    true_damage: entry.true_damage,
+    stabilized: !!stabilized
+  });
+  st.max_hp_damage = Math.max(0, Number(st.max_hp_damage || 0) + entry.hp_loss);
+  applyDamageAmount(entry.true_damage, true);
+  renderCombatCritList();
+  renderCombatDeathSaves();
+  if (maxHpDmgEl) safeSetValue(maxHpDmgEl, st.max_hp_damage);
+  updateDerived();
+  queueSave();
+}
+
+function updateCritNote(){
+  if (!critNoteEl || !critTypeEl) return;
+  const type = critTypeEl.value;
+  const map = {
+    severe: 'Severe: 10 True damage and lose 20 max HP. Stabilization DC 10.',
+    very: 'Very Severe: 20 True damage and lose 40 max HP. Stabilization DC 14.',
+    mortal: 'Mortal Injury: 60 True damage and lose 80 max HP. Stabilization DC 16.'
+  };
+  critNoteEl.textContent = map[type] || '';
+}
+function toggleCritModal(open){
+  if (!critModal || !critBackdrop) return;
+  if (open){
+    critModal.classList.remove('hidden');
+    critModal.classList.add('open');
+    critBackdrop.classList.add('open');
+    updateCritNote();
+  }else{
+    critModal.classList.add('hidden');
+    critModal.classList.remove('open');
+    critBackdrop.classList.remove('open');
+  }
 }
 
 /* --------- PASSIVE on DERIVED (existing behavior) ---------- */
@@ -7014,10 +8678,22 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
     }
   }
 
+  const condFlags = getCombatConditionFlags();
+  if (condFlags.accelerated){
+    ops.add.push({ k: 'mo', v: 2, origin: 'Accelerated' });
+  }
+
   // set -> mul -> add
   for (const op of ops.set){ out[op.k] = op.v; notes[op.k].push(`Set to ${op.v} -> ${op.origin}`); }
   for (const op of ops.mul){ const before = out[op.k]; out[op.k] = Math.round(before * op.v); notes[op.k].push(`*${op.v} (from ${before}) -> ${op.origin}`); }
   for (const op of ops.add){ out[op.k] = out[op.k] + op.v; notes[op.k].push(`${op.v>=0?'+':''}${op.v} -> ${op.origin}`); }
+
+  const maxHpDamage = Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0));
+  if (maxHpDamage){
+    const before = out.hp;
+    out.hp = Math.max(0, out.hp - maxHpDamage);
+    notes.hp.push(`Max HP damage -${maxHpDamage} (from ${before})`);
+  }
 
   // Recompute spcap off final HP, then apply any spcap-specific modifiers that were already added
   const baseSpcap = Math.floor(out.hp * 0.10);
@@ -7031,6 +8707,13 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   for (const op of spcapOps.set){ out.spcap = op.v; notes.spcap.push(`Set to ${op.v} -> ${op.origin}`); }
   for (const op of spcapOps.mul){ const before = out.spcap; out.spcap = Math.round(before * op.v); notes.spcap.push(`*${op.v} (from ${before}) -> ${op.origin}`); }
   for (const op of spcapOps.add){ out.spcap = out.spcap + op.v; notes.spcap.push(`${op.v>=0?'+':''}${op.v} -> ${op.origin}`); }
+  if (condFlags.toughened){
+    const bonus = Math.round(out.hp * 0.15);
+    if (bonus){
+      out.spcap += bonus;
+      notes.spcap.push(`+${bonus} (15% HP) -> Toughened`);
+    }
+  }
 
   TALENT_MAX = out.talent_max ?? base.talent_max ?? TALENT_MAX;
 
@@ -7214,6 +8897,7 @@ function updateDerived(){
   if (curEnEl) curEnEl.value = cur.en;
   if (curFoEl) curFoEl.value = cur.fo;
   if (curSpEl) curSpEl.value = cur.sp;
+  if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
     if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
     [
       [ovHpEl, maxVals.hp], [ovEnEl, maxVals.en], [ovFoEl, maxVals.fo], [ovMoEl, maxVals.mo],
@@ -7248,6 +8932,9 @@ function updateDerived(){
     updateTalentCounter();
     updateExpertiseCounters();
     updateCraftomancyCounter();
+    renderCombatEtUsage();
+    renderCombatTension();
+    if (initBaseEl) initBaseEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
     if (subSlotPill) renderSublimations();
   }
 
@@ -7351,6 +9038,7 @@ async function loadCharacter(){
   if (CAN_EDIT) await loadInventoriesList();
   if (SELECTED_INV_ID) await loadInventoryById(SELECTED_INV_ID);
   wirePersonal();
+  renderCombatTab();
   INITIAL_LOAD = false;
   applyReadOnlyState();
 }
@@ -8588,6 +10276,8 @@ function renderAbilitiesTab(){
   updateTalentCounter();
   updateExpertiseCounters();
   updateCraftomancyCounter();
+  renderCombatAbilityList();
+  renderCombatEtUsage();
 }
 
 function fillPersonal(){
