@@ -100,12 +100,13 @@
     }
     .intensity-line {
       display:grid;
-      grid-template-columns: minmax(80px, 1fr) 70px 62px;
+      grid-template-columns: minmax(80px, 1fr) 70px 62px 62px;
       gap:6px;
       align-items:center;
     }
     .intensity-line input.num { width:40px; max-width:40px; }
     .intensity-line .skill-total { text-align:center; min-width:48px; }
+    .intensity-line .intensity-id { text-align:center; min-width:54px; }
     @media (max-width: 900px){
       .intensities-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
     }
@@ -7654,6 +7655,31 @@ function skillAdjTotal(key, skill){
   const { value, notes } = applyOps(base, agg);
   return { total:value, notes };
 }
+function intensityBaseValue(name){
+  const invested = investVal((CHAR.stats?.intensities || {})[name], 0);
+  if (!invested) return null;
+  return skillAdjTotal('magic', name).total;
+}
+function intensityIdForValue(value){
+  if (value == null) return '--';
+  const base = Number(value);
+  if (!Number.isFinite(base) || base <= 0) return '--';
+  if (base <= 7) return '1d4';
+  if (base <= 11) return '1d6';
+  if (base <= 15) return '1d8';
+  if (base <= 17) return '1d10';
+  return '1d12';
+}
+function intensityDieForNature(nature){
+  const name = INTENSITIES.find(n=> lc(n) === lc(nature || ''));
+  if (!name) return null;
+  const baseVal = intensityBaseValue(name);
+  const label = intensityIdForValue(baseVal);
+  if (label === '--') return { name, label, die:'' };
+  const m = String(label).match(/1d(\d+)/i);
+  if (!m) return null;
+  return { name, label, die:`d${m[1]}` };
+}
 
 function renderStatistics(){
   gridEl.innerHTML = '';
@@ -7720,13 +7746,17 @@ function renderStatistics(){
     INTENSITIES.forEach(n=>{
       const invested = investVal((CHAR.stats.intensities||{})[n], 0);
       const adj = skillAdjTotal('magic', n);
+      const baseVal = intensityBaseValue(n);
+      const idVal = intensityIdForValue(baseVal);
       const investId = `intensity-${n}-invest`;
       const totalId = `intensity-${n}-total`;
+      const idId = `intensity-${n}-id`;
       const line = document.createElement('div'); line.className = 'intensity-line';
       line.innerHTML = `
         <div class="k">${n}</div>
         <input type="number" class="num" min="0" id="${investId}" value="${invested}">
-        <div class="skill-total badge mod-toggle" data-target="mods-${totalId}" id="${totalId}" title="${adj.notes.join('\n')}">${adj.total>=0? '+'+adj.total : adj.total}</div>
+        <div class="skill-total badge mod-toggle" data-target="mods-${totalId}" id="${totalId}" title="${adj.notes.join('\n')}">${baseVal == null ? '--' : (adj.total>=0? '+'+adj.total : adj.total)}</div>
+        <div class="intensity-id badge" id="${idId}">ID ${idVal}</div>
       `;
     line.appendChild(setNotesList(`mods-${totalId}`, adj.notes));
     intGrid.appendChild(line);
@@ -7750,10 +7780,15 @@ function renderStatistics(){
       if (!OVERRIDE_ENABLED) input.value = val;
       CHAR.stats.intensities[n] = val;
       const adj = skillAdjTotal('magic', n);
+      const baseVal = intensityBaseValue(n);
       const totalId = `intensity-${n}-total`;
-      document.getElementById(totalId).textContent = adj.total>=0? '+'+adj.total : adj.total;
-      document.getElementById(totalId).title = adj.notes.join('\\n');
+      const idId = `intensity-${n}-id`;
+      const totalEl = document.getElementById(totalId);
+      if (totalEl) totalEl.textContent = baseVal == null ? '--' : (adj.total>=0? '+'+adj.total : adj.total);
+      if (totalEl) totalEl.title = adj.notes.join('\\n');
       setNotesList(`mods-${totalId}`, adj.notes);
+      const idEl = document.getElementById(idId);
+      if (idEl) idEl.textContent = `ID ${intensityIdForValue(baseVal)}`;
       updatePointCounters();
       updateDerived();
       renderAddedSchools();
@@ -8150,9 +8185,31 @@ function renderCombatSpecialAttacks(){
   });
 }
 
+function normalizeWeaponAttributeList(value){
+  if (!value) return [];
+  if (Array.isArray(value)){
+    return value.flatMap(v=> String(v ?? '').split(','));
+  }
+  return String(value).split(',');
+}
+function getWeaponAttributes(it){
+  const attrs = [];
+  const addAttrs = (val)=>{
+    normalizeWeaponAttributeList(val).forEach(a=>{
+      const clean = String(a || '').trim();
+      if (clean) attrs.push(clean);
+    });
+  };
+  addAttrs(it?.attributes);
+  addAttrs(it?.effects);
+  const catalog = weaponCatalogLookup(it);
+  addAttrs(catalog?.attributes);
+  addAttrs(catalog?.effects);
+  return Array.from(new Set(attrs));
+}
 function weaponHasAttribute(it, name){
-  const attrs = (it?.attributes || []).map(a=> String(a||'').toLowerCase());
-  return attrs.includes(String(name || '').toLowerCase());
+  const target = String(name || '').toLowerCase();
+  return getWeaponAttributes(it).some(a=> String(a || '').toLowerCase() === target);
 }
 function ensureWeaponCatalog(){
   if (WEAPON_CATALOG_READY) return Promise.resolve(WEAPON_CATALOG_BY_ID);
@@ -8210,29 +8267,68 @@ function getWeaponState(it){
 }
 function weaponDamageParts(it){
   const raw = String(weaponDamageValue(it) || '').trim();
-  const m = raw.match(/^(\d+)\s*(d6|ID)\s*\\+\\s*(\\d+)\\s*\\+\\s*M\\(([^)]+)\\)/i);
-  if (!m) return null;
-  return {
-    dice: Math.max(1, Number(m[1] || 1)),
-    die: m[2],
-    flat: Number(m[3] || 0),
-    ms: String(m[4] || '').toUpperCase()
-  };
+  if (!raw) return null;
+  const compact = raw.replace(/\s+/g, '');
+  const dieMatch = compact.match(/^(\d+)?(d\d+|ID)/i);
+  if (!dieMatch) return null;
+  const dice = Math.max(1, Number(dieMatch[1] || 1));
+  const die = String(dieMatch[2] || '').toUpperCase();
+  let rest = compact.slice(dieMatch[0].length);
+  if (rest && /^[0-9]/.test(rest)) rest = `+${rest}`;
+  const msMatches = Array.from(rest.matchAll(/M\(([^)]+)\)/gi));
+  const ms = msMatches.map(m=> String(m[1] || '').trim().toUpperCase()).filter(Boolean);
+  rest = rest.replace(/M\([^)]+\)/gi, '');
+  const nums = rest.match(/[+-]\d+/g) || [];
+  const flat = nums.reduce((sum, token)=> sum + Number(token), 0);
+  return { dice, die, flat, ms };
 }
+
 function milestoneKeyFromCode(code){
   const map = { REF:'reflex', DEX:'dexterity', BODY:'body', WIS:'wisdom', PRE:'presence', MAG:'magic', WILL:'willpower', TECH:'tech' };
   return map[String(code || '').toUpperCase()] || '';
+}
+function resolveMilestoneCodes(codes){
+  const parts = [];
+  let total = 0;
+  (codes || []).forEach(code=>{
+    const key = milestoneKeyFromCode(code);
+    if (!key) return;
+    const value = milestone(key);
+    parts.push({ code, value });
+    total += value;
+  });
+  return { total, parts };
+}
+function getWeaponUpgradeBonuses(it){
+  let neutral = 0;
+  let magic = 0;
+  const nature = String(it?.nature || it?.linked_nature || '').trim();
+  const upgrades = Array.isArray(it?.upgrades) ? it.upgrades : [];
+  upgrades.forEach(u=>{
+    const upgId = u?.id || u?.key || u;
+    const meta = (window.UPGRADE_META || {})[upgId] || {};
+    const token = [
+      upgId, u?.key, u?.name, meta?.key, meta?.name
+    ].map(v=> String(v || '').toLowerCase()).join(' ');
+    if (token.includes('lethality')) neutral += 2;
+    if (token.includes('benediction') || token.includes('blessing')){
+      if (nature) magic += 2;
+    }
+  });
+  return { neutral, magic };
 }
 function rollDie(sides){
   return Math.floor(Math.random() * sides) + 1;
 }
 function rollDamageDice(count, die){
-  const sides = die.toLowerCase() === 'id' ? 6 : 6;
+  const raw = String(die || '').toLowerCase();
+  const sides = raw == 'id' ? 6 : (Number(raw.replace('d','')) || 6);
   const rolls = [];
   for (let i=0; i<count; i++) rolls.push(rollDie(sides));
   const total = rolls.reduce((a,b)=>a+b,0);
-  return { rolls, total, sides, label: die.toLowerCase() === 'id' ? 'ID' : `d${sides}` };
+  return { rolls, total, sides, label: raw == 'id' ? 'ID' : `d${sides}` };
 }
+
 function abilityHasActiveCost(a){
   const active = a?.active || {};
   if (!active.costs_active) return false;
@@ -8361,7 +8457,11 @@ function renderCombatWeapons(){
     combatWeaponsEl.innerHTML = '<div class="muted">No equipped weapons.</div>';
     return;
   }
-  const needsCatalog = items.some(it=> !weaponDamageValue(it));
+  const needsCatalog = items.some(it=>{
+    const missingDamage = !weaponDamageValue(it);
+    const hasAttrs = normalizeWeaponAttributeList(it?.attributes).length || normalizeWeaponAttributeList(it?.effects).length;
+    return missingDamage || !hasAttrs;
+  });
   if (needsCatalog && !WEAPON_CATALOG_READY && !WEAPON_CATALOG_PROMISE){
     ensureWeaponCatalog().then(()=> renderCombatWeapons());
   }else if (needsCatalog && WEAPON_CATALOG_PROMISE && !WEAPON_CATALOG_READY){
@@ -8371,13 +8471,17 @@ function renderCombatWeapons(){
     const name = it.alt_name || it.name || 'Weapon';
     const skill = it.skill || 'Technicity';
     const dmg = weaponDamageValue(it) || '--';
-    const attrs = (it.attributes || []).join(', ') || 'No properties';
-    const neutral = Number(DERIVED_CACHE?.weapon_neutral || 0);
+    const attrList = getWeaponAttributes(it);
+    const attrs = attrList.length ? attrList.join(', ') : 'No properties';
+    const baseNeutral = Number(DERIVED_CACHE?.weapon_neutral || 0);
     const nature = String(it?.nature || it?.linked_nature || '').toLowerCase();
-    let magic = 0;
+    let baseMagic = 0;
     if (nature && PASSIVE.magic_damage.weapon && PASSIVE.magic_damage.weapon[nature]){
-      magic = applyOps(0, PASSIVE.magic_damage.weapon[nature]).value || 0;
+      baseMagic = applyOps(0, PASSIVE.magic_damage.weapon[nature]).value || 0;
     }
+    const upgradeBonus = getWeaponUpgradeBonuses(it);
+    const neutral = baseNeutral + upgradeBonus.neutral;
+    const magic = baseMagic + upgradeBonus.magic;
     const extra = [];
     if (neutral) extra.push(`Neutral ${neutral}`);
     if (magic) extra.push(`Magic ${magic}`);
@@ -8409,9 +8513,25 @@ function renderCombatWeapons(){
         openRollModal({ title: `${name} Damage`, infoOnly:true, descText: infoText });
         return;
       }
-      const msKey = milestoneKeyFromCode(parts.ms);
-      const msVal = msKey ? milestone(msKey) : 0;
-      const diceRoll = rollDamageDice(parts.dice, parts.die);
+      const msInfo = resolveMilestoneCodes(parts.ms);
+      const msVal = msInfo.total;
+      let die = parts.die;
+      let dieLabelOverride = '';
+      if (String(parts.die || '').toUpperCase() === 'ID'){
+        const idInfo = intensityDieForNature(it?.nature || it?.linked_nature || '');
+        if (!idInfo){
+          openRollModal({ title: `${name} Damage`, infoOnly:true, descText:'ID requires a linked nature intensity.' });
+          return;
+        }
+        if (!idInfo.die){
+          openRollModal({ title: `${name} Damage`, infoOnly:true, descText:`ID is -- for ${idInfo.name} (no intensity investment).` });
+          return;
+        }
+        die = idInfo.die;
+        dieLabelOverride = `ID(${idInfo.name}) ${idInfo.label}`;
+      }
+      const diceRoll = rollDamageDice(parts.dice, die);
+      if (dieLabelOverride) diceRoll.label = dieLabelOverride;
       const neutralBase = diceRoll.total + parts.flat + msVal;
       let neutralTotal = neutralBase + neutral;
       let magicTotal = magic;
@@ -8435,7 +8555,18 @@ function renderCombatWeapons(){
       entry.appendChild(line);
       const breakdown = document.createElement('div');
       breakdown.className = 'muted';
-      breakdown.textContent = `${parts.dice}${diceRoll.label} (${diceRoll.rolls.join(' + ')} = ${diceRoll.total}) + ${parts.flat} + M(${parts.ms}) ${msVal >= 0 ? '+' : ''}${msVal} + Neutral ${neutral} = ${neutralTotal} | Magic ${magic}${offhand ? ' (halved)' : ''}${offhand ? ' | Offhand halved' : ''}`;
+      const msBreak = msInfo.parts.length
+        ? msInfo.parts.map(p=> `M(${p.code}) ${p.value >= 0 ? '+' : ''}${p.value}`).join(' + ')
+        : '';
+      const flatBreak = parts.flat ? `${parts.flat >= 0 ? '+' : ''}${parts.flat}` : '';
+      const neutralBreak = upgradeBonus.neutral ? `Neutral ${baseNeutral} + Lethality ${upgradeBonus.neutral}` : `Neutral ${neutral}`;
+      const magicBreak = upgradeBonus.magic ? `Magic ${baseMagic} + Benediction ${upgradeBonus.magic}` : `Magic ${magic}`;
+      const baseBreak = [
+        `${parts.dice}${diceRoll.label} (${diceRoll.rolls.join(' + ')} = ${diceRoll.total})`,
+        flatBreak,
+        msBreak
+      ].filter(Boolean).join(' + ');
+      breakdown.textContent = `${baseBreak} + ${neutralBreak} = ${neutralTotal} | ${magicBreak}${offhand ? ' (halved)' : ''}${offhand ? ' | Offhand halved' : ''}`;
       entry.appendChild(breakdown);
       appendRollLog(entry);
     });
