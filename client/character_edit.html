@@ -1734,59 +1734,60 @@ const SPECIAL_ATTACKS = [
 const SIMPLE_ATTACK_DESC = "Simple Attack: roll your weapon skill vs defense with no penalty. On success, apply weapon damage. Each weapon can be used once per two actions.";
 
 const SECONDARY_ACTIONS = [
-  { name:'Intimidate', attack:'Intimidation', defense:'Spirit', effect:'Target becomes Disturbed for 1 round. Overwhelming success: Afraid for 1 round.' },
-  { name:'Charm', attack:'Charm', defense:'Spirit', effect:'Target becomes Disturbed for 1 round. Overwhelming success: Charmed for 1 round.' },
-  { name:'Insult', attack:'Persuasion', defense:'Spirit', effect:'Target becomes Taunted for 1 round. Overwhelming success: Obsessed for 1 round.' },
-  { name:'Hide', attack:'Stealth', defense:'Perception', effect:'Hide in cover or darkness. Invisible to those who fail. Overwhelming success: Slightly Motivated for next attack.' },
-  { name:'Feign', attack:'Deception', defense:'Psychology', effect:'Gain +1 to next attack. Overwhelming success: +2 instead.' },
-  { name:'Analyze', attack:'Investigation', defense:'Deception', effect:'Gain Advantage on next defensive act vs them. Overwhelming success: Advantage on next offensive act too.' },
-  { name:'Gauge', attack:'Potential', defense:'Potential', effect:'Estimate opponent magic mastery, eclipse nature, and remaining EN. Overwhelming success: Advantage on defensive act vs their next spell.' },
-  { name:'Command', attack:'Charisma', defense:'Intimidation', effect:'Allies gain +1 to acts needed to fulfill your order until next round. Overwhelming success: they may act immediately (skip next regular turn).' },
-  { name:'Detect', attack:'Instinct or Potential', defense:'Stealth or Potential', effect:'Roll with Disadvantage to sense a concealed opponent. If success, guess exact position within 20m. Overwhelming success: no penalty vs them for 5 rounds.' }
+  { name:'Intimidate', attack:'Intimidation', defense:'Spirit', effect:'Apply Condition Disturbance (1). Overwhelming success: apply Condition Fear (1) instead.' },
+  { name:'Charm', attack:'Charm', defense:'Spirit', effect:'Apply Condition Disturbance (1). Overwhelming success: apply Condition Charm (1) instead.' },
+  { name:'Insult', attack:'Persuasion', defense:'Spirit', effect:'Apply Condition Provocation (1). Overwhelming success: apply Provocation (5) instead.' },
+  { name:'Hide', attack:'Stealth', defense:'Perception', effect:'Hide in cover or darkness. Invisible to those who fail. Overwhelming success: gain Motivation (1) on your next attack.' },
+  { name:'Feign', attack:'Deception', defense:'Psychology', effect:'Gain +1 to your next attack. Overwhelming success: gain +3 instead.' },
+  { name:'Analyze', attack:'Investigation', defense:'Deception', effect:'Gain Advantage on your next defensive act vs them. Overwhelming success: gain Advantage on your next offensive act too.' },
+  { name:'Gauge', attack:'Potential', defense:'Potential', effect:'Determine their magic mastery, eclipse nature, and approximate remaining EN. Overwhelming success: gain Advantage on the Defensive Act against their next spell.' },
+  { name:'Command', attack:'Charisma', defense:'Intimidation', effect:'Allies gain +1 to acts needed to fulfill your order until your next round. Overwhelming success: they may act immediately (skip next regular turn).' },
+  { name:'Detect', attack:'Instinct or Potential', defense:'Stealth or Potential', effect:'Roll Potential or Instinct with Disadvantage to sense a concealed opponent vs Stealth or Potential. If success, guess exact position within 20m. Overwhelming success: no penalty vs them for 5 rounds.' }
 ];
 
 const CONTEXTUAL_ACTIONS = [
-  { name:'Disengage', effect:'You are no longer threatened by anyone this round.' },
+  { name:'Natural Defense', effect:'Ignore one weakness to one nature for 1 round.' },
+  { name:'Disengage', effect:'You are no longer threatened by anyone in this Round.' },
   { name:'Move Aside', effect:'Move a target to a free square in melee range with Athletics vs Athletics. If they consent, no roll.' },
-  { name:'Turnaround', effect:'You cannot be flanked this round.' },
-  { name:'Defensive Stance', effect:'You are Motivated for all defenses until next round.' }
+  { name:'Turnaround', effect:'If you are being flanked, cancel the Advantage of a pair of attackers as long as they do not reposition.' },
+  { name:'Defensive Stance', effect:'Obtain Motivation (1) for all your defenses until the next Round.' }
 ];
 
 const SPECIAL_ACTIONS = [
-  { tier:3, name:'Small Dash', effect:'Move by half your mobility in one direction (not upward). Triggers at most one opportunity attack.' },
-  { tier:3, name:'Small Purification', effect:'Cleanse a random condition and reduce Toxicity by 2.' },
-  { tier:3, name:'Small Anti-Heal', effect:'Target suffers Slowed Metabolism for 2 rounds.' },
-  { tier:3, name:'Precise Strike', effect:'Your next attack deals 12 True damage.' },
-  { tier:3, name:'Substitution', effect:'Swap positions with a substitution tool (scroll, beads, etc).' },
-  { tier:6, name:'Dash', effect:'Move by your mobility in one direction (not upward). Triggers at most one opportunity attack.' },
-  { tier:6, name:'Purification', effect:'Cleanse a random negative or positive condition and reduce Toxicity by 4.' },
-  { tier:6, name:'Anti-Heal', effect:'Target suffers Slowed Metabolism for 4 rounds.' },
-  { tier:6, name:'Lethal Strike', effect:'Your next attack deals 24 True damage.' },
-  { tier:6, name:'Higher Substitution', effect:'Swap positions with a substitution tool or target marked by substitution.' },
-  { tier:9, name:'Small Interruption', effect:'Predict the opponent next action type; if correct, stop their turn.' },
-  { tier:9, name:'Rush', effect:'Move by your mobility in one direction (also upward). No opportunity attacks.' },
-  { tier:9, name:'Superior Anti-Heal', effect:'Target suffers Deficient Metabolism for 4 rounds.' },
-  { tier:9, name:'Surgical Strike', effect:'Your next attack deals 36 True damage.' },
-  { tier:9, name:'Total Substitution', effect:'Swap positions with a substitution tool or invocation target.' },
-  { tier:9, name:'Higher Purification', effect:'Cleanse a chosen negative or positive condition and reduce Toxicity by 6.' },
-  { tier:9, name:'Propulsion', effect:'If target fails Athletics or Reactivity vs your Condition DC, throw them half your Athletics base value in a line.' },
-  { tier:12, name:'Interruption', effect:'Predict next action type; if correct, stop their turn and take an attack action.' },
-  { tier:12, name:'Super Rush', effect:'Move by your mobility; no opportunity attacks. You may change direction once.' },
-  { tier:12, name:'Extra Action', effect:'Immediately use any of your actions as a free action.' },
+  { tier:3, name:'Small Dash', effect:'Move by half your mobility in one direction (not upward). This movement may trigger one opportunity attack.' },
+  { tier:3, name:'Small Purification', effect:'Apply to yourself True Cleanse (3) and reduce your Toxicity by 2.' },
+  { tier:3, name:'Small Anti-Heal', effect:'Your next offensive act applies Erosion (3) to one target. If you hit multiple targets, choose one.' },
+  { tier:3, name:'Precise Strike', effect:'Your next attack will deal 12 True Damage.' },
+  { tier:3, name:'Substitution', effect:'Exchange your position with a substitution tool (Substitution Scroll, Substitution Beads, etc).' },
+  { tier:6, name:'Dash', effect:'Move by your mobility in one direction (not upward). This movement may trigger one opportunity attack.' },
+  { tier:6, name:'Purification', effect:'Apply to yourself True Cleanse (6) and reduce your Toxicity by 4.' },
+  { tier:6, name:'Anti-Heal', effect:'Your next offensive act applies Erosion (5) to one target. If you hit multiple targets, choose one.' },
+  { tier:6, name:'Lethal Strike', effect:'Your next attack will deal 24 True Damage.' },
+  { tier:6, name:'Higher Substitution', effect:'Exchange your position with a substitution tool or a target marked by Substitution.' },
+  { tier:9, name:'Small Interruption', effect:'Predict the opponent next action type (spell school or attack type). If correct, immediately stop their turn.' },
+  { tier:9, name:'Rush', effect:'Move by your mobility in one direction (also upward). This movement does not trigger opportunity attacks.' },
+  { tier:9, name:'Superior Anti-Heal', effect:'Your next offensive act applies Erosion (7) to all targets.' },
+  { tier:9, name:'Surgical Strike', effect:'Your next attack will deal 36 True Damage.' },
+  { tier:9, name:'Total Substitution', effect:'Exchange your position with a substitution tool or a target marked by Substitution. You may also use an invocation.' },
+  { tier:9, name:'Higher Purification', effect:'Apply to yourself True Cleanse (9) and reduce your Toxicity by 6.' },
+  { tier:9, name:'Propulsion', effect:'If the target fails Athletics or Reactivity vs your Condition DC, grab them in melee and throw them half your Athletics base value in a line.' },
+  { tier:12, name:'Interruption', effect:'Predict the opponent next action type (spell school or attack type). If correct, immediately stop their turn and take an attack action.' },
+  { tier:12, name:'Super Rush', effect:'Move by your mobility in one direction (also upward). This movement does not trigger opportunity attacks. You may change direction once.' },
+  { tier:12, name:'Extra Action', effect:'Immediately use any of your actions as a Free Action.' },
   { tier:12, name:'Ultimate Block', effect:'Before your next turn, ignore the next damage unless it is True Damage or exceeds your max HP.' },
-  { tier:12, name:'True Strike', effect:'This round, your attacks ignore all SP.' },
-  { tier:12, name:'Light-speed Propulsion', effect:'If target fails Athletics or Reactivity vs your Condition DC, throw them then rush into melee and gain an attack action.' },
-  { tier:15, name:'Legendary Defense', effect:'If you would suffer a Critical Injury, you do not.' },
-  { tier:15, name:'Initiative Boost', effect:'Increase initiative by 5 (affects order).' },
-  { tier:15, name:'Fighting Control', effect:'Other teams cannot use a Special Action for one round.' },
-  { tier:15, name:'Legendary Tempo', effect:'Reset all cooldowns.' },
-  { tier:15, name:'Disruption', effect:'Your next Offensive Act forces a Resistance or Potential check vs your Condition DC, or drops one chosen Active Ability.' },
-  { tier:18, name:'Tactical Advantage', effect:'Use any lower-tier Special Action without being Exhausted. Cannot use this again before another Special Action.' },
-  { tier:18, name:'Second Wind', effect:'With team agreement, reset Tension to 0 and revive a KO ally to 25% max HP.' },
-  { tier:18, name:'Perfect Purification', effect:'Reset Toxicity to 0 and cleanse all negative effects.' },
-  { tier:18, name:'One-Time Opening', effect:'With team agreement, reset Tension to 0 and take another turn immediately.' },
-  { tier:18, name:'No Mistakes', effect:'First team to fail an act suffers -2 on all acts for one round.' },
-  { tier:18, name:'Real Interruption', effect:'Predict next action type (two guesses allowed); if correct, stop their turn and take an attack action.' }
+  { tier:12, name:'True Strike', effect:'During this Round, your attacks ignore all of the SP.' },
+  { tier:12, name:'Light-speed Propulsion', effect:'If the target fails Athletics or Reactivity vs your Condition DC, grab them in melee and throw them, then rush into melee and gain an attack action.' },
+  { tier:15, name:'Legendary Defense', effect:'If you were supposed to suffer a Critical Injury, don\'t.' },
+  { tier:15, name:'Initiative Boost', effect:'Increase your initiative by 5. This affects the ongoing initiative order.' },
+  { tier:15, name:'Fighting Control', effect:'Other teams cannot use a Special Action for 1 round.' },
+  { tier:15, name:'Legendary Tempo', effect:'Reset all your cooldowns.' },
+  { tier:15, name:'Disruption', effect:'Your next Offensive Act forces one target to succeed a Resistance or Potential check vs your Condition DC or drop one chosen Active Ability.' },
+  { tier:18, name:'Tactical Advantage', effect:'Use any lower-tier Special Action without being Exhausted. You may not use this Special Action again before using any other one.' },
+  { tier:18, name:'Second Wind', effect:'With team agreement, reset Tension to 0 and revive a KOed ally to 25% of their max HP.' },
+  { tier:18, name:'Perfect Purification', effect:'Reset your Toxicity Level to 0 and cleanse all your negative effects.' },
+  { tier:18, name:'One Time Opening', effect:'With team agreement, reset Tension to 0 and immediately take another turn.' },
+  { tier:18, name:'No Mistakes', effect:'First team to fail an act suffers -2 on all acts for a full round.' },
+  { tier:18, name:'Real Interruption', effect:'Predict the opponent next action type (spell school or attack type). If correct, immediately stop their turn and take an attack action. You may take two guesses instead of one.' }
 ];
 
 const CONDITION_DEFS = [
@@ -8005,7 +8006,7 @@ function renderCombatActions(){
       const row = document.createElement('div');
       row.className = 'combat-entry';
       row.title = action.effect || '';
-      const skillOptions = String(action.attack || '').split(/\\s+or\\s+|\\//i).map(s=> s.trim()).filter(Boolean);
+      const skillOptions = String(action.attack || '').split(/\s+or\s+|\//i).map(s=> s.trim()).filter(Boolean);
       const pick = skillOptions[0] || '';
       row.innerHTML = `
         <div class="grow">
@@ -8088,8 +8089,10 @@ function renderCombatActions(){
   }
   if (combatSpecialActionsEl){
     combatSpecialActionsEl.innerHTML = '';
-    const exhausted = combatState().exhausted;
-    SPECIAL_ACTIONS.forEach(action=>{
+    const st = combatState();
+    const exhausted = st.exhausted;
+    const cur = Math.max(0, Number(st.tension || 0));
+    SPECIAL_ACTIONS.filter(action=> action.tier <= cur).forEach(action=>{
       const row = document.createElement('div');
       row.className = 'combat-entry';
       row.title = action.effect || '';
@@ -8103,7 +8106,6 @@ function renderCombatActions(){
       row.querySelector('button')?.addEventListener('click', ()=>{
         if (exhausted) return;
         const st = combatState();
-        const cap = tensionCapForLevel(CHAR?.level || 1);
         const cur = Math.max(0, Number(st.tension || 0));
         if (cur < action.tier){
           alert('Not enough Tension for this Special Action.');
