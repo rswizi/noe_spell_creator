@@ -1943,6 +1943,8 @@ function levelFromXp(xp){
 /* State */
 const params = new URLSearchParams(location.search);
 const CID = params.get('id');
+const CAMPAIGN_ID = params.get('cid') || '';
+const VIEW_ONLY = params.get('view') === '1' || params.get('mode') === 'viewer';
 let ROLE = 'user';
 let CURRENT_USER = null;
 let READ_ONLY = false;
@@ -4398,7 +4400,59 @@ function formatConditionsSummary(conds){
   return parts.join(' | ');
 }
 
+function campaignChatVisibility(){
+  if (!CAMPAIGN_ID) return 'public';
+  return localStorage.getItem(`campaign_chat_visibility:${CAMPAIGN_ID}`) || 'public';
+}
+
+function serializeRollEntry(entry){
+  const parts = Array.from(entry.children).map(el=> (el.textContent || '').trim()).filter(Boolean);
+  const titleEl = entry.querySelector('.title');
+  const title = titleEl ? titleEl.textContent : (parts[0] || 'Log');
+  if (parts[0] === title) parts.shift();
+  return { title, lines: parts };
+}
+
+async function postCampaignChatMessage(payload){
+  if (!CAMPAIGN_ID) return false;
+  try{
+    const res = await fetch(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/chat`, {
+      method:'POST',
+      headers:{ 'content-type':'application/json', ...authHeaders() },
+      body: JSON.stringify(payload),
+      credentials:'include'
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return true;
+  }catch(e){
+    console.warn('Campaign chat post failed', e);
+    return false;
+  }
+}
+
+function queueCampaignChat(entry){
+  if (!CAMPAIGN_ID) return;
+  const data = serializeRollEntry(entry);
+  const charId = CHAR?.id || CID || '';
+  const payload = {
+    type: 'roll',
+    text: data.title,
+    lines: data.lines,
+    visibility: campaignChatVisibility(),
+    ts: Date.now(),
+    user: CURRENT_USER?.username || CHAR?.owner || 'Unknown',
+    character_id: charId,
+    character_name: CHAR?.name || charId || 'Character',
+    character_avatar: charId ? `/characters/${encodeURIComponent(charId)}/avatar` : ''
+  };
+  postCampaignChatMessage(payload);
+}
+
 function appendRollLog(entry){
+  if (CAMPAIGN_ID){
+    queueCampaignChat(entry);
+    return;
+  }
   if (!rollLogEl) return;
   if (rollLogEmptyEl) rollLogEmptyEl.style.display = 'none';
   rollLogEl.appendChild(entry);
@@ -9664,6 +9718,10 @@ async function loadCharacter(){
   const isAdmin = role === 'admin';
   CAN_EDIT = !!(isOwner || isAdmin);
   READ_ONLY = !CAN_EDIT;
+  if (VIEW_ONLY){
+    CAN_EDIT = false;
+    READ_ONLY = true;
+  }
   CHAR.stats = normalizeStats(CHAR.stats || {});
   setAddedSchools(CHAR.stats.selected_schools || []);
   XP = numOr(CHAR.xp, 0);

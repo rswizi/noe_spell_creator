@@ -5,105 +5,138 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>My Campaigns</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet" />
   <style>
-    :root{color-scheme:dark;--ink:#f5f2ee;--bg:#0b0b12;--panel:#141422;--border:#2a2a3a;--accent:#d1a348;}
-    body{margin:0;color:var(--ink);font-family:"Palatino Linotype","Book Antiqua","Georgia",serif;background:radial-gradient(900px 500px at 0% 0%, rgba(209,163,72,0.18), transparent 60%),linear-gradient(180deg,#0b0b12 0%,#0a0a0f 100%);}
-    .page{max-width:1100px;margin:0 auto;padding:28px 16px 64px;}
-    .topbar{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
-    .topbar h1{margin:0;font-size:1.8rem;}
-    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid #3a3a4a;font-size:.8rem;opacity:.85;}
+    :root{
+      color-scheme: dark;
+      --ink:#f6f2ea;
+      --muted:#b7b2a8;
+      --bg:#0b0c10;
+      --panel:#161924;
+      --border:#2a2f3a;
+      --accent:#c9a227;
+    }
+    *{box-sizing:border-box;}
+    body{
+      margin:0;
+      font-family:"Source Sans 3","Trebuchet MS",sans-serif;
+      color:var(--ink);
+      background:
+        radial-gradient(900px 500px at 0% -10%, rgba(201,162,39,0.2), transparent 60%),
+        linear-gradient(180deg, var(--bg), #0a0b10 60%, #07080c);
+      min-height:100vh;
+    }
+    .page{max-width:1100px;margin:0 auto;padding:30px 16px 70px;}
+    .topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .topbar h1{margin:0;font-family:"Cinzel","Times New Roman",serif;font-size:1.9rem;letter-spacing:.06em;}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid #3a3f49;font-size:.82rem;color:var(--muted);}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
     .grid{display:grid;gap:14px;}
     @media(min-width:720px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
-    .card{border:1px solid var(--border);border-radius:16px;padding:14px;background:linear-gradient(150deg, rgba(20,20,34,0.95), rgba(12,12,20,0.9));display:grid;gap:8px;}
-    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    .card{
+      border:1px solid var(--border);
+      border-radius:18px;
+      padding:14px;
+      background:linear-gradient(150deg, rgba(22,25,36,0.96), rgba(10,11,16,0.92));
+      display:grid;gap:8px;
+    }
     .avatar{width:56px;height:56px;border-radius:12px;border:1px solid #333;overflow:hidden;background:#0b0b10;display:grid;place-items:center;}
     .avatar img{width:100%;height:100%;object-fit:cover;}
-    .muted{opacity:.78;}
-    a.btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;border:1px solid #3a3a4a;padding:7px 12px;text-decoration:none;color:var(--ink);background:#141422;}
-    a.btn:hover{background:#1c1c2e;border-color:#4a4a60;}
+    .btn{
+      border-radius:999px;border:1px solid #3a3f49;
+      padding:7px 12px;background:#121521;color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;
+    }
+    .btn:hover{border-color:#5c626f;}
+    .muted{color:var(--muted);}
+    .empty{padding:14px;border:1px dashed #2f3340;border-radius:14px;color:var(--muted);}
   </style>
 </head>
 <body>
   <div class="page">
     <div class="topbar">
       <h1>My Campaigns</h1>
-      <span id="login-chip" class="pill">Checking...</span>
+      <span id="login-chip" class="pill">Checking login...</span>
       <a class="btn" href="campaign_manager.html">Back</a>
       <a class="btn" href="portal.html">Portal</a>
     </div>
+
     <div class="row" style="margin-bottom:10px;">
-      <button class="btn small" id="refresh">Refresh</button>
+      <button class="btn" id="refresh">Refresh</button>
       <span class="muted" id="status"></span>
     </div>
+
     <div id="list" class="grid"></div>
-    <div id="empty" class="muted" style="display:none;">No campaigns yet. Create or join one.</div>
+    <div id="empty" class="empty" style="display:none;">No campaigns yet. Create or join one.</div>
   </div>
 
   <script>
-    const listEl = document.getElementById("list");
-    const emptyEl = document.getElementById("empty");
-    const statusEl = document.getElementById("status");
-    const loginChip = document.getElementById("login-chip");
+    const listEl = document.getElementById('list');
+    const emptyEl = document.getElementById('empty');
+    const statusEl = document.getElementById('status');
+    const loginChip = document.getElementById('login-chip');
 
     function authHeaders(){
-      const t = localStorage.getItem("auth_token") || "";
-      return t ? { "Authorization":"Bearer " + t, "X-Auth-Token": t } : {};
+      const t = localStorage.getItem('auth_token') || '';
+      return t ? { Authorization: 'Bearer ' + t, 'X-Auth-Token': t } : {};
     }
     async function api(path,opt={}){
       const headers = Object.assign({}, opt.headers||{}, authHeaders());
-      const resp = await fetch(path, { credentials:"include", ...opt, headers });
-      const ct = resp.headers.get("content-type") || "";
-      const data = ct.includes("application/json") ? await resp.json() : { status:"error", message: await resp.text() };
-      if (!resp.ok || data.status === "error") throw new Error(data.message || `HTTP ${resp.status}`);
+      const resp = await fetch(path, { credentials:'include', ...opt, headers });
+      const ct = resp.headers.get('content-type') || '';
+      const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
+      if (!resp.ok || data.status === 'error') throw new Error(data.message || `HTTP ${resp.status}`);
       return data;
     }
     async function checkMe(){
       try{
-        const me = await api("/auth/me");
+        const me = await api('/auth/me');
         loginChip.textContent = `${me.username} (${me.role})`;
       }catch{
-        loginChip.textContent = "Not logged in";
+        loginChip.textContent = 'Not logged in';
       }
     }
     function render(campaigns){
-      listEl.innerHTML = "";
+      listEl.innerHTML = '';
       if (!campaigns.length){
-        emptyEl.style.display = "";
+        emptyEl.style.display = '';
         return;
       }
-      emptyEl.style.display = "none";
+      emptyEl.style.display = 'none';
       campaigns.forEach(c=>{
-        const card = document.createElement("div");
-        card.className = "card";
+        const card = document.createElement('div');
+        card.className = 'card';
         const avatarUrl = c.avatar_url ? `${c.avatar_url}?ts=${Date.now()}` : `/campaigns/${encodeURIComponent(c.id)}/avatar?ts=${Date.now()}`;
+        const desc = (c.description || '').trim() || 'No description.';
         card.innerHTML = `
           <div class="row" style="justify-content:space-between;align-items:center;">
             <div class="row" style="gap:10px;">
               <div class="avatar"><img src="${avatarUrl}" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';"></div>
               <div>
-                <strong>${c.name || "Campaign"}</strong>
-                <div class="muted">Owner: ${c.owner || "?"}</div>
-                <div class="muted">${c.description || "No description."}</div>
+                <strong>${c.name || 'Campaign'}</strong>
+                <div class="muted">Owner: ${c.owner || '?'}</div>
+                <div class="muted">${desc}</div>
               </div>
             </div>
             <a class="btn" href="campaign_view.html?cid=${encodeURIComponent(c.id)}">Open</a>
           </div>
-          <div class="muted">Members: ${(c.members || []).length} • Code: ${c.join_code || "--"}</div>
         `;
         listEl.appendChild(card);
       });
     }
     async function loadCampaigns(){
-      statusEl.textContent = "Loading...";
+      statusEl.textContent = 'Loading...';
       try{
-        const res = await api("/campaigns");
+        const res = await api('/campaigns');
         render(res.campaigns || []);
-        statusEl.textContent = "Loaded.";
+        statusEl.textContent = '';
       }catch(e){
         statusEl.textContent = e.message;
       }
     }
-    document.getElementById("refresh").addEventListener("click", loadCampaigns);
+
+    document.getElementById('refresh').addEventListener('click', loadCampaigns);
     checkMe().then(loadCampaigns);
   </script>
 </body>

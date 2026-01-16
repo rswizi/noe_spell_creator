@@ -5,21 +5,51 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Join Campaign</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet" />
   <style>
-    :root{color-scheme:dark;--ink:#f5f2ee;--bg:#0b0b12;--panel:#141422;--border:#2a2a3a;--accent:#d1a348;}
-    body{margin:0;color:var(--ink);font-family:"Palatino Linotype","Book Antiqua","Georgia",serif;background:radial-gradient(800px 420px at 100% 0%, rgba(58,127,209,0.2), transparent 60%),linear-gradient(180deg,#0b0b12 0%,#0a0a0f 100%);}
-    .page{max-width:900px;margin:0 auto;padding:28px 16px 64px;}
-    .topbar{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
-    .topbar h1{margin:0;font-size:1.8rem;}
-    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid #3a3a4a;font-size:.8rem;opacity:.85;}
-    .panel{border:1px solid var(--border);border-radius:16px;padding:14px;background:linear-gradient(150deg, rgba(20,20,34,0.95), rgba(12,12,20,0.9));display:grid;gap:10px;}
+    :root{
+      color-scheme: dark;
+      --ink:#f6f2ea;
+      --muted:#b7b2a8;
+      --bg:#0b0c10;
+      --panel:#161924;
+      --border:#2a2f3a;
+      --accent:#c9a227;
+    }
+    *{box-sizing:border-box;}
+    body{
+      margin:0;
+      font-family:"Source Sans 3","Trebuchet MS",sans-serif;
+      color:var(--ink);
+      background:
+        radial-gradient(900px 500px at 100% -10%, rgba(201,162,39,0.2), transparent 60%),
+        linear-gradient(180deg, var(--bg), #0a0b10 60%, #07080c);
+      min-height:100vh;
+    }
+    .page{max-width:880px;margin:0 auto;padding:30px 16px 70px;}
+    .topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .topbar h1{margin:0;font-family:"Cinzel","Times New Roman",serif;font-size:1.9rem;letter-spacing:.06em;}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid #3a3f49;font-size:.82rem;color:var(--muted);}
+    .panel{
+      border:1px solid var(--border);
+      border-radius:18px;
+      padding:16px;
+      background:linear-gradient(150deg, rgba(22,25,36,0.96), rgba(10,11,16,0.92));
+      display:grid;gap:14px;
+    }
+    label{font-size:.9rem;color:var(--muted);}
+    input,select{padding:10px 12px;border-radius:12px;border:1px solid #2a2f3a;background:#11131d;color:var(--ink);}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-    label{font-size:.9rem;opacity:.85;}
-    input,select{padding:9px 11px;border-radius:12px;border:1px solid #2a2a3a;background:#12121d;color:var(--ink);}
-    .btn{border-radius:999px;border:1px solid #3a3a4a;padding:8px 12px;background:#141422;color:var(--ink);}
-    .btn:hover{background:#1c1c2e;border-color:#4a4a60;}
-    .muted{opacity:.78;}
-    .choice-card{border:1px solid #2a2a3a;border-radius:12px;padding:10px;background:#101018;}
+    .btn{
+      border-radius:999px;border:1px solid #3a3f49;
+      padding:8px 14px;background:#121521;color:var(--ink);
+    }
+    .btn:hover{border-color:#5c626f;}
+    .muted{color:var(--muted);}
+    .section-title{font-weight:600;}
+    .stack{display:grid;gap:10px;}
     .hidden{display:none;}
   </style>
 </head>
@@ -27,105 +57,123 @@
   <div class="page">
     <div class="topbar">
       <h1>Join Campaign</h1>
-      <span id="login-chip" class="pill">Checking...</span>
+      <span id="login-chip" class="pill">Checking login...</span>
       <a class="btn" href="campaign_manager.html">Back</a>
     </div>
 
     <div class="panel">
-      <div class="row">
-        <label style="min-width:120px;">Join code</label>
-        <input id="join-code" placeholder="ABC123" style="width:160px;">
-        <button class="btn" id="join-btn">Join</button>
+      <div class="stack">
+        <div class="section-title">Campaign code</div>
+        <div class="row">
+          <input id="join-code" placeholder="ABC123" style="min-width:200px;" />
+          <button class="btn" id="join-btn">Join Campaign</button>
+        </div>
       </div>
-      <div class="choice-card">
-        <strong>Choose a character</strong>
-        <div class="row" style="margin-top:8px;">
-          <label><input type="radio" name="join-mode" value="existing" checked> Existing</label>
-          <label><input type="radio" name="join-mode" value="new"> Create new</label>
+
+      <div class="stack">
+        <div class="section-title">Character selection</div>
+        <div class="row">
+          <label><input type="radio" name="join-mode" value="existing" checked> Use existing character (will duplicate)</label>
+          <label><input type="radio" name="join-mode" value="new"> Create new character</label>
         </div>
-        <div id="existing-wrap" class="row" style="margin-top:8px;">
-          <select id="char-select" style="min-width:240px;"></select>
+        <div id="existing-wrap" class="row">
+          <select id="char-select" style="min-width:260px;"></select>
         </div>
-        <div id="new-wrap" class="row hidden" style="margin-top:8px;">
-          <input id="new-name" placeholder="New character name" style="min-width:240px;">
+        <div id="new-wrap" class="row hidden">
+          <input id="new-name" placeholder="New character name" style="min-width:260px;" />
         </div>
-        <div class="muted" style="margin-top:6px;">Characters are assigned to you when joining.</div>
+        <div class="muted">Existing characters are duplicated so your originals stay safe.</div>
       </div>
+
       <div class="muted" id="status"></div>
     </div>
   </div>
 
   <script>
-    const loginChip = document.getElementById("login-chip");
-    const statusEl = document.getElementById("status");
-    const joinBtn = document.getElementById("join-btn");
-    const joinCodeEl = document.getElementById("join-code");
-    const charSelect = document.getElementById("char-select");
-    const newNameEl = document.getElementById("new-name");
-    const existingWrap = document.getElementById("existing-wrap");
-    const newWrap = document.getElementById("new-wrap");
+    const loginChip = document.getElementById('login-chip');
+    const statusEl = document.getElementById('status');
+    const joinBtn = document.getElementById('join-btn');
+    const joinCodeEl = document.getElementById('join-code');
+    const charSelect = document.getElementById('char-select');
+    const newNameEl = document.getElementById('new-name');
+    const existingWrap = document.getElementById('existing-wrap');
+    const newWrap = document.getElementById('new-wrap');
 
     function authHeaders(){
-      const t = localStorage.getItem("auth_token") || "";
-      return t ? { "Authorization":"Bearer " + t, "X-Auth-Token": t } : {};
+      const t = localStorage.getItem('auth_token') || '';
+      return t ? { Authorization: 'Bearer ' + t, 'X-Auth-Token': t } : {};
     }
     async function api(path,opt={}){
       const headers = Object.assign({}, opt.headers||{}, authHeaders());
-      const resp = await fetch(path, { credentials:"include", ...opt, headers });
-      const ct = resp.headers.get("content-type") || "";
-      const data = ct.includes("application/json") ? await resp.json() : { status:"error", message: await resp.text() };
-      if (!resp.ok || data.status === "error") throw new Error(data.message || `HTTP ${resp.status}`);
+      const resp = await fetch(path, { credentials:'include', ...opt, headers });
+      const ct = resp.headers.get('content-type') || '';
+      const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
+      if (!resp.ok || data.status === 'error') throw new Error(data.message || `HTTP ${resp.status}`);
       return data;
     }
     async function checkMe(){
       try{
-        const me = await api("/auth/me");
+        const me = await api('/auth/me');
         loginChip.textContent = `${me.username} (${me.role})`;
       }catch{
-        loginChip.textContent = "Not logged in";
+        loginChip.textContent = 'Not logged in';
       }
     }
     async function loadCharacters(){
       try{
-        const res = await api("/characters");
+        const res = await api('/characters');
         const chars = res.characters || [];
-        charSelect.innerHTML = chars.map(c=>`<option value="${c.id}">${c.name || c.id}</option>`).join("");
+        charSelect.innerHTML = chars.length
+          ? chars.map(c=>`<option value="${c.id}">${c.name || c.id}</option>`).join('')
+          : '<option value="">No characters found</option>';
       }catch{
-        charSelect.innerHTML = '<option value="">No characters</option>';
+        charSelect.innerHTML = '<option value="">No characters found</option>';
       }
     }
-    document.querySelectorAll("input[name='join-mode']").forEach(r=>{
-      r.addEventListener("change", ()=>{
-        const mode = document.querySelector("input[name='join-mode']:checked").value;
-        existingWrap.classList.toggle("hidden", mode !== "existing");
-        newWrap.classList.toggle("hidden", mode !== "new");
+    document.querySelectorAll('input[name="join-mode"]').forEach(radio=>{
+      radio.addEventListener('change', ()=>{
+        const mode = document.querySelector('input[name="join-mode"]:checked').value;
+        existingWrap.classList.toggle('hidden', mode !== 'existing');
+        newWrap.classList.toggle('hidden', mode !== 'new');
       });
     });
-    joinBtn.addEventListener("click", async ()=>{
-      const code = (joinCodeEl.value || "").trim();
-      if (!code){ alert("Enter join code"); return; }
-      const mode = document.querySelector("input[name='join-mode']:checked").value;
-      let character_id = "";
-      if (mode === "new"){
-        const name = (newNameEl.value || "").trim();
-        if (!name){ alert("Enter character name"); return; }
-        try{
-          const res = await api("/characters", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ name }) });
-          character_id = res.id || res.character?.id || "";
-        }catch(e){
-          alert("Create character failed: " + e.message);
-          return;
-        }
-      }else{
-        character_id = (charSelect.value || "").trim();
-        if (!character_id){ alert("Select a character"); return; }
-      }
+
+    async function createCharacter(name){
+      const res = await api('/characters', {
+        method:'POST',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify({ name })
+      });
+      return res.id || res.character?.id || '';
+    }
+
+    joinBtn.addEventListener('click', async ()=>{
+      const code = (joinCodeEl.value || '').trim();
+      if (!code){ alert('Enter a campaign code'); return; }
+      const mode = document.querySelector('input[name="join-mode"]:checked').value;
+      let character_id = '';
       try{
-        statusEl.textContent = "Joining...";
-        const res = await api("/campaigns/join", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ code, character_id }) });
-        statusEl.textContent = "Joined.";
-        if (res.campaign?.id){
-          location.href = `campaign_view.html?cid=${encodeURIComponent(res.campaign.id)}`;
+        statusEl.textContent = 'Preparing character...';
+        if (mode === 'new'){
+          const name = (newNameEl.value || '').trim() || 'New Campaign Character';
+          character_id = await createCharacter(name);
+        }else{
+          character_id = (charSelect.value || '').trim();
+        }
+        if (!character_id){ alert('Select or create a character'); return; }
+        statusEl.textContent = 'Joining campaign...';
+        const payload = { code, character_id };
+        if (mode === 'existing') payload.duplicate = true;
+        const res = await api('/campaigns/join', {
+          method:'POST',
+          headers:{ 'content-type':'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const cid = res.campaign?.id || '';
+        if (cid){
+          location.href = `campaign_view.html?cid=${encodeURIComponent(cid)}`;
+        }else{
+          statusEl.textContent = 'Joined, but missing campaign id.';
         }
       }catch(e){
         statusEl.textContent = e.message;

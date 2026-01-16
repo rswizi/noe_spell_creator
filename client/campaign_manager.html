@@ -5,107 +5,130 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Campaign Manager</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet" />
   <style>
     :root{
       color-scheme: dark;
-      --ink:#f5f2ee;
-      --bg:#0b0b12;
-      --bg-2:#131326;
-      --accent:#d1a348;
-      --accent-2:#3a7fd1;
-      --border:#2a2a3a;
+      --ink:#f6f2ea;
+      --muted:#b5b1a8;
+      --bg:#0b0c10;
+      --bg-2:#12141c;
+      --panel:#161924;
+      --border:#2a2f3a;
+      --accent:#c9a227;
+      --accent-2:#4a8b8f;
     }
+    *{box-sizing:border-box;}
     body{
       margin:0;
+      font-family:"Source Sans 3","Trebuchet MS",sans-serif;
       color:var(--ink);
-      font-family:"Palatino Linotype","Book Antiqua","Georgia",serif;
       background:
-        radial-gradient(1200px 600px at 10% -10%, rgba(209,163,72,0.2), transparent 55%),
-        radial-gradient(900px 500px at 100% 0%, rgba(58,127,209,0.25), transparent 50%),
-        linear-gradient(180deg, #0b0b12 0%, #0a0a0f 100%);
+        radial-gradient(900px 500px at 0% -10%, rgba(201,162,39,0.18), transparent 55%),
+        radial-gradient(700px 420px at 100% 0%, rgba(74,139,143,0.2), transparent 50%),
+        linear-gradient(180deg, var(--bg), #090a0f 60%, #07080c);
       min-height:100vh;
     }
-    .page{max-width:980px;margin:0 auto;padding:32px 16px 64px;}
-    .topbar{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
-    .topbar h1{margin:0;font-size:2rem;letter-spacing:.5px;}
-    .topbar .right{margin-left:auto;}
-    .hero{padding:18px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(135deg, rgba(18,18,30,0.95), rgba(12,12,20,0.9));box-shadow:0 14px 40px rgba(0,0,0,0.35);}
-    .hero p{margin:6px 0 0;opacity:.8;}
+    .page{max-width:980px;margin:0 auto;padding:32px 16px 70px;}
+    .topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;}
+    .topbar h1{margin:0;font-family:"Cinzel","Times New Roman",serif;font-weight:700;letter-spacing:0.08em;font-size:2rem;}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid #3a3f49;font-size:.82rem;color:var(--muted);}
+    .hero{
+      border:1px solid var(--border);
+      border-radius:18px;
+      padding:18px;
+      background:linear-gradient(145deg, rgba(22,25,36,0.95), rgba(12,13,19,0.9));
+      box-shadow:0 18px 40px rgba(0,0,0,0.4);
+    }
+    .hero strong{display:block;font-size:1.1rem;}
+    .hero p{margin:8px 0 0;color:var(--muted);}
     .grid{display:grid;gap:16px;margin-top:20px;}
-    @media(min-width:720px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
+    @media(min-width:720px){.grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
     .card{
       border:1px solid var(--border);
       border-radius:18px;
       padding:16px;
-      background:linear-gradient(160deg, rgba(19,19,38,0.95), rgba(10,10,18,0.9));
-      display:grid;gap:10px;
+      background:linear-gradient(160deg, rgba(19,22,32,0.95), rgba(9,10,14,0.92));
+      display:grid;
+      gap:10px;
       position:relative;
       overflow:hidden;
+      min-height:180px;
     }
     .card:before{
       content:"";
       position:absolute;inset:0;
-      background:linear-gradient(120deg, transparent, rgba(209,163,72,0.07), transparent);
-      opacity:.6;
-      pointer-events:none;
+      background:linear-gradient(110deg, transparent, rgba(201,162,39,0.08), transparent);
+      opacity:.5;pointer-events:none;
     }
-    .card h2{margin:0;font-size:1.1rem;}
-    .card p{margin:0;opacity:.78;line-height:1.35;}
-    .card a.btn{
-      display:inline-flex;align-items:center;justify-content:center;
-      border-radius:999px;border:1px solid #3a3a4a;
-      padding:8px 12px;text-decoration:none;color:var(--ink);
-      background:#141422;
+    .card h2{margin:0;font-family:"Cinzel","Times New Roman",serif;font-size:1.15rem;letter-spacing:.05em;}
+    .card p{margin:0;color:var(--muted);line-height:1.35;}
+    .card a{
+      justify-self:start;
+      display:inline-flex;align-items:center;gap:8px;
+      border-radius:999px;border:1px solid #3a3f49;
+      padding:8px 14px;text-decoration:none;color:var(--ink);
+      background:#121521;transition:transform .15s ease, border-color .15s ease;
     }
-    .card a.btn:hover{background:#1c1c2e;border-color:#4a4a60;}
-    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid #3a3a4a;font-size:.8rem;opacity:.8;}
+    .card a:hover{border-color:#5c626f;transform:translateY(-1px);}
+    .spacer{flex:1 1 auto;}
   </style>
 </head>
 <body>
   <div class="page">
     <div class="topbar">
       <h1>Campaign Manager</h1>
-      <span class="pill" id="login-chip">Not logged in</span>
-      <a class="btn btn-secondary right" href="portal.html">Back to Portal</a>
+      <span class="pill" id="login-chip">Checking login...</span>
+      <span class="spacer"></span>
+      <a class="btn btn-secondary" href="portal.html">Back to Portal</a>
     </div>
 
     <div class="hero">
-      <strong>Choose what you want to do</strong>
-      <p>Manage your campaigns, bring a character into a new story, or create a fresh campaign hub.</p>
+      <strong>Choose your path</strong>
+      <p>Create a new campaign, join an existing one, or return to a campaign you already play in.</p>
     </div>
 
     <div class="grid">
       <div class="card">
-        <h2>My Campaigns</h2>
-        <p>See all campaigns you own or joined. Open one to view characters and details.</p>
-        <a class="btn" href="campaigns_my.html">Open list</a>
-      </div>
-      <div class="card">
-        <h2>Join New</h2>
-        <p>Enter a join code and link a character, or create a new one just for this campaign.</p>
-        <a class="btn" href="campaigns_join.html">Join a campaign</a>
-      </div>
-      <div class="card">
         <h2>Create Campaign</h2>
-        <p>Name your campaign, add a description, and set an optional avatar.</p>
-        <a class="btn" href="campaigns_create.html">Create campaign</a>
+        <p>Name your story, write a short description, and set an avatar.</p>
+        <a href="campaigns_create.html">Create</a>
+      </div>
+      <div class="card">
+        <h2>Join Campaign</h2>
+        <p>Enter a campaign code and bring in a new or existing character.</p>
+        <a href="campaigns_join.html">Join</a>
+      </div>
+      <div class="card">
+        <h2>My Campaigns</h2>
+        <p>Open any campaign you already joined.</p>
+        <a href="campaigns_my.html">Open list</a>
       </div>
     </div>
   </div>
 
   <script>
-    async function authHeaders(){
-      const t = localStorage.getItem("auth_token") || "";
-      return t ? { "Authorization":"Bearer " + t, "X-Auth-Token": t } : {};
+    function authHeaders(){
+      const t = localStorage.getItem('auth_token') || '';
+      return t ? { Authorization: 'Bearer ' + t, 'X-Auth-Token': t } : {};
+    }
+    async function api(path,opt={}){
+      const headers = Object.assign({}, opt.headers||{}, authHeaders());
+      const resp = await fetch(path, { credentials:'include', ...opt, headers });
+      const ct = resp.headers.get('content-type') || '';
+      const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
+      if (!resp.ok || data.status === 'error') throw new Error(data.message || `HTTP ${resp.status}`);
+      return data;
     }
     async function checkMe(){
       try{
-        const res = await fetch("/auth/me", { headers: await authHeaders() });
-        const data = await res.json();
-        if (data.status === "success"){
-          document.getElementById("login-chip").textContent = `${data.username} (${data.role})`;
-        }
-      }catch{}
+        const me = await api('/auth/me');
+        document.getElementById('login-chip').textContent = `${me.username} (${me.role})`;
+      }catch{
+        document.getElementById('login-chip').textContent = 'Not logged in';
+      }
     }
     checkMe();
   </script>
