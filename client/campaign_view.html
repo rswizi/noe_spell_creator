@@ -675,24 +675,46 @@
       const title = msg.text || '';
       if (!/damage/i.test(title)) return null;
       const lines = cleanChatLines(msg.lines);
-      const resultLine = lines.find(l=> /^Result:/i.test(l));
-      if (!resultLine) return null;
-      const inParen = resultLine.match(/\((.+)\)/);
-      if (!inParen) return null;
-      const typeParts = inParen[1].split('+').map(p=> p.trim()).filter(Boolean);
-      const types = [];
-      typeParts.forEach(part=>{
-        const m = part.match(/^([A-Za-z ]+?)\s+([+-]?\d+)/);
-        if (m) types.push({ name: m[1].trim(), total: m[2] });
-      });
-      if (!types.length) return null;
-      const breakdownLine = lines.find(l=> /\|/.test(l) || /Neutral|Magic/i.test(l)) || '';
+      const rollLine = lines.find(l=> /^(Result|Roll):/i.test(l));
+      if (!rollLine) return null;
+      const content = rollLine.replace(/^(Result|Roll):\s*/i, '');
+      let types = [];
       const formulas = {};
-      const segments = breakdownLine ? breakdownLine.split('|').map(s=> s.trim()).filter(Boolean) : [];
+      const segments = content.split('|').map(s=> s.trim()).filter(Boolean);
       segments.forEach(seg=>{
-        const m = seg.match(/([A-Za-z ]+?)\s+([+-]?\d+)/);
-        if (m) formulas[m[1].trim()] = seg;
+        const m = seg.match(/^([A-Za-z ]+?)\s+([+-]?\d+)(?:\s*\((.+)\))?$/);
+        if (m){
+          const label = m[1].trim();
+          types.push({ name: label, total: m[2] });
+          if (m[3]) formulas[label] = m[3].trim();
+        }
       });
+      if (!types.length){
+        const inParen = content.match(/\((.+)\)/);
+        if (!inParen) return null;
+        const typeParts = inParen[1].split('+').map(p=> p.trim()).filter(Boolean);
+        types = [];
+        typeParts.forEach(part=>{
+          const m = part.match(/^([A-Za-z ]+?)\s+([+-]?\d+)/);
+          if (m) types.push({ name: m[1].trim(), total: m[2] });
+        });
+      }
+      if (!types.length) return null;
+      lines.forEach(line=>{
+        const m = line.match(/^([A-Za-z ]+):\s*(.+)$/);
+        if (m){
+          const key = m[1].trim();
+          if (!formulas[key]) formulas[key] = m[2].trim();
+        }
+      });
+      if (!Object.keys(formulas).length){
+        const breakdownLine = lines.find(l=> l !== rollLine && (/\|/.test(l) || /Neutral|Magic/i.test(l))) || '';
+        const fallbackSegs = breakdownLine ? breakdownLine.split('|').map(s=> s.trim()).filter(Boolean) : [];
+        fallbackSegs.forEach(seg=>{
+          const m = seg.match(/([A-Za-z ]+?)\s+([+-]?\d+)/);
+          if (m) formulas[m[1].trim()] = seg;
+        });
+      }
       return { types, formulas };
     }
 

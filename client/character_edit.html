@@ -1876,60 +1876,59 @@ const SPECIAL_ATTACKS = [
 const SIMPLE_ATTACK_DESC = "Simple Attack: roll your weapon skill vs defense with no penalty. On success, apply weapon damage. Each weapon can be used once per two actions.";
 
 const SECONDARY_ACTIONS = [
-  { name:'Intimidate', attack:'Intimidation', defense:'Spirit', effect:'Apply Condition Disturbance (1). Overwhelming success: apply Condition Fear (1) instead.' },
-  { name:'Charm', attack:'Charm', defense:'Spirit', effect:'Apply Condition Disturbance (1). Overwhelming success: apply Condition Charm (1) instead.' },
-  { name:'Insult', attack:'Persuasion', defense:'Spirit', effect:'Apply Condition Provocation (1). Overwhelming success: apply Provocation (5) instead.' },
-  { name:'Hide', attack:'Stealth', defense:'Perception', effect:'Hide in cover or darkness. Invisible to those who fail. Overwhelming success: gain Motivation (1) on your next attack.' },
-  { name:'Feign', attack:'Deception', defense:'Psychology', effect:'Gain +1 to your next attack. Overwhelming success: gain +3 instead.' },
-  { name:'Analyze', attack:'Investigation', defense:'Deception', effect:'Gain Advantage on your next defensive act vs them. Overwhelming success: gain Advantage on your next offensive act too.' },
-  { name:'Gauge', attack:'Potential', defense:'Potential', effect:'Determine their magic mastery, eclipse nature, and approximate remaining EN. Overwhelming success: gain Advantage on the Defensive Act against their next spell.' },
-  { name:'Command', attack:'Charisma', defense:'Intimidation', effect:'Allies gain +1 to acts needed to fulfill your order until your next round. Overwhelming success: they may act immediately (skip next regular turn).' },
-  { name:'Detect', attack:'Instinct or Potential', defense:'Stealth or Potential', effect:'Roll Potential or Instinct with Disadvantage to sense a concealed opponent vs Stealth or Potential. If success, guess exact position within 20m. Overwhelming success: no penalty vs them for 5 rounds.' }
+  { name:'Intimidate', attack:'Intimidation', defense:'Spirit', effect:'Your target becomes Disturbed for one round. If the success is overwhelming, the target is Afraid of you instead for 1 round.' },
+  { name:'Charm', attack:'Charm', defense:'Spirit', effect:'Your target becomes Disturbed for one round. If the success is overwhelming, the target is Charmed by you instead for 1 round.' },
+  { name:'Insult', attack:'Persuasion', defense:'Spirit', effect:'Your target becomes Taunted by you for one round. If the success is overwhelming, the target is Obsessed with you instead for 1 round.' },
+  { name:'Hide', attack:'Stealth', defense:'Perception', effect:'You can hide in the presence of a hiding place or in darkness. This will make you invisible to all those who fail their perception check. If the success is overwhelming, you are considered Slightly Motivated for your next attack.' },
+  { name:'Feign', attack:'Deception', defense:'Psychology', effect:'You gain a bonus of 1 to your next attack. If the success is overwhelming, gain a bonus of 2 instead.' },
+  { name:'Analyze', attack:'Investigation', defense:'Deception', effect:'You can analyze their movements and their way of acting. This allows you to gain the advantage on your next defensive act against them. If your success is overwhelming, gain the advantage on your next offensive act against them as well.' },
+  { name:'Gauge', attack:'Potential', defense:'Potential', effect:'Determine the level of magic mastery of an opponent, their nature of eclipse, and an approximation of their remaining EN. If the success is overwhelming, gain the Advantage on the Defensive Act against their next spell.' },
+  { name:'Command', attack:'Charisma', defense:'Intimidation', effect:'Give a concise command to your allies to perform a specific task. If you succeed on a charisma check against your opponents\' Intimidation, your allies will gain a bonus of 1 to the necessary acts to fulfill that order until your next round. If your success is overwhelming, they may take their turn immediately (but they will skip their next regular turn).' },
+  { name:'Detect', attack:'Instinct or Potential', defense:'Stealth or Potential', effect:'You can roll a Potential or Instinct check with Disadvantage to try to sense the energy or Aura of a concealed opponent against their Stealth or Potential. If you succeed, you guess their exact position if they are within 20m of you. If the success is overwhelming, you have no penalty against them because they are camouflaged or invisible, and they cannot conceal themselves from you for the next 5 Rounds.' }
 ];
 
 const CONTEXTUAL_ACTIONS = [
-  { name:'Natural Defense', effect:'Ignore one weakness to one nature for 1 round.' },
   { name:'Disengage', effect:'You are no longer threatened by anyone in this Round.' },
-  { name:'Move Aside', effect:'Move a target to a free square in melee range with Athletics vs Athletics. If they consent, no roll.' },
-  { name:'Turnaround', effect:'If you are being flanked, cancel the Advantage of a pair of attackers as long as they do not reposition.' },
-  { name:'Defensive Stance', effect:'Obtain Motivation (1) for all your defenses until the next Round.' }
+  { name:'Move aside', effect:'You can move a target to a free square within your Melee Range if you succeed on an Athletics roll against their Athletics. If the target consents, no need to pass the check.' },
+  { name:'Turnaround', effect:'You cannot be Flanked on that round.' },
+  { name:'Defensive Stance', effect:'You are considered Motivated for all your defenses until the next Round.' }
 ];
 
 const SPECIAL_ACTIONS = [
-  { tier:3, name:'Small Dash', effect:'Move by half your mobility in one direction (not upward). This movement may trigger one opportunity attack.' },
-  { tier:3, name:'Small Purification', effect:'Apply to yourself True Cleanse (3) and reduce your Toxicity by 2.' },
-  { tier:3, name:'Small Anti-Heal', effect:'Your next offensive act applies Erosion (3) to one target. If you hit multiple targets, choose one.' },
+  { tier:3, name:'Small Dash', effect:'You can move by half your mobility value in one direction (but upward). This movement may trigger one, and only one opportunity attack.' },
+  { tier:3, name:'Small Purification', effect:'Cleanse yourself of a random one condition and reduce your Toxicity by 2.' },
+  { tier:3, name:'Small Anti-Heal', effect:'Make a target within range suffer from Slowed Metabolism for 2 rounds.' },
   { tier:3, name:'Precise Strike', effect:'Your next attack will deal 12 True Damage.' },
-  { tier:3, name:'Substitution', effect:'Exchange your position with a substitution tool (Substitution Scroll, Substitution Beads, etc).' },
-  { tier:6, name:'Dash', effect:'Move by your mobility in one direction (not upward). This movement may trigger one opportunity attack.' },
-  { tier:6, name:'Purification', effect:'Apply to yourself True Cleanse (6) and reduce your Toxicity by 4.' },
-  { tier:6, name:'Anti-Heal', effect:'Your next offensive act applies Erosion (5) to one target. If you hit multiple targets, choose one.' },
+  { tier:3, name:'Substitution', effect:'You can exchange your position with one of a substitution tool, like something marked by a Substitution Scroll, or Substitution Beads.' },
+  { tier:6, name:'Dash', effect:'You can move by your mobility value in one direction (but upward). This movement may trigger one, and only one opportunity attack.' },
+  { tier:6, name:'Purification', effect:'Cleanse yourself of a random negative or positive condition and reduce your Toxicity by 4.' },
+  { tier:6, name:'Anti-Heal', effect:'Make a target within range suffer from Slowed Metabolism for 4 rounds.' },
   { tier:6, name:'Lethal Strike', effect:'Your next attack will deal 24 True Damage.' },
-  { tier:6, name:'Higher Substitution', effect:'Exchange your position with a substitution tool or a target marked by Substitution.' },
-  { tier:9, name:'Small Interruption', effect:'Predict the opponent next action type (spell school or attack type). If correct, immediately stop their turn.' },
-  { tier:9, name:'Rush', effect:'Move by your mobility in one direction (also upward). This movement does not trigger opportunity attacks.' },
-  { tier:9, name:'Superior Anti-Heal', effect:'Your next offensive act applies Erosion (7) to all targets.' },
+  { tier:6, name:'Higher Substitution', effect:'You can exchange your position with one of a substitution tool, like something or someone marked by a Substitution Scroll, or Substitution.' },
+  { tier:9, name:'Small Interruption', effect:'Predict the precise type of action (if it is a spell, what school? If it is an attack, what type?) that your opponent will perform on their next Act. If you do so, you immediately stop their turn.' },
+  { tier:9, name:'Rush', effect:'You can move by your mobility value in one direction (also upward). This movement does not trigger any opportunity attack.' },
+  { tier:9, name:'Superior Anti-Heal', effect:'Make a target within range suffer from Deficient Metabolism for 4 rounds.' },
   { tier:9, name:'Surgical Strike', effect:'Your next attack will deal 36 True Damage.' },
-  { tier:9, name:'Total Substitution', effect:'Exchange your position with a substitution tool or a target marked by Substitution. You may also use an invocation.' },
-  { tier:9, name:'Higher Purification', effect:'Apply to yourself True Cleanse (9) and reduce your Toxicity by 6.' },
-  { tier:9, name:'Propulsion', effect:'If the target fails Athletics or Reactivity vs your Condition DC, grab them in melee and throw them half your Athletics base value in a line.' },
-  { tier:12, name:'Interruption', effect:'Predict the opponent next action type (spell school or attack type). If correct, immediately stop their turn and take an attack action.' },
-  { tier:12, name:'Super Rush', effect:'Move by your mobility in one direction (also upward). This movement does not trigger opportunity attacks. You may change direction once.' },
+  { tier:9, name:'Total Substitution', effect:'You can exchange your position with one of a substitution tool, like something or someone marked by a Substitution Scroll, or Substitution. You may also use an invocation as a target for substitution.' },
+  { tier:9, name:'Higher Purification', effect:'Cleanse yourself of a chosen negative or positive condition and reduce your Toxicity by 6.' },
+  { tier:9, name:'Propulsion', effect:'If the opponent fails an Athletics or Reactivity check against your Condition DC, grab an opponent in Melee Range and throw them as many squares as half your Athletics Base Value behind, in front of, or above you in a straight line.' },
+  { tier:12, name:'Interruption', effect:'Predict the precise type of action (if it is a spell, what school? If it is an attack, what type) that your opponent will perform on their next Act. If you do so, you immediately stop their turn and take an attack action against them.' },
+  { tier:12, name:'Super Rush', effect:'You can move by your mobility value in one direction (also upward). This movement does not trigger any opportunity attack. You may also choose to change the direction of your Rush midway, but only once.' },
   { tier:12, name:'Extra Action', effect:'Immediately use any of your actions as a Free Action.' },
-  { tier:12, name:'Ultimate Block', effect:'Before your next turn, ignore the next damage unless it is True Damage or exceeds your max HP.' },
+  { tier:12, name:'Ultimate Block', effect:'Next time you receive damage and before your next turn, ignore that damage if it is neither True Damage nor superior to your max HP.' },
   { tier:12, name:'True Strike', effect:'During this Round, your attacks ignore all of the SP.' },
-  { tier:12, name:'Light-speed Propulsion', effect:'If the target fails Athletics or Reactivity vs your Condition DC, grab them in melee and throw them, then rush into melee and gain an attack action.' },
+  { tier:12, name:'Light-speed Propulsion', effect:'If the opponent fails an Athletics or Reactivity check against your Condition DC, grab an opponent in Melee Range and throw them as many squares as half your Athletics Base Value behind, in front of, or above you in a straight line. Then, you rush into their Melee and gain an attack action against them.' },
   { tier:15, name:'Legendary Defense', effect:'If you were supposed to suffer a Critical Injury, don\'t.' },
-  { tier:15, name:'Initiative Boost', effect:'Increase your initiative by 5. This affects the ongoing initiative order.' },
-  { tier:15, name:'Fighting Control', effect:'Other teams cannot use a Special Action for 1 round.' },
+  { tier:15, name:'Initiative Boost', effect:'Increase your initiative by 5. This will affect the ongoing initiative order.' },
+  { tier:15, name:'Fighting Control', effect:'The other teams are unable to use a Special Action for one round.' },
   { tier:15, name:'Legendary Tempo', effect:'Reset all your cooldowns.' },
-  { tier:15, name:'Disruption', effect:'Your next Offensive Act forces one target to succeed a Resistance or Potential check vs your Condition DC or drop one chosen Active Ability.' },
-  { tier:18, name:'Tactical Advantage', effect:'Use any lower-tier Special Action without being Exhausted. You may not use this Special Action again before using any other one.' },
-  { tier:18, name:'Second Wind', effect:'With team agreement, reset Tension to 0 and revive a KOed ally to 25% of their max HP.' },
+  { tier:15, name:'Disruption', effect:'Your next Offensive Act will force one target to succeed a Resistance or Potential check vs your Condition DC, or drop one of their Active Ability that you chose.' },
+  { tier:18, name:'Tactical Advantage', effect:'Use any of the lower Tension level Special Actions without being Exhausted. You may not use this Special Action again before using any other one.' },
+  { tier:18, name:'Second Wind', effect:'With the agreement of the whole team, you may reset the Tension level to 0 and revive a KOed (not dead) ally and bring them back to 25% of their max HP.' },
   { tier:18, name:'Perfect Purification', effect:'Reset your Toxicity Level to 0 and cleanse all your negative effects.' },
-  { tier:18, name:'One Time Opening', effect:'With team agreement, reset Tension to 0 and immediately take another turn.' },
-  { tier:18, name:'No Mistakes', effect:'First team to fail an act suffers -2 on all acts for a full round.' },
-  { tier:18, name:'Real Interruption', effect:'Predict the opponent next action type (spell school or attack type). If correct, immediately stop their turn and take an attack action. You may take two guesses instead of one.' }
+  { tier:18, name:'One-Time Opening', effect:'With the agreement of the whole team, you may reset the Tension level to 0 and immediately take another turn.' },
+  { tier:18, name:'No mistakes', effect:'The first team that has a member who fails one of its acts suffers -2 on all acts for a full round.' },
+  { tier:18, name:'Real Interruption', effect:'Predict the precise type of action (if it is a spell, what school? If it is an attack, what type?) that your opponent will perform on their next Act. If you do so, you immediately stop their turn and take an attack action against them. You may take two guesses instead of one.' }
 ];
 
 const CONDITION_DEFS = [
@@ -4127,7 +4126,7 @@ function getSublimationEffects(){
       hidden.weaponNeutral += 2 * tier;
       continue;
     }
-    if (t === 'blessing'){
+    if (t === 'blessing' || t === 'benediction'){
       hidden.magicBonus += 2 * tier;
       hidden.magicNature = s.nature || hidden.magicNature || '';
       continue;
@@ -4725,24 +4724,46 @@ function parseDamageCard(msg){
   const title = msg.text || '';
   if (!/damage/i.test(title)) return null;
   const lines = cleanChatLines(msg.lines);
-  const resultLine = lines.find(l=> /^Result:/i.test(l));
-  if (!resultLine) return null;
-  const inParen = resultLine.match(/\((.+)\)/);
-  if (!inParen) return null;
-  const typeParts = inParen[1].split('+').map(p=> p.trim()).filter(Boolean);
-  const types = [];
-  typeParts.forEach(part=>{
-    const m = part.match(/^([A-Za-z ]+?)\s+([+-]?\d+)/);
-    if (m) types.push({ name: m[1].trim(), total: m[2] });
-  });
-  if (!types.length) return null;
-  const breakdownLine = lines.find(l=> /\|/.test(l) || /Neutral|Magic/i.test(l)) || '';
+  const rollLine = lines.find(l=> /^(Result|Roll):/i.test(l));
+  if (!rollLine) return null;
+  const content = rollLine.replace(/^(Result|Roll):\s*/i, '');
+  let types = [];
   const formulas = {};
-  const segments = breakdownLine ? breakdownLine.split('|').map(s=> s.trim()).filter(Boolean) : [];
+  const segments = content.split('|').map(s=> s.trim()).filter(Boolean);
   segments.forEach(seg=>{
-    const m = seg.match(/([A-Za-z ]+?)\s+([+-]?\d+)/);
-    if (m) formulas[m[1].trim()] = seg;
+    const m = seg.match(/^([A-Za-z ]+?)\s+([+-]?\d+)(?:\s*\((.+)\))?$/);
+    if (m){
+      const label = m[1].trim();
+      types.push({ name: label, total: m[2] });
+      if (m[3]) formulas[label] = m[3].trim();
+    }
   });
+  if (!types.length){
+    const inParen = content.match(/\((.+)\)/);
+    if (!inParen) return null;
+    const typeParts = inParen[1].split('+').map(p=> p.trim()).filter(Boolean);
+    types = [];
+    typeParts.forEach(part=>{
+      const m = part.match(/^([A-Za-z ]+?)\s+([+-]?\d+)/);
+      if (m) types.push({ name: m[1].trim(), total: m[2] });
+    });
+  }
+  if (!types.length) return null;
+  lines.forEach(line=>{
+    const m = line.match(/^([A-Za-z ]+):\s*(.+)$/);
+    if (m){
+      const key = m[1].trim();
+      if (!formulas[key]) formulas[key] = m[2].trim();
+    }
+  });
+  if (!Object.keys(formulas).length){
+    const breakdownLine = lines.find(l=> l !== rollLine && (/\|/.test(l) || /Neutral|Magic/i.test(l))) || '';
+    const fallbackSegs = breakdownLine ? breakdownLine.split('|').map(s=> s.trim()).filter(Boolean) : [];
+    fallbackSegs.forEach(seg=>{
+      const m = seg.match(/([A-Za-z ]+?)\s+([+-]?\d+)/);
+      if (m) formulas[m[1].trim()] = seg;
+    });
+  }
   return { types, formulas };
 }
 
@@ -9032,7 +9053,7 @@ function renderCombatActions(){
       const row = document.createElement('div');
       row.className = 'combat-entry';
       row.title = action.effect || '';
-      const isRoll = action.name === 'Move Aside';
+      const isRoll = String(action.name || '').toLowerCase() === 'move aside';
       row.innerHTML = `
         <div class="grow">
           <div><strong>${invEscapeHtml(action.name)}</strong></div>
@@ -9180,6 +9201,11 @@ function weaponIsAnimarma(it){
 }
 function weaponLinkedNature(it){
   return String(it?.linked_nature || it?.nature || '').trim();
+}
+function formatNatureLabel(name){
+  const clean = String(name || '').trim();
+  if (!clean) return '';
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 function weaponHasBenedictionUpgrade(it){
   const upgrades = Array.isArray(it?.upgrades) ? it.upgrades : [];
@@ -9460,9 +9486,10 @@ function renderCombatWeapons(){
     const isAnimarma = weaponIsAnimarma(it);
     const natureRaw = weaponLinkedNature(it);
     const nature = natureRaw.toLowerCase();
+    const natureLabel = formatNatureLabel(natureRaw);
     const subHidden = SUB_HIDDEN || {};
+    const derivedNeutral = Number(DERIVED_CACHE?.weapon_neutral || 0);
     const subNeutral = !isAnimarma ? (subHidden.weaponNeutral || 0) : 0;
-    const baseNeutral = Number(DERIVED_CACHE?.weapon_neutral || 0) + subNeutral;
     const magicBucket = isAnimarma ? (PASSIVE.magic_damage.spell || {}) : (PASSIVE.magic_damage.weapon || {});
     let baseMagic = 0;
     if (nature && magicBucket[nature]){
@@ -9472,11 +9499,12 @@ function renderCombatWeapons(){
       ? subHidden.magicBonus
       : 0;
     const upgradeBonus = getWeaponUpgradeBonuses(it);
-    const neutral = baseNeutral + upgradeBonus.neutral;
-    const magic = (baseMagic + subMagicBonus) + upgradeBonus.magic;
+    const neutralBonusTotal = derivedNeutral + subNeutral + upgradeBonus.neutral;
+    const magicBonusTotal = (baseMagic + subMagicBonus) + upgradeBonus.magic;
+    const magicLabel = natureLabel || 'Magic';
     const extra = [];
-    if (neutral) extra.push(`Neutral ${neutral}`);
-    if (magic) extra.push(`Magic ${magic}`);
+    if (neutralBonusTotal) extra.push(`Neutral ${neutralBonusTotal}`);
+    if (magicBonusTotal) extra.push(`${magicLabel} ${magicBonusTotal}`);
     const dmgDisplay = extra.length ? `${dmg} + ${extra.join(' + ')}` : dmg;
     const row = document.createElement('div');
     row.className = 'combat-entry';
@@ -9510,6 +9538,7 @@ function renderCombatWeapons(){
       const msVal = msInfo.total;
       let die = parts.die;
       let dieLabelOverride = '';
+      let magicTypeLabel = magicLabel;
       if (String(parts.die || '').toUpperCase() === 'ID'){
         const idInfo = intensityDieForNature(natureRaw || '');
         if (!idInfo){
@@ -9522,17 +9551,17 @@ function renderCombatWeapons(){
         }
         die = idInfo.die;
         dieLabelOverride = `ID(${idInfo.name}) ${idInfo.label}`;
+        if (idInfo.name) magicTypeLabel = idInfo.name;
       }
       const diceRoll = rollDamageDice(parts.dice, die);
       if (dieLabelOverride) diceRoll.label = dieLabelOverride;
-      const neutralBase = diceRoll.total + parts.flat + msVal;
-      let neutralTotal = neutralBase + neutral;
-      let magicTotal = magic;
+      const baseRollTotal = diceRoll.total + parts.flat + msVal;
+      let neutralTotal = isAnimarma ? neutralBonusTotal : (baseRollTotal + neutralBonusTotal);
+      let magicTotal = isAnimarma ? (baseRollTotal + magicBonusTotal) : magicBonusTotal;
       if (offhand){
         neutralTotal = Math.floor(neutralTotal / 2);
         magicTotal = Math.floor(magicTotal / 2);
       }
-      const total = neutralTotal + magicTotal;
       const entry = document.createElement('div');
       entry.className = 'roll-entry';
       const title = document.createElement('div');
@@ -9543,32 +9572,51 @@ function renderCombatWeapons(){
       meta.className = 'meta';
       meta.textContent = new Date().toLocaleTimeString();
       entry.appendChild(meta);
-      const line = document.createElement('div');
-      line.textContent = `Result: ${total} (Neutral ${neutralTotal} + Magic ${magicTotal})`;
-      entry.appendChild(line);
-      const breakdown = document.createElement('div');
-      breakdown.className = 'muted';
       const msBreak = msInfo.parts.length
         ? msInfo.parts.map(p=> `M(${p.code}) ${p.value >= 0 ? '+' : ''}${p.value}`).join(' + ')
         : '';
       const flatBreak = parts.flat ? `${parts.flat >= 0 ? '+' : ''}${parts.flat}` : '';
-      const neutralParts = [];
-      neutralParts.push(`Neutral ${Number(DERIVED_CACHE?.weapon_neutral || 0)}`);
-      if (subNeutral) neutralParts.push(`Lethality (sub) ${subNeutral}`);
-      if (upgradeBonus.neutral) neutralParts.push(`Lethality (upg) ${upgradeBonus.neutral}`);
-      const neutralBreak = neutralParts.length > 1 ? neutralParts.join(' + ') : `Neutral ${neutral}`;
-      const magicParts = [];
-      magicParts.push(`Magic ${baseMagic}`);
-      if (subMagicBonus) magicParts.push(`Blessing (sub) ${subMagicBonus}`);
-      if (upgradeBonus.magic) magicParts.push(`Benediction ${upgradeBonus.magic}`);
-      const magicBreak = magicParts.length > 1 ? magicParts.join(' + ') : `Magic ${magic}`;
-      const baseBreak = [
+      const coreBreak = [
         `${parts.dice}${diceRoll.label} (${diceRoll.rolls.join(' + ')} = ${diceRoll.total})`,
         flatBreak,
         msBreak
       ].filter(Boolean).join(' + ');
-      breakdown.textContent = `${baseBreak} + ${neutralBreak} = ${neutralTotal} | ${magicBreak}${offhand ? ' (halved)' : ''}${offhand ? ' | Offhand halved' : ''}`;
-      entry.appendChild(breakdown);
+      const neutralParts = [];
+      if (derivedNeutral) neutralParts.push(`Neutral ${derivedNeutral}`);
+      if (subNeutral) neutralParts.push(`Lethality (sub) ${subNeutral}`);
+      if (upgradeBonus.neutral) neutralParts.push(`Lethality (upg) ${upgradeBonus.neutral}`);
+      const neutralBreak = neutralParts.length ? (neutralParts.length > 1 ? neutralParts.join(' + ') : neutralParts[0]) : '';
+      const magicParts = [];
+      if (baseMagic) magicParts.push(`${magicTypeLabel} ${baseMagic}`);
+      if (subMagicBonus) magicParts.push(`Benediction (sub) ${subMagicBonus}`);
+      if (upgradeBonus.magic) magicParts.push(`Benediction (upg) ${upgradeBonus.magic}`);
+      const magicBreak = magicParts.length ? (magicParts.length > 1 ? magicParts.join(' + ') : magicParts[0]) : '';
+      const neutralFormulaParts = [];
+      const magicFormulaParts = [];
+      if (isAnimarma){
+        if (coreBreak) magicFormulaParts.push(coreBreak);
+      }else{
+        if (coreBreak) neutralFormulaParts.push(coreBreak);
+      }
+      if (neutralBreak) neutralFormulaParts.push(neutralBreak);
+      if (magicBreak) magicFormulaParts.push(magicBreak);
+      const neutralFormula = neutralFormulaParts.join(' + ');
+      const magicFormula = magicFormulaParts.join(' + ');
+      const segments = [];
+      if (neutralTotal){
+        const neutralDetail = neutralFormula ? `${neutralFormula}${offhand ? '; halved' : ''}` : (offhand ? 'halved' : '');
+        segments.push(`Neutral ${neutralTotal}${neutralDetail ? ` (${neutralDetail})` : ''}`);
+      }
+      if (magicTotal){
+        const magicDetail = magicFormula ? `${magicFormula}${offhand ? '; halved' : ''}` : (offhand ? 'halved' : '');
+        segments.push(`${magicTypeLabel} ${magicTotal}${magicDetail ? ` (${magicDetail})` : ''}`);
+      }
+      if (!segments.length){
+        segments.push('Neutral 0');
+      }
+      const line = document.createElement('div');
+      line.textContent = `Roll: ${segments.join(' | ')}`;
+      entry.appendChild(line);
       appendRollLog(entry);
     });
     combatWeaponsEl.appendChild(row);
