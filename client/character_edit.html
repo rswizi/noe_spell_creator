@@ -231,11 +231,99 @@
   .chat-avatar { width:36px; height:36px; border-radius:10px; border:1px solid #333; overflow:hidden; background:#0b0b10; display:grid; place-items:center; }
   .chat-avatar img { width:100%; height:100%; object-fit:cover; }
   .chat-user { font-weight:600; }
-  .chat-lines { display:grid; gap:4px; padding-left:46px; }
+  .chat-lines { --chat-indent:46px; display:grid; gap:4px; padding-left:var(--chat-indent); }
   .chat-line { background:#121623; border:1px solid #232839; border-radius:10px; padding:8px 10px; }
   .chat-line .muted { font-size:.85rem; }
   .chat-line.whisper { border-color:#5a4a22; }
   .chat-line.self { border-color:#34555a; }
+  .chat-line.chat-roll { background:transparent; border:none; padding:0; margin-left:calc(-1 * var(--chat-indent)); }
+  .roll-card{
+    --roll-accent:#a6b2ff;
+    border:1px solid #2b303e;
+    border-radius:16px;
+    padding:12px 12px 10px;
+    background:linear-gradient(180deg, rgba(18,20,33,0.98), rgba(12,13,20,0.96));
+    display:grid;
+    gap:8px;
+    box-shadow:0 12px 18px rgba(0,0,0,0.35);
+  }
+  .roll-card.roll-skill{--roll-accent:#a6b2ff;}
+  .roll-card.crit-success{--roll-accent:#b632ff;}
+  .roll-card.crit-fail{--roll-accent:#e0672c;}
+  .roll-card.is-active{--roll-accent:#c9a227;}
+  .roll-card.is-passive{--roll-accent:#d4d7e8;}
+  .roll-card.roll-damage{--roll-accent:#c96b52;}
+  .roll-title{
+    font-weight:700;
+    text-align:center;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--roll-accent);
+  }
+  .roll-divider{
+    height:1px;
+    background:linear-gradient(90deg, transparent, rgba(210,210,230,0.35), transparent);
+  }
+  .roll-sub{
+    text-align:center;
+    font-size:.82rem;
+    opacity:.8;
+  }
+  .roll-total{
+    text-align:center;
+    font-size:2.6rem;
+    font-weight:700;
+    color:var(--roll-accent);
+    letter-spacing:.02em;
+  }
+  .roll-total::before,
+  .roll-total::after{
+    color:var(--roll-accent);
+  }
+  .roll-total::before{content:'{';margin-right:4px;}
+  .roll-total::after{content:'}';margin-left:4px;}
+  .roll-formula{
+    font-size:.78rem;
+    opacity:.7;
+    text-align:center;
+  }
+  .roll-desc{
+    border:1px solid #2b303e;
+    border-radius:12px;
+    padding:10px;
+    background:#121622;
+    font-size:.88rem;
+    line-height:1.4;
+  }
+  .roll-meta-line{
+    text-align:center;
+    font-size:.75rem;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    opacity:.75;
+  }
+  .roll-dmg-row{
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:8px;
+    align-items:baseline;
+  }
+  .roll-dmg-type{
+    font-size:.78rem;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    opacity:.85;
+  }
+  .roll-dmg-value{
+    font-size:2rem;
+    font-weight:700;
+    color:var(--roll-accent);
+  }
+  .roll-foot{
+    text-align:center;
+    font-size:.72rem;
+    opacity:.6;
+  }
   .chat-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .roll-entry { border:1px solid #2a2a38; border-radius:12px; padding:8px 10px; background:#14141d; }
   .roll-entry .title { font-weight:600; }
@@ -308,6 +396,7 @@
       <a class="btn" href="characters.html">Back to My Characters</a>
       <a class="btn" href="portal.html">Portal</a>
       <a class="btn" href="character_admin.html" id="admin-link" style="display:none">All Characters</a>
+      <button class="btn secondary" id="unlink-campaign" style="display:none;">Unlink from Campaign</button>
       <button class="btn" id="delete-char" style="border-color:#7a1b1b; background:linear-gradient(135deg, rgba(197,53,53,0.35), rgba(60,10,14,0.9)); color:#fff;">Delete</button>
       <label class="row" style="gap:6px; margin-left:8px;">
         <input type="checkbox" id="override-derived"> <span class="muted">Override values (GM)</span>
@@ -1987,10 +2076,13 @@ let ROLE = 'user';
 let CURRENT_USER = null;
 let CAMPAIGN_INFO = null;
 let CAMPAIGN_CHAT_MESSAGES = [];
+let CAMPAIGN_CHAT_MESSAGE_IDS = new Set();
 let CAMPAIGN_CHAT_API_OK = true;
 let CAMPAIGN_CHAT_READY = false;
 let CAMPAIGN_CHAT_POLL = null;
 let CAMPAIGN_CHAT_REFRESH_TIMER = null;
+let CAMPAIGN_CHAT_WS = null;
+let CAMPAIGN_CHAT_WS_RETRY = null;
 const CAMPAIGN_CHAT_STORAGE_KEY = CAMPAIGN_ID ? `campaign_chat_local:${CAMPAIGN_ID}` : '';
 let READ_ONLY = false;
 let CAN_EDIT = false;
@@ -2122,6 +2214,7 @@ const nameEl    = document.getElementById('name');
 const publicToggle = document.getElementById('public-toggle');
 const readonlyPill = document.getElementById('readonly-pill');
 const deleteBtn = document.getElementById('delete-char');
+const unlinkCampaignBtn = document.getElementById('unlink-campaign');
 const gridEl    = document.getElementById('stats-grid');
 
 /* derived refs */
@@ -4528,6 +4621,19 @@ function normalizeCampaignChatMessage(raw){
   };
 }
 
+function setCampaignChatMessages(list){
+  CAMPAIGN_CHAT_MESSAGES = list || [];
+  CAMPAIGN_CHAT_MESSAGE_IDS = new Set(CAMPAIGN_CHAT_MESSAGES.map(m=> m.id));
+}
+
+function addCampaignChatMessage(raw){
+  const msg = normalizeCampaignChatMessage(raw);
+  if (CAMPAIGN_CHAT_MESSAGE_IDS.has(msg.id)) return false;
+  CAMPAIGN_CHAT_MESSAGE_IDS.add(msg.id);
+  CAMPAIGN_CHAT_MESSAGES.push(msg);
+  return true;
+}
+
 function campaignMessageVisible(msg){
   if (!msg) return false;
   if (msg.visibility === 'public') return true;
@@ -4832,17 +4938,18 @@ async function loadCampaignChat(){
   if (!CAMPAIGN_ID) return;
   if (!campaignChatLog) return;
   if (!CAMPAIGN_CHAT_API_OK){
-    CAMPAIGN_CHAT_MESSAGES = loadCampaignChatLocal();
+    setCampaignChatMessages(loadCampaignChatLocal());
     renderCampaignChat();
     return;
   }
   try{
     const res = await api(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/chat`);
-    CAMPAIGN_CHAT_MESSAGES = (res.messages || res.chat || []).map(normalizeCampaignChatMessage);
+    setCampaignChatMessages((res.messages || res.chat || []).map(normalizeCampaignChatMessage));
     renderCampaignChat();
   }catch(e){
     CAMPAIGN_CHAT_API_OK = false;
-    CAMPAIGN_CHAT_MESSAGES = loadCampaignChatLocal();
+    closeCampaignChatSocket();
+    setCampaignChatMessages(loadCampaignChatLocal());
     renderCampaignChat();
     if (campaignChatStatus) campaignChatStatus.textContent = 'Chat API unavailable, using local log.';
   }
@@ -4856,12 +4963,101 @@ function scheduleCampaignChatRefresh(){
   }, 500);
 }
 
+function startCampaignChatPolling(){
+  if (CAMPAIGN_CHAT_POLL) return;
+  CAMPAIGN_CHAT_POLL = setInterval(loadCampaignChat, 5000);
+}
+
+function stopCampaignChatPolling(){
+  if (!CAMPAIGN_CHAT_POLL) return;
+  clearInterval(CAMPAIGN_CHAT_POLL);
+  CAMPAIGN_CHAT_POLL = null;
+}
+
+function campaignChatSocketUrl(){
+  const token = localStorage.getItem('auth_token') || '';
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${location.host}/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/chat/ws?token=${encodeURIComponent(token)}`;
+}
+
+function closeCampaignChatSocket(){
+  if (CAMPAIGN_CHAT_WS){
+    CAMPAIGN_CHAT_WS.close();
+    CAMPAIGN_CHAT_WS = null;
+  }
+  if (CAMPAIGN_CHAT_WS_RETRY){
+    clearTimeout(CAMPAIGN_CHAT_WS_RETRY);
+    CAMPAIGN_CHAT_WS_RETRY = null;
+  }
+}
+
+function scheduleCampaignChatReconnect(){
+  if (CAMPAIGN_CHAT_WS_RETRY) return;
+  CAMPAIGN_CHAT_WS_RETRY = setTimeout(()=>{
+    CAMPAIGN_CHAT_WS_RETRY = null;
+    connectCampaignChatSocket();
+  }, 2000);
+}
+
+function connectCampaignChatSocket(){
+  if (!CAMPAIGN_ID || !CAMPAIGN_CHAT_API_OK) return;
+  if (CAMPAIGN_CHAT_WS && (CAMPAIGN_CHAT_WS.readyState === WebSocket.OPEN || CAMPAIGN_CHAT_WS.readyState === WebSocket.CONNECTING)) return;
+  const token = localStorage.getItem('auth_token') || '';
+  if (!token){
+    startCampaignChatPolling();
+    return;
+  }
+  CAMPAIGN_CHAT_WS = new WebSocket(campaignChatSocketUrl());
+  CAMPAIGN_CHAT_WS.onopen = ()=>{
+    if (campaignChatStatus) campaignChatStatus.textContent = 'Live';
+    stopCampaignChatPolling();
+  };
+  CAMPAIGN_CHAT_WS.onmessage = (event)=>{
+    let payload = null;
+    try{
+      const data = JSON.parse(event.data || '{}');
+      payload = data.message || data;
+    }catch{
+      return;
+    }
+    if (!payload) return;
+    if (addCampaignChatMessage(payload)){
+      renderCampaignChat();
+    }
+  };
+  CAMPAIGN_CHAT_WS.onclose = ()=>{
+    CAMPAIGN_CHAT_WS = null;
+    if (CAMPAIGN_CHAT_API_OK){
+      if (campaignChatStatus) campaignChatStatus.textContent = 'Reconnecting...';
+      scheduleCampaignChatReconnect();
+      startCampaignChatPolling();
+    }
+  };
+  CAMPAIGN_CHAT_WS.onerror = ()=>{};
+}
+
 function serializeRollEntry(entry){
   const parts = Array.from(entry.children).map(el=> (el.textContent || '').trim()).filter(Boolean);
   const titleEl = entry.querySelector('.title');
   const title = titleEl ? titleEl.textContent : (parts[0] || 'Log');
   if (parts[0] === title) parts.shift();
   return { title, lines: parts };
+}
+
+function buildRollCardFromEntry(entry){
+  const data = serializeRollEntry(entry);
+  if (!data.title) return null;
+  const msg = { type:'roll', text: data.title, lines: data.lines || [] };
+  const card = buildRollCard(msg);
+  if (!card) return null;
+  const metaText = entry.querySelector('.meta')?.textContent || '';
+  if (metaText){
+    const foot = document.createElement('div');
+    foot.className = 'roll-foot';
+    foot.textContent = metaText;
+    card.appendChild(foot);
+  }
+  return card;
 }
 
 async function postCampaignChatMessage(payload){
@@ -4876,10 +5072,11 @@ async function postCampaignChatMessage(payload){
       return true;
     }catch(e){
       CAMPAIGN_CHAT_API_OK = false;
+      closeCampaignChatSocket();
       if (campaignChatStatus) campaignChatStatus.textContent = 'Chat API unavailable, using local log.';
     }
   }
-  CAMPAIGN_CHAT_MESSAGES.push(normalizeCampaignChatMessage(payload));
+  addCampaignChatMessage(payload);
   saveCampaignChatLocal();
   renderCampaignChat();
   return false;
@@ -4913,7 +5110,8 @@ function appendRollLog(entry){
   }
   if (!rollLogEl) return;
   if (rollLogEmptyEl) rollLogEmptyEl.style.display = 'none';
-  rollLogEl.appendChild(entry);
+  const card = buildRollCardFromEntry(entry);
+  rollLogEl.appendChild(card || entry);
   rollLogEl.scrollTop = rollLogEl.scrollHeight;
   ROLL_LOG_COUNT += 1;
   if (rollLogCountEl) rollLogCountEl.textContent = `(${ROLL_LOG_COUNT})`;
@@ -5096,11 +5294,11 @@ async function initCampaignChat(){
   if (campaignChatVisibilityEl) campaignChatVisibilityEl.value = campaignChatVisibility();
   await loadCampaignChat();
   if (CAMPAIGN_CHAT_API_OK){
-    CAMPAIGN_CHAT_POLL = setInterval(loadCampaignChat, 5000);
+    connectCampaignChatSocket();
   }else{
     window.addEventListener('storage', (e)=>{
       if (e.key === CAMPAIGN_CHAT_STORAGE_KEY){
-        CAMPAIGN_CHAT_MESSAGES = loadCampaignChatLocal();
+        setCampaignChatMessages(loadCampaignChatLocal());
         renderCampaignChat();
       }
     });
@@ -10365,6 +10563,7 @@ async function loadCharacter(){
       queueSave();
     });
   }
+  if (unlinkCampaignBtn) unlinkCampaignBtn.style.display = CAMPAIGN_ID ? '' : 'none';
   avatarPreview.src = `/characters/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
 
   // Level
@@ -10438,6 +10637,21 @@ async function deleteCharacter(){
     location.href = 'characters.html';
   }catch(e){
     statusEl.textContent = 'Delete failed: ' + e.message;
+    alert(e.message);
+  }
+}
+
+async function unlinkFromCampaign(){
+  if (!CAMPAIGN_ID || !CID) return;
+  const confirmed = confirm('Unlink this character from the campaign?');
+  if (!confirmed) return;
+  try{
+    statusEl.textContent = 'Unlinking...';
+    await api(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/characters/${encodeURIComponent(CID)}`, { method:'DELETE' });
+    statusEl.textContent = 'Unlinked.';
+    location.href = `campaign_view.html?cid=${encodeURIComponent(CAMPAIGN_ID)}`;
+  }catch(e){
+    statusEl.textContent = 'Unlink failed: ' + e.message;
     alert(e.message);
   }
 }
@@ -10612,6 +10826,7 @@ sourceSearchBtn?.addEventListener('click', searchSourceEntries);
 sourceSearchEl?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchSourceEntries(); });
 abiAddBackdrop?.addEventListener('click', (e)=>{ if (e.target===abiAddBackdrop) closeAbilityAddModal(); });
 deleteBtn?.addEventListener('click', deleteCharacter);
+unlinkCampaignBtn?.addEventListener('click', unlinkFromCampaign);
 
 invLoadBtn.addEventListener('click', ()=> loadInventoryById(invSelectEl.value));
 invSelectEl.addEventListener('change', ()=> loadInventoryById(invSelectEl.value));

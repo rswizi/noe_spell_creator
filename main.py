@@ -1,4 +1,5 @@
 import datetime
+import json
 import re
 import secrets
 import string
@@ -6,7 +7,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, Request, HTTPException, Query, Body, Depends, UploadFile, File
+from fastapi import FastAPI, Request, HTTPException, Query, Body, Depends, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -24,6 +25,8 @@ from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES
 EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 from server.src.modules.allowed_pages import ALLOWED_PAGES
 CAMPAIGN_COL = get_col("campaigns")
+CAMPAIGN_CHAT_COL = get_col("campaign_chat")
+CAMPAIGN_CHAT_WS: dict[str, set[WebSocket]] = {}
 def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) -> dict:
     if not doc:
         return {}
@@ -234,6 +237,24 @@ async def update_campaign_character(cid: str, char_id: str, req: Request):
     doc["characters"] = updated
     return {"status":"success", "campaign": _campaign_view(doc, user, role)}
 
+@app.delete("/campaigns/{cid}/characters/{char_id}")
+async def remove_campaign_character(cid: str, char_id: str, req: Request):
+    user, role = require_auth(req)
+    doc = _require_campaign_access(cid, user, role)
+    chars = doc.get("characters") or []
+    target = next((c for c in chars if c.get("character_id") == char_id), None)
+    if not target:
+        raise HTTPException(404, "Character not in campaign")
+    is_admin = (role or "").lower() == "admin"
+    is_owner = doc.get("owner") == user
+    is_assigned = (target.get("assigned_to") or "").strip() == user
+    if not (is_admin or is_owner or is_assigned):
+        raise HTTPException(403, "Only GM/admin or assigned player can unlink")
+    updated = [c for c in chars if c.get("character_id") != char_id]
+    CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": updated}})
+    doc["characters"] = updated
+    return {"status":"success", "campaign": _campaign_view(doc, user, role)}
+
 @app.post("/campaigns/{cid}/characters/{char_id}/duplicate")
 async def duplicate_campaign_character(cid: str, char_id: str, req: Request):
     user, role = require_auth(req)
@@ -332,6 +353,122 @@ async def get_campaign_avatar(cid: str):
     if not doc or not doc.get("avatar"):
         raise HTTPException(404, "No avatar")
     return Response(content=doc["avatar"], media_type="image/png")
+
+# ---------- Campaign Chat ----------
+def _chat_visibility(val: Any) -> str:
+    v = str(val or "public").lower()
+    return v if v in ("public", "whisper", "self") else "public"
+
+def _chat_type(val: Any) -> str:
+    v = str(val or "message").lower()
+    return v if v in ("message", "roll", "system") else "message"
+
+def _chat_lines(val: Any) -> list[str]:
+    if not isinstance(val, list):
+        return []
+    out = []
+    for item in val:
+        s = str(item or "").strip()
+        if s:
+            out.append(s[:400])
+    return out[:40]
+
+def _chat_doc(cid: str, user: str, body: dict) -> dict:
+    ts = body.get("ts")
+    try:
+        ts_val = int(ts)
+    except Exception:
+        ts_val = int(datetime.datetime.utcnow().timestamp() * 1000)
+    doc = {
+        "id": f"msg_{next_id_str('campaign_chat', padding=6)}",
+        "campaign_id": cid,
+        "ts": ts_val,
+        "visibility": _chat_visibility(body.get("visibility")),
+        "type": _chat_type(body.get("type")),
+        "text": str(body.get("text") or "").strip()[:800],
+        "lines": _chat_lines(body.get("lines")),
+        "user": user,
+        "character_id": str(body.get("character_id") or "").strip(),
+        "character_name": str(body.get("character_name") or "").strip(),
+        "character_avatar": str(body.get("character_avatar") or "").strip(),
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+    return doc
+
+async def _broadcast_campaign_chat(cid: str, msg: dict) -> None:
+    sockets = list(CAMPAIGN_CHAT_WS.get(cid, set()))
+    if not sockets:
+        return
+    payload = {"type": "chat", "message": msg}
+    dead: list[WebSocket] = []
+    for ws in sockets:
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        CAMPAIGN_CHAT_WS.get(cid, set()).discard(ws)
+    if not CAMPAIGN_CHAT_WS.get(cid):
+        CAMPAIGN_CHAT_WS.pop(cid, None)
+
+@app.get("/campaigns/{cid}/chat")
+async def get_campaign_chat(cid: str, req: Request, limit: int = Query(200, ge=1, le=400), before: int | None = Query(None)):
+    user, role = require_auth(req)
+    _require_campaign_access(cid, user, role)
+    query = {"campaign_id": cid}
+    if before:
+        query["ts"] = {"$lt": int(before)}
+    docs = list(CAMPAIGN_CHAT_COL.find(query, {"_id": 0}).sort("ts", 1).limit(limit))
+    return {"status": "success", "messages": docs}
+
+@app.post("/campaigns/{cid}/chat")
+async def post_campaign_chat(cid: str, req: Request):
+    user, role = require_auth(req)
+    _require_campaign_access(cid, user, role)
+    body = await req.json()
+    doc = _chat_doc(cid, user, body or {})
+    CAMPAIGN_CHAT_COL.insert_one(doc)
+    await _broadcast_campaign_chat(cid, doc)
+    return {"status": "success", "message": doc}
+
+@app.websocket("/campaigns/{cid}/chat/ws")
+async def campaign_chat_ws(websocket: WebSocket, cid: str):
+    token = websocket.query_params.get("token") or websocket.query_params.get("auth") or ""
+    if not token or token not in SESSIONS:
+        await websocket.close(code=1008)
+        return
+    user, role = SESSIONS[token]
+    try:
+        _require_campaign_access(cid, user, role)
+    except HTTPException:
+        await websocket.close(code=1008)
+        return
+    await websocket.accept()
+    CAMPAIGN_CHAT_WS.setdefault(cid, set()).add(websocket)
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            if not raw:
+                continue
+            if raw.lower() == "ping":
+                await websocket.send_text("pong")
+                continue
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+            payload = data.get("message") if isinstance(data, dict) else None
+            if not isinstance(payload, dict):
+                continue
+            doc = _chat_doc(cid, user, payload)
+            CAMPAIGN_CHAT_COL.insert_one(doc)
+            await _broadcast_campaign_chat(cid, doc)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        CAMPAIGN_CHAT_WS.get(cid, set()).discard(websocket)
+        if not CAMPAIGN_CHAT_WS.get(cid):
+            CAMPAIGN_CHAT_WS.pop(cid, None)
 # ---------- Auth ----------
 @app.post("/auth/login")
 async def auth_login(request: Request):

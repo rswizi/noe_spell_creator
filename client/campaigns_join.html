@@ -124,7 +124,7 @@
         const res = await api('/characters');
         const chars = res.characters || [];
         charSelect.innerHTML = chars.length
-          ? chars.map(c=>`<option value="${c.id}">${c.name || c.id}</option>`).join('')
+          ? chars.map(c=>`<option value="${c.id}">${c.name || c.character_name || 'Character'}</option>`).join('')
           : '<option value="">No characters found</option>';
       }catch{
         charSelect.innerHTML = '<option value="">No characters found</option>';

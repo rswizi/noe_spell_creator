@@ -62,6 +62,8 @@ def ensure_indexes() -> None:
             "school": {"$exists": True, "$type": "string"},
         },
     )
+    db.campaign_chat.create_index("id", unique=True)
+    db.campaign_chat.create_index([("campaign_id", ASCENDING), ("ts", ASCENDING)])
 
 def next_id_str(sequence_name: str, padding: int = 4) -> str:
     doc = get_col("counters").find_one_and_update(

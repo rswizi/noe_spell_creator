@@ -53,13 +53,15 @@
     .muted{color:var(--muted);}
     .grid{display:grid;gap:14px;}
     @media(min-width:980px){.grid.cols-2{grid-template-columns:1.4fr .8fr;}}
+    .char-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));}
     .char-card{
-      border:1px solid #2a2f3a;border-radius:16px;padding:14px;background:#10131d;
-      display:grid;gap:10px;position:relative;
+      border:1px solid #2a2f3a;border-radius:16px;padding:12px;background:#10131d;
+      display:flex;gap:12px;align-items:center;position:relative;
+      box-shadow:0 10px 24px rgba(0,0,0,0.28);
     }
-    .char-card .head{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
-    .char-info{flex:1 1 220px;min-width:220px;}
-    .char-meta{font-size:.85rem;color:var(--muted);}
+    .char-card .avatar{width:72px;height:72px;border-radius:14px;}
+    .char-info{display:grid;gap:6px;flex:1 1 auto;min-width:0;}
+    .char-meta{font-size:.85rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .char-actions{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;}
     .tag{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;border:1px solid #3a3f49;font-size:.75rem;color:var(--muted);}
     .chat-wrap{display:grid;gap:10px;}
@@ -68,12 +70,13 @@
     .chat-head{display:flex;gap:10px;align-items:center;}
     .chat-head .avatar{width:42px;height:42px;border-radius:12px;}
     .chat-user{font-weight:600;}
-    .chat-lines{display:grid;gap:4px;padding-left:52px;}
+    .chat-lines{--chat-indent:52px;display:grid;gap:4px;padding-left:var(--chat-indent);}
     .chat-line{background:#121623;border:1px solid #232839;border-radius:10px;padding:8px 10px;}
     .chat-line .muted{font-size:.85rem;}
     .chat-line.whisper{border-color:#5a4a22;}
     .chat-line.self{border-color:#34555a;}
     .chat-line.chat-roll{background:transparent;border:none;padding:0;}
+    .chat-line.chat-roll{margin-left:calc(-1 * var(--chat-indent));}
     .roll-card{
       --roll-accent:#a6b2ff;
       border:1px solid #2b303e;
@@ -209,7 +212,7 @@
           <strong>Characters</strong>
           <span class="muted">Right click a card for permissions (GM).</span>
         </div>
-        <div id="char-list" class="grid"></div>
+        <div id="char-list" class="char-grid"></div>
       </div>
 
       <div class="panel chat-wrap">
@@ -346,8 +349,12 @@
     let CAMPAIGN = null;
     let MY_CHARS = [];
     let CHAT_MESSAGES = [];
+    let CHAT_MESSAGE_IDS = new Set();
     let CHAT_API_OK = true;
     let ACTIVE_CHAR_FOR_PERM = null;
+    let CHAT_WS = null;
+    let CHAT_WS_RETRY = null;
+    let CHAT_POLL = null;
 
     function authHeaders(){
       const t = localStorage.getItem('auth_token') || '';
@@ -406,7 +413,7 @@
     }
 
     function charDisplayName(c){
-      return c.name || c.character_name || c.character_id || 'Character';
+      return c.name || c.character_name || 'Character';
     }
 
     function charOwnerName(c){
@@ -436,6 +443,18 @@
       renderChatSpeaker();
     }
 
+    async function unlinkCampaignCharacter(charId){
+      if (!charId) return;
+      const confirmed = confirm('Unlink this character from the campaign?');
+      if (!confirmed) return;
+      try{
+        await api(`/campaigns/${encodeURIComponent(CID)}/characters/${encodeURIComponent(charId)}`, { method:'DELETE' });
+        await loadCampaign();
+      }catch(e){
+        alert(e.message);
+      }
+    }
+
     function renderCharacters(){
       charList.innerHTML = '';
       const chars = CAMPAIGN?.characters || [];
@@ -455,20 +474,25 @@
         const avatar = avatarUrlForCharacter(c);
         const isViewer = perm === 'viewer';
         const isLimited = perm === 'limited';
+        const canUnlink = isGm() || owner === username;
         const openUrl = `character_edit.html?id=${encodeURIComponent(charId)}&cid=${encodeURIComponent(CID)}${isViewer ? '&view=1' : ''}`;
         card.innerHTML = `
-          <div class="head">
-            <div class="avatar" style="width:56px;height:56px;"><img src="${avatar}" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';"></div>
-            <div class="char-info">
-              <div><strong>${name}</strong></div>
-              <div class="char-meta">Owner: ${owner}</div>
-              ${isGm() ? `<div class="char-meta">Permission: ${perm}</div>` : ''}
-            </div>
-            <div class="char-actions">
-              ${isLimited ? '<button class="btn secondary" disabled>Limited</button>' : `<a class="btn" href="${openUrl}">Open</a>`}
-            </div>
+          <div class="avatar"><img src="${avatar}" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';"></div>
+          <div class="char-info">
+            <div><strong>${name}</strong></div>
+            <div class="char-meta">Owner: ${owner}</div>
+            ${isGm() ? `<div class="char-meta">Permission: ${perm}</div>` : ''}
+          </div>
+          <div class="char-actions">
+            ${isLimited ? '<button class="btn secondary" disabled>Limited</button>' : `<a class="btn" href="${openUrl}">Open</a>`}
+            ${canUnlink ? '<button class="btn secondary unlink-btn">Unlink</button>' : ''}
           </div>
         `;
+        card.querySelector('.unlink-btn')?.addEventListener('click', (e)=>{
+          e.preventDefault();
+          e.stopPropagation();
+          unlinkCampaignCharacter(charId);
+        });
         if (isGm()){
           card.addEventListener('contextmenu', (e)=>{
             e.preventDefault();
@@ -546,6 +570,19 @@
         text: raw.text || raw.message || raw.content || '',
         lines: raw.lines || raw.detail_lines || raw.details || []
       };
+    }
+
+    function setChatMessages(list){
+      CHAT_MESSAGES = list || [];
+      CHAT_MESSAGE_IDS = new Set(CHAT_MESSAGES.map(m=> m.id));
+    }
+
+    function addChatMessage(raw){
+      const msg = normalizeMessage(raw);
+      if (CHAT_MESSAGE_IDS.has(msg.id)) return false;
+      CHAT_MESSAGE_IDS.add(msg.id);
+      CHAT_MESSAGES.push(msg);
+      return true;
     }
 
     function messageVisible(msg){
@@ -847,17 +884,18 @@
     async function loadChat(){
       if (!CID) return;
       if (!CHAT_API_OK){
-        CHAT_MESSAGES = loadChatLocal();
+        setChatMessages(loadChatLocal());
         renderChat();
         return;
       }
       try{
         const res = await api(`/campaigns/${encodeURIComponent(CID)}/chat`);
-        CHAT_MESSAGES = (res.messages || res.chat || []).map(normalizeMessage);
+        setChatMessages((res.messages || res.chat || []).map(normalizeMessage));
         renderChat();
       }catch(e){
         CHAT_API_OK = false;
-        CHAT_MESSAGES = loadChatLocal();
+        closeChatSocket();
+        setChatMessages(loadChatLocal());
         renderChat();
         chatStatus.textContent = 'Chat API unavailable, using local log.';
       }
@@ -886,10 +924,11 @@
           return;
         }catch{
           CHAT_API_OK = false;
+          closeChatSocket();
           chatStatus.textContent = 'Chat API unavailable, using local log.';
         }
       }
-      CHAT_MESSAGES.push(payload);
+      addChatMessage(payload);
       saveChatLocal();
       renderChat();
     }
@@ -911,6 +950,79 @@
         character_name: charDisplayName(c),
         character_avatar: avatarUrlForCharacter(c)
       };
+    }
+
+    function startChatPolling(){
+      if (CHAT_POLL) return;
+      CHAT_POLL = setInterval(loadChat, 5000);
+    }
+
+    function stopChatPolling(){
+      if (!CHAT_POLL) return;
+      clearInterval(CHAT_POLL);
+      CHAT_POLL = null;
+    }
+
+    function chatSocketUrl(){
+      const token = localStorage.getItem('auth_token') || '';
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      return `${proto}://${location.host}/campaigns/${encodeURIComponent(CID)}/chat/ws?token=${encodeURIComponent(token)}`;
+    }
+
+    function closeChatSocket(){
+      if (CHAT_WS){
+        CHAT_WS.close();
+        CHAT_WS = null;
+      }
+      if (CHAT_WS_RETRY){
+        clearTimeout(CHAT_WS_RETRY);
+        CHAT_WS_RETRY = null;
+      }
+    }
+
+    function scheduleChatSocketReconnect(){
+      if (CHAT_WS_RETRY) return;
+      CHAT_WS_RETRY = setTimeout(()=>{
+        CHAT_WS_RETRY = null;
+        connectChatSocket();
+      }, 2000);
+    }
+
+    function connectChatSocket(){
+      if (!CID || !CHAT_API_OK) return;
+      if (CHAT_WS && (CHAT_WS.readyState === WebSocket.OPEN || CHAT_WS.readyState === WebSocket.CONNECTING)) return;
+      const token = localStorage.getItem('auth_token') || '';
+      if (!token){
+        startChatPolling();
+        return;
+      }
+      CHAT_WS = new WebSocket(chatSocketUrl());
+      CHAT_WS.onopen = ()=>{
+        chatStatus.textContent = 'Live';
+        stopChatPolling();
+      };
+      CHAT_WS.onmessage = (event)=>{
+        let payload = null;
+        try{
+          const data = JSON.parse(event.data || '{}');
+          payload = data.message || data;
+        }catch{
+          return;
+        }
+        if (!payload) return;
+        if (addChatMessage(payload)){
+          renderChat();
+        }
+      };
+      CHAT_WS.onclose = ()=>{
+        CHAT_WS = null;
+        if (CHAT_API_OK){
+          chatStatus.textContent = 'Reconnecting...';
+          scheduleChatSocketReconnect();
+          startChatPolling();
+        }
+      };
+      CHAT_WS.onerror = ()=>{};
     }
 
     function rollDice(count, sides){
@@ -1013,7 +1125,7 @@
     document.getElementById('gm-add-char').addEventListener('click', ()=>{
       addCharStatus.textContent = '';
       addCharName.value = '';
-      addCharSelect.innerHTML = (MY_CHARS || []).map(c=>`<option value="${c.id}">${c.name || c.id}</option>`).join('');
+      addCharSelect.innerHTML = (MY_CHARS || []).map(c=>`<option value="${c.id}">${c.name || 'Character'}</option>`).join('');
       openModal(addCharBackdrop);
     });
     addCharClose.addEventListener('click', ()=> closeModal(addCharBackdrop));
@@ -1077,11 +1189,11 @@
       chatVisibility.value = getChatVisibilityPref();
       await loadChat();
       if (CHAT_API_OK){
-        setInterval(loadChat, 5000);
+        connectChatSocket();
       }else{
         window.addEventListener('storage', (e)=>{
           if (e.key === CHAT_STORAGE_KEY){
-            CHAT_MESSAGES = loadChatLocal();
+            setChatMessages(loadChatLocal());
             renderChat();
           }
         });
