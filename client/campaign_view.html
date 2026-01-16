@@ -165,6 +165,7 @@
       opacity:.6;
     }
     .chat-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+    #chat-input{width:100%;max-width:100%;box-sizing:border-box;}
     input,select,textarea{padding:10px 12px;border-radius:12px;border:1px solid #2a2f3a;background:#11131d;color:var(--ink);}
     textarea{min-height:80px;resize:vertical;}
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;z-index:4000;}
@@ -645,6 +646,7 @@
       const modeLine = lines.find(l=> /^Roll type:/i.test(l));
       const condLine = lines.find(l=> /^Conditions:/i.test(l));
       const critLine = lines.find(l=> /^Critical/i.test(l));
+      const effectLine = lines.find(l=> /^Effect:/i.test(l));
       const breakdownLine = lines.find(l=> /\bBase\b/i.test(l) && /\bMod\b/i.test(l));
       const baseMatch = breakdownLine ? breakdownLine.match(/\bBase\s+(-?\d+)/i) : null;
       const modMatch = breakdownLine ? breakdownLine.match(/\bMod\s+(-?\d+)/i) : null;
@@ -665,7 +667,8 @@
         if (/success/i.test(critLine) || /\+\s*\d+/.test(critLine)) critClass = 'crit-success';
         if (/fail/i.test(critLine) || /-\s*\d+/.test(critLine)) critClass = critClass || 'crit-fail';
       }
-      return { total, sub, formula, critClass };
+      const effect = effectLine ? effectLine.replace(/^Effect:\s*/i, '').trim() : '';
+      return { total, sub, formula, critClass, effect };
     }
 
     function parseDamageCard(msg){
@@ -718,6 +721,12 @@
           formula.className = 'roll-formula';
           formula.textContent = skillMeta.formula;
           card.appendChild(formula);
+        }
+        if (skillMeta.effect){
+          const desc = document.createElement('div');
+          desc.className = 'roll-desc';
+          desc.textContent = skillMeta.effect;
+          card.appendChild(desc);
         }
         return card;
       }

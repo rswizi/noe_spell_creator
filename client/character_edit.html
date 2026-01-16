@@ -325,6 +325,7 @@
     opacity:.6;
   }
   .chat-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  #campaign-chat-input{ width:100%; max-width:100%; box-sizing:border-box; }
   .roll-entry { border:1px solid #2a2a38; border-radius:12px; padding:8px 10px; background:#14141d; }
   .roll-entry .title { font-weight:600; }
   .roll-entry .meta { font-size:.8rem; opacity:.75; }
@@ -393,7 +394,7 @@
     <div class="topbar">
       <h1 id="title">Edit Character</h1>
       <span id="login-chip" class="muted right"></span>
-      <a class="btn" href="characters.html">Back to My Characters</a>
+      <a class="btn" id="back-link" href="characters.html">Back to My Characters</a>
       <a class="btn" href="portal.html">Portal</a>
       <a class="btn" href="character_admin.html" id="admin-link" style="display:none">All Characters</a>
       <button class="btn secondary" id="unlink-campaign" style="display:none;">Unlink from Campaign</button>
@@ -2214,6 +2215,7 @@ const nameEl    = document.getElementById('name');
 const publicToggle = document.getElementById('public-toggle');
 const readonlyPill = document.getElementById('readonly-pill');
 const deleteBtn = document.getElementById('delete-char');
+const backLinkEl = document.getElementById('back-link');
 const unlinkCampaignBtn = document.getElementById('unlink-campaign');
 const gridEl    = document.getElementById('stats-grid');
 
@@ -4694,6 +4696,7 @@ function parseSkillCard(msg){
   const modeLine = lines.find(l=> /^Roll type:/i.test(l));
   const condLine = lines.find(l=> /^Conditions:/i.test(l));
   const critLine = lines.find(l=> /^Critical/i.test(l));
+  const effectLine = lines.find(l=> /^Effect:/i.test(l));
   const breakdownLine = lines.find(l=> /\bBase\b/i.test(l) && /\bMod\b/i.test(l));
   const baseMatch = breakdownLine ? breakdownLine.match(/\bBase\s+(-?\d+)/i) : null;
   const modMatch = breakdownLine ? breakdownLine.match(/\bMod\s+(-?\d+)/i) : null;
@@ -4714,7 +4717,8 @@ function parseSkillCard(msg){
     if (/success/i.test(critLine) || /\+\s*\d+/.test(critLine)) critClass = 'crit-success';
     if (/fail/i.test(critLine) || /-\s*\d+/.test(critLine)) critClass = critClass || 'crit-fail';
   }
-  return { total, sub, formula, critClass };
+  const effect = effectLine ? effectLine.replace(/^Effect:\s*/i, '').trim() : '';
+  return { total, sub, formula, critClass, effect };
 }
 
 function parseDamageCard(msg){
@@ -4767,6 +4771,12 @@ function buildRollCard(msg){
       formula.className = 'roll-formula';
       formula.textContent = skillMeta.formula;
       card.appendChild(formula);
+    }
+    if (skillMeta.effect){
+      const desc = document.createElement('div');
+      desc.className = 'roll-desc';
+      desc.textContent = skillMeta.effect;
+      card.appendChild(desc);
     }
     return card;
   }
@@ -5497,15 +5507,20 @@ function openCombatAbilityRoll(a, sourceLabel){
 
 function openSpellRoll(sp, meta, info){
   const titleText = info?.nameDisplay || meta?.alt_name || sp?.name || 'Spell';
-  const parts = [];
-  if (sp?.category) parts.push(`Type: ${sp.category}`);
-  if (info?.statusLabel) parts.push(`Status: ${info.statusLabel}`);
+  const rangeText = info?.range ? (String(info.range).toLowerCase().startsWith('range:') ? info.range : `Range: ${info.range}`) : '';
+  const aoeText = info?.aoe ? (String(info.aoe).toLowerCase().startsWith('aoe:') ? info.aoe : `AoE: ${info.aoe}`) : '';
+  const activationRaw = sp?.activation || sp?.cast_time || '';
+  const activationText = activationRaw ? (String(activationRaw).toLowerCase().startsWith('activation:') ? activationRaw : `Activation: ${activationRaw}`) : '';
+  const parts = ['Type: Active'];
   if (info?.cost) parts.push(`Cost: ${info.cost}`);
-  if (info?.range) parts.push(info.range);
-  if (info?.aoe) parts.push(info.aoe);
+  if (rangeText) parts.push(rangeText);
+  if (aoeText) parts.push(aoeText);
+  if (activationText) parts.push(activationText);
   const detailLine = parts.join(' | ');
+  const effectText = String(info?.desc || '').replace(/<[^>]+>/g, '').trim();
   const lines = [];
   if (detailLine) lines.push(detailLine);
+  if (effectText) lines.push(`Effect: ${effectText}`);
   if (info?.effectsDesc) lines.push(`Effects: ${info.effectsDesc}`);
   openRollModal({
     title: titleText,
@@ -5521,15 +5536,20 @@ function openSpellRoll(sp, meta, info){
 
 function openCombatSpellRoll(sp, meta, info){
   const titleText = info?.nameDisplay || meta?.alt_name || sp?.name || 'Spell';
-  const parts = [];
-  if (sp?.category) parts.push(`Type: ${sp.category}`);
-  if (info?.statusLabel) parts.push(`Status: ${info.statusLabel}`);
+  const rangeText = info?.range ? (String(info.range).toLowerCase().startsWith('range:') ? info.range : `Range: ${info.range}`) : '';
+  const aoeText = info?.aoe ? (String(info.aoe).toLowerCase().startsWith('aoe:') ? info.aoe : `AoE: ${info.aoe}`) : '';
+  const activationRaw = sp?.activation || sp?.cast_time || '';
+  const activationText = activationRaw ? (String(activationRaw).toLowerCase().startsWith('activation:') ? activationRaw : `Activation: ${activationRaw}`) : '';
+  const parts = ['Type: Active'];
   if (info?.cost) parts.push(`Cost: ${info.cost}`);
-  if (info?.range) parts.push(info.range);
-  if (info?.aoe) parts.push(info.aoe);
+  if (rangeText) parts.push(rangeText);
+  if (aoeText) parts.push(aoeText);
+  if (activationText) parts.push(activationText);
   const detailLine = parts.join(' | ');
+  const effectText = String(info?.desc || '').replace(/<[^>]+>/g, '').trim();
   const lines = [];
   if (detailLine) lines.push(detailLine);
+  if (effectText) lines.push(`Effect: ${effectText}`);
   if (info?.effectsDesc) lines.push(`Effects: ${info.effectsDesc}`);
   openRollModal({
     title: titleText,
@@ -8995,7 +9015,12 @@ function renderCombatActions(){
           autoConds: cond.conds,
           detailsText: `Attack: ${action.attack} | Defense: ${action.defense}`,
           descText: action.effect,
-          detailLines: [`Attack: ${action.attack}`, `Defense: ${action.defense}`, `Effect: ${action.effect}`]
+          detailLines: [
+            'Type: Passive',
+            `Attack: ${action.attack}`,
+            `Defense: ${action.defense}`,
+            action.effect ? `Effect: ${action.effect}` : ''
+          ].filter(Boolean)
         });
       });
       combatActionsEl.appendChild(row);
@@ -9031,14 +9056,22 @@ function renderCombatActions(){
             autoConds: cond.conds,
             detailsText: 'Athletics vs Athletics',
             descText: action.effect,
-            detailLines: ['Athletics vs Athletics', `Effect: ${action.effect}`]
+            detailLines: [
+              'Type: Passive',
+              'Athletics vs Athletics',
+              action.effect ? `Effect: ${action.effect}` : ''
+            ].filter(Boolean)
           });
         }else{
           openRollModal({
             title: action.name,
             subtitle: 'Contextual Action',
             infoOnly: true,
-            descText: action.effect
+            descText: action.effect,
+            detailLines: [
+              'Type: Passive',
+              action.effect ? `Effect: ${action.effect}` : ''
+            ].filter(Boolean)
           });
         }
       });
@@ -9082,7 +9115,12 @@ function renderCombatActions(){
           subtitle: 'Special Action',
           infoOnly: true,
           detailsText: `Tension ${action.tier}`,
-          descText: action.effect
+          descText: action.effect,
+          detailLines: [
+            'Type: Passive',
+            `Tension: ${action.tier}`,
+            action.effect ? `Effect: ${action.effect}` : ''
+          ].filter(Boolean)
         });
       });
       combatSpecialActionsEl.appendChild(row);
@@ -9345,6 +9383,7 @@ function rollCombatAttack(){
   const attackType = combatAttackTypeEl?.value || 'simple';
   const specialName = attackType === 'special' ? getSelectedAttackSpecial() : '';
   const isOffhand = !!combatAttackOffhandEl?.checked;
+  const isSpecial = attackType === 'special';
   state.type = attackType;
   state.special = specialName || state.special;
   state.offhand = isOffhand;
@@ -9360,21 +9399,22 @@ function rollCombatAttack(){
   const mod = cond.mod + acuity + penalty;
   const adv = isOffhand ? 'dis' : (cond.adv || 'normal');
   const special = SPECIAL_ATTACKS.find(s=> s.name === specialName);
-  const desc = attackType === 'special' ? (special?.effect || '') : SIMPLE_ATTACK_DESC;
+  const desc = isSpecial ? (special?.effect || '') : SIMPLE_ATTACK_DESC;
   const details = [
     `Weapon: ${name}`,
-    `Type: ${attackType === 'special' ? 'Special' : 'Simple'}`,
-    attackType === 'special' ? `Special: ${specialName}` : '',
+    `Type: ${isSpecial ? 'Special' : 'Simple'}`,
+    isSpecial ? `Special: ${specialName}` : '',
     special?.prereq ? `Prereq: ${special.prereq}` : '',
     acuity ? 'Acuity +1' : '',
     isOffhand ? 'Offhand penalty and disadvantage' : ''
   ].filter(Boolean);
   const detailLines = [
+    `Skill: ${skill}`,
     `Weapon: ${name}`,
-    `Type: ${attackType === 'special' ? 'Special' : 'Simple'}`,
-    attackType === 'special' ? `Special: ${specialName}` : '',
+    `Type: ${isSpecial ? 'Special' : 'Simple'}`,
+    isSpecial ? `Special: ${specialName}` : '',
     special?.prereq ? `Prereq: ${special.prereq}` : '',
-    desc ? `Effect: ${desc}` : '',
+    isSpecial && desc ? `Effect: ${desc}` : '',
     acuity ? 'Acuity +1' : '',
     isOffhand ? 'Offhand penalty and disadvantage' : ''
   ].filter(Boolean);
@@ -9388,7 +9428,8 @@ function rollCombatAttack(){
     autoConds: cond.conds,
     detailsText: details.join(' | '),
     descText: desc,
-    detailLines
+    detailLines,
+    rollKind: 'skill'
   });
   closeCombatAttackModal();
 }
@@ -9968,12 +10009,20 @@ function rollInitiativeSpecial(){
   meta.className = 'meta';
   meta.textContent = new Date().toLocaleTimeString();
   entry.appendChild(meta);
+  const skillLine = document.createElement('div');
+  skillLine.className = 'muted';
+  skillLine.textContent = 'Skill: Initiative';
+  entry.appendChild(skillLine);
+  const modeLine = document.createElement('div');
+  modeLine.className = 'muted';
+  modeLine.textContent = 'Roll type: Simple';
+  entry.appendChild(modeLine);
   const line = document.createElement('div');
   line.textContent = `Result: ${result}`;
   entry.appendChild(line);
   const detail = document.createElement('div');
   detail.className = 'muted';
-  detail.textContent = `Rolls: ${rolls.map(r=>`${r.sign}${r.v}`).join(' ')} | Base ${base}`;
+  detail.textContent = `Rolls: ${rolls.map(r=>`${r.sign}${r.v}`).join(' ')} | Base ${base} | Mod 0`;
   entry.appendChild(detail);
   appendRollLog(entry);
   if (initLastEl) initLastEl.textContent = `Last roll: ${result}`;
@@ -10030,12 +10079,30 @@ function rollDeathSave(){
   meta.className = 'meta';
   meta.textContent = new Date().toLocaleTimeString();
   entry.appendChild(meta);
+  const skillLine = document.createElement('div');
+  skillLine.className = 'muted';
+  skillLine.textContent = 'Skill: Death Save';
+  entry.appendChild(skillLine);
+  const modeLine = document.createElement('div');
+  modeLine.className = 'muted';
+  modeLine.textContent = 'Roll type: Simple';
+  entry.appendChild(modeLine);
   const line = document.createElement('div');
-  line.textContent = `Roll: ${raw} ${penalty ? `- ${penalty}` : ''} = ${result}`;
+  line.textContent = `Result: ${result}`;
   entry.appendChild(line);
+  const detail = document.createElement('div');
+  detail.className = 'muted';
+  detail.textContent = `Roll: ${raw} | Base 0 | Mod ${penalty ? `-${penalty}` : '0'}`;
+  entry.appendChild(detail);
+  if (penalty){
+    const condLine = document.createElement('div');
+    condLine.className = 'muted';
+    condLine.textContent = `Conditions: Injuries -${penalty}`;
+    entry.appendChild(condLine);
+  }
   const state = document.createElement('div');
   state.className = 'muted';
-  state.textContent = `Successes: ${ds.successes} | Failures: ${ds.failures}${ds.dead ? ' | Dead' : ''}`;
+  state.textContent = `Effect: Successes: ${ds.successes} | Failures: ${ds.failures}${ds.dead ? ' | Dead' : ''}`;
   entry.appendChild(state);
   appendRollLog(entry);
   queueSave();
@@ -10146,7 +10213,9 @@ function rollDefense(){
     mod: modInput + cond.mod,
     adv: cond.adv || 'normal',
     autoConds: cond.conds,
-    detailsText: `Defense skill: ${skill || 'None'}`
+    detailsText: `Defense skill: ${skill || 'None'}`,
+    detailLines: [`Skill: ${skill || 'Defense'}`],
+    rollKind: 'skill'
   });
 }
 
@@ -10634,6 +10703,15 @@ async function loadCharacter(){
     });
   }
   if (unlinkCampaignBtn) unlinkCampaignBtn.style.display = CAMPAIGN_ID ? '' : 'none';
+  if (backLinkEl){
+    if (CAMPAIGN_ID){
+      backLinkEl.textContent = 'Back to Campaign';
+      backLinkEl.href = `campaign_view.html?cid=${encodeURIComponent(CAMPAIGN_ID)}`;
+    }else{
+      backLinkEl.textContent = 'Back to My Characters';
+      backLinkEl.href = 'characters.html';
+    }
+  }
   avatarPreview.src = `/characters/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
 
   // Level
