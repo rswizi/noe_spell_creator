@@ -100,13 +100,12 @@
     }
     .intensity-line {
       display:grid;
-      grid-template-columns: minmax(80px, 1fr) 70px 62px 62px;
+      grid-template-columns: minmax(80px, 1fr) 70px 62px;
       gap:6px;
       align-items:center;
     }
     .intensity-line input.num { width:40px; max-width:40px; }
     .intensity-line .skill-total { text-align:center; min-width:48px; }
-    .intensity-line .intensity-id { text-align:center; min-width:54px; }
     @media (max-width: 900px){
       .intensities-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
     }
@@ -4429,17 +4428,38 @@ function applyRollClamp(total, conds){
   return out;
 }
 
-function rollOnce(base, mod, conds){
-  const raw = rollExplodingD10();
-  const clamped = applyRollClamp(raw.total, conds);
+function rollOnce(base, mod, conds, opts){
+  const kind = opts?.kind || '';
+  const first = rollD10();
+  const rolls = [first];
+  const rawTotal = first;
+  let crit = null;
+  let critDelta = 0;
+  if (kind === 'skill' && (first === 1 || first === 10)){
+    const critRoll = rollD10();
+    const critSign = first === 10 ? 1 : -1;
+    critDelta = critSign * critRoll;
+    crit = { roll: critRoll, sign: critSign };
+  }
+  const rawWithCrit = rawTotal + critDelta;
+  const clamped = applyRollClamp(rawWithCrit, conds);
   const total = clamped + base + mod;
-  return { rolls: raw.rolls, rawTotal: raw.total, diceTotal: clamped, total };
+  return { rolls, rawTotal, rawWithCrit, diceTotal: clamped, total, crit, critDelta };
 }
 
 function rollSummaryText(r){
   const rollsText = r.rolls.join(' + ');
   let text = `d10: ${rollsText} = ${r.rawTotal}`;
-  if (r.diceTotal !== r.rawTotal){
+  if (r.crit && r.crit.roll){
+    const sign = r.crit.sign > 0 ? '+' : '-';
+    const rawWithCrit = r.rawTotal + (r.crit.sign * r.crit.roll);
+    text += `, crit ${sign}${r.crit.roll}`;
+    if (rawWithCrit !== r.rawTotal){
+      text += ` => ${rawWithCrit}`;
+    }
+  }
+  const rawForClamp = r.rawWithCrit != null ? r.rawWithCrit : r.rawTotal;
+  if (r.diceTotal !== rawForClamp){
     text += ` -> ${r.diceTotal}`;
   }
   return text;
@@ -4517,6 +4537,209 @@ function campaignMessageVisible(msg){
   return true;
 }
 
+function cleanChatLines(lines){
+  return (lines || []).map(l=> String(l || '').trim()).filter(Boolean);
+}
+
+function isTimeLine(line){
+  return /^\d{1,2}:\d{2}/.test(line || '');
+}
+
+function detailMapFromLine(line){
+  const map = {};
+  if (!line) return map;
+  line.split('|').forEach(part=>{
+    const clean = part.trim();
+    const idx = clean.indexOf(':');
+    if (idx === -1) return;
+    const key = clean.slice(0, idx).trim().toLowerCase();
+    const val = clean.slice(idx + 1).trim();
+    if (key) map[key] = val;
+  });
+  return map;
+}
+
+function parseAbilityCard(msg){
+  const lines = cleanChatLines(msg.lines);
+  const typeLine = lines.find(l=> /^Type:/i.test(l));
+  if (!typeLine) return null;
+  const typeMatch = typeLine.match(/Type:\s*([^|]+)/i);
+  const kind = typeMatch ? typeMatch[1].trim().toLowerCase() : '';
+  if (kind !== 'active' && kind !== 'passive') return null;
+  const details = detailMapFromLine(typeLine);
+  const filtered = lines.filter(l=> l !== typeLine && !/^Source:/i.test(l) && !/^Info only/i.test(l) && !isTimeLine(l));
+  let desc = '';
+  const effectLine = filtered.find(l=> /^Effect:/i.test(l));
+  if (effectLine) desc = effectLine.replace(/^Effect:\s*/i, '').trim();
+  if (!desc){
+    const descLine = filtered.find(l=> !/^Cost:/i.test(l) && !/^Range:/i.test(l) && !/^AoE:/i.test(l) && !/^Activation:/i.test(l));
+    if (descLine) desc = descLine;
+  }
+  return { kind, details, desc };
+}
+
+function parseSkillCard(msg){
+  const lines = cleanChatLines(msg.lines);
+  const skillLine = lines.find(l=> /^Skill:/i.test(l));
+  if (!skillLine) return null;
+  const resultLine = lines.find(l=> /^Result:/i.test(l));
+  const totalMatch = resultLine ? resultLine.match(/Result:\s*([+-]?\d+)/i) : null;
+  const total = totalMatch ? totalMatch[1] : '';
+  const modeLine = lines.find(l=> /^Roll type:/i.test(l));
+  const condLine = lines.find(l=> /^Conditions:/i.test(l));
+  const critLine = lines.find(l=> /^Critical/i.test(l));
+  const breakdownLine = lines.find(l=> /\bBase\b/i.test(l) && /\bMod\b/i.test(l));
+  const baseMatch = breakdownLine ? breakdownLine.match(/\bBase\s+(-?\d+)/i) : null;
+  const modMatch = breakdownLine ? breakdownLine.match(/\bMod\s+(-?\d+)/i) : null;
+  const base = baseMatch ? baseMatch[1] : null;
+  const mod = modMatch ? modMatch[1] : null;
+  const summaryPart = breakdownLine ? breakdownLine.split('| Base')[0].trim() : '';
+  const parts = [];
+  if (summaryPart) parts.push(summaryPart);
+  if (base != null) parts.push(`Skill ${base}`);
+  if (mod != null) parts.push(`Mod ${mod}`);
+  if (critLine) parts.push(critLine.replace(/^Critical:\s*/i, '').trim());
+  const formula = parts.length ? `[ ${parts.join(' + ')} ]` : '';
+  const rollType = modeLine ? modeLine.replace(/^Roll type:\s*/i, '').trim() : 'Simple';
+  const condText = condLine ? condLine.replace(/^Conditions:\s*/i, '').trim().replace(/\s*\|\s*/g, ', ') : '';
+  const sub = condText ? `Rolled with ${rollType} + ${condText}` : `Rolled with ${rollType}`;
+  let critClass = '';
+  if (critLine){
+    if (/success/i.test(critLine) || /\+\s*\d+/.test(critLine)) critClass = 'crit-success';
+    if (/fail/i.test(critLine) || /-\s*\d+/.test(critLine)) critClass = critClass || 'crit-fail';
+  }
+  return { total, sub, formula, critClass };
+}
+
+function parseDamageCard(msg){
+  const title = msg.text || '';
+  if (!/damage/i.test(title)) return null;
+  const lines = cleanChatLines(msg.lines);
+  const resultLine = lines.find(l=> /^Result:/i.test(l));
+  if (!resultLine) return null;
+  const inParen = resultLine.match(/\((.+)\)/);
+  if (!inParen) return null;
+  const typeParts = inParen[1].split('+').map(p=> p.trim()).filter(Boolean);
+  const types = [];
+  typeParts.forEach(part=>{
+    const m = part.match(/^([A-Za-z ]+?)\s+([+-]?\d+)/);
+    if (m) types.push({ name: m[1].trim(), total: m[2] });
+  });
+  if (!types.length) return null;
+  const breakdownLine = lines.find(l=> /\|/.test(l) || /Neutral|Magic/i.test(l)) || '';
+  const formulas = {};
+  const segments = breakdownLine ? breakdownLine.split('|').map(s=> s.trim()).filter(Boolean) : [];
+  segments.forEach(seg=>{
+    const m = seg.match(/([A-Za-z ]+?)\s+([+-]?\d+)/);
+    if (m) formulas[m[1].trim()] = seg;
+  });
+  return { types, formulas };
+}
+
+function buildRollCard(msg){
+  const skillMeta = parseSkillCard(msg);
+  if (skillMeta){
+    const card = document.createElement('div');
+    card.className = `roll-card roll-skill ${skillMeta.critClass}`.trim();
+    const title = document.createElement('div');
+    title.className = 'roll-title';
+    title.textContent = msg.text || 'Skill';
+    const divider = document.createElement('div');
+    divider.className = 'roll-divider';
+    const sub = document.createElement('div');
+    sub.className = 'roll-sub';
+    sub.textContent = skillMeta.sub;
+    const total = document.createElement('div');
+    total.className = 'roll-total';
+    total.textContent = skillMeta.total || '--';
+    card.appendChild(title);
+    card.appendChild(divider);
+    card.appendChild(sub);
+    card.appendChild(total);
+    if (skillMeta.formula){
+      const formula = document.createElement('div');
+      formula.className = 'roll-formula';
+      formula.textContent = skillMeta.formula;
+      card.appendChild(formula);
+    }
+    return card;
+  }
+  const abilityMeta = parseAbilityCard(msg);
+  if (abilityMeta){
+    const card = document.createElement('div');
+    card.className = `roll-card roll-ability ${abilityMeta.kind === 'active' ? 'is-active' : 'is-passive'}`.trim();
+    const title = document.createElement('div');
+    title.className = 'roll-title';
+    title.textContent = msg.text || 'Ability';
+    const divider = document.createElement('div');
+    divider.className = 'roll-divider';
+    card.appendChild(title);
+    card.appendChild(divider);
+    if (abilityMeta.kind === 'active'){
+      const metaLine = document.createElement('div');
+      metaLine.className = 'roll-meta-line';
+      const parts = [];
+      if (abilityMeta.details.cost) parts.push(`Cost: ${abilityMeta.details.cost}`);
+      if (abilityMeta.details.aoe) parts.push(`AoE: ${abilityMeta.details.aoe}`);
+      if (abilityMeta.details.range) parts.push(`Range: ${abilityMeta.details.range}`);
+      metaLine.textContent = parts.join(' || ');
+      if (metaLine.textContent) card.appendChild(metaLine);
+      if (abilityMeta.details.activation){
+        const activationLine = document.createElement('div');
+        activationLine.className = 'roll-meta-line';
+        activationLine.textContent = `Activation: ${abilityMeta.details.activation}`;
+        card.appendChild(activationLine);
+      }
+    }
+    if (abilityMeta.desc){
+      const desc = document.createElement('div');
+      desc.className = 'roll-desc';
+      desc.textContent = abilityMeta.desc;
+      card.appendChild(desc);
+    }
+    return card;
+  }
+  const dmgMeta = parseDamageCard(msg);
+  if (dmgMeta){
+    const card = document.createElement('div');
+    card.className = 'roll-card roll-damage';
+    const title = document.createElement('div');
+    title.className = 'roll-title';
+    title.textContent = msg.text || 'Weapon Damage';
+    card.appendChild(title);
+    const topDivider = document.createElement('div');
+    topDivider.className = 'roll-divider';
+    card.appendChild(topDivider);
+    dmgMeta.types.forEach((row, idx)=>{
+      const rowEl = document.createElement('div');
+      rowEl.className = 'roll-dmg-row';
+      const typeEl = document.createElement('div');
+      typeEl.className = 'roll-dmg-type';
+      typeEl.textContent = row.name;
+      const valueEl = document.createElement('div');
+      valueEl.className = 'roll-dmg-value';
+      valueEl.textContent = row.total;
+      rowEl.appendChild(typeEl);
+      rowEl.appendChild(valueEl);
+      card.appendChild(rowEl);
+      const formulaText = dmgMeta.formulas[row.name];
+      if (formulaText){
+        const formula = document.createElement('div');
+        formula.className = 'roll-formula';
+        formula.textContent = `[ ${formulaText} ]`;
+        card.appendChild(formula);
+      }
+      if (idx < dmgMeta.types.length - 1){
+        const sep = document.createElement('div');
+        sep.className = 'roll-divider';
+        card.appendChild(sep);
+      }
+    });
+    return card;
+  }
+  return null;
+}
+
 function renderCampaignChat(){
   if (!campaignChatLog) return;
   campaignChatLog.innerHTML = '';
@@ -4554,6 +4777,20 @@ function renderCampaignChat(){
     }
     const lines = group.querySelector('.chat-lines');
     const line = document.createElement('div');
+    if (msg.type === 'roll'){
+      const card = buildRollCard(msg);
+      if (card){
+        line.className = `chat-line chat-roll ${msg.visibility}`;
+        const meta = document.createElement('div');
+        meta.className = 'roll-foot';
+        meta.textContent = `${new Date(msg.ts).toLocaleTimeString()} | ${msg.visibility}`;
+        card.appendChild(meta);
+        line.appendChild(card);
+        lines.appendChild(line);
+        if (lastGroup) lastGroup.lastTs = msg.ts;
+        return;
+      }
+    }
     line.className = `chat-line ${msg.visibility}`;
     const title = document.createElement('div');
     title.textContent = msg.text || (msg.type === 'roll' ? 'Roll' : 'Message');
@@ -4879,16 +5116,25 @@ function runRoll(){
   const target = targetRaw === '' || targetRaw == null ? null : Number(targetRaw);
   const conds = collectRollConditions();
   const mode = rollAdvEl?.value || 'normal';
+  const rollKind = ROLL_CONTEXT?.rollKind || '';
+  const rollModeLabel = mode === 'adv' ? 'Advantage' : (mode === 'dis' ? 'Disadvantage' : 'Simple');
 
-  const first = rollOnce(base, mod, conds);
+  const first = rollOnce(base, mod, conds, { kind: rollKind });
   let second = null;
   let chosen = first;
   if (mode !== 'normal'){
-    second = rollOnce(base, mod, conds);
+    second = rollOnce(base, mod, conds, { kind: rollKind });
     chosen = (mode === 'adv')
       ? (first.total >= second.total ? first : second)
       : (first.total <= second.total ? first : second);
   }
+
+  const critNote = (rollKind === 'skill' && chosen.crit)
+    ? {
+      label: chosen.crit.sign > 0 ? 'Critical Success' : 'Critical Fail',
+      delta: chosen.crit.sign * chosen.crit.roll
+    }
+    : null;
 
   const preCondTotal = chosen.total;
   let finalTotal = preCondTotal;
@@ -4939,6 +5185,19 @@ function runRoll(){
 
   appendRollDesc(entry);
 
+  if (rollKind === 'skill'){
+    const modeLine = document.createElement('div');
+    modeLine.className = 'muted';
+    modeLine.textContent = `Roll type: ${rollModeLabel}`;
+    entry.appendChild(modeLine);
+    if (critNote){
+      const critLine = document.createElement('div');
+      critLine.className = 'muted';
+      critLine.textContent = `${critNote.label}: ${critNote.delta >= 0 ? '+' : ''}${critNote.delta}`;
+      entry.appendChild(critLine);
+    }
+  }
+
   const rollLine = document.createElement('div');
   rollLine.textContent = resultText;
   entry.appendChild(rollLine);
@@ -4964,8 +5223,9 @@ function abilityRollDetails(a){
   const cost = isPassive ? '' : abilityCostText(a);
   const range = isPassive ? '' : (a?.active?.range || a?.range || '');
   const aoe = isPassive ? '' : (a?.active?.aoe || a?.aoe || '');
+  const activation = isPassive ? '' : (a?.active?.activation || a?.activation || '');
   const type = a?.type || '';
-  return { desc, cost, range, aoe, type };
+  return { desc, cost, range, aoe, activation, type };
 }
 
 function openSkillRoll(charKey, charLabel, skillName){
@@ -4981,7 +5241,8 @@ function openSkillRoll(charKey, charLabel, skillName){
     autoConds: cond.conds,
     detailsText: `Skill: ${skillName} (${charLabel})`,
     descText: '',
-    detailLines: [`Skill: ${skillName} (${charLabel})`]
+    detailLines: [`Skill: ${skillName} (${charLabel})`],
+    rollKind: 'skill'
   });
 }
 
@@ -4993,6 +5254,7 @@ function openAbilityRoll(a, sourceLabel){
   if (details.cost) parts.push(`Cost: ${details.cost}`);
   if (details.range) parts.push(`Range: ${details.range}`);
   if (details.aoe) parts.push(`AoE: ${details.aoe}`);
+  if (details.activation) parts.push(`Activation: ${details.activation}`);
   const detailLine = parts.join(' | ');
   const lines = [];
   if (sourceLabel) lines.push(`Source: ${sourceLabel}`);
@@ -5017,6 +5279,7 @@ function openCombatAbilityRoll(a, sourceLabel){
   if (details.cost) parts.push(`Cost: ${details.cost}`);
   if (details.range) parts.push(`Range: ${details.range}`);
   if (details.aoe) parts.push(`AoE: ${details.aoe}`);
+  if (details.activation) parts.push(`Activation: ${details.activation}`);
   const detailLine = parts.join(' | ');
   const lines = [];
   if (sourceLabel) lines.push(`Source: ${sourceLabel}`);
@@ -8098,6 +8361,12 @@ function intensityIdForValue(value){
   if (base <= 17) return '1d10';
   return '1d12';
 }
+function intensityTooltip(notes, idVal){
+  const parts = [];
+  if (Array.isArray(notes) && notes.length) parts.push(...notes);
+  parts.push(`ID ${idVal}`);
+  return parts.join('\n');
+}
 function intensityDieForNature(nature){
   const name = INTENSITIES.find(n=> lc(n) === lc(nature || ''));
   if (!name) return null;
@@ -8178,13 +8447,11 @@ function renderStatistics(){
       const idVal = intensityIdForValue(baseVal);
       const investId = `intensity-${n}-invest`;
       const totalId = `intensity-${n}-total`;
-      const idId = `intensity-${n}-id`;
       const line = document.createElement('div'); line.className = 'intensity-line';
       line.innerHTML = `
         <div class="k">${n}</div>
         <input type="number" class="num" min="0" id="${investId}" value="${invested}">
-        <div class="skill-total badge mod-toggle" data-target="mods-${totalId}" id="${totalId}" title="${adj.notes.join('\n')}">${baseVal == null ? '--' : (adj.total>=0? '+'+adj.total : adj.total)}</div>
-        <div class="intensity-id badge" id="${idId}">ID ${idVal}</div>
+        <div class="skill-total badge mod-toggle" data-target="mods-${totalId}" id="${totalId}" title="${intensityTooltip(adj.notes, idVal)}">${baseVal == null ? '--' : (adj.total>=0? '+'+adj.total : adj.total)}</div>
       `;
     line.appendChild(setNotesList(`mods-${totalId}`, adj.notes));
     intGrid.appendChild(line);
@@ -8210,13 +8477,10 @@ function renderStatistics(){
       const adj = skillAdjTotal('magic', n);
       const baseVal = intensityBaseValue(n);
       const totalId = `intensity-${n}-total`;
-      const idId = `intensity-${n}-id`;
       const totalEl = document.getElementById(totalId);
       if (totalEl) totalEl.textContent = baseVal == null ? '--' : (adj.total>=0? '+'+adj.total : adj.total);
-      if (totalEl) totalEl.title = adj.notes.join('\\n');
+      if (totalEl) totalEl.title = intensityTooltip(adj.notes, intensityIdForValue(baseVal));
       setNotesList(`mods-${totalId}`, adj.notes);
-      const idEl = document.getElementById(idId);
-      if (idEl) idEl.textContent = `ID ${intensityIdForValue(baseVal)}`;
       updatePointCounters();
       updateDerived();
       renderAddedSchools();

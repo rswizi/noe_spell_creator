@@ -73,6 +73,94 @@
     .chat-line .muted{font-size:.85rem;}
     .chat-line.whisper{border-color:#5a4a22;}
     .chat-line.self{border-color:#34555a;}
+    .chat-line.chat-roll{background:transparent;border:none;padding:0;}
+    .roll-card{
+      --roll-accent:#a6b2ff;
+      border:1px solid #2b303e;
+      border-radius:16px;
+      padding:12px 12px 10px;
+      background:linear-gradient(180deg, rgba(18,20,33,0.98), rgba(12,13,20,0.96));
+      display:grid;
+      gap:8px;
+      box-shadow:0 12px 18px rgba(0,0,0,0.35);
+    }
+    .roll-card.roll-skill{--roll-accent:#a6b2ff;}
+    .roll-card.crit-success{--roll-accent:#b632ff;}
+    .roll-card.crit-fail{--roll-accent:#e0672c;}
+    .roll-card.is-active{--roll-accent:#c9a227;}
+    .roll-card.is-passive{--roll-accent:#d4d7e8;}
+    .roll-card.roll-damage{--roll-accent:#c96b52;}
+    .roll-title{
+      font-weight:700;
+      text-align:center;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:var(--roll-accent);
+    }
+    .roll-divider{
+      height:1px;
+      background:linear-gradient(90deg, transparent, rgba(210,210,230,0.35), transparent);
+    }
+    .roll-sub{
+      text-align:center;
+      font-size:.82rem;
+      opacity:.8;
+    }
+    .roll-total{
+      text-align:center;
+      font-size:2.6rem;
+      font-weight:700;
+      color:var(--roll-accent);
+      letter-spacing:.02em;
+    }
+    .roll-total::before,
+    .roll-total::after{
+      color:var(--roll-accent);
+    }
+    .roll-total::before{content:'{';margin-right:4px;}
+    .roll-total::after{content:'}';margin-left:4px;}
+    .roll-formula{
+      font-size:.78rem;
+      opacity:.7;
+      text-align:center;
+    }
+    .roll-desc{
+      border:1px solid #2b303e;
+      border-radius:12px;
+      padding:10px;
+      background:#121622;
+      font-size:.88rem;
+      line-height:1.4;
+    }
+    .roll-meta-line{
+      text-align:center;
+      font-size:.75rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      opacity:.75;
+    }
+    .roll-dmg-row{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:8px;
+      align-items:baseline;
+    }
+    .roll-dmg-type{
+      font-size:.78rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      opacity:.85;
+    }
+    .roll-dmg-value{
+      font-size:2rem;
+      font-weight:700;
+      color:var(--roll-accent);
+    }
+    .roll-foot{
+      text-align:center;
+      font-size:.72rem;
+      opacity:.6;
+    }
     .chat-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
     input,select,textarea{padding:10px 12px;border-radius:12px;border:1px solid #2a2f3a;background:#11131d;color:var(--ink);}
     textarea{min-height:80px;resize:vertical;}
@@ -469,6 +557,209 @@
       return true;
     }
 
+    function cleanChatLines(lines){
+      return (lines || []).map(l=> String(l || '').trim()).filter(Boolean);
+    }
+
+    function isTimeLine(line){
+      return /^\d{1,2}:\d{2}/.test(line || '');
+    }
+
+    function detailMapFromLine(line){
+      const map = {};
+      if (!line) return map;
+      line.split('|').forEach(part=>{
+        const clean = part.trim();
+        const idx = clean.indexOf(':');
+        if (idx === -1) return;
+        const key = clean.slice(0, idx).trim().toLowerCase();
+        const val = clean.slice(idx + 1).trim();
+        if (key) map[key] = val;
+      });
+      return map;
+    }
+
+    function parseAbilityCard(msg){
+      const lines = cleanChatLines(msg.lines);
+      const typeLine = lines.find(l=> /^Type:/i.test(l));
+      if (!typeLine) return null;
+      const typeMatch = typeLine.match(/Type:\s*([^|]+)/i);
+      const kind = typeMatch ? typeMatch[1].trim().toLowerCase() : '';
+      if (kind !== 'active' && kind !== 'passive') return null;
+      const details = detailMapFromLine(typeLine);
+      const filtered = lines.filter(l=> l !== typeLine && !/^Source:/i.test(l) && !/^Info only/i.test(l) && !isTimeLine(l));
+      let desc = '';
+      const effectLine = filtered.find(l=> /^Effect:/i.test(l));
+      if (effectLine) desc = effectLine.replace(/^Effect:\s*/i, '').trim();
+      if (!desc){
+        const descLine = filtered.find(l=> !/^Cost:/i.test(l) && !/^Range:/i.test(l) && !/^AoE:/i.test(l) && !/^Activation:/i.test(l));
+        if (descLine) desc = descLine;
+      }
+      return { kind, details, desc };
+    }
+
+    function parseSkillCard(msg){
+      const lines = cleanChatLines(msg.lines);
+      const skillLine = lines.find(l=> /^Skill:/i.test(l));
+      if (!skillLine) return null;
+      const resultLine = lines.find(l=> /^Result:/i.test(l));
+      const totalMatch = resultLine ? resultLine.match(/Result:\s*([+-]?\d+)/i) : null;
+      const total = totalMatch ? totalMatch[1] : '';
+      const modeLine = lines.find(l=> /^Roll type:/i.test(l));
+      const condLine = lines.find(l=> /^Conditions:/i.test(l));
+      const critLine = lines.find(l=> /^Critical/i.test(l));
+      const breakdownLine = lines.find(l=> /\bBase\b/i.test(l) && /\bMod\b/i.test(l));
+      const baseMatch = breakdownLine ? breakdownLine.match(/\bBase\s+(-?\d+)/i) : null;
+      const modMatch = breakdownLine ? breakdownLine.match(/\bMod\s+(-?\d+)/i) : null;
+      const base = baseMatch ? baseMatch[1] : null;
+      const mod = modMatch ? modMatch[1] : null;
+      const summaryPart = breakdownLine ? breakdownLine.split('| Base')[0].trim() : '';
+      const parts = [];
+      if (summaryPart) parts.push(summaryPart);
+      if (base != null) parts.push(`Skill ${base}`);
+      if (mod != null) parts.push(`Mod ${mod}`);
+      if (critLine) parts.push(critLine.replace(/^Critical:\s*/i, '').trim());
+      const formula = parts.length ? `[ ${parts.join(' + ')} ]` : '';
+      const rollType = modeLine ? modeLine.replace(/^Roll type:\s*/i, '').trim() : 'Simple';
+      const condText = condLine ? condLine.replace(/^Conditions:\s*/i, '').trim().replace(/\s*\|\s*/g, ', ') : '';
+      const sub = condText ? `Rolled with ${rollType} + ${condText}` : `Rolled with ${rollType}`;
+      let critClass = '';
+      if (critLine){
+        if (/success/i.test(critLine) || /\+\s*\d+/.test(critLine)) critClass = 'crit-success';
+        if (/fail/i.test(critLine) || /-\s*\d+/.test(critLine)) critClass = critClass || 'crit-fail';
+      }
+      return { total, sub, formula, critClass };
+    }
+
+    function parseDamageCard(msg){
+      const title = msg.text || '';
+      if (!/damage/i.test(title)) return null;
+      const lines = cleanChatLines(msg.lines);
+      const resultLine = lines.find(l=> /^Result:/i.test(l));
+      if (!resultLine) return null;
+      const inParen = resultLine.match(/\((.+)\)/);
+      if (!inParen) return null;
+      const typeParts = inParen[1].split('+').map(p=> p.trim()).filter(Boolean);
+      const types = [];
+      typeParts.forEach(part=>{
+        const m = part.match(/^([A-Za-z ]+?)\s+([+-]?\d+)/);
+        if (m) types.push({ name: m[1].trim(), total: m[2] });
+      });
+      if (!types.length) return null;
+      const breakdownLine = lines.find(l=> /\|/.test(l) || /Neutral|Magic/i.test(l)) || '';
+      const formulas = {};
+      const segments = breakdownLine ? breakdownLine.split('|').map(s=> s.trim()).filter(Boolean) : [];
+      segments.forEach(seg=>{
+        const m = seg.match(/([A-Za-z ]+?)\s+([+-]?\d+)/);
+        if (m) formulas[m[1].trim()] = seg;
+      });
+      return { types, formulas };
+    }
+
+    function buildRollCard(msg){
+      const skillMeta = parseSkillCard(msg);
+      if (skillMeta){
+        const card = document.createElement('div');
+        card.className = `roll-card roll-skill ${skillMeta.critClass}`.trim();
+        const title = document.createElement('div');
+        title.className = 'roll-title';
+        title.textContent = msg.text || 'Skill';
+        const divider = document.createElement('div');
+        divider.className = 'roll-divider';
+        const sub = document.createElement('div');
+        sub.className = 'roll-sub';
+        sub.textContent = skillMeta.sub;
+        const total = document.createElement('div');
+        total.className = 'roll-total';
+        total.textContent = skillMeta.total || '--';
+        card.appendChild(title);
+        card.appendChild(divider);
+        card.appendChild(sub);
+        card.appendChild(total);
+        if (skillMeta.formula){
+          const formula = document.createElement('div');
+          formula.className = 'roll-formula';
+          formula.textContent = skillMeta.formula;
+          card.appendChild(formula);
+        }
+        return card;
+      }
+      const abilityMeta = parseAbilityCard(msg);
+      if (abilityMeta){
+        const card = document.createElement('div');
+        card.className = `roll-card roll-ability ${abilityMeta.kind === 'active' ? 'is-active' : 'is-passive'}`.trim();
+        const title = document.createElement('div');
+        title.className = 'roll-title';
+        title.textContent = msg.text || 'Ability';
+        const divider = document.createElement('div');
+        divider.className = 'roll-divider';
+        card.appendChild(title);
+        card.appendChild(divider);
+        if (abilityMeta.kind === 'active'){
+          const metaLine = document.createElement('div');
+          metaLine.className = 'roll-meta-line';
+          const parts = [];
+          if (abilityMeta.details.cost) parts.push(`Cost: ${abilityMeta.details.cost}`);
+          if (abilityMeta.details.aoe) parts.push(`AoE: ${abilityMeta.details.aoe}`);
+          if (abilityMeta.details.range) parts.push(`Range: ${abilityMeta.details.range}`);
+          metaLine.textContent = parts.join(' || ');
+          if (metaLine.textContent) card.appendChild(metaLine);
+          if (abilityMeta.details.activation){
+            const activationLine = document.createElement('div');
+            activationLine.className = 'roll-meta-line';
+            activationLine.textContent = `Activation: ${abilityMeta.details.activation}`;
+            card.appendChild(activationLine);
+          }
+        }
+        if (abilityMeta.desc){
+          const desc = document.createElement('div');
+          desc.className = 'roll-desc';
+          desc.textContent = abilityMeta.desc;
+          card.appendChild(desc);
+        }
+        return card;
+      }
+      const dmgMeta = parseDamageCard(msg);
+      if (dmgMeta){
+        const card = document.createElement('div');
+        card.className = 'roll-card roll-damage';
+        const title = document.createElement('div');
+        title.className = 'roll-title';
+        title.textContent = msg.text || 'Weapon Damage';
+        card.appendChild(title);
+        const topDivider = document.createElement('div');
+        topDivider.className = 'roll-divider';
+        card.appendChild(topDivider);
+        dmgMeta.types.forEach((row, idx)=>{
+          const rowEl = document.createElement('div');
+          rowEl.className = 'roll-dmg-row';
+          const typeEl = document.createElement('div');
+          typeEl.className = 'roll-dmg-type';
+          typeEl.textContent = row.name;
+          const valueEl = document.createElement('div');
+          valueEl.className = 'roll-dmg-value';
+          valueEl.textContent = row.total;
+          rowEl.appendChild(typeEl);
+          rowEl.appendChild(valueEl);
+          card.appendChild(rowEl);
+          const formulaText = dmgMeta.formulas[row.name];
+          if (formulaText){
+            const formula = document.createElement('div');
+            formula.className = 'roll-formula';
+            formula.textContent = `[ ${formulaText} ]`;
+            card.appendChild(formula);
+          }
+          if (idx < dmgMeta.types.length - 1){
+            const sep = document.createElement('div');
+            sep.className = 'roll-divider';
+            card.appendChild(sep);
+          }
+        });
+        return card;
+      }
+      return null;
+    }
+
     function renderChat(){
       chatLog.innerHTML = '';
       const visible = CHAT_MESSAGES.filter(messageVisible).sort((a,b)=>a.ts-b.ts);
@@ -505,6 +796,20 @@
         }
         const lines = group.querySelector('.chat-lines');
         const line = document.createElement('div');
+        if (msg.type === 'roll'){
+          const card = buildRollCard(msg);
+          if (card){
+            line.className = `chat-line chat-roll ${msg.visibility}`;
+            const meta = document.createElement('div');
+            meta.className = 'roll-foot';
+            meta.textContent = `${new Date(msg.ts).toLocaleTimeString()} | ${msg.visibility}`;
+            card.appendChild(meta);
+            line.appendChild(card);
+            lines.appendChild(line);
+            if (lastGroup) lastGroup.lastTs = msg.ts;
+            return;
+          }
+        }
         line.className = `chat-line ${msg.visibility}`;
         const title = document.createElement('div');
         title.textContent = msg.text || (msg.type === 'roll' ? 'Roll' : 'Message');
