@@ -79,9 +79,11 @@ app.add_middleware(
 
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
+ASSETS_DIR = BASE_DIR / "assets"
 
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
+app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
 @app.get("/", include_in_schema=False)
 def root():

@@ -90,6 +90,14 @@
     .roll-card.roll-skill{--roll-accent:#a6b2ff;}
     .roll-card.crit-success{--roll-accent:#b632ff;}
     .roll-card.crit-fail{--roll-accent:#e0672c;}
+    .roll-card.crit-max{
+      --roll-accent:#ff3b3b;
+      border-color:#6a1010;
+      background:linear-gradient(180deg, rgba(6,6,10,0.98), rgba(8,8,12,0.95));
+      box-shadow:0 0 0 1px rgba(140,0,0,0.7), 0 16px 30px rgba(120,0,0,0.65), 0 0 18px rgba(255,0,0,0.45);
+    }
+    .roll-card.crit-max .roll-title,
+    .roll-card.crit-max .roll-total{ text-shadow:0 0 12px rgba(255,40,40,0.6); }
     .roll-card.is-active{--roll-accent:#c9a227;}
     .roll-card.is-passive{--roll-accent:#d4d7e8;}
     .roll-card.roll-damage{--roll-accent:#c96b52;}
@@ -165,6 +173,9 @@
       opacity:.6;
     }
     .chat-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+    .chat-line.chat-image{ background:#121623; border:1px solid #232839; padding:8px; }
+    .chat-line.chat-image img{ width:100%; border-radius:12px; border:1px solid #2a2a38; display:block; }
+    .chat-line.chat-image .caption{ font-size:.85rem; margin-bottom:6px; }
     #chat-input{width:100%;max-width:100%;box-sizing:border-box;}
     input,select,textarea{padding:10px 12px;border-radius:12px;border:1px solid #2a2f3a;background:#11131d;color:var(--ink);}
     textarea{min-height:80px;resize:vertical;}
@@ -569,7 +580,8 @@
         character_name: raw.character_name || raw.characterName || raw.character?.name || raw.character_id || 'Character',
         character_avatar: raw.character_avatar || raw.avatar_url || raw.character?.avatar_url || '',
         text: raw.text || raw.message || raw.content || '',
-        lines: raw.lines || raw.detail_lines || raw.details || []
+        lines: raw.lines || raw.detail_lines || raw.details || [],
+        image: raw.image || raw.image_url || raw.imageUrl || raw.media || ''
       };
     }
 
@@ -597,6 +609,14 @@
 
     function cleanChatLines(lines){
       return (lines || []).map(l=> String(l || '').trim()).filter(Boolean);
+    }
+
+    function imageFromMessage(msg){
+      if (!msg) return '';
+      if (msg.image) return String(msg.image);
+      const line = (msg.lines || []).find(l=> /^Image:/i.test(l));
+      if (line) return line.replace(/^Image:\s*/i, '').trim();
+      return '';
     }
 
     function isTimeLine(line){
@@ -664,8 +684,10 @@
       const sub = condText ? `Rolled with ${rollType} + ${condText}` : `Rolled with ${rollType}`;
       let critClass = '';
       if (critLine){
-        if (/success/i.test(critLine) || /\+\s*\d+/.test(critLine)) critClass = 'crit-success';
-        if (/fail/i.test(critLine) || /-\s*\d+/.test(critLine)) critClass = critClass || 'crit-fail';
+        const critText = critLine.replace(/^Critical:\s*/i, '').trim().toLowerCase();
+        if (critText.includes('maximum')) critClass = 'crit-max';
+        if (!critClass && (/success/i.test(critLine) || /\+\s*\d+/.test(critLine))) critClass = 'crit-success';
+        if (!critClass && (/fail/i.test(critLine) || /-\s*\d+/.test(critLine))) critClass = 'crit-fail';
       }
       const effect = effectLine ? effectLine.replace(/^Effect:\s*/i, '').trim() : '';
       return { total, sub, formula, critClass, effect };
@@ -864,6 +886,27 @@
         }
         const lines = group.querySelector('.chat-lines');
         const line = document.createElement('div');
+        const imageSrc = imageFromMessage(msg);
+        if (msg.type === 'image' || imageSrc){
+          line.className = `chat-line chat-image ${msg.visibility}`;
+          if (msg.text){
+            const caption = document.createElement('div');
+            caption.className = 'caption';
+            caption.textContent = msg.text;
+            line.appendChild(caption);
+          }
+          const img = document.createElement('img');
+          img.src = imageSrc;
+          img.alt = msg.text || 'Image';
+          line.appendChild(img);
+          const meta = document.createElement('div');
+          meta.className = 'muted';
+          meta.textContent = `${new Date(msg.ts).toLocaleTimeString()} | ${msg.visibility}`;
+          line.appendChild(meta);
+          lines.appendChild(line);
+          if (lastGroup) lastGroup.lastTs = msg.ts;
+          return;
+        }
         if (msg.type === 'roll'){
           const card = buildRollCard(msg);
           if (card){

@@ -250,6 +250,14 @@
   .roll-card.roll-skill{--roll-accent:#a6b2ff;}
   .roll-card.crit-success{--roll-accent:#b632ff;}
   .roll-card.crit-fail{--roll-accent:#e0672c;}
+  .roll-card.crit-max{
+    --roll-accent:#ff3b3b;
+    border-color:#6a1010;
+    background:linear-gradient(180deg, rgba(6,6,10,0.98), rgba(8,8,12,0.95));
+    box-shadow:0 0 0 1px rgba(140,0,0,0.7), 0 16px 30px rgba(120,0,0,0.65), 0 0 18px rgba(255,0,0,0.45);
+  }
+  .roll-card.crit-max .roll-title,
+  .roll-card.crit-max .roll-total{ text-shadow:0 0 12px rgba(255,40,40,0.6); }
   .roll-card.is-active{--roll-accent:#c9a227;}
   .roll-card.is-passive{--roll-accent:#d4d7e8;}
   .roll-card.roll-damage{--roll-accent:#c96b52;}
@@ -324,6 +332,10 @@
     font-size:.72rem;
     opacity:.6;
   }
+  .roll-entry img{ width:100%; border-radius:12px; border:1px solid #2a2a38; display:block; }
+  .chat-line.chat-image{ background:#121623; border:1px solid #232839; padding:8px; }
+  .chat-line.chat-image img{ width:100%; border-radius:12px; border:1px solid #2a2a38; display:block; }
+  .chat-line.chat-image .caption{ font-size:.85rem; margin-bottom:6px; }
   .chat-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   #campaign-chat-input{ width:100%; max-width:100%; box-sizing:border-box; }
   .roll-entry { border:1px solid #2a2a38; border-radius:12px; padding:8px 10px; background:#14141d; }
@@ -331,6 +343,7 @@
   .roll-entry .meta { font-size:.8rem; opacity:.75; }
   .roll-grid { display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-top:8px; }
   .roll-grid label { display:grid; gap:4px; }
+  .roll-grid input[type="number"]{ width:7ch; max-width:7ch; justify-self:start; }
   .roll-conditions { margin-top:10px; }
   .roll-cond-grid { display:grid; gap:6px 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
   .roll-conditions label { display:flex; align-items:center; gap:8px; }
@@ -1041,6 +1054,8 @@
                   <button class="btn small" id="combat-open-spell">Use Spells</button>
                   <span class="combat-badge">ET Used: <span id="combat-et-used">0</span></span>
                 </div>
+                <div class="muted" style="margin-top:8px;">Active abilities</div>
+                <div id="combat-active-abilities" class="combat-pill-list" style="margin-top:6px;"></div>
               </div>
             </details>
           </div>
@@ -2307,6 +2322,7 @@ const exhaustedToggleEl = document.getElementById('combat-exhausted');
 const combatActionsEl = document.getElementById('combat-actions');
 const combatContextActionsEl = document.getElementById('combat-context-actions');
 const combatSpecialActionsEl = document.getElementById('combat-special-actions');
+const combatActiveAbilitiesEl = document.getElementById('combat-active-abilities');
 const combatSpecialAttacksEl = document.getElementById('combat-special-attacks');
 const combatSecondaryModal = document.getElementById('combat-secondary-modal');
 const combatSecondaryBackdrop = document.getElementById('combat-secondary-backdrop');
@@ -4414,6 +4430,8 @@ function invToggleModal(modal, backdrop, open){
 let ROLL_CONTEXT = null;
 let ROLL_LOG_COUNT = 0;
 let ROLL_CLICK_TIMER = null;
+const DAZZLING_SPARK_IMAGE = '/assets/dazzling_spark/dazzling_spark.png';
+const DAZZLING_SPARK_SOUND = '/assets/dazzling_spark/dazzling_spark.mp3';
 
 function resetRollConditions(){
   if (condJ1El) condJ1El.checked = false;
@@ -4568,6 +4586,62 @@ function formatConditionsSummary(conds){
   return parts.join(' | ');
 }
 
+function playDazzlingSparkSound(){
+  try{
+    const audio = new Audio(DAZZLING_SPARK_SOUND);
+    audio.volume = 0.8;
+    audio.play().catch(()=>{});
+  }catch{}
+}
+
+function appendRollImage(titleText, imageSrc){
+  if (!rollLogEl) return;
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = titleText || 'Image';
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  const img = document.createElement('img');
+  img.src = imageSrc;
+  img.alt = titleText || 'Image';
+  entry.appendChild(title);
+  entry.appendChild(meta);
+  entry.appendChild(img);
+  appendRollLog(entry);
+}
+
+function sendCampaignChatImage(titleText, imageSrc){
+  if (!CAMPAIGN_ID) return;
+  const charId = CHAR?.id || CID || '';
+  const displayName = (nameEl?.value || CHAR?.name || charId || 'Character');
+  const payload = {
+    type: 'image',
+    text: titleText || 'Image',
+    image: imageSrc,
+    visibility: campaignChatVisibility(),
+    ts: Date.now(),
+    user: CURRENT_USER?.username || CHAR?.owner || 'Unknown',
+    character_id: charId,
+    character_name: displayName,
+    character_avatar: charId ? `/characters/${encodeURIComponent(charId)}/avatar` : ''
+  };
+  postCampaignChatMessage(payload).then((ok)=>{
+    if (ok) scheduleCampaignChatRefresh();
+  });
+}
+
+function emitDazzlingSparkEffect(){
+  playDazzlingSparkSound();
+  if (CAMPAIGN_ID){
+    sendCampaignChatImage('Dazzling Spark', DAZZLING_SPARK_IMAGE);
+  }else{
+    appendRollImage('Dazzling Spark', DAZZLING_SPARK_IMAGE);
+  }
+}
+
 function campaignChatVisibility(){
   if (!CAMPAIGN_ID) return 'public';
   return localStorage.getItem(`campaign_chat_visibility:${CAMPAIGN_ID}`) || 'public';
@@ -4618,7 +4692,8 @@ function normalizeCampaignChatMessage(raw){
     character_name: raw.character_name || raw.characterName || raw.character?.name || raw.character_id || 'Character',
     character_avatar: raw.character_avatar || raw.avatar_url || raw.character?.avatar_url || '',
     text: raw.text || raw.message || raw.content || '',
-    lines: raw.lines || raw.detail_lines || raw.details || []
+    lines: raw.lines || raw.detail_lines || raw.details || [],
+    image: raw.image || raw.image_url || raw.imageUrl || raw.media || ''
   };
 }
 
@@ -4646,6 +4721,14 @@ function campaignMessageVisible(msg){
 
 function cleanChatLines(lines){
   return (lines || []).map(l=> String(l || '').trim()).filter(Boolean);
+}
+
+function imageFromChat(msg){
+  if (!msg) return '';
+  if (msg.image) return String(msg.image);
+  const line = (msg.lines || []).find(l=> /^Image:/i.test(l));
+  if (line) return line.replace(/^Image:\s*/i, '').trim();
+  return '';
 }
 
 function isTimeLine(line){
@@ -4713,8 +4796,10 @@ function parseSkillCard(msg){
   const sub = condText ? `Rolled with ${rollType} + ${condText}` : `Rolled with ${rollType}`;
   let critClass = '';
   if (critLine){
-    if (/success/i.test(critLine) || /\+\s*\d+/.test(critLine)) critClass = 'crit-success';
-    if (/fail/i.test(critLine) || /-\s*\d+/.test(critLine)) critClass = critClass || 'crit-fail';
+    const critText = critLine.replace(/^Critical:\s*/i, '').trim().toLowerCase();
+    if (critText.includes('maximum')) critClass = 'crit-max';
+    if (!critClass && (/success/i.test(critLine) || /\+\s*\d+/.test(critLine))) critClass = 'crit-success';
+    if (!critClass && (/fail/i.test(critLine) || /-\s*\d+/.test(critLine))) critClass = 'crit-fail';
   }
   const effect = effectLine ? effectLine.replace(/^Effect:\s*/i, '').trim() : '';
   return { total, sub, formula, critClass, effect };
@@ -4914,6 +4999,27 @@ function renderCampaignChat(){
     }
     const lines = group.querySelector('.chat-lines');
     const line = document.createElement('div');
+    const imageSrc = imageFromChat(msg);
+    if (msg.type === 'image' || imageSrc){
+      line.className = `chat-line chat-image ${msg.visibility}`;
+      if (msg.text){
+        const caption = document.createElement('div');
+        caption.className = 'caption';
+        caption.textContent = msg.text;
+        line.appendChild(caption);
+      }
+      const img = document.createElement('img');
+      img.src = imageSrc;
+      img.alt = msg.text || 'Image';
+      line.appendChild(img);
+      const meta = document.createElement('div');
+      meta.className = 'muted';
+      meta.textContent = `${new Date(msg.ts).toLocaleTimeString()} | ${msg.visibility}`;
+      line.appendChild(meta);
+      lines.appendChild(line);
+      if (lastGroup) lastGroup.lastTs = msg.ts;
+      return;
+    }
     if (msg.type === 'roll'){
       const card = buildRollCard(msg);
       if (card){
@@ -5358,10 +5464,17 @@ function runRoll(){
       : (first.total <= second.total ? first : second);
   }
 
+  const isMaxRoll = rollKind === 'skill'
+    && chosen.crit
+    && chosen.crit.sign > 0
+    && chosen.crit.roll === 10
+    && Array.isArray(chosen.rolls)
+    && chosen.rolls[0] === 10;
   const critNote = (rollKind === 'skill' && chosen.crit)
     ? {
-      label: chosen.crit.sign > 0 ? 'Critical Success' : 'Critical Fail',
-      delta: chosen.crit.sign * chosen.crit.roll
+      label: isMaxRoll ? 'Maximum Roll' : (chosen.crit.sign > 0 ? 'Critical Success' : 'Critical Fail'),
+      delta: chosen.crit.sign * chosen.crit.roll,
+      isMax: isMaxRoll
     }
     : null;
 
@@ -5422,7 +5535,7 @@ function runRoll(){
     if (critNote){
       const critLine = document.createElement('div');
       critLine.className = 'muted';
-      critLine.textContent = `${critNote.label}: ${critNote.delta >= 0 ? '+' : ''}${critNote.delta}`;
+      critLine.textContent = `Critical: ${critNote.label} ${critNote.delta >= 0 ? '+' : ''}${critNote.delta}`;
       entry.appendChild(critLine);
     }
   }
@@ -5444,6 +5557,9 @@ function runRoll(){
   }
 
   appendRollLog(entry);
+  if (critNote?.isMax){
+    emitDazzlingSparkEffect();
+  }
 }
 
 function abilityRollDetails(a){
@@ -8998,6 +9114,31 @@ function renderCombatEtUsage(){
   combatEtUsedEl.textContent = `${used} / ${maxEt}`;
 }
 
+function renderCombatActiveAbilities(){
+  if (!combatActiveAbilitiesEl) return;
+  const st = combatState();
+  const activeIds = Array.from(new Set((st.active_abilities || []).map(String).filter(Boolean)));
+  combatActiveAbilitiesEl.innerHTML = '';
+  if (!activeIds.length){
+    combatActiveAbilitiesEl.innerHTML = '<span class="muted">None</span>';
+    return;
+  }
+  const list = collectDisplayAbilities() || [];
+  const byId = {};
+  list.forEach(a=>{
+    const id = String(a?.id || '');
+    if (id) byId[id] = a;
+  });
+  activeIds.forEach(id=>{
+    const ability = byId[id];
+    const label = ability?.name || ability?.id || id;
+    const pill = document.createElement('span');
+    pill.className = 'combat-pill';
+    pill.textContent = label;
+    combatActiveAbilitiesEl.appendChild(pill);
+  });
+}
+
 function renderCombatActions(){
   if (combatActionsEl){
     combatActionsEl.innerHTML = '';
@@ -9698,6 +9839,7 @@ function renderCombatAbilityList(){
   if (!rendered){
     combatAbilityListEl.innerHTML = '<div class="muted">No matching abilities.</div>';
   }
+  renderCombatActiveAbilities();
 }
 
 function renderCombatSpellList(){
@@ -9933,6 +10075,7 @@ function renderCombatTab(){
   renderCombatDeathSaves();
   renderCombatTension();
   renderCombatEtUsage();
+  renderCombatActiveAbilities();
   if (initBaseEl) initBaseEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(combatState().max_hp_damage || 0)));
   renderCombatDerivedBadges();
