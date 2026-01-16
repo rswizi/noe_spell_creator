@@ -3410,7 +3410,7 @@ function renderSublimations(){
   const { hidden } = getSublimationEffects();
   const parts = [];
   if (hidden.weaponNeutral) parts.push(`+${hidden.weaponNeutral} neutral weapon dmg (not animarmas)`);
-  if (hidden.magicBonus) parts.push(`+${hidden.magicBonus} ${hidden.magicNature || 'magic'} dmg (spells/animarmas)`);
+  if (hidden.magicBonus) parts.push(`+${hidden.magicBonus} ${hidden.magicNature || 'magic'} dmg (benediction, spells/animarmas)`);
   if (hidden.conditionDC) parts.push(`+${hidden.conditionDC} Condition DC`);
   subHiddenEl.textContent = parts.length ? `Hidden effects: ${parts.join(' | ')}` : '';
 }
@@ -9495,16 +9495,20 @@ function renderCombatWeapons(){
     if (nature && magicBucket[nature]){
       baseMagic = applyOps(0, magicBucket[nature]).value || 0;
     }
-    const subMagicBonus = (isAnimarma && subHidden.magicBonus && (!subHidden.magicNature || nature === String(subHidden.magicNature).toLowerCase()))
-      ? subHidden.magicBonus
-      : 0;
     const upgradeBonus = getWeaponUpgradeBonuses(it);
-    const neutralBonusTotal = derivedNeutral + subNeutral + upgradeBonus.neutral;
-    const magicBonusTotal = (baseMagic + subMagicBonus) + upgradeBonus.magic;
+    const subMagicNatureLabel = formatNatureLabel(subHidden.magicNature);
+    const subMagicBonus = isAnimarma ? (subHidden.magicBonus || 0) : 0;
     const magicLabel = natureLabel || 'Magic';
+    const subMagicMatchesWeapon = !!(subMagicNatureLabel && natureLabel)
+      && subMagicNatureLabel.toLowerCase() === natureLabel.toLowerCase();
+    const mainMagicBonus = baseMagic + upgradeBonus.magic
+      + (subMagicBonus && (!subMagicNatureLabel || subMagicMatchesWeapon) ? subMagicBonus : 0);
+    const extraMagicBonus = (subMagicBonus && subMagicNatureLabel && !subMagicMatchesWeapon) ? subMagicBonus : 0;
+    const neutralBonusTotal = derivedNeutral + subNeutral + upgradeBonus.neutral;
     const extra = [];
     if (neutralBonusTotal) extra.push(`Neutral ${neutralBonusTotal}`);
-    if (magicBonusTotal) extra.push(`${magicLabel} ${magicBonusTotal}`);
+    if (mainMagicBonus) extra.push(`${magicLabel} ${mainMagicBonus}`);
+    if (extraMagicBonus && subMagicNatureLabel) extra.push(`${subMagicNatureLabel} ${extraMagicBonus}`);
     const dmgDisplay = extra.length ? `${dmg} + ${extra.join(' + ')}` : dmg;
     const row = document.createElement('div');
     row.className = 'combat-entry';
@@ -9556,11 +9560,16 @@ function renderCombatWeapons(){
       const diceRoll = rollDamageDice(parts.dice, die);
       if (dieLabelOverride) diceRoll.label = dieLabelOverride;
       const baseRollTotal = diceRoll.total + parts.flat + msVal;
-      let neutralTotal = isAnimarma ? neutralBonusTotal : (baseRollTotal + neutralBonusTotal);
-      let magicTotal = isAnimarma ? (baseRollTotal + magicBonusTotal) : magicBonusTotal;
+      const neutralTotalRaw = isAnimarma ? neutralBonusTotal : (baseRollTotal + neutralBonusTotal);
+      const mainMagicTotalRaw = isAnimarma ? (baseRollTotal + mainMagicBonus) : mainMagicBonus;
+      const extraMagicTotalRaw = extraMagicBonus;
+      let neutralTotal = neutralTotalRaw;
+      let mainMagicTotal = mainMagicTotalRaw;
+      let extraMagicTotal = extraMagicTotalRaw;
       if (offhand){
         neutralTotal = Math.floor(neutralTotal / 2);
-        magicTotal = Math.floor(magicTotal / 2);
+        mainMagicTotal = Math.floor(mainMagicTotal / 2);
+        extraMagicTotal = Math.floor(extraMagicTotal / 2);
       }
       const entry = document.createElement('div');
       entry.className = 'roll-entry';
@@ -9586,30 +9595,35 @@ function renderCombatWeapons(){
       if (subNeutral) neutralParts.push(`Lethality (sub) ${subNeutral}`);
       if (upgradeBonus.neutral) neutralParts.push(`Lethality (upg) ${upgradeBonus.neutral}`);
       const neutralBreak = neutralParts.length ? (neutralParts.length > 1 ? neutralParts.join(' + ') : neutralParts[0]) : '';
-      const magicParts = [];
-      if (baseMagic) magicParts.push(`${magicTypeLabel} ${baseMagic}`);
-      if (subMagicBonus) magicParts.push(`Benediction (sub) ${subMagicBonus}`);
-      if (upgradeBonus.magic) magicParts.push(`Benediction (upg) ${upgradeBonus.magic}`);
-      const magicBreak = magicParts.length ? (magicParts.length > 1 ? magicParts.join(' + ') : magicParts[0]) : '';
+      const mainMagicParts = [];
+      if (baseMagic) mainMagicParts.push(`${magicTypeLabel} ${baseMagic}`);
+      if (subMagicBonus && (!subMagicNatureLabel || subMagicMatchesWeapon)) mainMagicParts.push(`Benediction (sub) ${subMagicBonus}`);
+      if (upgradeBonus.magic) mainMagicParts.push(`Benediction (upg) ${upgradeBonus.magic}`);
+      const mainMagicBreak = mainMagicParts.length ? (mainMagicParts.length > 1 ? mainMagicParts.join(' + ') : mainMagicParts[0]) : '';
+      const extraMagicBreak = (extraMagicBonus && subMagicNatureLabel) ? `Benediction (sub) ${extraMagicBonus}` : '';
       const neutralFormulaParts = [];
-      const magicFormulaParts = [];
+      const mainMagicFormulaParts = [];
       if (isAnimarma){
-        if (coreBreak) magicFormulaParts.push(coreBreak);
+        if (coreBreak) mainMagicFormulaParts.push(coreBreak);
       }else{
         if (coreBreak) neutralFormulaParts.push(coreBreak);
       }
       if (neutralBreak) neutralFormulaParts.push(neutralBreak);
-      if (magicBreak) magicFormulaParts.push(magicBreak);
+      if (mainMagicBreak) mainMagicFormulaParts.push(mainMagicBreak);
       const neutralFormula = neutralFormulaParts.join(' + ');
-      const magicFormula = magicFormulaParts.join(' + ');
+      const mainMagicFormula = mainMagicFormulaParts.join(' + ');
       const segments = [];
       if (neutralTotal){
         const neutralDetail = neutralFormula ? `${neutralFormula}${offhand ? '; halved' : ''}` : (offhand ? 'halved' : '');
         segments.push(`Neutral ${neutralTotal}${neutralDetail ? ` (${neutralDetail})` : ''}`);
       }
-      if (magicTotal){
-        const magicDetail = magicFormula ? `${magicFormula}${offhand ? '; halved' : ''}` : (offhand ? 'halved' : '');
-        segments.push(`${magicTypeLabel} ${magicTotal}${magicDetail ? ` (${magicDetail})` : ''}`);
+      if (mainMagicTotal){
+        const magicDetail = mainMagicFormula ? `${mainMagicFormula}${offhand ? '; halved' : ''}` : (offhand ? 'halved' : '');
+        segments.push(`${magicTypeLabel} ${mainMagicTotal}${magicDetail ? ` (${magicDetail})` : ''}`);
+      }
+      if (extraMagicTotal && subMagicNatureLabel){
+        const extraDetail = extraMagicBreak ? `${extraMagicBreak}${offhand ? '; halved' : ''}` : (offhand ? 'halved' : '');
+        segments.push(`${subMagicNatureLabel} ${extraMagicTotal}${extraDetail ? ` (${extraDetail})` : ''}`);
       }
       if (!segments.length){
         segments.push('Neutral 0');
