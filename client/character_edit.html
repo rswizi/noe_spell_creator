@@ -225,6 +225,19 @@
   .roll-chat { border:1px solid var(--border); border-radius:16px; padding:12px; background: #14141d; box-shadow: 0 10px 24px rgba(0,0,0,0.35); display:flex; flex-direction:column; gap:10px; position:sticky; top:24px; }
   .roll-chat-header { display:flex; align-items:center; gap:8px; }
   .roll-chat-body { display:grid; gap:8px; overflow:auto; max-height: calc(100vh - 220px); }
+  .roll-chat-panel { display:flex; flex-direction:column; gap:10px; }
+  .chat-log { border:1px solid #2a2a38; border-radius:12px; padding:10px; background:#101018; max-height: calc(100vh - 320px); overflow:auto; display:grid; gap:12px; }
+  .chat-group { display:grid; gap:6px; }
+  .chat-head { display:flex; gap:10px; align-items:center; }
+  .chat-avatar { width:36px; height:36px; border-radius:10px; border:1px solid #333; overflow:hidden; background:#0b0b10; display:grid; place-items:center; }
+  .chat-avatar img { width:100%; height:100%; object-fit:cover; }
+  .chat-user { font-weight:600; }
+  .chat-lines { display:grid; gap:4px; padding-left:46px; }
+  .chat-line { background:#121623; border:1px solid #232839; border-radius:10px; padding:8px 10px; }
+  .chat-line .muted { font-size:.85rem; }
+  .chat-line.whisper { border-color:#5a4a22; }
+  .chat-line.self { border-color:#34555a; }
+  .chat-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .roll-entry { border:1px solid #2a2a38; border-radius:12px; padding:8px 10px; background:#14141d; }
   .roll-entry .title { font-weight:600; }
   .roll-entry .meta { font-size:.8rem; opacity:.75; }
@@ -247,6 +260,7 @@
       .sheet-layout { grid-template-columns: 1fr; }
       .roll-chat { position:static; }
       .roll-chat-body { max-height:none; }
+      .chat-log { max-height:none; }
     }
     .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:3000; display:none; }
     .modal{ position:fixed; inset:0; display:none; z-index:3001; align-items:center; justify-content:center; padding:16px; }
@@ -1026,13 +1040,38 @@
 
     </div>
     <aside class="roll-chat" id="roll-chat">
-      <div class="roll-chat-header">
-        <strong>Roll Log</strong>
-        <span class="muted" id="roll-log-count"></span>
-        <button class="btn small right" id="roll-log-clear">Clear</button>
+      <div class="roll-chat-panel" id="roll-log-panel">
+        <div class="roll-chat-header">
+          <strong>Roll Log</strong>
+          <span class="muted" id="roll-log-count"></span>
+          <button class="btn small right" id="roll-log-clear">Clear</button>
+        </div>
+        <div class="roll-chat-body" id="roll-log">
+          <div class="muted" id="roll-log-empty">No rolls yet.</div>
+        </div>
       </div>
-      <div class="roll-chat-body" id="roll-log">
-        <div class="muted" id="roll-log-empty">No rolls yet.</div>
+      <div class="roll-chat-panel" id="campaign-chat-panel" style="display:none;">
+        <div class="roll-chat-header">
+          <strong>Campaign Chat</strong>
+          <span class="muted" id="campaign-chat-status"></span>
+        </div>
+        <div class="chat-log" id="campaign-chat-log"></div>
+        <div class="chat-controls">
+          <span class="muted">Speaker</span>
+          <span class="pill" id="campaign-chat-speaker">--</span>
+          <label class="muted">Visibility
+            <select id="campaign-chat-visibility" data-readonly-allow="true">
+              <option value="public">Public</option>
+              <option value="whisper">Whisper</option>
+              <option value="self">Self</option>
+            </select>
+          </label>
+        </div>
+        <textarea id="campaign-chat-input" data-readonly-allow="true" placeholder="Type a message, or /r 2d6+1 adv"></textarea>
+        <div class="row">
+          <button class="btn small" id="campaign-chat-send" data-readonly-allow="true">Send</button>
+          <span class="muted">Commands: /r XdY +Z adv|dis, /w or /s for visibility.</span>
+        </div>
       </div>
     </aside>
   </div></div>
@@ -1947,6 +1986,13 @@ const CAMPAIGN_ID = params.get('cid') || '';
 const VIEW_ONLY = params.get('view') === '1' || params.get('mode') === 'viewer';
 let ROLE = 'user';
 let CURRENT_USER = null;
+let CAMPAIGN_INFO = null;
+let CAMPAIGN_CHAT_MESSAGES = [];
+let CAMPAIGN_CHAT_API_OK = true;
+let CAMPAIGN_CHAT_READY = false;
+let CAMPAIGN_CHAT_POLL = null;
+let CAMPAIGN_CHAT_REFRESH_TIMER = null;
+const CAMPAIGN_CHAT_STORAGE_KEY = CAMPAIGN_ID ? `campaign_chat_local:${CAMPAIGN_ID}` : '';
 let READ_ONLY = false;
 let CAN_EDIT = false;
 let SAVE_TIMER = null;
@@ -2307,6 +2353,14 @@ const rollLogEl = document.getElementById('roll-log');
 const rollLogEmptyEl = document.getElementById('roll-log-empty');
 const rollLogCountEl = document.getElementById('roll-log-count');
 const rollLogClear = document.getElementById('roll-log-clear');
+const rollLogPanel = document.getElementById('roll-log-panel');
+const campaignChatPanel = document.getElementById('campaign-chat-panel');
+const campaignChatLog = document.getElementById('campaign-chat-log');
+const campaignChatStatus = document.getElementById('campaign-chat-status');
+const campaignChatSpeaker = document.getElementById('campaign-chat-speaker');
+const campaignChatVisibilityEl = document.getElementById('campaign-chat-visibility');
+const campaignChatInput = document.getElementById('campaign-chat-input');
+const campaignChatSend = document.getElementById('campaign-chat-send');
 const condJ1El = document.getElementById('cond-j1');
 const condJ2El = document.getElementById('cond-j2');
 const condJ3El = document.getElementById('cond-j3');
@@ -4405,6 +4459,166 @@ function campaignChatVisibility(){
   return localStorage.getItem(`campaign_chat_visibility:${CAMPAIGN_ID}`) || 'public';
 }
 
+function setCampaignChatVisibilityPref(val){
+  if (!CAMPAIGN_ID) return;
+  localStorage.setItem(`campaign_chat_visibility:${CAMPAIGN_ID}`, val);
+}
+
+function toggleCampaignChatPanel(){
+  if (!rollLogPanel || !campaignChatPanel) return;
+  const showCampaign = !!CAMPAIGN_ID;
+  rollLogPanel.style.display = showCampaign ? 'none' : 'flex';
+  campaignChatPanel.style.display = showCampaign ? 'flex' : 'none';
+}
+
+async function loadCampaignInfo(){
+  if (!CAMPAIGN_ID) return null;
+  try{
+    const res = await api(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}`);
+    CAMPAIGN_INFO = res.campaign || res;
+    return CAMPAIGN_INFO;
+  }catch(e){
+    console.warn('Campaign load failed', e);
+    return null;
+  }
+}
+
+function isCampaignGm(){
+  const role = (CURRENT_USER?.role || '').toLowerCase();
+  if (role === 'admin') return true;
+  if (CAMPAIGN_INFO?.is_owner) return true;
+  const owner = CAMPAIGN_INFO?.owner || '';
+  return !!(owner && CURRENT_USER?.username && CURRENT_USER.username === owner);
+}
+
+function normalizeCampaignChatMessage(raw){
+  const ts = raw.ts || raw.timestamp || raw.created_at || raw.time;
+  const stamp = typeof ts === 'number' ? ts : (ts ? new Date(ts).getTime() : Date.now());
+  return {
+    id: raw.id || `${stamp}_${Math.random().toString(16).slice(2)}`,
+    ts: stamp,
+    visibility: (raw.visibility || raw.scope || 'public').toLowerCase(),
+    type: raw.type || raw.kind || 'message',
+    user: raw.user || raw.username || raw.sender || 'Unknown',
+    character_id: raw.character_id || raw.characterId || raw.character?.id || '',
+    character_name: raw.character_name || raw.characterName || raw.character?.name || raw.character_id || 'Character',
+    character_avatar: raw.character_avatar || raw.avatar_url || raw.character?.avatar_url || '',
+    text: raw.text || raw.message || raw.content || '',
+    lines: raw.lines || raw.detail_lines || raw.details || []
+  };
+}
+
+function campaignMessageVisible(msg){
+  if (!msg) return false;
+  if (msg.visibility === 'public') return true;
+  const username = CURRENT_USER?.username || '';
+  if (msg.visibility === 'self') return msg.user === username;
+  if (msg.visibility === 'whisper') return isCampaignGm();
+  return true;
+}
+
+function renderCampaignChat(){
+  if (!campaignChatLog) return;
+  campaignChatLog.innerHTML = '';
+  const visible = CAMPAIGN_CHAT_MESSAGES.filter(campaignMessageVisible).sort((a,b)=>a.ts-b.ts);
+  if (!visible.length){
+    campaignChatLog.innerHTML = '<div class="muted">No messages yet.</div>';
+    return;
+  }
+  let lastGroup = null;
+  visible.forEach(msg=>{
+    const key = `${msg.user}|${msg.character_id}`;
+    const within = lastGroup && lastGroup.key === key && (msg.ts - lastGroup.lastTs) <= 5 * 60 * 1000;
+    let group = lastGroup?.el;
+    if (!within){
+      group = document.createElement('div');
+      group.className = 'chat-group';
+      const head = document.createElement('div');
+      head.className = 'chat-head';
+      const avatar = document.createElement('div');
+      avatar.className = 'chat-avatar';
+      const img = document.createElement('img');
+      img.src = msg.character_avatar || (msg.character_id ? `/characters/${encodeURIComponent(msg.character_id)}/avatar` : '');
+      img.onerror = () => { img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII='; };
+      avatar.appendChild(img);
+      const info = document.createElement('div');
+      info.innerHTML = `<div class="chat-user">${msg.character_name}</div><div class="muted">${msg.user}</div>`;
+      head.appendChild(avatar);
+      head.appendChild(info);
+      group.appendChild(head);
+      const lines = document.createElement('div');
+      lines.className = 'chat-lines';
+      group.appendChild(lines);
+      campaignChatLog.appendChild(group);
+      lastGroup = { key, el: group, lastTs: msg.ts };
+    }
+    const lines = group.querySelector('.chat-lines');
+    const line = document.createElement('div');
+    line.className = `chat-line ${msg.visibility}`;
+    const title = document.createElement('div');
+    title.textContent = msg.text || (msg.type === 'roll' ? 'Roll' : 'Message');
+    line.appendChild(title);
+    (msg.lines || []).forEach(l=>{
+      if (!l) return;
+      const div = document.createElement('div');
+      div.className = 'muted';
+      div.textContent = l;
+      line.appendChild(div);
+    });
+    const meta = document.createElement('div');
+    meta.className = 'muted';
+    meta.textContent = `${new Date(msg.ts).toLocaleTimeString()} | ${msg.visibility}`;
+    line.appendChild(meta);
+    lines.appendChild(line);
+    if (lastGroup) lastGroup.lastTs = msg.ts;
+  });
+  campaignChatLog.scrollTop = campaignChatLog.scrollHeight;
+}
+
+function saveCampaignChatLocal(){
+  if (!CAMPAIGN_CHAT_STORAGE_KEY) return;
+  localStorage.setItem(CAMPAIGN_CHAT_STORAGE_KEY, JSON.stringify(CAMPAIGN_CHAT_MESSAGES.slice(-400)));
+}
+
+function loadCampaignChatLocal(){
+  if (!CAMPAIGN_CHAT_STORAGE_KEY) return [];
+  const raw = localStorage.getItem(CAMPAIGN_CHAT_STORAGE_KEY);
+  if (!raw) return [];
+  try{
+    return JSON.parse(raw).map(normalizeCampaignChatMessage);
+  }catch{
+    return [];
+  }
+}
+
+async function loadCampaignChat(){
+  if (!CAMPAIGN_ID) return;
+  if (!campaignChatLog) return;
+  if (!CAMPAIGN_CHAT_API_OK){
+    CAMPAIGN_CHAT_MESSAGES = loadCampaignChatLocal();
+    renderCampaignChat();
+    return;
+  }
+  try{
+    const res = await api(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/chat`);
+    CAMPAIGN_CHAT_MESSAGES = (res.messages || res.chat || []).map(normalizeCampaignChatMessage);
+    renderCampaignChat();
+  }catch(e){
+    CAMPAIGN_CHAT_API_OK = false;
+    CAMPAIGN_CHAT_MESSAGES = loadCampaignChatLocal();
+    renderCampaignChat();
+    if (campaignChatStatus) campaignChatStatus.textContent = 'Chat API unavailable, using local log.';
+  }
+}
+
+function scheduleCampaignChatRefresh(){
+  if (CAMPAIGN_CHAT_REFRESH_TIMER) return;
+  CAMPAIGN_CHAT_REFRESH_TIMER = setTimeout(()=>{
+    CAMPAIGN_CHAT_REFRESH_TIMER = null;
+    loadCampaignChat();
+  }, 500);
+}
+
 function serializeRollEntry(entry){
   const parts = Array.from(entry.children).map(el=> (el.textContent || '').trim()).filter(Boolean);
   const titleEl = entry.querySelector('.title');
@@ -4415,25 +4629,30 @@ function serializeRollEntry(entry){
 
 async function postCampaignChatMessage(payload){
   if (!CAMPAIGN_ID) return false;
-  try{
-    const res = await fetch(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/chat`, {
-      method:'POST',
-      headers:{ 'content-type':'application/json', ...authHeaders() },
-      body: JSON.stringify(payload),
-      credentials:'include'
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return true;
-  }catch(e){
-    console.warn('Campaign chat post failed', e);
-    return false;
+  if (CAMPAIGN_CHAT_API_OK){
+    try{
+      await api(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/chat`, {
+        method:'POST',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return true;
+    }catch(e){
+      CAMPAIGN_CHAT_API_OK = false;
+      if (campaignChatStatus) campaignChatStatus.textContent = 'Chat API unavailable, using local log.';
+    }
   }
+  CAMPAIGN_CHAT_MESSAGES.push(normalizeCampaignChatMessage(payload));
+  saveCampaignChatLocal();
+  renderCampaignChat();
+  return false;
 }
 
 function queueCampaignChat(entry){
   if (!CAMPAIGN_ID) return;
   const data = serializeRollEntry(entry);
   const charId = CHAR?.id || CID || '';
+  const displayName = (nameEl?.value || CHAR?.name || charId || 'Character');
   const payload = {
     type: 'roll',
     text: data.title,
@@ -4442,10 +4661,12 @@ function queueCampaignChat(entry){
     ts: Date.now(),
     user: CURRENT_USER?.username || CHAR?.owner || 'Unknown',
     character_id: charId,
-    character_name: CHAR?.name || charId || 'Character',
+    character_name: displayName,
     character_avatar: charId ? `/characters/${encodeURIComponent(charId)}/avatar` : ''
   };
-  postCampaignChatMessage(payload);
+  postCampaignChatMessage(payload).then((ok)=>{
+    if (ok) scheduleCampaignChatRefresh();
+  });
 }
 
 function appendRollLog(entry){
@@ -4535,6 +4756,118 @@ function clearRollLog(){
   }
   ROLL_LOG_COUNT = 0;
   if (rollLogCountEl) rollLogCountEl.textContent = '';
+}
+
+function rollDice(count, sides){
+  const rolls = [];
+  for (let i=0; i<count; i++) rolls.push(Math.floor(Math.random() * sides) + 1);
+  const total = rolls.reduce((a,b)=>a+b,0);
+  return { rolls, total };
+}
+
+function parseRollExpression(expr){
+  const raw = expr.trim();
+  if (!raw) return null;
+  const adv = /\badv\b/i.test(raw);
+  const dis = /\bdis\b/i.test(raw);
+  const cleaned = raw.replace(/\badv\b/ig,'').replace(/\bdis\b/ig,'').trim();
+  const match = cleaned.match(/^(\d+)?d(\d+)([+-]\d+)?$/i);
+  if (!match) return null;
+  const count = Math.max(1, Number(match[1] || 1));
+  const sides = Math.max(2, Number(match[2] || 6));
+  const mod = Number(match[3] || 0);
+  return { count, sides, mod, adv, dis, label: `${count}d${sides}${mod ? (mod > 0 ? `+${mod}` : mod) : ''}` };
+}
+
+function buildChatRollMessage(expr, visibility){
+  const parsed = parseRollExpression(expr);
+  if (!parsed) return { error:'Invalid roll format. Use /r XdY +Z adv|dis.' };
+  const attempt = () => {
+    const dice = rollDice(parsed.count, parsed.sides);
+    return { rolls: dice.rolls, subtotal: dice.total, total: dice.total + parsed.mod };
+  };
+  let picked = attempt();
+  let alt = null;
+  if ((parsed.adv || parsed.dis) && !(parsed.adv && parsed.dis)){
+    alt = attempt();
+    picked = parsed.adv ? (picked.total >= alt.total ? picked : alt) : (picked.total <= alt.total ? picked : alt);
+  }
+  const lines = [];
+  lines.push(`Expression: ${parsed.label}${parsed.adv ? ' adv' : ''}${parsed.dis ? ' dis' : ''}`.trim());
+  lines.push(`Rolls: ${picked.rolls.join(' + ')} = ${picked.subtotal} ${parsed.mod ? (parsed.mod > 0 ? `+ ${parsed.mod}` : `- ${Math.abs(parsed.mod)}`) : ''}`.trim());
+  lines.push(`Total: ${picked.total}`);
+  if (alt){
+    lines.push(`Other: ${alt.rolls.join(' + ')} = ${alt.subtotal} ${parsed.mod ? (parsed.mod > 0 ? `+ ${parsed.mod}` : `- ${Math.abs(parsed.mod)}`) : ''}`.trim());
+  }
+  return { text:`Roll ${parsed.label}`, lines, visibility };
+}
+
+async function handleCampaignChatSend(){
+  const raw = (campaignChatInput?.value || '').trim();
+  if (!raw || !CAMPAIGN_ID) return;
+  let visibility = campaignChatVisibilityEl?.value || 'public';
+  let content = raw;
+  if (content.startsWith('/w')){
+    visibility = 'whisper';
+    content = content.slice(2).trim();
+  }else if (content.startsWith('/s')){
+    visibility = 'self';
+    content = content.slice(2).trim();
+  }
+  const charId = CHAR?.id || CID || '';
+  const displayName = (nameEl?.value || CHAR?.name || charId || 'Character');
+  const basePayload = {
+    visibility,
+    ts: Date.now(),
+    user: CURRENT_USER?.username || CHAR?.owner || 'Unknown',
+    character_id: charId,
+    character_name: displayName,
+    character_avatar: charId ? `/characters/${encodeURIComponent(charId)}/avatar` : ''
+  };
+  if (content.startsWith('/r')){
+    const expr = content.slice(2).trim();
+    const roll = buildChatRollMessage(expr, visibility);
+    if (roll.error){
+      alert(roll.error);
+      return;
+    }
+    await postCampaignChatMessage({ ...basePayload, type:'roll', text: roll.text, lines: roll.lines });
+  }else{
+    await postCampaignChatMessage({ ...basePayload, type:'message', text: content, lines: [] });
+  }
+  scheduleCampaignChatRefresh();
+  if (campaignChatInput) campaignChatInput.value = '';
+}
+
+async function initCampaignChat(){
+  if (CAMPAIGN_CHAT_READY) return;
+  toggleCampaignChatPanel();
+  if (!CAMPAIGN_ID || !campaignChatPanel) return;
+  CAMPAIGN_CHAT_READY = true;
+  campaignChatSend?.addEventListener('click', handleCampaignChatSend);
+  campaignChatInput?.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      handleCampaignChatSend();
+    }
+  });
+  campaignChatVisibilityEl?.addEventListener('change', ()=>{
+    if (campaignChatVisibilityEl) setCampaignChatVisibilityPref(campaignChatVisibilityEl.value);
+  });
+  await loadCampaignInfo();
+  if (campaignChatSpeaker) campaignChatSpeaker.textContent = nameEl?.value || CHAR?.name || 'Character';
+  if (campaignChatVisibilityEl) campaignChatVisibilityEl.value = campaignChatVisibility();
+  await loadCampaignChat();
+  if (CAMPAIGN_CHAT_API_OK){
+    CAMPAIGN_CHAT_POLL = setInterval(loadCampaignChat, 5000);
+  }else{
+    window.addEventListener('storage', (e)=>{
+      if (e.key === CAMPAIGN_CHAT_STORAGE_KEY){
+        CAMPAIGN_CHAT_MESSAGES = loadCampaignChatLocal();
+        renderCampaignChat();
+      }
+    });
+  }
 }
 
 function runRoll(){
@@ -9758,6 +10091,7 @@ async function loadCharacter(){
   nameEl.value = (CHAR.name || '').slice(0,22);
   nameEl.addEventListener('input', ()=>{
     if (nameEl.value.length > 22) nameEl.value = nameEl.value.slice(0,22);
+    if (campaignChatSpeaker) campaignChatSpeaker.textContent = nameEl.value || 'Character';
     queueSave();
   });
   if (publicToggle){
@@ -11082,7 +11416,10 @@ function wirePersonal(){
 }
 
 /* boot */
-checkMe().then(loadCharacter).catch((e)=>{ statusEl.textContent = 'Load failed: ' + (e?.message || e); });
+checkMe().then(async ()=>{
+  await loadCharacter();
+  await initCampaignChat();
+}).catch((e)=>{ statusEl.textContent = 'Load failed: ' + (e?.message || e); });
 wireRichTextPaste();
 </script>
 
