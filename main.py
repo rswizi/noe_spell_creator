@@ -4209,7 +4209,8 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
     target_container = payload.get("container_id", None)
     consumable = payload.get("consumable", None)
     alchemy_tool = payload.get("alchemy_tool", None)
-    if alt_name is None and equipped is None and target_container is None and consumable is None and alchemy_tool is None:
+    linked_nature = payload.get("linked_nature", None)
+    if alt_name is None and equipped is None and target_container is None and consumable is None and alchemy_tool is None and linked_nature is None:
         raise HTTPException(400, "Nothing to update")
 
     containers = _ensure_self_container(inv.get("containers") or [])
@@ -4230,6 +4231,8 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
                 it["container_id"] = it.get("stowed_container_id") or _default_stow_container(containers)
     if alchemy_tool is not None:
         it["alchemy_tool"] = bool(alchemy_tool)
+    if linked_nature is not None:
+        it["linked_nature"] = (linked_nature or "").strip()
 
     valid_ids = {c.get("id") for c in containers}
     move_target = None

@@ -3409,7 +3409,7 @@ function renderSublimations(){
   const { hidden } = getSublimationEffects();
   const parts = [];
   if (hidden.weaponNeutral) parts.push(`+${hidden.weaponNeutral} neutral weapon dmg (not animarmas)`);
-  if (hidden.magicBonus) parts.push(`+${hidden.magicBonus} ${hidden.magicNature || 'magic'} dmg to space actions`);
+  if (hidden.magicBonus) parts.push(`+${hidden.magicBonus} ${hidden.magicNature || 'magic'} dmg (spells/animarmas)`);
   if (hidden.conditionDC) parts.push(`+${hidden.conditionDC} Condition DC`);
   subHiddenEl.textContent = parts.length ? `Hidden effects: ${parts.join(' | ')}` : '';
 }
@@ -6107,6 +6107,20 @@ async function saveInvAltName(item_id, alt_name){
   return j.inventory;
 }
 
+async function saveInvLinkedNature(item_id, linked_nature){
+  const sourceId = getInventorySourceId();
+  if (!sourceId) throw new Error("Link an inventory first.");
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}`, {
+    method:"PATCH",
+    headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify({ linked_nature })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ throw new Error(j.message || "Save failed"); }
+  LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+  return j.inventory;
+}
+
   async function upgradeQuality(item_id, to){
   const sourceId = getInventorySourceId();
   if (!sourceId) throw new Error("Link an inventory first.");
@@ -6432,6 +6446,28 @@ function openInvItemModal(it){
     info.appendChild(cell);
   });
   invItemBody.appendChild(info);
+
+  const itemKind = normalizeItemKind(it);
+  const canLinkNature = itemKind === 'weapon' && (weaponIsAnimarma(it) || weaponHasBenedictionUpgrade(it));
+  if (canLinkNature){
+    const natureRow = document.createElement("div");
+    natureRow.className = "row";
+    natureRow.style.gap = "8px";
+    const label = document.createElement("label");
+    label.className = "muted";
+    label.textContent = "Linked nature";
+    const select = document.createElement("select");
+    select.innerHTML = ['<option value="">-- None --</option>']
+      .concat(NATURES.map(n=>`<option value="${n}">${n}</option>`))
+      .join('');
+    select.value = weaponLinkedNature(it) || '';
+    select.addEventListener("change", async ()=>{
+      try{ await saveInvLinkedNature(it.item_id, select.value || ""); }catch(e){ console.warn(e); }
+    });
+    natureRow.appendChild(label);
+    natureRow.appendChild(select);
+    invItemBody.appendChild(natureRow);
+  }
 
   const descText = (it.description || it.desc || it.description_html || '').toString().trim();
   if (descText){
@@ -9101,6 +9137,23 @@ function weaponHasAttribute(it, name){
   const target = String(name || '').toLowerCase();
   return getWeaponAttributes(it).some(a=> String(a || '').toLowerCase() === target);
 }
+function weaponIsAnimarma(it){
+  return !!it?.is_animarma;
+}
+function weaponLinkedNature(it){
+  return String(it?.linked_nature || it?.nature || '').trim();
+}
+function weaponHasBenedictionUpgrade(it){
+  const upgrades = Array.isArray(it?.upgrades) ? it.upgrades : [];
+  return upgrades.some(u=>{
+    const upgId = u?.id || u?.key || u;
+    const meta = (window.UPGRADE_META || {})[upgId] || {};
+    const token = [
+      upgId, u?.key, u?.name, meta?.key, meta?.name
+    ].map(v=> String(v || '').toLowerCase()).join(' ');
+    return token.includes('benediction') || token.includes('blessing');
+  });
+}
 function ensureWeaponCatalog(){
   if (WEAPON_CATALOG_READY) return Promise.resolve(WEAPON_CATALOG_BY_ID);
   if (WEAPON_CATALOG_PROMISE) return WEAPON_CATALOG_PROMISE;
@@ -9192,7 +9245,7 @@ function resolveMilestoneCodes(codes){
 function getWeaponUpgradeBonuses(it){
   let neutral = 0;
   let magic = 0;
-  const nature = String(it?.nature || it?.linked_nature || '').trim();
+  const nature = weaponLinkedNature(it);
   const upgrades = Array.isArray(it?.upgrades) ? it.upgrades : [];
   upgrades.forEach(u=>{
     const upgId = u?.id || u?.key || u;
@@ -9363,15 +9416,23 @@ function renderCombatWeapons(){
     const dmg = weaponDamageValue(it) || '--';
     const attrList = getWeaponAttributes(it);
     const attrs = attrList.length ? attrList.join(', ') : 'No properties';
-    const baseNeutral = Number(DERIVED_CACHE?.weapon_neutral || 0);
-    const nature = String(it?.nature || it?.linked_nature || '').toLowerCase();
+    const isAnimarma = weaponIsAnimarma(it);
+    const natureRaw = weaponLinkedNature(it);
+    const nature = natureRaw.toLowerCase();
+    const subHidden = SUB_HIDDEN || {};
+    const subNeutral = !isAnimarma ? (subHidden.weaponNeutral || 0) : 0;
+    const baseNeutral = Number(DERIVED_CACHE?.weapon_neutral || 0) + subNeutral;
+    const magicBucket = isAnimarma ? (PASSIVE.magic_damage.spell || {}) : (PASSIVE.magic_damage.weapon || {});
     let baseMagic = 0;
-    if (nature && PASSIVE.magic_damage.weapon && PASSIVE.magic_damage.weapon[nature]){
-      baseMagic = applyOps(0, PASSIVE.magic_damage.weapon[nature]).value || 0;
+    if (nature && magicBucket[nature]){
+      baseMagic = applyOps(0, magicBucket[nature]).value || 0;
     }
+    const subMagicBonus = (isAnimarma && subHidden.magicBonus && (!subHidden.magicNature || nature === String(subHidden.magicNature).toLowerCase()))
+      ? subHidden.magicBonus
+      : 0;
     const upgradeBonus = getWeaponUpgradeBonuses(it);
     const neutral = baseNeutral + upgradeBonus.neutral;
-    const magic = baseMagic + upgradeBonus.magic;
+    const magic = (baseMagic + subMagicBonus) + upgradeBonus.magic;
     const extra = [];
     if (neutral) extra.push(`Neutral ${neutral}`);
     if (magic) extra.push(`Magic ${magic}`);
@@ -9403,12 +9464,13 @@ function renderCombatWeapons(){
         openRollModal({ title: `${name} Damage`, infoOnly:true, descText: infoText });
         return;
       }
-      const msInfo = resolveMilestoneCodes(parts.ms);
+      const msCodes = isAnimarma ? ['MAG'] : parts.ms;
+      const msInfo = resolveMilestoneCodes(msCodes);
       const msVal = msInfo.total;
       let die = parts.die;
       let dieLabelOverride = '';
       if (String(parts.die || '').toUpperCase() === 'ID'){
-        const idInfo = intensityDieForNature(it?.nature || it?.linked_nature || '');
+        const idInfo = intensityDieForNature(natureRaw || '');
         if (!idInfo){
           openRollModal({ title: `${name} Damage`, infoOnly:true, descText:'ID requires a linked nature intensity.' });
           return;
@@ -9449,8 +9511,16 @@ function renderCombatWeapons(){
         ? msInfo.parts.map(p=> `M(${p.code}) ${p.value >= 0 ? '+' : ''}${p.value}`).join(' + ')
         : '';
       const flatBreak = parts.flat ? `${parts.flat >= 0 ? '+' : ''}${parts.flat}` : '';
-      const neutralBreak = upgradeBonus.neutral ? `Neutral ${baseNeutral} + Lethality ${upgradeBonus.neutral}` : `Neutral ${neutral}`;
-      const magicBreak = upgradeBonus.magic ? `Magic ${baseMagic} + Benediction ${upgradeBonus.magic}` : `Magic ${magic}`;
+      const neutralParts = [];
+      neutralParts.push(`Neutral ${Number(DERIVED_CACHE?.weapon_neutral || 0)}`);
+      if (subNeutral) neutralParts.push(`Lethality (sub) ${subNeutral}`);
+      if (upgradeBonus.neutral) neutralParts.push(`Lethality (upg) ${upgradeBonus.neutral}`);
+      const neutralBreak = neutralParts.length > 1 ? neutralParts.join(' + ') : `Neutral ${neutral}`;
+      const magicParts = [];
+      magicParts.push(`Magic ${baseMagic}`);
+      if (subMagicBonus) magicParts.push(`Blessing (sub) ${subMagicBonus}`);
+      if (upgradeBonus.magic) magicParts.push(`Benediction ${upgradeBonus.magic}`);
+      const magicBreak = magicParts.length > 1 ? magicParts.join(' + ') : `Magic ${magic}`;
       const baseBreak = [
         `${parts.dice}${diceRoll.label} (${diceRoll.rolls.join(' + ')} = ${diceRoll.total})`,
         flatBreak,
