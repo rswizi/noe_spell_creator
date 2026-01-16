@@ -833,6 +833,19 @@
                   <span class="combat-badge">Cap <span id="tension-cap">--</span></span>
                 </div>
                 <div class="combat-row">
+                  <span class="combat-badge">Max HP <span id="combat-max-hp">--</span></span>
+                  <span class="combat-badge">Max EN <span id="combat-max-en">--</span></span>
+                  <span class="combat-badge">Max FO <span id="combat-max-fo">--</span></span>
+                  <span class="combat-badge">Max SP <span id="combat-max-sp">--</span></span>
+                </div>
+                <div class="combat-row">
+                  <span class="combat-badge">MO <span id="combat-der-mo">--</span></span>
+                  <span class="combat-badge">Init <span id="combat-der-init">--</span></span>
+                  <span class="combat-badge">ET <span id="combat-der-et">--</span></span>
+                  <span class="combat-badge">TX <span id="combat-der-tx">--</span></span>
+                  <span class="combat-badge">Enc <span id="combat-der-enc">--</span></span>
+                </div>
+                <div class="combat-row">
                   <button class="btn small" id="combat-take-dmg">Take Damage</button>
                   <button class="btn small" id="combat-take-true">Take True Damage</button>
                   <button class="btn small" id="combat-heal">Heal Damage</button>
@@ -2101,6 +2114,15 @@ const curEnEl = document.getElementById('cur-en');
 const curFoEl = document.getElementById('cur-fo');
 const curSpEl = document.getElementById('cur-sp');
 const maxHpDmgEl = document.getElementById('max-hp-dmg');
+const combatMaxHpEl = document.getElementById('combat-max-hp');
+const combatMaxEnEl = document.getElementById('combat-max-en');
+const combatMaxFoEl = document.getElementById('combat-max-fo');
+const combatMaxSpEl = document.getElementById('combat-max-sp');
+const combatDerMoEl = document.getElementById('combat-der-mo');
+const combatDerInitEl = document.getElementById('combat-der-init');
+const combatDerEtEl = document.getElementById('combat-der-et');
+const combatDerTxEl = document.getElementById('combat-der-tx');
+const combatDerEncEl = document.getElementById('combat-der-enc');
 const combatTakeDmgBtn = document.getElementById('combat-take-dmg');
 const combatTakeTrueBtn = document.getElementById('combat-take-true');
 const combatHealBtn = document.getElementById('combat-heal');
@@ -4385,6 +4407,21 @@ function appendRollLog(entry){
   if (rollLogCountEl) rollLogCountEl.textContent = `(${ROLL_LOG_COUNT})`;
 }
 
+function appendRollDesc(entry){
+  if (!ROLL_CONTEXT) return;
+  const html = ROLL_CONTEXT.logDescHtml || '';
+  const text = ROLL_CONTEXT.logDescText || '';
+  if (html){
+    const desc = document.createElement('div');
+    desc.innerHTML = html;
+    entry.appendChild(desc);
+  }else if (text){
+    const desc = document.createElement('div');
+    desc.textContent = text;
+    entry.appendChild(desc);
+  }
+}
+
 function appendInfoLog(ctx){
   const entry = document.createElement('div');
   entry.className = 'roll-entry';
@@ -4513,6 +4550,8 @@ function runRoll(){
     entry.appendChild(div);
   });
 
+  appendRollDesc(entry);
+
   const rollLine = document.createElement('div');
   rollLine.textContent = resultText;
   entry.appendChild(rollLine);
@@ -4602,6 +4641,7 @@ function openCombatAbilityRoll(a, sourceLabel){
     base: 0,
     detailsText: detailLine,
     descHtml: details.desc || '',
+    logDescHtml: details.desc || '',
     detailLines: lines,
     infoOnly: false
   });
@@ -4650,6 +4690,7 @@ function openCombatSpellRoll(sp, meta, info){
     base: 0,
     detailsText: detailLine,
     descHtml: info?.desc || '',
+    logDescHtml: info?.desc || '',
     detailLines: lines,
     infoOnly: false
   });
@@ -8841,6 +8882,24 @@ function renderCombatDeathSaves(){
   if (deathStatusEl) deathStatusEl.textContent = ds.dead ? 'Dead' : 'Alive';
 }
 
+function renderCombatDerivedBadges(){
+  const maxHpDamage = Math.max(0, Number(combatState().max_hp_damage || 0));
+  const maxHp = Math.max(0, numOr(DERIVED_CACHE?.hp, 0) - maxHpDamage);
+  if (combatMaxHpEl) combatMaxHpEl.textContent = maxHp;
+  if (combatMaxEnEl) combatMaxEnEl.textContent = numOr(DERIVED_CACHE?.en, 0);
+  if (combatMaxFoEl) combatMaxFoEl.textContent = numOr(DERIVED_CACHE?.fo, 0);
+  if (combatMaxSpEl) combatMaxSpEl.textContent = numOr(DERIVED_CACHE?.spcap, 0);
+  if (combatDerMoEl) combatDerMoEl.textContent = numOr(DERIVED_CACHE?.mo, 0);
+  if (combatDerInitEl) combatDerInitEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
+  if (combatDerEtEl) combatDerEtEl.textContent = numOr(DERIVED_CACHE?.et, 0);
+  if (combatDerTxEl) combatDerTxEl.textContent = numOr(DERIVED_CACHE?.tx, 0);
+  if (combatDerEncEl){
+    const curEnc = Number(DERIVED_CACHE?.current_enc || 0).toFixed(1);
+    const maxEnc = numOr(DERIVED_CACHE?.enc, 0);
+    combatDerEncEl.textContent = `${curEnc}/${maxEnc}`;
+  }
+}
+
 function renderCombatTab(){
   renderCombatDefenseSkills();
   renderCombatWeapons();
@@ -8854,6 +8913,7 @@ function renderCombatTab(){
   renderCombatEtUsage();
   if (initBaseEl) initBaseEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(combatState().max_hp_damage || 0)));
+  renderCombatDerivedBadges();
   if (initLastEl){
     const last = combatState().initiative_last;
     initLastEl.textContent = last ? `Last roll: ${last}` : '';
@@ -9586,6 +9646,7 @@ function updateDerived(){
     updateCraftomancyCounter();
     renderCombatEtUsage();
     renderCombatTension();
+    renderCombatDerivedBadges();
     if (initBaseEl) initBaseEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
     if (subSlotPill) renderSublimations();
   }
