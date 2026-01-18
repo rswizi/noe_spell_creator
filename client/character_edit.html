@@ -9415,7 +9415,12 @@ function weaponHasAttribute(it, name){
   return getWeaponAttributes(it).some(a=> String(a || '').toLowerCase() === target);
 }
 function weaponIsAnimarma(it){
-  return !!it?.is_animarma;
+  if (it?.is_animarma) return true;
+  const name = String(it?.name || it?.alt_name || '').toLowerCase();
+  if (name.includes('animarma')) return true;
+  if (weaponHasAttribute(it, 'animarma')) return true;
+  const catalog = weaponCatalogLookup(it);
+  return !!catalog?.is_animarma;
 }
 function weaponLinkedNature(it){
   return String(it?.linked_nature || it?.nature || '').trim();

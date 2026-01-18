@@ -3794,6 +3794,7 @@ def _refresh_inventory_items_from_catalog(inv_id: str, inv: dict) -> tuple[dict,
         set_if_diff("description_html", desc_html)
         set_if_diff("consumable", consumable)
         set_if_diff("alchemy_tool", alchemy_tool)
+        set_if_diff("is_animarma", bool(src.get("is_animarma")))
 
         if updates:
             it.update(updates)
