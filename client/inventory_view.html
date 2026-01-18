@@ -528,12 +528,39 @@ function itemChoiceKey(it){
   const name = String(it?.name || "").trim();
   return name || "";
 }
-function upgradeChoiceKey(it, upgrade, idx){
+function upgradeChoiceKeyLegacy(it, upgrade, idx){
   const itemKey = itemChoiceKey(it);
+  if (!itemKey) return "";
   const upgId = String(upgrade?.id || upgrade?.key || upgrade || "").trim() || "upgrade";
   const target = String(upgrade?.target || "").trim() || "any";
   const pos = Number.isFinite(idx) ? idx : 0;
   return `${itemKey}::upg:${upgId}:${target}:${pos}`;
+}
+function upgradeChoiceKey(it, upgrade, idx){
+  const itemKey = itemChoiceKey(it);
+  if (!itemKey) return "";
+  const choiceId = String(upgrade?.choice_id || upgrade?.choiceId || upgrade?.uid || "").trim();
+  if (choiceId) return `${itemKey}::upg:${choiceId}`;
+  return upgradeChoiceKeyLegacy(it, upgrade, idx);
+}
+function migrateUpgradeChoiceKeys(items){
+  let changed = false;
+  (items || []).forEach(it=>{
+    (it.upgrades || []).forEach((u, idx)=>{
+      const legacyKey = upgradeChoiceKeyLegacy(it, u, idx);
+      const newKey = upgradeChoiceKey(it, u, idx);
+      if (!legacyKey || !newKey || legacyKey === newKey) return;
+      if (ITEM_CHOICES[legacyKey] && !ITEM_CHOICES[newKey]){
+        ITEM_CHOICES[newKey] = ITEM_CHOICES[legacyKey];
+        changed = true;
+      }
+      if (ITEM_CHOICES[legacyKey]){
+        delete ITEM_CHOICES[legacyKey];
+        changed = true;
+      }
+    });
+  });
+  return changed;
 }
 function pruneItemChoices(){
   if (!INV) return;
@@ -849,6 +876,7 @@ function broadcastInventoryUpdate(){
 
 function applyInventory(inv){
   INV = inv;
+  migrateUpgradeChoiceKeys(INV.items || []);
   pruneItemChoices();
   renderInventory();
   populateGlobals();

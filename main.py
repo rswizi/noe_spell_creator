@@ -3612,6 +3612,7 @@ def read_inventory(request: Request, inv_id: str):
     if not inv:
         raise HTTPException(404, "Not found")
     inv, refresh_report = _refresh_inventory_items_from_catalog(inv_id, inv)
+    _ensure_upgrade_choice_ids(inv_id, inv, allow_write=bool(user))
     containers = _ensure_self_container(inv.get("containers") or [])
     recomputed_containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
     needs_update = (inv.get("enc_total") != inv_total) or ((inv.get("containers") or []) != recomputed_containers)
@@ -3808,6 +3809,21 @@ def _refresh_inventory_items_from_catalog(inv_id: str, inv: dict) -> tuple[dict,
         inv["items"] = items
     return inv, {"count": len(changed), "changed_items": changed}
 
+def _ensure_upgrade_choice_ids(inv_id: str, inv: dict, allow_write: bool) -> bool:
+    items = inv.get("items") or []
+    updated = False
+    for it in items:
+        upgrades = it.get("upgrades") or []
+        if not isinstance(upgrades, list):
+            continue
+        for u in upgrades:
+            if isinstance(u, dict) and not u.get("choice_id"):
+                u["choice_id"] = next_id_str("invupg", padding=6)
+                updated = True
+    if updated and allow_write:
+        get_db().inventories.update_one({"id": inv_id}, {"$set": {"items": items}})
+    return updated
+
 def _tags_filter(tags: str) -> dict:
     raw = [t.strip() for t in (tags or "").split(",") if t.strip()]
     if not raw:
@@ -3959,6 +3975,7 @@ def _prepare_new_upgrades(existing: list[dict], add_payload: list, kind: str, sl
             "targets": targets,
             "target": chosen_target,
             "modifiers": doc.get("modifiers") or [],
+            "choice_id": next_id_str("invupg", padding=6),
         }
         new_docs.append(ndoc)
 

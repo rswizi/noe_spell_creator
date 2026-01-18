@@ -295,6 +295,12 @@
     opacity:.7;
     text-align:center;
   }
+  .roll-card .roll-image{
+    width:100%;
+    border-radius:12px;
+    border:1px solid #2a2a38;
+    display:block;
+  }
   .roll-desc{
     border:1px solid #2b303e;
     border-radius:12px;
@@ -4252,6 +4258,7 @@ function renderInventoryUI(){
     invCatalogOpenBtn?.setAttribute('disabled','disabled');
     return;
   }
+  if (migrateUpgradeChoiceKeys(LINKED_INV.items || [])) queueSave();
   pruneItemChoices();
   invManagerEl.style.display = '';
   if (invOpenManagerBtn){
@@ -4594,6 +4601,16 @@ function playDazzlingSparkSound(){
   }catch{}
 }
 
+function attachRollImage(entry, imageSrc, caption){
+  if (!entry || !imageSrc) return;
+  entry.dataset.image = imageSrc;
+  if (caption) entry.dataset.imageCaption = caption;
+  const img = document.createElement('img');
+  img.src = imageSrc;
+  img.alt = caption || 'Roll image';
+  entry.appendChild(img);
+}
+
 function appendRollImage(titleText, imageSrc){
   if (!rollLogEl) return;
   const entry = document.createElement('div');
@@ -4633,13 +4650,9 @@ function sendCampaignChatImage(titleText, imageSrc){
   });
 }
 
-function emitDazzlingSparkEffect(){
+function emitDazzlingSparkEffect(entry){
   playDazzlingSparkSound();
-  if (CAMPAIGN_ID){
-    sendCampaignChatImage('Dazzling Spark', DAZZLING_SPARK_IMAGE);
-  }else{
-    appendRollImage('Dazzling Spark', DAZZLING_SPARK_IMAGE);
-  }
+  attachRollImage(entry, DAZZLING_SPARK_IMAGE, 'Dazzling Spark');
 }
 
 function campaignChatVisibility(){
@@ -4720,7 +4733,10 @@ function campaignMessageVisible(msg){
 }
 
 function cleanChatLines(lines){
-  return (lines || []).map(l=> String(l || '').trim()).filter(Boolean);
+  return (lines || [])
+    .map(l=> String(l || '').trim())
+    .filter(Boolean)
+    .filter(l=> !/^Image:/i.test(l) && !/^Image Caption:/i.test(l));
 }
 
 function imageFromChat(msg){
@@ -4852,6 +4868,17 @@ function parseDamageCard(msg){
   return { types, formulas };
 }
 
+function appendRollCardImage(card, msg){
+  if (!card || !msg) return;
+  const imageSrc = msg.image || '';
+  if (!imageSrc) return;
+  const img = document.createElement('img');
+  img.className = 'roll-image';
+  img.src = imageSrc;
+  img.alt = msg.imageCaption || msg.text || 'Roll image';
+  card.appendChild(img);
+}
+
 function buildRollCard(msg){
   const skillMeta = parseSkillCard(msg);
   if (skillMeta){
@@ -4884,6 +4911,7 @@ function buildRollCard(msg){
       desc.textContent = skillMeta.effect;
       card.appendChild(desc);
     }
+    appendRollCardImage(card, msg);
     return card;
   }
   const abilityMeta = parseAbilityCard(msg);
@@ -4919,6 +4947,7 @@ function buildRollCard(msg){
       desc.textContent = abilityMeta.desc;
       card.appendChild(desc);
     }
+    appendRollCardImage(card, msg);
     return card;
   }
   const dmgMeta = parseDamageCard(msg);
@@ -4957,6 +4986,7 @@ function buildRollCard(msg){
         card.appendChild(sep);
       }
     });
+    appendRollCardImage(card, msg);
     return card;
   }
   return null;
@@ -5000,7 +5030,7 @@ function renderCampaignChat(){
     const lines = group.querySelector('.chat-lines');
     const line = document.createElement('div');
     const imageSrc = imageFromChat(msg);
-    if (msg.type === 'image' || imageSrc){
+    if (msg.type === 'image' || (imageSrc && msg.type !== 'roll')){
       line.className = `chat-line chat-image ${msg.visibility}`;
       if (msg.text){
         const caption = document.createElement('div');
@@ -5021,7 +5051,7 @@ function renderCampaignChat(){
       return;
     }
     if (msg.type === 'roll'){
-      const card = buildRollCard(msg);
+      const card = buildRollCard({ ...msg, image: imageSrc });
       if (card){
         line.className = `chat-line chat-roll ${msg.visibility}`;
         const meta = document.createElement('div');
@@ -5178,13 +5208,15 @@ function serializeRollEntry(entry){
   const titleEl = entry.querySelector('.title');
   const title = titleEl ? titleEl.textContent : (parts[0] || 'Log');
   if (parts[0] === title) parts.shift();
-  return { title, lines: parts };
+  const image = entry?.dataset?.image || '';
+  const imageCaption = entry?.dataset?.imageCaption || '';
+  return { title, lines: parts, image, imageCaption };
 }
 
 function buildRollCardFromEntry(entry){
   const data = serializeRollEntry(entry);
   if (!data.title) return null;
-  const msg = { type:'roll', text: data.title, lines: data.lines || [] };
+  const msg = { type:'roll', text: data.title, lines: data.lines || [], image: data.image, imageCaption: data.imageCaption };
   const card = buildRollCard(msg);
   if (!card) return null;
   const metaText = entry.querySelector('.meta')?.textContent || '';
@@ -5224,10 +5256,14 @@ function queueCampaignChat(entry){
   const data = serializeRollEntry(entry);
   const charId = CHAR?.id || CID || '';
   const displayName = (nameEl?.value || CHAR?.name || charId || 'Character');
+  const lines = (data.lines || []).slice();
+  if (data.image && !lines.some(l=> /^Image:/i.test(l))){
+    lines.push(`Image: ${data.image}`);
+  }
   const payload = {
     type: 'roll',
     text: data.title,
-    lines: data.lines,
+    lines,
     visibility: campaignChatVisibility(),
     ts: Date.now(),
     user: CURRENT_USER?.username || CHAR?.owner || 'Unknown',
@@ -5556,10 +5592,10 @@ function runRoll(){
     entry.appendChild(condLine);
   }
 
-  appendRollLog(entry);
   if (critNote?.isMax){
-    emitDazzlingSparkEffect();
+    emitDazzlingSparkEffect(entry);
   }
+  appendRollLog(entry);
 }
 
 function abilityRollDetails(a){
@@ -5743,12 +5779,39 @@ function itemChoiceKey(it){
     const name = String(it?.name || '').trim();
     return name || '';
   }
-  function upgradeChoiceKey(it, upgrade, idx){
+  function upgradeChoiceKeyLegacy(it, upgrade, idx){
     const itemKey = itemChoiceKey(it);
+    if (!itemKey) return '';
     const upgId = String(upgrade?.id || upgrade?.key || upgrade || '').trim() || 'upgrade';
     const target = String(upgrade?.target || '').trim() || 'any';
     const pos = Number.isFinite(idx) ? idx : 0;
     return `${itemKey}::upg:${upgId}:${target}:${pos}`;
+  }
+  function upgradeChoiceKey(it, upgrade, idx){
+    const itemKey = itemChoiceKey(it);
+    if (!itemKey) return '';
+    const choiceId = String(upgrade?.choice_id || upgrade?.choiceId || upgrade?.uid || '').trim();
+    if (choiceId) return `${itemKey}::upg:${choiceId}`;
+    return upgradeChoiceKeyLegacy(it, upgrade, idx);
+  }
+  function migrateUpgradeChoiceKeys(items){
+    let changed = false;
+    (items || []).forEach(it=>{
+      (it.upgrades || []).forEach((u, idx)=>{
+        const legacyKey = upgradeChoiceKeyLegacy(it, u, idx);
+        const newKey = upgradeChoiceKey(it, u, idx);
+        if (!legacyKey || !newKey || legacyKey === newKey) return;
+        if (ITEM_CHOICES[legacyKey] && !ITEM_CHOICES[newKey]){
+          ITEM_CHOICES[newKey] = ITEM_CHOICES[legacyKey];
+          changed = true;
+        }
+        if (ITEM_CHOICES[legacyKey]){
+          delete ITEM_CHOICES[legacyKey];
+          changed = true;
+        }
+      });
+    });
+    return changed;
   }
   function pruneItemChoices(){
     if (!LINKED_INV) return;
@@ -7745,9 +7808,21 @@ function renderAbilitySpellsBucket(){
   const onlyLearned = !!(abiSpellsOnlyLearnedEl && abiSpellsOnlyLearnedEl.checked);
   const ordered = applySpellSort(SPELLLIST_SPELLS, ABI_SORT_SPELLS, metaMap);
   const visible = ordered.filter(sp=> !onlyLearned || (metaMap[sp.id]?.status === 'learnt'));
-  const manualMode = String(ABI_SORT_SPELLS || '').toLowerCase() === 'manual';
+  const sortMode = String(ABI_SORT_SPELLS || '').toLowerCase();
+  const manualMode = sortMode === 'manual';
   const moveIndexById = {};
   visible.forEach((sp, idx)=>{ moveIndexById[String(sp?.id || '')] = idx; });
+  const craftOrdered = craftEntries.slice();
+  if (sortMode === 'az' || sortMode === 'za'){
+    craftOrdered.sort((a, b)=>{
+      const aCraft = a?.craft || {};
+      const bCraft = b?.craft || {};
+      const aName = spellDisplayName({ id: aCraft.spell_id || '', name: aCraft.spell_name || '' }, metaMap);
+      const bName = spellDisplayName({ id: bCraft.spell_id || '', name: bCraft.spell_name || '' }, metaMap);
+      return String(aName).localeCompare(String(bName), undefined, { sensitivity: 'base' });
+    });
+    if (sortMode === 'za') craftOrdered.reverse();
+  }
   visible.forEach(sp=>{
     const meta = metaMap[sp.id] || {};
     const nameDisplay = spellDisplayName(sp, metaMap);
@@ -7809,7 +7884,7 @@ function renderAbilitySpellsBucket(){
     el.appendChild(div);
   });
 
-  craftEntries.forEach(entry=>{
+  craftOrdered.forEach(entry=>{
     const cm = entry.craft || {};
     const sp = {
       id: cm.spell_id || '',
@@ -7827,7 +7902,7 @@ function renderAbilitySpellsBucket(){
       aoe: cm.spell_aoe,
       duration: cm.spell_duration
     };
-    const nameDisplay = sp.name || 'Spell';
+    const nameDisplay = spellDisplayName(sp, metaMap);
     const desc = sp.description || sp.description_long || sp.desc || '';
     const flavor = sp.flavor || '';
     const effectDetails = Array.isArray(sp.effects_detail) ? sp.effects_detail : [];
@@ -7854,9 +7929,10 @@ function renderAbilitySpellsBucket(){
     const div = document.createElement('div');
     div.className = 'abi-item';
     const statusLabel = 'Craftomancy';
+    const titleKey = spellColorKey(sp) || entryColorKey('craft', cm);
     div.innerHTML = `
       <div class="grow">
-        <div><strong>${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
+        <div><strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${effectsDesc ? `<div class="muted" style="font-size:.8rem">Effects: ${effectsDesc}</div>` : ''}
@@ -7867,6 +7943,7 @@ function renderAbilitySpellsBucket(){
         <span class="tag">Craftomancy</span>
       </div>
     `;
+    registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
     div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, {}, { cost, range, aoe, desc, effectsDesc, statusLabel, nameDisplay })));
     el.appendChild(div);
   });
@@ -9629,7 +9706,7 @@ function renderCombatWeapons(){
     const nature = natureRaw.toLowerCase();
     const natureLabel = formatNatureLabel(natureRaw);
     const subHidden = SUB_HIDDEN || {};
-    const derivedNeutral = Number(DERIVED_CACHE?.weapon_neutral || 0);
+    const derivedNeutral = isAnimarma ? 0 : Number(DERIVED_CACHE?.weapon_neutral || 0);
     const subNeutral = !isAnimarma ? (subHidden.weaponNeutral || 0) : 0;
     const magicBucket = isAnimarma ? (PASSIVE.magic_damage.spell || {}) : (PASSIVE.magic_damage.weapon || {});
     let baseMagic = 0;
@@ -9637,15 +9714,14 @@ function renderCombatWeapons(){
       baseMagic = applyOps(0, magicBucket[nature]).value || 0;
     }
     const upgradeBonus = getWeaponUpgradeBonuses(it);
+    const upgradeNeutral = isAnimarma ? 0 : (upgradeBonus.neutral || 0);
+    const upgradeMagic = upgradeBonus.magic || 0;
     const subMagicNatureLabel = formatNatureLabel(subHidden.magicNature);
     const subMagicBonus = isAnimarma ? (subHidden.magicBonus || 0) : 0;
     const magicLabel = natureLabel || 'Magic';
-    const subMagicMatchesWeapon = !!(subMagicNatureLabel && natureLabel)
-      && subMagicNatureLabel.toLowerCase() === natureLabel.toLowerCase();
-    const mainMagicBonus = baseMagic + upgradeBonus.magic
-      + (subMagicBonus && (!subMagicNatureLabel || subMagicMatchesWeapon) ? subMagicBonus : 0);
-    const extraMagicBonus = (subMagicBonus && subMagicNatureLabel && !subMagicMatchesWeapon) ? subMagicBonus : 0;
-    const neutralBonusTotal = derivedNeutral + subNeutral + upgradeBonus.neutral;
+    const mainMagicBonus = baseMagic + upgradeMagic;
+    const extraMagicBonus = isAnimarma ? subMagicBonus : 0;
+    const neutralBonusTotal = derivedNeutral + subNeutral + upgradeNeutral;
     const extra = [];
     if (neutralBonusTotal) extra.push(`Neutral ${neutralBonusTotal}`);
     if (mainMagicBonus) extra.push(`${magicLabel} ${mainMagicBonus}`);
@@ -9734,12 +9810,11 @@ function renderCombatWeapons(){
       const neutralParts = [];
       if (derivedNeutral) neutralParts.push(`Neutral ${derivedNeutral}`);
       if (subNeutral) neutralParts.push(`Lethality (sub) ${subNeutral}`);
-      if (upgradeBonus.neutral) neutralParts.push(`Lethality (upg) ${upgradeBonus.neutral}`);
+      if (upgradeNeutral) neutralParts.push(`Lethality (upg) ${upgradeNeutral}`);
       const neutralBreak = neutralParts.length ? (neutralParts.length > 1 ? neutralParts.join(' + ') : neutralParts[0]) : '';
       const mainMagicParts = [];
       if (baseMagic) mainMagicParts.push(`${magicTypeLabel} ${baseMagic}`);
-      if (subMagicBonus && (!subMagicNatureLabel || subMagicMatchesWeapon)) mainMagicParts.push(`Benediction (sub) ${subMagicBonus}`);
-      if (upgradeBonus.magic) mainMagicParts.push(`Benediction (upg) ${upgradeBonus.magic}`);
+      if (upgradeMagic) mainMagicParts.push(`Benediction (upg) ${upgradeMagic}`);
       const mainMagicBreak = mainMagicParts.length ? (mainMagicParts.length > 1 ? mainMagicParts.join(' + ') : mainMagicParts[0]) : '';
       const extraMagicBreak = (extraMagicBonus && subMagicNatureLabel) ? `Benediction (sub) ${extraMagicBonus}` : '';
       const neutralFormulaParts = [];
