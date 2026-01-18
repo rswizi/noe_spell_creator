@@ -2037,7 +2037,7 @@ function qualityStepDelta(q){
   const baseIdx = QUALITY_ORDER.findIndex(x=> lc(x) === 'adequate');
   const idx = QUALITY_ORDER.findIndex(x=> lc(x) === lc(q));
   if (idx === -1 || baseIdx === -1) return 0;
-  return idx - baseIdx;
+  return Math.max(0, (idx - baseIdx) + 1);
 }
 function debounce(fn, ms=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
 function qualityStepFromNote(note){
