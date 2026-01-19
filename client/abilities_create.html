@@ -48,6 +48,10 @@
     .mod-row .mod-target-custom { grid-column:1 / span 2; }
     .mod-row .group-wrap { grid-column:1 / -1; display:grid; grid-template-columns: 1fr; gap:8px; align-items:center; }
     .mod-row .group-wrap .muted { grid-column:1 / -1; }
+    .roll-list { display:grid; gap:8px; margin-top:6px; }
+    .roll-row { display:grid; grid-template-columns: minmax(180px,1.4fr) minmax(140px,0.9fr) minmax(140px,0.9fr) minmax(140px,0.9fr) auto; gap:8px; align-items:center; }
+    .roll-row input, .roll-row select { width:100%; min-width:0; }
+    .roll-row button { padding:4px 8px; font-size:.8rem; }
 
     .status-line { margin-top:10px; font-size:.85rem; opacity:.9; }
 
@@ -229,6 +233,19 @@
             <input type="checkbox" id="costs-active">
             <span class="muted">Active cost?</span>
           </label>
+
+          <h3 style="margin-top:10px;">Rolls</h3>
+          <div class="muted" style="margin-bottom:4px;">
+            Add damage, healing, restoration, or custom rolls for this ability. Use ID for nature-based dice.
+          </div>
+          <div id="roll-list" class="roll-list"></div>
+          <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:6px;">
+            <button class="btn" id="btn-add-roll" type="button">+ Add Roll</button>
+            <label class="row" style="gap:6px; margin:0;">
+              <input type="checkbox" id="roll-skill-required">
+              <span class="muted">Requires skill roll</span>
+            </label>
+          </div>
         </div>
       </div>
     </div>
@@ -347,11 +364,24 @@ const costTxEl    = document.getElementById('cost-tx');
 const costOLabelEl= document.getElementById('cost-other-label');
 const costOValEl  = document.getElementById('cost-other-value');
 const costsActiveEl = document.getElementById('costs-active');
+const rollListEl  = document.getElementById('roll-list');
+const btnAddRoll  = document.getElementById('btn-add-roll');
+const rollSkillEl = document.getElementById('roll-skill-required');
 
 const btnSave     = document.getElementById('btn-save');
 
 const DEFAULT_NATURES = ['Fire','Water','Earth','Lightning','Wind','Sun','Moon','Ki'];
 const DEFAULT_CHARACTERISTICS = ['Reflex','Dexterity','Body','Wisdom','Presence','Magic','Willpower','Tech'];
+const ROLL_KINDS = [
+  { value:'damage', label:'Damage' },
+  { value:'true_damage', label:'True Damage' },
+  { value:'heal_hp', label:'HP Heal' },
+  { value:'restore_fo', label:'FO Restore' },
+  { value:'restore_en', label:'EN Restore' },
+  { value:'sp_gain', label:'SP Gain' },
+  { value:'custom', label:'Custom' },
+];
+const DAMAGE_TYPES = ['Neutral','Fire','Water','Earth','Wind','Lightning','Sun','Moon','Ki','Magic'];
 const CUSTOM_TARGET_VALUE = '__custom__';
 const PASSIVE_TARGET_GROUPS = (()=>{
   const characteristics = [
@@ -610,6 +640,71 @@ function addModifierRow(initial){
 }
 btnAddMod.addEventListener('click', ()=> addModifierRow());
 
+function addRollRow(initial){
+  if (!rollListEl) return;
+  const row = document.createElement('div');
+  row.className = 'roll-row';
+
+  const expr = document.createElement('input');
+  expr.className = 'roll-expr';
+  expr.placeholder = 'Expression (ex: 2d6 + 4 or 2 ID + 5)';
+  expr.value = initial?.expr || initial?.expression || '';
+
+  const kind = document.createElement('select');
+  kind.className = 'roll-kind';
+  ROLL_KINDS.forEach(opt=>{
+    const o = document.createElement('option');
+    o.value = opt.value;
+    o.textContent = opt.label;
+    kind.appendChild(o);
+  });
+  kind.value = initial?.kind || initial?.reason || 'damage';
+
+  const dmgType = document.createElement('select');
+  dmgType.className = 'roll-dmg-type';
+  DAMAGE_TYPES.forEach(t=>{
+    const o = document.createElement('option');
+    o.value = t;
+    o.textContent = t;
+    dmgType.appendChild(o);
+  });
+  const initType = (initial?.damage_type || initial?.damageType || '').trim();
+  if (initType && DAMAGE_TYPES.some(t=> t.toLowerCase() === initType.toLowerCase())){
+    dmgType.value = DAMAGE_TYPES.find(t=> t.toLowerCase() === initType.toLowerCase()) || 'Neutral';
+  }else{
+    dmgType.value = 'Neutral';
+  }
+
+  const label = document.createElement('input');
+  label.className = 'roll-label';
+  label.placeholder = 'Custom label';
+  label.value = initial?.label || initial?.custom_label || '';
+
+  const rm = document.createElement('button');
+  rm.className = 'btn small';
+  rm.type = 'button';
+  rm.textContent = 'X';
+  rm.addEventListener('click', ()=> row.remove());
+
+  const syncVisibility = ()=>{
+    const k = kind.value;
+    const showDmg = k === 'damage';
+    const showLabel = k === 'custom';
+    dmgType.style.display = showDmg ? '' : 'none';
+    label.style.display = showLabel ? '' : 'none';
+  };
+  kind.addEventListener('change', syncVisibility);
+  syncVisibility();
+
+  row.appendChild(expr);
+  row.appendChild(kind);
+  row.appendChild(dmgType);
+  row.appendChild(label);
+  row.appendChild(rm);
+  rollListEl.appendChild(row);
+}
+btnAddRoll?.addEventListener('click', ()=> addRollRow());
+
 // show/hide panels
 function updateTypeVisibility(){
   const t = typeEl.value;
@@ -670,6 +765,21 @@ async function buildPayload(){
 
   let active = null;
   if (typeEl.value === 'active' || typeEl.value === 'mixed') {
+    const rolls = [];
+    for (const row of rollListEl?.querySelectorAll('.roll-row') || []){
+      const exprEl = row.querySelector('.roll-expr');
+      const kindEl = row.querySelector('.roll-kind');
+      const dmgTypeEl = row.querySelector('.roll-dmg-type');
+      const labelEl = row.querySelector('.roll-label');
+      const expr = (exprEl?.value || '').trim();
+      if (!expr) continue;
+      const kind = kindEl?.value || 'custom';
+      const roll = { expr, kind };
+      if (kind === 'damage') roll.damage_type = dmgTypeEl?.value || 'Neutral';
+      if (kind === 'true_damage') roll.damage_type = 'True';
+      if (kind === 'custom') roll.label = (labelEl?.value || '').trim();
+      rolls.push(roll);
+    }
     active = {
       activation: actActivationEl.value,
       range: Number(actRangeEl.value || 0),
@@ -684,7 +794,9 @@ async function buildPayload(){
         other_label: costOLabelEl.value || '',
         other_value: Number(costOValEl.value || 0),
       },
-      costs_active: !!costsActiveEl?.checked
+      costs_active: !!costsActiveEl?.checked,
+      rolls,
+      requires_skill_roll: !!rollSkillEl?.checked
     };
   }
 

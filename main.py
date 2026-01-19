@@ -5559,7 +5559,35 @@ def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
         except Exception: costs["other_value"] = 0
 
         costs_active = bool(active_in.get("costs_active") or active_in.get("cost_active") or False)
-        active_block = {"activation":activation,"range":rng,"aoe":aoe,"costs":costs,"costs_active":costs_active}
+
+        rolls_in = active_in.get("rolls") or []
+        rolls = []
+        if isinstance(rolls_in, list):
+            for r in rolls_in:
+                if not isinstance(r, dict):
+                    continue
+                expr = (r.get("expr") or r.get("expression") or "").strip()
+                if not expr:
+                    continue
+                kind = (r.get("kind") or r.get("reason") or "custom").strip().lower()
+                damage_type = (r.get("damage_type") or r.get("damageType") or "").strip()
+                label = (r.get("label") or r.get("custom_label") or "").strip()
+                rolls.append({
+                    "expr": expr,
+                    "kind": kind,
+                    "damage_type": damage_type,
+                    "label": label,
+                })
+        requires_skill_roll = bool(active_in.get("requires_skill_roll") or active_in.get("skill_roll") or False)
+        active_block = {
+            "activation": activation,
+            "range": rng,
+            "aoe": aoe,
+            "costs": costs,
+            "costs_active": costs_active,
+            "rolls": rolls,
+            "requires_skill_roll": requires_skill_roll,
+        }
 
     # --- passive part ---
     passive_block = None
@@ -5739,7 +5767,35 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
         try: costs["other_value"] = int(costs_in.get("other_value") or 0)
         except Exception: costs["other_value"] = 0
         costs_active = bool(active_in.get("costs_active") or active_in.get("cost_active") or existing.get("active", {}).get("costs_active") or False)
-        active_block = {"activation":activation,"range":rng,"aoe":aoe,"costs":costs,"costs_active":costs_active}
+
+        rolls_in = active_in.get("rolls") or existing.get("active", {}).get("rolls") or []
+        rolls = []
+        if isinstance(rolls_in, list):
+            for r in rolls_in:
+                if not isinstance(r, dict):
+                    continue
+                expr = (r.get("expr") or r.get("expression") or "").strip()
+                if not expr:
+                    continue
+                kind = (r.get("kind") or r.get("reason") or "custom").strip().lower()
+                damage_type = (r.get("damage_type") or r.get("damageType") or "").strip()
+                label = (r.get("label") or r.get("custom_label") or "").strip()
+                rolls.append({
+                    "expr": expr,
+                    "kind": kind,
+                    "damage_type": damage_type,
+                    "label": label,
+                })
+        requires_skill_roll = bool(active_in.get("requires_skill_roll") or active_in.get("skill_roll") or existing.get("active", {}).get("requires_skill_roll") or False)
+        active_block = {
+            "activation": activation,
+            "range": rng,
+            "aoe": aoe,
+            "costs": costs,
+            "costs_active": costs_active,
+            "rolls": rolls,
+            "requires_skill_roll": requires_skill_roll,
+        }
 
     passive_block = None
     if ab_type in ("passive","mixed"):

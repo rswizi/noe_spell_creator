@@ -261,6 +261,8 @@
   .roll-card.is-active{--roll-accent:#c9a227;}
   .roll-card.is-passive{--roll-accent:#d4d7e8;}
   .roll-card.roll-damage{--roll-accent:#c96b52;}
+  .roll-card.roll-heal{--roll-accent:#6ac982;}
+  .roll-card.roll-custom{--roll-accent:#9ea4b8;}
   .roll-title{
     font-weight:700;
     text-align:center;
@@ -327,6 +329,17 @@
     text-transform:uppercase;
     letter-spacing:.08em;
     opacity:.85;
+  }
+  .nature-grid{
+    display:grid;
+    gap:8px;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    margin-top:10px;
+  }
+  .nature-option{
+    display:flex;
+    align-items:center;
+    gap:8px;
   }
   .roll-dmg-value{
     font-size:2rem;
@@ -1497,6 +1510,25 @@
   </div>
 </div>
 
+<!-- Nature select modal -->
+<div id="nature-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="nature-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="nature-title">
+  <div class="modal-card" style="max-width:520px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div>
+        <div class="modal-title" id="nature-title">Choose Natures</div>
+        <div class="muted" id="nature-subtitle"></div>
+      </div>
+      <button class="modal-close" id="nature-close" aria-label="Close">&times;</button>
+    </header>
+    <div id="nature-body" class="nature-grid"></div>
+    <div class="row" style="justify-content:flex-end; gap:8px; margin-top:10px;">
+      <button class="btn" id="nature-cancel">Cancel</button>
+      <button class="btn" id="nature-confirm">Use Selected</button>
+    </div>
+  </div>
+</div>
+
 <!-- Combat awaken modal -->
 <div id="combat-awaken-backdrop" class="modal-backdrop" aria-hidden="true"></div>
 <div id="combat-awaken-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="combat-awaken-title">
@@ -2520,6 +2552,14 @@ const rollLogEmptyEl = document.getElementById('roll-log-empty');
 const rollLogCountEl = document.getElementById('roll-log-count');
 const rollLogClear = document.getElementById('roll-log-clear');
 const rollLogPanel = document.getElementById('roll-log-panel');
+const natureModal = document.getElementById('nature-modal');
+const natureBackdrop = document.getElementById('nature-backdrop');
+const natureClose = document.getElementById('nature-close');
+const natureCancel = document.getElementById('nature-cancel');
+const natureConfirm = document.getElementById('nature-confirm');
+const natureTitleEl = document.getElementById('nature-title');
+const natureSubtitleEl = document.getElementById('nature-subtitle');
+const natureBodyEl = document.getElementById('nature-body');
 const campaignChatPanel = document.getElementById('campaign-chat-panel');
 const campaignChatLog = document.getElementById('campaign-chat-log');
 const campaignChatStatus = document.getElementById('campaign-chat-status');
@@ -4513,6 +4553,67 @@ function invToggleModal(modal, backdrop, open){
   }
 }
 
+function openNatureSelectModal({ titleText = 'Choose Natures', subtitleText = 'Select up to 2 natures.', selected = [], max = 2 } = {}){
+  return new Promise((resolve)=>{
+    if (!natureModal || !natureBackdrop || !natureBodyEl){
+      resolve([]);
+      return;
+    }
+    const maxPick = Math.max(1, Number(max || 2));
+    const selectedSet = new Set((selected || []).map(n=> String(n || '').toLowerCase()));
+    if (natureTitleEl) natureTitleEl.textContent = titleText || 'Choose Natures';
+    if (natureSubtitleEl) natureSubtitleEl.textContent = subtitleText || `Select up to ${maxPick} natures.`;
+    natureBodyEl.innerHTML = '';
+
+    const updateSubtitle = ()=>{
+      const count = natureBodyEl.querySelectorAll('input[type="checkbox"]:checked').length;
+      if (natureSubtitleEl){
+        natureSubtitleEl.textContent = `${subtitleText || `Select up to ${maxPick} natures.`} (${count}/${maxPick})`;
+      }
+    };
+
+    INTENSITIES.forEach(n=>{
+      const row = document.createElement('label');
+      row.className = 'nature-option';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = n;
+      cb.checked = selectedSet.has(String(n || '').toLowerCase());
+      cb.addEventListener('change', ()=>{
+        const checked = natureBodyEl.querySelectorAll('input[type="checkbox"]:checked');
+        if (checked.length > maxPick){
+          cb.checked = false;
+        }
+        updateSubtitle();
+      });
+      const span = document.createElement('span');
+      span.textContent = n;
+      row.appendChild(cb);
+      row.appendChild(span);
+      natureBodyEl.appendChild(row);
+    });
+
+    const close = (result)=>{
+      invToggleModal(natureModal, natureBackdrop, false);
+      resolve(result);
+    };
+
+    if (natureClose) natureClose.onclick = ()=> close(null);
+    if (natureCancel) natureCancel.onclick = ()=> close(null);
+    if (natureBackdrop) natureBackdrop.onclick = (e)=>{ if (e.target === natureBackdrop) close(null); };
+    if (natureConfirm) natureConfirm.onclick = ()=>{
+      const picked = Array.from(natureBodyEl.querySelectorAll('input[type="checkbox"]:checked'))
+        .map(i=> i.value)
+        .filter(Boolean)
+        .slice(0, maxPick);
+      close(picked);
+    };
+
+    updateSubtitle();
+    invToggleModal(natureModal, natureBackdrop, true);
+  });
+}
+
 /* ---------- Rolling ---------- */
 let ROLL_CONTEXT = null;
 let ROLL_LOG_COUNT = 0;
@@ -4901,18 +5002,23 @@ function parseSkillCard(msg){
   return { total, sub, formula, critClass, effect };
 }
 
-function parseDamageCard(msg){
-  const title = msg.text || '';
-  if (!/damage/i.test(title)) return null;
-  const lines = cleanChatLines(msg.lines);
-  const rollLine = lines.find(l=> /^(Result|Roll):/i.test(l));
+function templateTagFromLines(lines){
+  const line = (lines || []).find(l=> /^Template:/i.test(l));
+  if (!line) return '';
+  return line.replace(/^Template:\s*/i, '').trim().toLowerCase();
+}
+function stripTemplateLines(lines){
+  return (lines || []).filter(l=> !/^Template:/i.test(l));
+}
+function parseRollSegments(lines){
+  const rollLine = (lines || []).find(l=> /^(Result|Roll):/i.test(l));
   if (!rollLine) return null;
   const content = rollLine.replace(/^(Result|Roll):\s*/i, '');
   let types = [];
   const formulas = {};
   const segments = content.split('|').map(s=> s.trim()).filter(Boolean);
   segments.forEach(seg=>{
-    const m = seg.match(/^([A-Za-z ]+?)\s+([+-]?\d+)(?:\s*\((.+)\))?$/);
+    const m = seg.match(/^(.+?)\s+([+-]?\d+)(?:\s*\((.+)\))?$/);
     if (m){
       const label = m[1].trim();
       types.push({ name: label, total: m[2] });
@@ -4925,27 +5031,93 @@ function parseDamageCard(msg){
     const typeParts = inParen[1].split('+').map(p=> p.trim()).filter(Boolean);
     types = [];
     typeParts.forEach(part=>{
-      const m = part.match(/^([A-Za-z ]+?)\s+([+-]?\d+)/);
+      const m = part.match(/^(.+?)\s+([+-]?\d+)/);
       if (m) types.push({ name: m[1].trim(), total: m[2] });
     });
   }
   if (!types.length) return null;
-  lines.forEach(line=>{
-    const m = line.match(/^([A-Za-z ]+):\s*(.+)$/);
+  (lines || []).forEach(line=>{
+    const m = line.match(/^(.+?):\s*(.+)$/);
     if (m){
       const key = m[1].trim();
       if (!formulas[key]) formulas[key] = m[2].trim();
     }
   });
   if (!Object.keys(formulas).length){
-    const breakdownLine = lines.find(l=> l !== rollLine && (/\|/.test(l) || /Neutral|Magic/i.test(l))) || '';
+    const breakdownLine = (lines || []).find(l=> l !== rollLine && /\|/.test(l)) || '';
     const fallbackSegs = breakdownLine ? breakdownLine.split('|').map(s=> s.trim()).filter(Boolean) : [];
     fallbackSegs.forEach(seg=>{
-      const m = seg.match(/([A-Za-z ]+?)\s+([+-]?\d+)/);
+      const m = seg.match(/(.+?)\s+([+-]?\d+)/);
       if (m) formulas[m[1].trim()] = seg;
     });
   }
   return { types, formulas };
+}
+function parseDamageCard(msg){
+  const title = msg.text || '';
+  const lines = cleanChatLines(msg.lines);
+  const template = templateTagFromLines(lines);
+  if (template && (template.includes('ability heal') || template.includes('ability custom'))){
+    return null;
+  }
+  if (!/damage/i.test(title) && !(template && template.includes('ability damage'))) return null;
+  const parsed = parseRollSegments(stripTemplateLines(lines));
+  if (!parsed) return null;
+  return parsed;
+}
+function parseHealCard(msg){
+  const lines = cleanChatLines(msg.lines);
+  const template = templateTagFromLines(lines);
+  if (!template || !template.includes('ability heal')) return null;
+  const parsed = parseRollSegments(stripTemplateLines(lines));
+  if (!parsed) return null;
+  return parsed;
+}
+function parseCustomCard(msg){
+  const lines = cleanChatLines(msg.lines);
+  const template = templateTagFromLines(lines);
+  if (!template || !template.includes('ability custom')) return null;
+  const parsed = parseRollSegments(stripTemplateLines(lines));
+  if (!parsed) return null;
+  return parsed;
+}
+
+function buildSegmentCard(meta, className, titleText){
+  const card = document.createElement('div');
+  card.className = `roll-card ${className}`.trim();
+  const title = document.createElement('div');
+  title.className = 'roll-title';
+  title.textContent = titleText || 'Roll';
+  card.appendChild(title);
+  const topDivider = document.createElement('div');
+  topDivider.className = 'roll-divider';
+  card.appendChild(topDivider);
+  meta.types.forEach((row, idx)=>{
+    const rowEl = document.createElement('div');
+    rowEl.className = 'roll-dmg-row';
+    const typeEl = document.createElement('div');
+    typeEl.className = 'roll-dmg-type';
+    typeEl.textContent = row.name;
+    const valueEl = document.createElement('div');
+    valueEl.className = 'roll-dmg-value';
+    valueEl.textContent = row.total;
+    rowEl.appendChild(typeEl);
+    rowEl.appendChild(valueEl);
+    card.appendChild(rowEl);
+    const formulaText = meta.formulas[row.name];
+    if (formulaText){
+      const formula = document.createElement('div');
+      formula.className = 'roll-formula';
+      formula.textContent = `[ ${formulaText} ]`;
+      card.appendChild(formula);
+    }
+    if (idx < meta.types.length - 1){
+      const sep = document.createElement('div');
+      sep.className = 'roll-divider';
+      card.appendChild(sep);
+    }
+  });
+  return card;
 }
 
 function appendRollCardImage(card, msg){
@@ -5005,22 +5177,29 @@ function buildRollCard(msg){
     divider.className = 'roll-divider';
     card.appendChild(title);
     card.appendChild(divider);
-    if (abilityMeta.kind === 'active'){
-      const metaLine = document.createElement('div');
-      metaLine.className = 'roll-meta-line';
-      const parts = [];
-      if (abilityMeta.details.cost) parts.push(`Cost: ${abilityMeta.details.cost}`);
-      if (abilityMeta.details.aoe) parts.push(`AoE: ${abilityMeta.details.aoe}`);
-      if (abilityMeta.details.range) parts.push(`Range: ${abilityMeta.details.range}`);
-      metaLine.textContent = parts.join(' || ');
-      if (metaLine.textContent) card.appendChild(metaLine);
-      if (abilityMeta.details.activation){
-        const activationLine = document.createElement('div');
-        activationLine.className = 'roll-meta-line';
-        activationLine.textContent = `Activation: ${abilityMeta.details.activation}`;
-        card.appendChild(activationLine);
+      if (abilityMeta.kind === 'active'){
+        const metaLine = document.createElement('div');
+        metaLine.className = 'roll-meta-line';
+        const parts = [];
+        if (abilityMeta.details.cost) parts.push(`Cost: ${abilityMeta.details.cost}`);
+        if (abilityMeta.details.aoe) parts.push(`AoE: ${abilityMeta.details.aoe}`);
+        if (abilityMeta.details.range) parts.push(`Range: ${abilityMeta.details.range}`);
+        metaLine.textContent = parts.join(' || ');
+        if (metaLine.textContent) card.appendChild(metaLine);
+        if (abilityMeta.details.activation){
+          const activationLine = document.createElement('div');
+          activationLine.className = 'roll-meta-line';
+          activationLine.textContent = `Activation: ${abilityMeta.details.activation}`;
+          card.appendChild(activationLine);
+        }
+        const skillReq = abilityMeta.details['skill roll'];
+        if (skillReq){
+          const skillLine = document.createElement('div');
+          skillLine.className = 'roll-meta-line';
+          skillLine.textContent = `Skill Roll: ${skillReq}`;
+          card.appendChild(skillLine);
+        }
       }
-    }
     if (abilityMeta.desc){
       const desc = document.createElement('div');
       desc.className = 'roll-desc';
@@ -5030,42 +5209,21 @@ function buildRollCard(msg){
     appendRollCardImage(card, msg);
     return card;
   }
+  const healMeta = parseHealCard(msg);
+  if (healMeta){
+    const card = buildSegmentCard(healMeta, 'roll-heal', msg.text || 'Ability Heal');
+    appendRollCardImage(card, msg);
+    return card;
+  }
+  const customMeta = parseCustomCard(msg);
+  if (customMeta){
+    const card = buildSegmentCard(customMeta, 'roll-custom', msg.text || 'Ability Roll');
+    appendRollCardImage(card, msg);
+    return card;
+  }
   const dmgMeta = parseDamageCard(msg);
   if (dmgMeta){
-    const card = document.createElement('div');
-    card.className = 'roll-card roll-damage';
-    const title = document.createElement('div');
-    title.className = 'roll-title';
-    title.textContent = msg.text || 'Weapon Damage';
-    card.appendChild(title);
-    const topDivider = document.createElement('div');
-    topDivider.className = 'roll-divider';
-    card.appendChild(topDivider);
-    dmgMeta.types.forEach((row, idx)=>{
-      const rowEl = document.createElement('div');
-      rowEl.className = 'roll-dmg-row';
-      const typeEl = document.createElement('div');
-      typeEl.className = 'roll-dmg-type';
-      typeEl.textContent = row.name;
-      const valueEl = document.createElement('div');
-      valueEl.className = 'roll-dmg-value';
-      valueEl.textContent = row.total;
-      rowEl.appendChild(typeEl);
-      rowEl.appendChild(valueEl);
-      card.appendChild(rowEl);
-      const formulaText = dmgMeta.formulas[row.name];
-      if (formulaText){
-        const formula = document.createElement('div');
-        formula.className = 'roll-formula';
-        formula.textContent = `[ ${formulaText} ]`;
-        card.appendChild(formula);
-      }
-      if (idx < dmgMeta.types.length - 1){
-        const sep = document.createElement('div');
-        sep.className = 'roll-divider';
-        card.appendChild(sep);
-      }
-    });
+    const card = buildSegmentCard(dmgMeta, 'roll-damage', msg.text || 'Weapon Damage');
     appendRollCardImage(card, msg);
     return card;
   }
@@ -5686,7 +5844,8 @@ function abilityRollDetails(a){
   const aoe = isPassive ? '' : (a?.active?.aoe || a?.aoe || '');
   const activation = isPassive ? '' : (a?.active?.activation || a?.activation || '');
   const type = a?.type || '';
-  return { desc, cost, range, aoe, activation, type };
+  const skillRoll = !!(a?.active?.requires_skill_roll);
+  return { desc, cost, range, aoe, activation, type, skillRoll };
 }
 
 function openSkillRoll(charKey, charLabel, skillName){
@@ -5716,6 +5875,7 @@ function openAbilityRoll(a, sourceLabel){
   if (details.range) parts.push(`Range: ${details.range}`);
   if (details.aoe) parts.push(`AoE: ${details.aoe}`);
   if (details.activation) parts.push(`Activation: ${details.activation}`);
+  if (details.skillRoll) parts.push('Skill Roll: Required');
   const detailLine = parts.join(' | ');
   const lines = [];
   if (sourceLabel) lines.push(`Source: ${sourceLabel}`);
@@ -5741,21 +5901,102 @@ function openCombatAbilityRoll(a, sourceLabel){
   if (details.range) parts.push(`Range: ${details.range}`);
   if (details.aoe) parts.push(`AoE: ${details.aoe}`);
   if (details.activation) parts.push(`Activation: ${details.activation}`);
+  if (details.skillRoll) parts.push('Skill Roll: Required');
   const detailLine = parts.join(' | ');
   const lines = [];
   if (sourceLabel) lines.push(`Source: ${sourceLabel}`);
   if (detailLine) lines.push(detailLine);
-  openRollModal({
-    title: titleText,
-    subtitle: sourceLabel ? `${sourceLabel} ability` : 'Ability',
-    baseLabel: 'Base value',
-    base: 0,
-    detailsText: detailLine,
-    descHtml: details.desc || '',
-    logDescHtml: details.desc || '',
-    detailLines: lines,
-    infoOnly: false
-  });
+
+  const rolls = normalizeAbilityRolls(a);
+  const hasRolls = rolls.length > 0 || details.skillRoll;
+  if (!hasRolls){
+    openRollModal({
+      title: titleText,
+      subtitle: sourceLabel ? `${sourceLabel} ability` : 'Ability',
+      baseLabel: 'Base value',
+      base: 0,
+      detailsText: detailLine,
+      descHtml: details.desc || '',
+      logDescHtml: details.desc || '',
+      detailLines: lines,
+      infoOnly: false
+    });
+    return;
+  }
+
+  const descText = String(details.desc || '').replace(/<[^>]+>/g, '').trim();
+  appendAbilityInfoLog({ title: titleText, detailLines: lines, descText });
+
+  const needsNature = abilityNeedsNatureSelection(rolls);
+  let selectedNatures = [];
+  if (needsNature){
+    selectedNatures = getAbilityRollDefaults(a?.id);
+    if (!selectedNatures.length){
+      openNatureSelectModal({
+        titleText: `${titleText} natures`,
+        subtitleText: 'Select up to 2 natures for magic damage or ID.',
+        selected: [],
+        max: 2
+      }).then((picked)=>{
+        if (!picked || !picked.length) return;
+        runAbilityRolls(picked);
+      });
+      return;
+    }
+  }
+  runAbilityRolls(selectedNatures);
+
+  function runAbilityRolls(natures){
+    const natureLabel = formatNatureList(natures || []);
+    const needsId = rolls.some(r=> rollExprHasId(r.expr));
+    let idInfo = null;
+    if (needsId){
+      const resolved = resolveIdDieFromNatures(natures || []);
+      if (resolved.error){
+        openRollModal({ title: `${titleText} Roll`, infoOnly:true, descText: resolved.error });
+        return;
+      }
+      idInfo = { die: resolved.die, label: resolved.label };
+    }
+    for (const r of rolls){
+      const kind = String(r.kind || 'custom').toLowerCase();
+      const isDamage = kind === 'damage' || kind === 'true_damage';
+      const isHeal = ['heal_hp','restore_fo','restore_en','sp_gain'].includes(kind);
+      let label = '';
+      if (kind === 'damage'){
+        const dmgType = String(r.damage_type || 'Neutral');
+        const dmgLower = dmgType.toLowerCase();
+        if (dmgLower === 'magic' || dmgLower === 'magical'){
+          label = natureLabel || 'Magic';
+        }else{
+          label = formatNatureLabel(dmgType);
+        }
+      }else if (kind === 'true_damage'){
+        label = 'True Damage';
+      }else if (kind === 'heal_hp'){
+        label = 'HP';
+      }else if (kind === 'restore_fo'){
+        label = 'FO';
+      }else if (kind === 'restore_en'){
+        label = 'EN';
+      }else if (kind === 'sp_gain'){
+        label = 'SP';
+      }else{
+        label = r.label || 'Custom';
+      }
+      const result = rollAbilityExpression(r.expr, idInfo);
+      if (result.error){
+        openRollModal({ title: `${titleText} Roll`, infoOnly:true, descText: result.error });
+        return;
+      }
+      const template = isDamage ? 'Ability Damage' : (isHeal ? 'Ability Heal' : 'Ability Custom');
+      const title = isDamage
+        ? `${titleText} Damage`
+        : (isHeal ? `${titleText} ${label}` : `${titleText} ${label || 'Roll'}`);
+      const rollLine = `Roll: ${label} ${result.total}${result.formula ? ` (${result.formula})` : ''}`;
+      appendAbilityRollEntry({ title, template, rollLine });
+    }
+  }
 }
 
 function openSpellRoll(sp, meta, info){
@@ -10104,6 +10345,190 @@ function rollDamageDice(count, die){
   return { rolls, total, sides, label: raw == 'id' ? 'ID' : `d${sides}` };
 }
 
+function normalizeAbilityRolls(a){
+  const active = a?.active || {};
+  const raw = Array.isArray(active.rolls) ? active.rolls : (Array.isArray(a?.rolls) ? a.rolls : []);
+  return (raw || []).map(r=>({
+    expr: String(r?.expr || r?.expression || '').trim(),
+    kind: String(r?.kind || r?.reason || 'custom').trim().toLowerCase(),
+    damage_type: String(r?.damage_type || r?.damageType || '').trim(),
+    label: String(r?.label || r?.custom_label || '').trim(),
+  })).filter(r=> r.expr);
+}
+function rollExprHasId(expr){
+  return /(^|[^a-z])id([^a-z]|$)/i.test(String(expr || ''));
+}
+function abilityNeedsNatureSelection(rolls){
+  return (rolls || []).some(r=>{
+    if (rollExprHasId(r.expr)) return true;
+    const dmg = String(r.damage_type || '').toLowerCase();
+    return r.kind === 'damage' && (dmg === 'magic' || dmg === 'magical');
+  });
+}
+function getAbilityRollDefaults(abId){
+  const byAb = ABILITY_CHOICES?.[abId] || {};
+  const raw = Array.isArray(byAb._roll_natures) ? byAb._roll_natures : [];
+  const allowed = new Set(INTENSITIES.map(n=> n.toLowerCase()));
+  const cleaned = raw.map(n=> String(n || '').trim()).filter(Boolean).filter(n=> allowed.has(n.toLowerCase()));
+  return cleaned.slice(0, 2).map(n=> INTENSITIES.find(x=> x.toLowerCase() === n.toLowerCase()) || n);
+}
+function setAbilityRollDefaults(abId, natures){
+  if (!abId) return;
+  if (!ABILITY_CHOICES[abId]) ABILITY_CHOICES[abId] = {};
+  ABILITY_CHOICES[abId]._roll_natures = (natures || []).slice(0, 2);
+}
+function formatNatureList(natures){
+  const parts = (natures || []).map(n=> formatNatureLabel(n)).filter(Boolean);
+  return parts.join(' / ');
+}
+function resolveIdDieFromNatures(natures){
+  if (!natures || !natures.length) return { error:'ID requires a linked nature intensity.' };
+  const infos = natures.map(n=> intensityDieForNature(n));
+  const missing = infos.find(i=> !i || !i.die);
+  if (missing){
+    const name = missing?.name || (natures.find(n=> lc(n) === lc(missing?.name)) || natures[0]);
+    return { error:`ID is -- for ${name || 'selected nature'} (no intensity investment).` };
+  }
+  const withSides = infos.map(i=> ({ ...i, sides:Number(String(i.die || '').replace('d','')) || 0 }));
+  const best = withSides.reduce((min, cur)=> (cur.sides && (!min.sides || cur.sides < min.sides)) ? cur : min, withSides[0]);
+  return {
+    die: best?.die || '',
+    label: formatNatureList(natures),
+    info: best || null
+  };
+}
+function parseAbilityRollTokens(expr){
+  const compact = String(expr || '').replace(/\s+/g, '');
+  if (!compact) return { error:'Empty roll expression.' };
+  const tokens = compact.replace(/-/g, '+-').split('+').filter(Boolean);
+  const parts = [];
+  for (const raw of tokens){
+    let token = raw;
+    let sign = 1;
+    if (token.startsWith('-')){
+      sign = -1;
+      token = token.slice(1);
+    }
+    if (!token) continue;
+    const diceMatch = token.match(/^(\d+)?(d\d+|id)$/i);
+    if (diceMatch){
+      const count = Math.max(1, Number(diceMatch[1] || 1));
+      const die = String(diceMatch[2] || '').toUpperCase();
+      parts.push({ type:'dice', count, die, isId: die === 'ID', sign });
+      continue;
+    }
+    if (/^\d+$/.test(token)){
+      parts.push({ type:'flat', value:Number(token), sign });
+      continue;
+    }
+    return { error:`Invalid token "${token}".` };
+  }
+  if (!parts.length) return { error:'Invalid roll expression.' };
+  return { parts };
+}
+function formatSignedFormula(pieces){
+  return pieces.map((p, idx)=>{
+    const sign = p.sign < 0 ? '-' : '+';
+    if (idx === 0) return (p.sign < 0 ? '-' : '') + p.text;
+    return `${sign} ${p.text}`;
+  }).join(' ');
+}
+function rollAbilityExpression(expr, idInfo){
+  const parsed = parseAbilityRollTokens(expr);
+  if (parsed.error) return { error: parsed.error };
+  let total = 0;
+  const pieces = [];
+  for (const part of parsed.parts){
+    if (part.type === 'dice'){
+      let dieLabel = part.die;
+      let dieSides = Number(String(part.die).replace('D','').replace('d',''));
+      if (part.isId){
+        if (!idInfo?.die) return { error:'ID requires a linked nature intensity.' };
+        dieLabel = idInfo?.label ? `ID(${idInfo.label})` : 'ID';
+        dieSides = Number(String(idInfo.die || '').replace('d','')) || 0;
+      }
+      if (!dieSides) return { error:`Invalid die ${part.die}.` };
+      const rolls = [];
+      for (let i=0; i<part.count; i++) rolls.push(rollDie(dieSides));
+      const sum = rolls.reduce((a,b)=>a+b,0);
+      total += part.sign * sum;
+      const text = `${part.count}${dieLabel} (${rolls.join(' + ')} = ${sum})`;
+      pieces.push({ sign: part.sign, text });
+    }else if (part.type === 'flat'){
+      total += part.sign * part.value;
+      pieces.push({ sign: part.sign, text: String(part.value) });
+    }
+  }
+  const formula = formatSignedFormula(pieces);
+  return { total, formula };
+}
+function appendAbilityInfoLog(ctx){
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = ctx?.title || 'Ability';
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  entry.appendChild(title);
+  entry.appendChild(meta);
+  (ctx?.detailLines || []).forEach(line=>{
+    if (!line) return;
+    const div = document.createElement('div');
+    div.className = 'muted';
+    div.textContent = line;
+    entry.appendChild(div);
+  });
+  if (ctx?.descText){
+    const desc = document.createElement('div');
+    desc.textContent = ctx.descText;
+    entry.appendChild(desc);
+  }
+  appendRollLog(entry);
+}
+function appendAbilityRollEntry({ title, template, rollLine }){
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const titleEl = document.createElement('div');
+  titleEl.className = 'title';
+  titleEl.textContent = title || 'Roll';
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  entry.appendChild(titleEl);
+  entry.appendChild(meta);
+  if (template){
+    const tpl = document.createElement('div');
+    tpl.className = 'muted';
+    tpl.textContent = `Template: ${template}`;
+    entry.appendChild(tpl);
+  }
+  const line = document.createElement('div');
+  line.textContent = rollLine;
+  entry.appendChild(line);
+  appendRollLog(entry);
+}
+
+async function configureAbilityRollDefaults(ab){
+  if (!ab?.id) return;
+  const rolls = normalizeAbilityRolls(ab);
+  if (!abilityNeedsNatureSelection(rolls)){
+    openRollModal({ title:'Ability Natures', infoOnly:true, descText:'This ability has no rolls that use ID or magic damage.' });
+    return;
+  }
+  const current = getAbilityRollDefaults(ab.id);
+  const picked = await openNatureSelectModal({
+    titleText: `${ab.name || 'Ability'} defaults`,
+    subtitleText: 'Select up to 2 default natures for ID or magic damage.',
+    selected: current,
+    max: 2
+  });
+  if (!picked) return;
+  setAbilityRollDefaults(ab.id, picked);
+  queueSave();
+}
+
 function abilityHasActiveCost(a){
   const active = a?.active || {};
   if (!active.costs_active) return false;
@@ -13158,6 +13583,8 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     div.className = 'abi-item';
     const isPassive = (a.type||'').toLowerCase()!=='active';
     const hasChoice = abilityHasChoice(a);
+    const rolls = normalizeAbilityRolls(a);
+    const needsNature = abilityNeedsNatureSelection(rolls);
     const desc = isPassive ? (a.passive?.description_html||a.passive?.description||a.description_html||a.description||'') : (a.description_html||a.description||'');
     const costText = abilityCostText(a);
     const titleKey = abilityColorKey(a);
@@ -13176,6 +13603,7 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
         <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
         ` : ''}
         ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
+        ${needsNature ? '<button class="btn small abi-nature" title="Configure default natures">Natures</button>' : ''}
         ${canRemove ? '<button class="btn small mod-remove" title="Remove">X</button>' : ''}
       </div>
     `;
@@ -13186,6 +13614,9 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     }
     if (hasChoice){
       div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
+    }
+    if (needsNature){
+      div.querySelector('.abi-nature')?.addEventListener('click', ()=> configureAbilityRollDefaults(a));
     }
     if (canMove && bucketType){
       div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveAbilityInBucket(idx, 'up', bucketType, list));

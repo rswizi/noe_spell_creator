@@ -101,6 +101,8 @@
     .roll-card.is-active{--roll-accent:#c9a227;}
     .roll-card.is-passive{--roll-accent:#d4d7e8;}
     .roll-card.roll-damage{--roll-accent:#c96b52;}
+    .roll-card.roll-heal{--roll-accent:#6ac982;}
+    .roll-card.roll-custom{--roll-accent:#9ea4b8;}
     .roll-title{
       font-weight:700;
       text-align:center;
@@ -693,18 +695,23 @@
       return { total, sub, formula, critClass, effect };
     }
 
-    function parseDamageCard(msg){
-      const title = msg.text || '';
-      if (!/damage/i.test(title)) return null;
-      const lines = cleanChatLines(msg.lines);
-      const rollLine = lines.find(l=> /^(Result|Roll):/i.test(l));
+    function templateTagFromLines(lines){
+      const line = (lines || []).find(l=> /^Template:/i.test(l));
+      if (!line) return '';
+      return line.replace(/^Template:\s*/i, '').trim().toLowerCase();
+    }
+    function stripTemplateLines(lines){
+      return (lines || []).filter(l=> !/^Template:/i.test(l));
+    }
+    function parseRollSegments(lines){
+      const rollLine = (lines || []).find(l=> /^(Result|Roll):/i.test(l));
       if (!rollLine) return null;
       const content = rollLine.replace(/^(Result|Roll):\s*/i, '');
       let types = [];
       const formulas = {};
       const segments = content.split('|').map(s=> s.trim()).filter(Boolean);
       segments.forEach(seg=>{
-        const m = seg.match(/^([A-Za-z ]+?)\s+([+-]?\d+)(?:\s*\((.+)\))?$/);
+        const m = seg.match(/^(.+?)\s+([+-]?\d+)(?:\s*\((.+)\))?$/);
         if (m){
           const label = m[1].trim();
           types.push({ name: label, total: m[2] });
@@ -717,27 +724,93 @@
         const typeParts = inParen[1].split('+').map(p=> p.trim()).filter(Boolean);
         types = [];
         typeParts.forEach(part=>{
-          const m = part.match(/^([A-Za-z ]+?)\s+([+-]?\d+)/);
+          const m = part.match(/^(.+?)\s+([+-]?\d+)/);
           if (m) types.push({ name: m[1].trim(), total: m[2] });
         });
       }
       if (!types.length) return null;
-      lines.forEach(line=>{
-        const m = line.match(/^([A-Za-z ]+):\s*(.+)$/);
+      (lines || []).forEach(line=>{
+        const m = line.match(/^(.+?):\s*(.+)$/);
         if (m){
           const key = m[1].trim();
           if (!formulas[key]) formulas[key] = m[2].trim();
         }
       });
       if (!Object.keys(formulas).length){
-        const breakdownLine = lines.find(l=> l !== rollLine && (/\|/.test(l) || /Neutral|Magic/i.test(l))) || '';
+        const breakdownLine = (lines || []).find(l=> l !== rollLine && /\|/.test(l)) || '';
         const fallbackSegs = breakdownLine ? breakdownLine.split('|').map(s=> s.trim()).filter(Boolean) : [];
         fallbackSegs.forEach(seg=>{
-          const m = seg.match(/([A-Za-z ]+?)\s+([+-]?\d+)/);
+          const m = seg.match(/(.+?)\s+([+-]?\d+)/);
           if (m) formulas[m[1].trim()] = seg;
         });
       }
       return { types, formulas };
+    }
+    function parseDamageCard(msg){
+      const title = msg.text || '';
+      const lines = cleanChatLines(msg.lines);
+      const template = templateTagFromLines(lines);
+      if (template && (template.includes('ability heal') || template.includes('ability custom'))){
+        return null;
+      }
+      if (!/damage/i.test(title) && !(template && template.includes('ability damage'))) return null;
+      const parsed = parseRollSegments(stripTemplateLines(lines));
+      if (!parsed) return null;
+      return parsed;
+    }
+    function parseHealCard(msg){
+      const lines = cleanChatLines(msg.lines);
+      const template = templateTagFromLines(lines);
+      if (!template || !template.includes('ability heal')) return null;
+      const parsed = parseRollSegments(stripTemplateLines(lines));
+      if (!parsed) return null;
+      return parsed;
+    }
+    function parseCustomCard(msg){
+      const lines = cleanChatLines(msg.lines);
+      const template = templateTagFromLines(lines);
+      if (!template || !template.includes('ability custom')) return null;
+      const parsed = parseRollSegments(stripTemplateLines(lines));
+      if (!parsed) return null;
+      return parsed;
+    }
+
+    function buildSegmentCard(meta, className, titleText){
+      const card = document.createElement('div');
+      card.className = `roll-card ${className}`.trim();
+      const title = document.createElement('div');
+      title.className = 'roll-title';
+      title.textContent = titleText || 'Roll';
+      card.appendChild(title);
+      const topDivider = document.createElement('div');
+      topDivider.className = 'roll-divider';
+      card.appendChild(topDivider);
+      meta.types.forEach((row, idx)=>{
+        const rowEl = document.createElement('div');
+        rowEl.className = 'roll-dmg-row';
+        const typeEl = document.createElement('div');
+        typeEl.className = 'roll-dmg-type';
+        typeEl.textContent = row.name;
+        const valueEl = document.createElement('div');
+        valueEl.className = 'roll-dmg-value';
+        valueEl.textContent = row.total;
+        rowEl.appendChild(typeEl);
+        rowEl.appendChild(valueEl);
+        card.appendChild(rowEl);
+        const formulaText = meta.formulas[row.name];
+        if (formulaText){
+          const formula = document.createElement('div');
+          formula.className = 'roll-formula';
+          formula.textContent = `[ ${formulaText} ]`;
+          card.appendChild(formula);
+        }
+        if (idx < meta.types.length - 1){
+          const sep = document.createElement('div');
+          sep.className = 'roll-divider';
+          card.appendChild(sep);
+        }
+      });
+      return card;
     }
 
     function buildRollCard(msg){
@@ -800,6 +873,13 @@
             activationLine.textContent = `Activation: ${abilityMeta.details.activation}`;
             card.appendChild(activationLine);
           }
+          const skillReq = abilityMeta.details['skill roll'];
+          if (skillReq){
+            const skillLine = document.createElement('div');
+            skillLine.className = 'roll-meta-line';
+            skillLine.textContent = `Skill Roll: ${skillReq}`;
+            card.appendChild(skillLine);
+          }
         }
         if (abilityMeta.desc){
           const desc = document.createElement('div');
@@ -809,43 +889,17 @@
         }
         return card;
       }
+      const healMeta = parseHealCard(msg);
+      if (healMeta){
+        return buildSegmentCard(healMeta, 'roll-heal', msg.text || 'Ability Heal');
+      }
+      const customMeta = parseCustomCard(msg);
+      if (customMeta){
+        return buildSegmentCard(customMeta, 'roll-custom', msg.text || 'Ability Roll');
+      }
       const dmgMeta = parseDamageCard(msg);
       if (dmgMeta){
-        const card = document.createElement('div');
-        card.className = 'roll-card roll-damage';
-        const title = document.createElement('div');
-        title.className = 'roll-title';
-        title.textContent = msg.text || 'Weapon Damage';
-        card.appendChild(title);
-        const topDivider = document.createElement('div');
-        topDivider.className = 'roll-divider';
-        card.appendChild(topDivider);
-        dmgMeta.types.forEach((row, idx)=>{
-          const rowEl = document.createElement('div');
-          rowEl.className = 'roll-dmg-row';
-          const typeEl = document.createElement('div');
-          typeEl.className = 'roll-dmg-type';
-          typeEl.textContent = row.name;
-          const valueEl = document.createElement('div');
-          valueEl.className = 'roll-dmg-value';
-          valueEl.textContent = row.total;
-          rowEl.appendChild(typeEl);
-          rowEl.appendChild(valueEl);
-          card.appendChild(rowEl);
-          const formulaText = dmgMeta.formulas[row.name];
-          if (formulaText){
-            const formula = document.createElement('div');
-            formula.className = 'roll-formula';
-            formula.textContent = `[ ${formulaText} ]`;
-            card.appendChild(formula);
-          }
-          if (idx < dmgMeta.types.length - 1){
-            const sep = document.createElement('div');
-            sep.className = 'roll-divider';
-            card.appendChild(sep);
-          }
-        });
-        return card;
+        return buildSegmentCard(dmgMeta, 'roll-damage', msg.text || 'Weapon Damage');
       }
       return null;
     }
