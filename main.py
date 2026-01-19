@@ -5678,19 +5678,26 @@ def list_abilities(
     request: Request,
     name: str | None = Query(default=None),
     source: str | None = Query(default=None),
+    source_ref: str | None = Query(default=None),
+    archetype: str | None = Query(default=None),
     typ: str | None = Query(default=None),
     tags: str | None = Query(default=None),
+    skill: str | None = Query(default=None),
 ):
     col = get_col("abilities")
     q: dict = {}
     if name:   q["name"] = {"$regex": name, "$options": "i"}
     if source: q["source_category"] = {"$regex": source, "$options": "i"}
+    ref = source_ref or archetype
+    if ref:    q["source_ref"] = {"$regex": ref, "$options": "i"}
     if typ:    q["type"] = {"$regex": typ, "$options": "i"}
     if tags:
         raw = [t.strip() for t in tags.split(",") if t.strip()]
         if raw:
             regexes = [re.compile(rf"^{re.escape(t)}$", re.IGNORECASE) for t in raw]
             q["tags"] = {"$in": regexes}
+    if skill:
+        q["passive.modifiers.target"] = {"$regex": skill, "$options": "i"}
     docs = list(col.find(q, {"_id": 0}))
     docs.sort(key=lambda d: d.get("name","").lower())
     return {"status":"success","abilities": docs}
