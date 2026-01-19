@@ -41,6 +41,12 @@
     .price-choice-custom{ display:grid; gap:8px; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
     .price-choice-field{ display:flex; gap:6px; align-items:center; min-width:0; }
     .price-choice-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
+    .choice-table{ display:grid; gap:8px; margin-top:8px; }
+    .choice-row{ display:grid; grid-template-columns: minmax(0,1fr) auto; gap:8px; align-items:center; }
+    .choice-row select{ width:100%; }
+    .choice-row .choice-remove{ padding:6px 10px; font-size:.8rem; }
+    .choice-actions{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .choice-counter{ font-size:.85rem; opacity:.75; }
     @media (min-width: 1100px){
       .container-wide { max-width: 1100px; margin: 0 auto; }
       .searchbar { grid-template-columns: 2fr 1fr; align-items:end; }
@@ -770,55 +776,126 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
       continue;
     }
 
-    const list = document.createElement("div");
-    list.style.display = "grid";
-    list.style.gridTemplateColumns = "repeat(auto-fit,minmax(220px,1fr))";
-    list.style.gap = "8px";
-    const counter = document.createElement("div");
-    counter.className = "muted";
-    counter.style.marginTop = "4px";
-
     const state = normalizeChoiceEntry(existingMap[kind]);
     const items = await choiceItemsForKind(kind, restrict, allowed);
+    let rows = [];
     if (!items.length){
       const empty = document.createElement("div");
       empty.className = "muted";
       empty.textContent = "No available options.";
-      list.appendChild(empty);
+      block.appendChild(empty);
     }else{
-      items.forEach(opt=>{
-        const row = document.createElement("label");
-        row.style.display = "flex";
-        row.style.gap = "8px";
-        row.style.alignItems = "center";
-        row.style.margin = "2px 0";
-        const input = document.createElement("input");
-        input.type = max === 1 ? "radio" : "checkbox";
-        input.name = `choice-${kind}`;
-        input.dataset.choice = kind;
-        input.value = opt.key;
-        input.checked = state.picks.includes(opt.key);
-        input.addEventListener("change", ()=>{
-          const checked = list.querySelectorAll(`input[data-choice=\"${kind}\"]:checked`);
-          if (max === 1){
-            checked.forEach(cb=>{ if (cb !== input) cb.checked = false; });
-          }else if (max > 0 && checked.length > max){
-            input.checked = false;
+      const picks = Array.from(new Set((state.picks || []).filter(p=> items.some(opt=> opt.key === p))));
+      const maxRows = max > 0 ? Math.min(max, items.length) : items.length;
+      const table = document.createElement("div");
+      table.className = "choice-table";
+      const actions = document.createElement("div");
+      actions.className = "choice-actions";
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "btn small";
+      addBtn.textContent = "Add choice";
+      const counter = document.createElement("div");
+      counter.className = "muted choice-counter";
+
+      rows = [];
+      const getSelects = ()=> rows.map(r=> r.select);
+      const getSelectedValues = ()=> getSelects().map(sel=> sel.value).filter(Boolean);
+      const enforceUnique = (changed)=>{
+        const seen = new Set();
+        const all = getSelects();
+        const ordered = changed ? [changed, ...all.filter(s=> s !== changed)] : all;
+        ordered.forEach(sel=>{
+          const val = sel.value;
+          if (!val) return;
+          if (seen.has(val)){
+            sel.value = "";
+          }else{
+            seen.add(val);
           }
-          counter.textContent = `Selected ${list.querySelectorAll(`input[data-choice=\"${kind}\"]:checked`).length}${max>0?` / ${max}`:""}`;
         });
-        row.appendChild(input);
-        const span = document.createElement("span");
-        span.textContent = opt.label;
-        row.appendChild(span);
-        list.appendChild(row);
+      };
+      const rebuildOptions = ()=>{
+        const values = getSelectedValues();
+        getSelects().forEach(sel=>{
+          const current = sel.value;
+          const taken = new Set(values.filter(v=> v !== current));
+          sel.innerHTML = '<option value="">-- choose --</option>';
+          items.forEach(opt=>{
+            if (taken.has(opt.key)) return;
+            const o = document.createElement("option");
+            o.value = opt.key;
+            o.textContent = opt.label;
+            sel.appendChild(o);
+          });
+          if (current && !Array.from(sel.options).some(o=> o.value === current)){
+            sel.value = "";
+          }else{
+            sel.value = current;
+          }
+        });
+      };
+      const updateActions = ()=>{
+        const selected = getSelectedValues().length;
+        counter.textContent = `Selected ${selected}${max>0?` / ${max}`:""}`;
+        const maxReached = rows.length >= maxRows;
+        const remaining = items.length - new Set(getSelectedValues()).size;
+        addBtn.disabled = maxReached || remaining <= 0;
+        rows.forEach(r=>{ r.removeBtn.disabled = rows.length <= 1; });
+        if (max === 1) addBtn.style.display = "none";
+      };
+      const syncUI = (changed)=>{
+        enforceUnique(changed);
+        rebuildOptions();
+        updateActions();
+      };
+      const addRow = (value="")=>{
+        const row = document.createElement("div");
+        row.className = "choice-row";
+        const select = document.createElement("select");
+        select.dataset.choice = kind;
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "btn small choice-remove";
+        removeBtn.textContent = "Remove";
+        removeBtn.addEventListener("click", ()=>{
+          const idx = rows.findIndex(r=> r.row === row);
+          if (idx >= 0) rows.splice(idx, 1);
+          row.remove();
+          syncUI();
+        });
+        select.addEventListener("change", ()=> syncUI(select));
+        row.appendChild(select);
+        row.appendChild(removeBtn);
+        table.appendChild(row);
+        rows.push({ row, select, removeBtn });
+        if (value) select.value = value;
+      };
+
+      const initial = picks.slice(0, max > 0 ? max : picks.length);
+      if (initial.length){
+        initial.forEach(()=> addRow(""));
+      }else{
+        addRow("");
+      }
+      syncUI();
+      if (initial.length){
+        rows.forEach((r, idx)=>{ r.select.value = initial[idx] || ""; });
+        syncUI();
+      }
+      addBtn.addEventListener("click", ()=>{
+        if (rows.length >= maxRows) return;
+        addRow("");
+        syncUI();
       });
+
+      actions.appendChild(addBtn);
+      actions.appendChild(counter);
+      block.appendChild(table);
+      block.appendChild(actions);
     }
-    counter.textContent = `Selected ${list.querySelectorAll(`input[data-choice=\"${kind}\"]:checked`).length}${max>0?` / ${max}`:""}`;
-    block.appendChild(list);
-    block.appendChild(counter);
     choiceBody.appendChild(block);
-    blocks.push({ kind, max, node: list, isMs: false });
+    blocks.push({ kind, max, rows, isMs: false });
   }
 
   return new Promise(resolve=>{
@@ -829,7 +906,16 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
     const save = ()=>{
       const selections = {};
       for (const b of blocks){
-        const picks = Array.from(b.node.querySelectorAll(`input[data-choice=\"${b.kind}\"]:checked`)).map(i=> i.value);
+        let picks = [];
+        if (b.isMs){
+          picks = Array.from(b.node.querySelectorAll(`input[data-choice=\"${b.kind}\"]:checked`)).map(i=> i.value);
+        }else{
+          picks = (b.rows || []).map(r=> r.select?.value || "").filter(Boolean);
+          if (b.max > 0 && picks.length > b.max){
+            alert(`Select at most ${b.max} option(s) for ${b.kind.replace(/_/g," ")}.`);
+            return;
+          }
+        }
         selections[b.kind] = { base: b.baseSelect?.value || "", picks };
       }
       saveHandler(selections);
@@ -857,11 +943,14 @@ async function openUpgradeChoiceModal(it, upgrade, idx){
   const upgId = upgrade?.id || upgrade?.key || upgrade;
   const meta = (window.UPGRADE_META || {})[upgId] || {};
   const choiceKey = upgradeChoiceKey(it, upgrade, idx);
+  const legacyKey = upgradeChoiceKeyLegacy(it, upgrade, idx);
   const mods = upgradeChoiceMods(upgrade, meta, choiceKey);
   if (!mods.length) return false;
   if (!choiceKey) return false;
-  return openChoiceModalGeneric(mods, ITEM_CHOICES[choiceKey] || {}, (selections)=>{
+  const existing = ITEM_CHOICES[choiceKey] || (legacyKey ? ITEM_CHOICES[legacyKey] : {}) || {};
+  return openChoiceModalGeneric(mods, existing, (selections)=>{
     ITEM_CHOICES[choiceKey] = selections;
+    if (legacyKey && legacyKey !== choiceKey) ITEM_CHOICES[legacyKey] = selections;
     saveItemChoices();
   }, { titleText: `Configure: ${meta.name || upgrade?.name || "Upgrade"}` });
 }
