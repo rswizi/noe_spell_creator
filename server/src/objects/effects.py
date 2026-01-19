@@ -1,6 +1,7 @@
 import json
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
+from typing import List
 from db_mongo import get_col
 from server.src.objects.schools import load_school, School
 
@@ -13,6 +14,9 @@ class Effect:
     description: str = ""
     en_cost: int = 0
     mp_cost: int = 0
+    skill_roll: bool = False
+    skill_roll_skills: List[str] = field(default_factory=list)
+    rolls: List[dict] = field(default_factory=list)
 
     def to_dict(self):
         d = asdict(self)

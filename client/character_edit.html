@@ -6400,6 +6400,7 @@ async function openCombatSpellRoll(sp, meta, info){
   const effectText = normalizeDescText(info?.desc || '');
   const effectsLines = Array.isArray(info?.effectsLines) ? info.effectsLines : [];
 
+  try{ await ensureEffectsLoaded(); }catch{}
   const instances = spellEffectInstances(sp || {});
   const aggregatedRolls = aggregateSpellRolls(instances);
   const needsSkillRoll = instances.some(inst=> inst?.meta?.skill_roll);
@@ -6425,7 +6426,6 @@ async function openCombatSpellRoll(sp, meta, info){
     return;
   }
 
-  try{ await ensureEffectsLoaded(); }catch{}
   try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
 
   const lines = ['Template: Spell Roll'];
@@ -10957,14 +10957,6 @@ function normalizeSpellEffectMetaEntry(entry, effectId){
 function spellEffectInstances(sp){
   const effects = Array.isArray(sp?.effects) ? sp.effects.map(e=> String(e || '').trim()).filter(Boolean) : [];
   const rawMeta = Array.isArray(sp?.effects_meta) ? sp.effects_meta : [];
-  const useIndex = rawMeta.length === effects.length && rawMeta.some(e=> e && typeof e === 'object');
-  if (useIndex){
-    return effects.map((eid, idx)=>({
-      id: eid,
-      meta: normalizeSpellEffectMetaEntry(rawMeta[idx], eid),
-      count: 1
-    }));
-  }
   const metaById = new Map();
   rawMeta.forEach(entry=>{
     if (!entry || typeof entry !== 'object') return;
@@ -10976,7 +10968,7 @@ function spellEffectInstances(sp){
   effects.forEach(eid=>{ counts[eid] = (counts[eid] || 0) + 1; });
   return Object.keys(counts).map(eid=>({
     id: eid,
-    meta: normalizeSpellEffectMetaEntry(metaById.get(eid), eid),
+    meta: normalizeSpellEffectMetaEntry(EFFECTS_BY_ID[String(eid).toLowerCase()] || metaById.get(eid), eid),
     count: counts[eid]
   }));
 }

@@ -32,6 +32,18 @@
     .mod-row { display:grid; grid-template-columns: 1.2fr 0.7fr 0.7fr 1fr 0.4fr; gap:8px; align-items:center; }
     .mod-row input, .mod-row select { width:100%; }
     .mod-row button { padding:4px 8px; font-size:.85rem; }
+    .effect-rolls { margin-top:12px; padding-top:12px; border-top:1px dashed #222; }
+    .effect-skill-line { font-size:.85rem; opacity:.85; margin-top:6px; }
+    .roll-list { display:grid; gap:6px; margin-top:6px; }
+    .roll-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    .roll-expr { flex:2; min-width:160px; }
+    .roll-kind { flex:1; min-width:140px; }
+    .roll-dmg-type { flex:1; min-width:120px; }
+    .roll-label { flex:1; min-width:140px; }
+    .skill-roll-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; margin-top:6px; }
+    .skill-roll-group { border:1px solid #333; border-radius:6px; padding:6px; }
+    .skill-roll-item { display:flex; align-items:center; gap:6px; font-size:.9rem; }
+    .tiny { font-size:.85rem; opacity:.75; }
   </style>
 </head>
 <body>
@@ -104,6 +116,21 @@
           </div>
           <div id="mod-list" class="mod-list"></div>
           <button id="mod-add" class="btn btn-secondary" type="button">+ Add Modifier</button>
+        </div>
+
+        <div class="effect-rolls">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+            <strong>Roll configuration</strong>
+            <span class="muted" style="font-size:.9rem;">Used when a spell with this effect is rolled.</span>
+          </div>
+          <label style="display:flex; align-items:center; gap:6px;">
+            <input id="ef-skill-roll" type="checkbox" />
+            <span>Requires skill roll</span>
+          </label>
+          <div id="ef-skill-line" class="effect-skill-line"></div>
+          <div id="ef-skill-options" class="skill-roll-grid"></div>
+          <div id="ef-roll-list" class="roll-list"></div>
+          <button id="ef-add-roll" class="btn btn-secondary" type="button">+ Add Roll</button>
         </div>
       </div>
 
@@ -216,10 +243,36 @@ const schoolInput = $("#ef-school");
 const tagsInput = $("#ef-tags");
 const modListEl = document.getElementById("mod-list");
 const modAddBtn = document.getElementById("mod-add");
+const skillRollInput = $("#ef-skill-roll");
+const skillLineEl = $("#ef-skill-line");
+const skillOptionsEl = $("#ef-skill-options");
+const rollListEl = $("#ef-roll-list");
+const addRollBtn = $("#ef-add-roll");
 
 let schools = [];
 let effects = [];
 let currentEditId = null;
+
+const ROLL_KINDS = [
+  { value:'damage', label:'Damage' },
+  { value:'true_damage', label:'True Damage' },
+  { value:'heal_hp', label:'HP Heal' },
+  { value:'restore_fo', label:'FO Restore' },
+  { value:'restore_en', label:'EN Restore' },
+  { value:'sp_gain', label:'SP Gain' },
+  { value:'custom', label:'Custom' },
+];
+const DAMAGE_TYPES = ['Neutral','Fire','Water','Earth','Wind','Lightning','Sun','Moon','Ki','Magic'];
+const SKILL_GROUPS = [
+  { label:'Reflex', skills:['Technicity','Dodge','Counter','Reactivity'] },
+  { label:'Dexterity', skills:['Accuracy','Evasion','Stealth','Acrobatics'] },
+  { label:'Body', skills:['Brutality','Blocking','Resistance','Athletics'] },
+  { label:'Wisdom', skills:['Survival','Education','Perception','Psychology','Investigation'] },
+  { label:'Presence', skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
+  { label:'Magic', skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
+  { label:'Willpower', skills:['Intimidation','Spirit','Instinct','Absorption'] },
+  { label:'Tech', skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
+];
 
 function authHeaders() {
   return { "Authorization": "Bearer " + token, "Content-Type": "application/json" };
@@ -227,6 +280,152 @@ function authHeaders() {
 
 function openModal() { modal.classList.remove("hidden"); modal.setAttribute("aria-hidden", "false"); }
 function closeModal() { modal.classList.add("hidden"); modal.setAttribute("aria-hidden", "true"); statusEl.textContent=""; currentEditId = null; }
+
+function normalizeSkillKey(name){
+  const cleaned = String(name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+  if (cleaned === 'enchantement') return 'enchantment';
+  return cleaned;
+}
+function allSkillNames(){
+  return SKILL_GROUPS.flatMap(group=> group.skills || []);
+}
+function linkedSkillForSchoolId(schoolId){
+  const school = schools.find(s=> String(s.id) === String(schoolId));
+  const raw = (school?.linked_skill || '').trim();
+  if (!raw) return '';
+  const rawKey = normalizeSkillKey(raw);
+  const match = allSkillNames().find(s=> normalizeSkillKey(s) === rawKey);
+  return match || raw;
+}
+function renderSkillOptions(container, selected, defaultSkill){
+  if (!container) return;
+  const picked = new Set((selected || []).map(s=> normalizeSkillKey(s)));
+  const defaultKey = normalizeSkillKey(defaultSkill);
+  container.innerHTML = '';
+  SKILL_GROUPS.forEach(group=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'skill-roll-group';
+    const title = document.createElement('div');
+    title.textContent = group.label;
+    title.className = 'tiny';
+    wrap.appendChild(title);
+    (group.skills || []).forEach(skill=>{
+      const key = normalizeSkillKey(skill);
+      if (!key || key === defaultKey) return;
+      const row = document.createElement('label');
+      row.className = 'skill-roll-item';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = skill;
+      if (picked.has(key)) cb.checked = true;
+      row.appendChild(cb);
+      const span = document.createElement('span');
+      span.textContent = skill;
+      row.appendChild(span);
+      wrap.appendChild(row);
+    });
+    container.appendChild(wrap);
+  });
+}
+function readSkillOptions(container){
+  if (!container) return [];
+  return Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(cb=> String(cb.value || '').trim())
+    .filter(Boolean);
+}
+function addEffectRollRow(listEl, initial){
+  if (!listEl) return;
+  const row = document.createElement('div');
+  row.className = 'roll-row';
+
+  const expr = document.createElement('input');
+  expr.className = 'roll-expr';
+  expr.placeholder = 'Expression (ex: 2d6 + 4 or 2 ID + 5)';
+  expr.value = initial?.expr || initial?.expression || '';
+
+  const kind = document.createElement('select');
+  kind.className = 'roll-kind';
+  ROLL_KINDS.forEach(opt=>{
+    const o = document.createElement('option');
+    o.value = opt.value;
+    o.textContent = opt.label;
+    kind.appendChild(o);
+  });
+  kind.value = initial?.kind || initial?.reason || 'damage';
+
+  const dmgType = document.createElement('select');
+  dmgType.className = 'roll-dmg-type';
+  DAMAGE_TYPES.forEach(t=>{
+    const o = document.createElement('option');
+    o.value = t;
+    o.textContent = t;
+    dmgType.appendChild(o);
+  });
+  const initType = (initial?.damage_type || initial?.damageType || '').trim();
+  if (initType && DAMAGE_TYPES.some(t=> t.toLowerCase() === initType.toLowerCase())){
+    dmgType.value = DAMAGE_TYPES.find(t=> t.toLowerCase() === initType.toLowerCase()) || 'Neutral';
+  }else{
+    dmgType.value = 'Neutral';
+  }
+
+  const label = document.createElement('input');
+  label.className = 'roll-label';
+  label.placeholder = 'Custom label';
+  label.value = initial?.label || initial?.custom_label || '';
+
+  const rm = document.createElement('button');
+  rm.className = 'btn small';
+  rm.type = 'button';
+  rm.textContent = 'X';
+  rm.addEventListener('click', ()=> row.remove());
+
+  const syncVisibility = ()=>{
+    const k = kind.value;
+    dmgType.style.display = k === 'damage' ? '' : 'none';
+    label.style.display = k === 'custom' ? '' : 'none';
+  };
+  kind.addEventListener('change', syncVisibility);
+  syncVisibility();
+
+  row.appendChild(expr);
+  row.appendChild(kind);
+  row.appendChild(dmgType);
+  row.appendChild(label);
+  row.appendChild(rm);
+  listEl.appendChild(row);
+}
+function readEffectRolls(listEl){
+  if (!listEl) return [];
+  const rolls = [];
+  listEl.querySelectorAll('.roll-row').forEach(row=>{
+    const expr = row.querySelector('.roll-expr')?.value || '';
+    const kind = row.querySelector('.roll-kind')?.value || 'custom';
+    const dmgType = row.querySelector('.roll-dmg-type')?.value || '';
+    const label = row.querySelector('.roll-label')?.value || '';
+    const cleanExpr = expr.trim();
+    if (!cleanExpr) return;
+    rolls.push({
+      expr: cleanExpr,
+      kind,
+      damage_type: kind === 'damage' ? dmgType : '',
+      label: kind === 'custom' ? label.trim() : ''
+    });
+  });
+  return rolls;
+}
+function refreshSkillOptions(selected){
+  const linkedSkill = linkedSkillForSchoolId(schoolInput.value || '');
+  if (skillLineEl){
+    skillLineEl.textContent = linkedSkill ? `School skill: ${linkedSkill}` : 'School skill: --';
+  }
+  const picked = Array.isArray(selected) ? selected : readSkillOptions(skillOptionsEl);
+  renderSkillOptions(skillOptionsEl, picked, linkedSkill);
+}
+function updateSkillVisibility(){
+  const show = !!skillRollInput?.checked;
+  if (skillLineEl) skillLineEl.style.display = show ? '' : 'none';
+  if (skillOptionsEl) skillOptionsEl.style.display = show ? '' : 'none';
+}
 
 // load schools into filters and modal select
 async function loadSchools() {
@@ -306,6 +505,13 @@ window.editEffect = function(id) {
   schoolInput.value = ef.school || "";
   tagsInput.value = (ef.tags || []).join(", ");
   setModifiers(modListEl, ef.modifiers || []);
+  if (rollListEl) rollListEl.innerHTML = '';
+  const rolls = Array.isArray(ef.rolls) ? ef.rolls : [];
+  rolls.forEach(r=> addEffectRollRow(rollListEl, r));
+  if (skillRollInput) skillRollInput.checked = !!ef.skill_roll;
+  const skillList = Array.isArray(ef.skill_roll_skills) ? ef.skill_roll_skills : [];
+  refreshSkillOptions(skillList);
+  updateSkillVisibility();
   openModal();
 };
 
@@ -342,7 +548,10 @@ $("#edit-save").addEventListener("click", async () => {
     en_cost: Number(enInput.value),
     school: schoolInput.value,
     tags: tagsInput.value.trim(),
-    modifiers: collectModifiers(modListEl)
+    modifiers: collectModifiers(modListEl),
+    skill_roll: !!skillRollInput?.checked,
+    skill_roll_skills: readSkillOptions(skillOptionsEl),
+    rolls: readEffectRolls(rollListEl)
   };
   const r = await fetch(`${API_BASE}/admin/effects/${encodeURIComponent(currentEditId)}`, {
     method: "PUT",
@@ -362,6 +571,9 @@ $("#edit-save").addEventListener("click", async () => {
 
 $("#edit-close").addEventListener("click", closeModal);
 $("#edit-cancel").addEventListener("click", closeModal);
+skillRollInput?.addEventListener("change", updateSkillVisibility);
+addRollBtn?.addEventListener("click", () => addEffectRollRow(rollListEl));
+schoolInput?.addEventListener("change", () => refreshSkillOptions());
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadSchools();

@@ -602,6 +602,34 @@ def _clean_modifiers(raw):
         mods.append(mod)
     return mods
 
+def _normalize_skill_list(raw):
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    if isinstance(raw, str):
+        return [s.strip() for s in raw.split(",") if s.strip()]
+    return []
+
+def _normalize_rolls(raw):
+    if not isinstance(raw, list):
+        return []
+    rolls = []
+    for r in raw:
+        if not isinstance(r, dict):
+            continue
+        expr = str(r.get("expr") or r.get("expression") or "").strip()
+        if not expr:
+            continue
+        kind = str(r.get("kind") or r.get("reason") or "custom").strip()
+        dmg_type = str(r.get("damage_type") or r.get("damageType") or "").strip()
+        label = str(r.get("label") or r.get("custom_label") or "").strip()
+        rolls.append({
+            "expr": expr,
+            "kind": kind,
+            "damage_type": dmg_type,
+            "label": label,
+        })
+    return rolls
+
 @app.get("/effects")
 def get_effects(name: str | None = Query(default=None), school: str | None = Query(default=None)):
     col = get_col("effects")
@@ -1469,9 +1497,14 @@ async def admin_update_effect(effect_id: str, request: Request):
     tags = _normalize_tags(tags_in) if tags_in is not None else (old.get("tags") or [])
     if not tags:
         tags = ["phb"]
+    skill_roll = bool(body.get("skill_roll", old.get("skill_roll", False)))
+    skill_roll_skills = _normalize_skill_list(body.get("skill_roll_skills", old.get("skill_roll_skills", [])))
+    rolls = _normalize_rolls(body.get("rolls", old.get("rolls", [])))
 
     col.update_one({"id": effect_id}, {"$set": {
-        "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school, "modifiers": modifiers, "tags": tags
+        "name": name, "description": desc, "mp_cost": mp, "en_cost": en, "school": school,
+        "modifiers": modifiers, "tags": tags,
+        "skill_roll": skill_roll, "skill_roll_skills": skill_roll_skills, "rolls": rolls
     }})
     try:
         username, _ = require_auth(request, ["admin","moderator"])
@@ -1491,10 +1524,15 @@ async def admin_update_effect(effect_id: str, request: Request):
     _chg("School", old.get("school",""), school)
     _chg("MP", int(old.get("mp_cost",0)), mp)
     _chg("EN", int(old.get("en_cost",0)), en)
+    _chg("Skill roll", bool(old.get("skill_roll", False)), skill_roll)
     if (old.get("description","") != desc):
         effect_changes.append("Description: (updated)")
     if (old.get("modifiers") or []) != modifiers:
         effect_changes.append("Modifiers updated")
+    if (old.get("skill_roll_skills") or []) != skill_roll_skills:
+        effect_changes.append("Skill roll skills updated")
+    if (old.get("rolls") or []) != rolls:
+        effect_changes.append("Rolls updated")
 
     header = [f"Edited Effect [{effect_id}]", ""] + ([*effect_changes, ""] if effect_changes else ["No direct field changes",""])
 
