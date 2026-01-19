@@ -341,6 +341,17 @@
     align-items:center;
     gap:8px;
   }
+  .skill-grid{
+    display:grid;
+    gap:8px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    margin-top:10px;
+  }
+  .skill-option{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
   .roll-dmg-value{
     font-size:2rem;
     font-weight:700;
@@ -1529,6 +1540,25 @@
   </div>
 </div>
 
+<!-- Skill select modal -->
+<div id="skill-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="skill-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="skill-title">
+  <div class="modal-card" style="max-width:560px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div>
+        <div class="modal-title" id="skill-title">Choose Skill</div>
+        <div class="muted" id="skill-subtitle"></div>
+      </div>
+      <button class="modal-close" id="skill-close" aria-label="Close">&times;</button>
+    </header>
+    <div id="skill-body" class="skill-grid"></div>
+    <div class="row" style="justify-content:flex-end; gap:8px; margin-top:10px;">
+      <button class="btn" id="skill-cancel">Cancel</button>
+      <button class="btn" id="skill-confirm">Use Skill</button>
+    </div>
+  </div>
+</div>
+
 <!-- Combat awaken modal -->
 <div id="combat-awaken-backdrop" class="modal-backdrop" aria-hidden="true"></div>
 <div id="combat-awaken-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="combat-awaken-title">
@@ -2560,6 +2590,14 @@ const natureConfirm = document.getElementById('nature-confirm');
 const natureTitleEl = document.getElementById('nature-title');
 const natureSubtitleEl = document.getElementById('nature-subtitle');
 const natureBodyEl = document.getElementById('nature-body');
+const skillModal = document.getElementById('skill-modal');
+const skillBackdrop = document.getElementById('skill-backdrop');
+const skillClose = document.getElementById('skill-close');
+const skillCancel = document.getElementById('skill-cancel');
+const skillConfirm = document.getElementById('skill-confirm');
+const skillTitleEl = document.getElementById('skill-title');
+const skillSubtitleEl = document.getElementById('skill-subtitle');
+const skillBodyEl = document.getElementById('skill-body');
 const campaignChatPanel = document.getElementById('campaign-chat-panel');
 const campaignChatLog = document.getElementById('campaign-chat-log');
 const campaignChatStatus = document.getElementById('campaign-chat-status');
@@ -4614,6 +4652,44 @@ function openNatureSelectModal({ titleText = 'Choose Natures', subtitleText = 'S
   });
 }
 
+function openSkillSelectModal({ titleText = 'Choose Skill', subtitleText = 'Select one skill.', options = [] } = {}){
+  return new Promise((resolve)=>{
+    if (!skillModal || !skillBackdrop || !skillBodyEl){
+      resolve('');
+      return;
+    }
+    if (skillTitleEl) skillTitleEl.textContent = titleText || 'Choose Skill';
+    if (skillSubtitleEl) skillSubtitleEl.textContent = subtitleText || 'Select one skill.';
+    skillBodyEl.innerHTML = '';
+    const list = (options || []).slice().sort((a,b)=> (a.label || a.name || '').localeCompare(b.label || b.name || ''));
+    list.forEach(opt=>{
+      const row = document.createElement('label');
+      row.className = 'skill-option';
+      const rb = document.createElement('input');
+      rb.type = 'radio';
+      rb.name = 'skill-choice';
+      rb.value = opt.name || opt;
+      row.appendChild(rb);
+      const span = document.createElement('span');
+      span.textContent = opt.label || opt.name || opt;
+      row.appendChild(span);
+      skillBodyEl.appendChild(row);
+    });
+    const close = (result)=>{
+      invToggleModal(skillModal, skillBackdrop, false);
+      resolve(result || '');
+    };
+    if (skillClose) skillClose.onclick = ()=> close('');
+    if (skillCancel) skillCancel.onclick = ()=> close('');
+    if (skillBackdrop) skillBackdrop.onclick = (e)=>{ if (e.target === skillBackdrop) close(''); };
+    if (skillConfirm) skillConfirm.onclick = ()=>{
+      const picked = skillBodyEl.querySelector('input[type="radio"]:checked');
+      close(picked ? picked.value : '');
+    };
+    invToggleModal(skillModal, skillBackdrop, true);
+  });
+}
+
 /* ---------- Rolling ---------- */
 let ROLL_CONTEXT = null;
 let ROLL_LOG_COUNT = 0;
@@ -5081,6 +5157,46 @@ function parseCustomCard(msg){
   if (!parsed) return null;
   return parsed;
 }
+function parseAbilityRollCard(msg){
+  const lines = cleanChatLines(msg.lines);
+  const template = templateTagFromLines(lines);
+  if (!template || !template.includes('ability roll')) return null;
+  const baseLines = stripTemplateLines(lines);
+  const typeLine = baseLines.find(l=> /^Type:/i.test(l));
+  const details = typeLine ? detailMapFromLine(typeLine) : {};
+  const sourceLine = baseLines.find(l=> /^Source:/i.test(l)) || '';
+  const descLine = baseLines.find(l=> /^(Effect|Description):/i.test(l)) || '';
+  const desc = descLine ? descLine.replace(/^(Effect|Description):\s*/i, '').trim() : '';
+  const source = sourceLine ? sourceLine.replace(/^Source:\s*/i, '').trim() : '';
+  const skillStart = baseLines.findIndex(l=> /^Skill:/i.test(l));
+  let skillLines = [];
+  if (skillStart >= 0){
+    for (let i=skillStart; i<baseLines.length; i++){
+      const line = baseLines[i];
+      if (/^Roll:/i.test(line)) break;
+      skillLines.push(line);
+    }
+  }
+  const skillMeta = skillLines.length ? parseSkillCard({ lines: skillLines }) : null;
+  const skillLine = skillLines.find(l=> /^Skill:/i.test(l)) || '';
+  const skillName = skillLine ? skillLine.replace(/^Skill:\s*/i, '').trim() : '';
+  const critLine = skillLines.find(l=> /^Critical:/i.test(l)) || '';
+  const condLine = skillLines.find(l=> /^Conditions:/i.test(l)) || '';
+  const rollLines = baseLines.filter(l=> /^Roll:/i.test(l));
+  const rolls = [];
+  rollLines.forEach(line=>{
+    const parsed = parseRollSegments([line]);
+    if (!parsed) return;
+    parsed.types.forEach(t=>{
+      rolls.push({
+        name: t.name,
+        total: t.total,
+        formula: parsed.formulas[t.name] || ''
+      });
+    });
+  });
+  return { details, desc, source, skillMeta, skillName, critLine, condLine, rolls };
+}
 
 function buildSegmentCard(meta, className, titleText){
   const card = document.createElement('div');
@@ -5132,6 +5248,133 @@ function appendRollCardImage(card, msg){
 }
 
 function buildRollCard(msg){
+  const abilityRollMeta = parseAbilityRollCard(msg);
+  if (abilityRollMeta){
+    const kind = String(abilityRollMeta.details?.type || '').toLowerCase();
+    const card = document.createElement('div');
+    card.className = `roll-card roll-ability ${kind === 'active' ? 'is-active' : 'is-passive'}`.trim();
+    const title = document.createElement('div');
+    title.className = 'roll-title';
+    title.textContent = msg.text || 'Ability';
+    const divider = document.createElement('div');
+    divider.className = 'roll-divider';
+    card.appendChild(title);
+    card.appendChild(divider);
+    if (kind === 'active'){
+      const metaLine = document.createElement('div');
+      metaLine.className = 'roll-meta-line';
+      const parts = [];
+      if (abilityRollMeta.details.cost) parts.push(`Cost: ${abilityRollMeta.details.cost}`);
+      if (abilityRollMeta.details.aoe) parts.push(`AoE: ${abilityRollMeta.details.aoe}`);
+      if (abilityRollMeta.details.range) parts.push(`Range: ${abilityRollMeta.details.range}`);
+      metaLine.textContent = parts.join(' || ');
+      if (metaLine.textContent) card.appendChild(metaLine);
+      if (abilityRollMeta.details.activation){
+        const activationLine = document.createElement('div');
+        activationLine.className = 'roll-meta-line';
+        activationLine.textContent = `Activation: ${abilityRollMeta.details.activation}`;
+        card.appendChild(activationLine);
+      }
+      const skillReq = abilityRollMeta.details['skill roll'];
+      if (skillReq){
+        const skillLine = document.createElement('div');
+        skillLine.className = 'roll-meta-line';
+        skillLine.textContent = `Skill Roll: ${skillReq}`;
+        card.appendChild(skillLine);
+      }
+    }
+    if (abilityRollMeta.source){
+      const srcLine = document.createElement('div');
+      srcLine.className = 'roll-meta-line';
+      srcLine.textContent = `Source: ${abilityRollMeta.source}`;
+      card.appendChild(srcLine);
+    }
+    if (abilityRollMeta.desc){
+      const desc = document.createElement('div');
+      desc.className = 'roll-desc';
+      desc.textContent = abilityRollMeta.desc;
+      card.appendChild(desc);
+    }
+    if (abilityRollMeta.skillMeta){
+      const skillDivider = document.createElement('div');
+      skillDivider.className = 'roll-divider';
+      card.appendChild(skillDivider);
+      const skillHeader = document.createElement('div');
+      skillHeader.className = 'roll-meta-line';
+      skillHeader.textContent = abilityRollMeta.skillName ? `Skill Roll: ${abilityRollMeta.skillName}` : 'Skill Roll';
+      card.appendChild(skillHeader);
+      const skillRow = document.createElement('div');
+      skillRow.className = 'roll-dmg-row';
+      const skillType = document.createElement('div');
+      skillType.className = 'roll-dmg-type';
+      skillType.textContent = abilityRollMeta.skillName || 'Skill';
+      const skillValue = document.createElement('div');
+      skillValue.className = 'roll-dmg-value';
+      skillValue.textContent = abilityRollMeta.skillMeta.total || '--';
+      skillRow.appendChild(skillType);
+      skillRow.appendChild(skillValue);
+      card.appendChild(skillRow);
+      if (abilityRollMeta.skillMeta.sub){
+        const sub = document.createElement('div');
+        sub.className = 'roll-sub';
+        sub.textContent = abilityRollMeta.skillMeta.sub;
+        card.appendChild(sub);
+      }
+      if (abilityRollMeta.skillMeta.formula){
+        const formula = document.createElement('div');
+        formula.className = 'roll-formula';
+        formula.textContent = abilityRollMeta.skillMeta.formula;
+        card.appendChild(formula);
+      }
+      if (abilityRollMeta.condLine){
+        const cond = document.createElement('div');
+        cond.className = 'roll-meta-line';
+        cond.textContent = abilityRollMeta.condLine;
+        card.appendChild(cond);
+      }
+      if (abilityRollMeta.critLine){
+        const crit = document.createElement('div');
+        crit.className = 'roll-meta-line';
+        crit.textContent = abilityRollMeta.critLine;
+        card.appendChild(crit);
+      }
+    }
+    if (abilityRollMeta.rolls && abilityRollMeta.rolls.length){
+      const rollDivider = document.createElement('div');
+      rollDivider.className = 'roll-divider';
+      card.appendChild(rollDivider);
+      const rollHeader = document.createElement('div');
+      rollHeader.className = 'roll-meta-line';
+      rollHeader.textContent = 'Rolls';
+      card.appendChild(rollHeader);
+      abilityRollMeta.rolls.forEach((roll, idx)=>{
+        const rowEl = document.createElement('div');
+        rowEl.className = 'roll-dmg-row';
+        const typeEl = document.createElement('div');
+        typeEl.className = 'roll-dmg-type';
+        typeEl.textContent = roll.name;
+        const valueEl = document.createElement('div');
+        valueEl.className = 'roll-dmg-value';
+        valueEl.textContent = roll.total;
+        rowEl.appendChild(typeEl);
+        rowEl.appendChild(valueEl);
+        card.appendChild(rowEl);
+        if (roll.formula){
+          const formula = document.createElement('div');
+          formula.className = 'roll-formula';
+          formula.textContent = `[ ${roll.formula} ]`;
+          card.appendChild(formula);
+        }
+        if (idx < abilityRollMeta.rolls.length - 1){
+          const sep = document.createElement('div');
+          sep.className = 'roll-divider';
+          card.appendChild(sep);
+        }
+      });
+    }
+    appendRollCardImage(card, msg);
+    return card;
+  }
   const skillMeta = parseSkillCard(msg);
   if (skillMeta){
     const card = document.createElement('div');
@@ -5845,7 +6088,8 @@ function abilityRollDetails(a){
   const activation = isPassive ? '' : (a?.active?.activation || a?.activation || '');
   const type = a?.type || '';
   const skillRoll = !!(a?.active?.requires_skill_roll);
-  return { desc, cost, range, aoe, activation, type, skillRoll };
+  const skillOptions = Array.isArray(a?.active?.skill_roll_skills) ? a.active.skill_roll_skills.filter(Boolean) : [];
+  return { desc, cost, range, aoe, activation, type, skillRoll, skillOptions };
 }
 
 function openSkillRoll(charKey, charLabel, skillName){
@@ -5875,7 +6119,10 @@ function openAbilityRoll(a, sourceLabel){
   if (details.range) parts.push(`Range: ${details.range}`);
   if (details.aoe) parts.push(`AoE: ${details.aoe}`);
   if (details.activation) parts.push(`Activation: ${details.activation}`);
-  if (details.skillRoll) parts.push('Skill Roll: Required');
+  if (details.skillRoll){
+    const skillLabel = details.skillOptions?.length ? details.skillOptions.join(', ') : 'Required';
+    parts.push(`Skill Roll: ${skillLabel}`);
+  }
   const detailLine = parts.join(' | ');
   const lines = [];
   if (sourceLabel) lines.push(`Source: ${sourceLabel}`);
@@ -5892,24 +6139,26 @@ function openAbilityRoll(a, sourceLabel){
   });
 }
 
-function openCombatAbilityRoll(a, sourceLabel){
+async function openCombatAbilityRoll(a, sourceLabel){
   const details = abilityRollDetails(a);
   const titleText = a?.name || a?.id || 'Ability';
-  const parts = [];
-  if (details.type) parts.push(`Type: ${details.type}`);
-  if (details.cost) parts.push(`Cost: ${details.cost}`);
-  if (details.range) parts.push(`Range: ${details.range}`);
-  if (details.aoe) parts.push(`AoE: ${details.aoe}`);
-  if (details.activation) parts.push(`Activation: ${details.activation}`);
-  if (details.skillRoll) parts.push('Skill Roll: Required');
-  const detailLine = parts.join(' | ');
-  const lines = [];
-  if (sourceLabel) lines.push(`Source: ${sourceLabel}`);
-  if (detailLine) lines.push(detailLine);
-
   const rolls = normalizeAbilityRolls(a);
   const hasRolls = rolls.length > 0 || details.skillRoll;
   if (!hasRolls){
+    const parts = [];
+    if (details.type) parts.push(`Type: ${details.type}`);
+    if (details.cost) parts.push(`Cost: ${details.cost}`);
+    if (details.range) parts.push(`Range: ${details.range}`);
+    if (details.aoe) parts.push(`AoE: ${details.aoe}`);
+    if (details.activation) parts.push(`Activation: ${details.activation}`);
+    if (details.skillRoll){
+      const skillLabel = details.skillOptions?.length ? details.skillOptions.join(', ') : 'Required';
+      parts.push(`Skill Roll: ${skillLabel}`);
+    }
+    const detailLine = parts.join(' | ');
+    const lines = [];
+    if (sourceLabel) lines.push(`Source: ${sourceLabel}`);
+    if (detailLine) lines.push(detailLine);
     openRollModal({
       title: titleText,
       subtitle: sourceLabel ? `${sourceLabel} ability` : 'Ability',
@@ -5924,79 +6173,105 @@ function openCombatAbilityRoll(a, sourceLabel){
     return;
   }
 
-  const descText = String(details.desc || '').replace(/<[^>]+>/g, '').trim();
-  appendAbilityInfoLog({ title: titleText, detailLines: lines, descText });
+  let skillName = '';
+  let skillLines = [];
+  if (details.skillRoll){
+    const options = abilitySkillOptions(a);
+    const pool = options.length ? options : allSkillNames();
+    if (pool.length === 1){
+      skillName = pool[0];
+    }else{
+      const modalOptions = pool.map(name=>({ name, label: name }));
+      skillName = await openSkillSelectModal({
+        titleText: `${titleText} skill`,
+        subtitleText: 'Select one skill for the ability roll.',
+        options: modalOptions
+      });
+      if (!skillName) return;
+    }
+    const skillSummary = rollSkillSummaryLines(skillName);
+    skillLines = skillSummary.lines || [];
+  }
 
   const needsNature = abilityNeedsNatureSelection(rolls);
   let selectedNatures = [];
   if (needsNature){
     selectedNatures = getAbilityRollDefaults(a?.id);
     if (!selectedNatures.length){
-      openNatureSelectModal({
+      const picked = await openNatureSelectModal({
         titleText: `${titleText} natures`,
         subtitleText: 'Select up to 2 natures for magic damage or ID.',
         selected: [],
         max: 2
-      }).then((picked)=>{
-        if (!picked || !picked.length) return;
-        runAbilityRolls(picked);
       });
+      if (!picked || !picked.length) return;
+      selectedNatures = picked;
+    }
+  }
+
+  const natureLabel = formatNatureList(selectedNatures || []);
+  const needsId = rolls.some(r=> rollExprHasId(r.expr));
+  let idInfo = null;
+  if (needsId){
+    const resolved = resolveIdDieFromNatures(selectedNatures || []);
+    if (resolved.error){
+      openRollModal({ title: `${titleText} Roll`, infoOnly:true, descText: resolved.error });
       return;
     }
+    idInfo = { die: resolved.die, label: resolved.label };
   }
-  runAbilityRolls(selectedNatures);
 
-  function runAbilityRolls(natures){
-    const natureLabel = formatNatureList(natures || []);
-    const needsId = rolls.some(r=> rollExprHasId(r.expr));
-    let idInfo = null;
-    if (needsId){
-      const resolved = resolveIdDieFromNatures(natures || []);
-      if (resolved.error){
-        openRollModal({ title: `${titleText} Roll`, infoOnly:true, descText: resolved.error });
-        return;
-      }
-      idInfo = { die: resolved.die, label: resolved.label };
-    }
-    for (const r of rolls){
-      const kind = String(r.kind || 'custom').toLowerCase();
-      const isDamage = kind === 'damage' || kind === 'true_damage';
-      const isHeal = ['heal_hp','restore_fo','restore_en','sp_gain'].includes(kind);
-      let label = '';
-      if (kind === 'damage'){
-        const dmgType = String(r.damage_type || 'Neutral');
-        const dmgLower = dmgType.toLowerCase();
-        if (dmgLower === 'magic' || dmgLower === 'magical'){
-          label = natureLabel || 'Magic';
-        }else{
-          label = formatNatureLabel(dmgType);
-        }
-      }else if (kind === 'true_damage'){
-        label = 'True Damage';
-      }else if (kind === 'heal_hp'){
-        label = 'HP';
-      }else if (kind === 'restore_fo'){
-        label = 'FO';
-      }else if (kind === 'restore_en'){
-        label = 'EN';
-      }else if (kind === 'sp_gain'){
-        label = 'SP';
-      }else{
-        label = r.label || 'Custom';
-      }
-      const result = rollAbilityExpression(r.expr, idInfo);
-      if (result.error){
-        openRollModal({ title: `${titleText} Roll`, infoOnly:true, descText: result.error });
-        return;
-      }
-      const template = isDamage ? 'Ability Damage' : (isHeal ? 'Ability Heal' : 'Ability Custom');
-      const title = isDamage
-        ? `${titleText} Damage`
-        : (isHeal ? `${titleText} ${label}` : `${titleText} ${label || 'Roll'}`);
-      const rollLine = `Roll: ${label} ${result.total}${result.formula ? ` (${result.formula})` : ''}`;
-      appendAbilityRollEntry({ title, template, rollLine });
-    }
+  const parts = [];
+  if (details.type) parts.push(`Type: ${details.type}`);
+  if (details.cost) parts.push(`Cost: ${details.cost}`);
+  if (details.range) parts.push(`Range: ${details.range}`);
+  if (details.aoe) parts.push(`AoE: ${details.aoe}`);
+  if (details.activation) parts.push(`Activation: ${details.activation}`);
+  if (details.skillRoll){
+    const skillLabel = skillName || (details.skillOptions?.length ? details.skillOptions.join(', ') : 'Required');
+    parts.push(`Skill Roll: ${skillLabel}`);
   }
+  const detailLine = parts.join(' | ');
+  const lines = ['Template: Ability Roll'];
+  if (sourceLabel) lines.push(`Source: ${sourceLabel}`);
+  if (detailLine) lines.push(detailLine);
+  const descText = String(details.desc || '').replace(/<[^>]+>/g, '').trim();
+  if (descText) lines.push(`Effect: ${descText}`);
+  if (skillLines.length) lines.push(...skillLines);
+
+  for (const r of rolls){
+    const kind = String(r.kind || 'custom').toLowerCase();
+    let label = '';
+    if (kind === 'damage'){
+      const dmgType = String(r.damage_type || 'Neutral');
+      const dmgLower = dmgType.toLowerCase();
+      if (dmgLower === 'magic' || dmgLower === 'magical'){
+        label = natureLabel || 'Magic';
+      }else{
+        label = formatNatureLabel(dmgType);
+      }
+    }else if (kind === 'true_damage'){
+      label = 'True Damage';
+    }else if (kind === 'heal_hp'){
+      label = 'HP';
+    }else if (kind === 'restore_fo'){
+      label = 'FO';
+    }else if (kind === 'restore_en'){
+      label = 'EN';
+    }else if (kind === 'sp_gain'){
+      label = 'SP';
+    }else{
+      label = r.label || 'Custom';
+    }
+    const result = rollAbilityExpression(r.expr, idInfo);
+    if (result.error){
+      openRollModal({ title: `${titleText} Roll`, infoOnly:true, descText: result.error });
+      return;
+    }
+    lines.push(`Roll: ${label} ${result.total}${result.formula ? ` (${result.formula})` : ''}`);
+  }
+
+  appendAbilityCombinedEntry({ title: titleText, lines });
 }
 
 function openSpellRoll(sp, meta, info){
@@ -10259,6 +10534,14 @@ function weaponCatalogLookup(it){
   if (nameKey && WEAPON_CATALOG_BY_NAME[nameKey]) return WEAPON_CATALOG_BY_NAME[nameKey];
   return null;
 }
+function weaponSkillValue(it){
+  const direct = it?.skill ?? it?.attack_skill ?? it?.weapon_skill ?? it?.details?.skill ?? it?.stats?.skill ?? it?.weapon?.skill ?? it?.meta?.skill;
+  if (direct != null && String(direct).trim()) return String(direct).trim();
+  const catalog = weaponCatalogLookup(it);
+  const fallback = catalog?.skill ?? catalog?.linked_skill ?? catalog?.attack_skill ?? catalog?.weapon_skill ?? catalog?.details?.skill ?? catalog?.stats?.skill;
+  if (fallback != null && String(fallback).trim()) return String(fallback).trim();
+  return 'Technicity';
+}
 function weaponDamageValue(it){
   const direct = it?.damage ?? it?.dmg ?? it?.details?.damage ?? it?.details?.dmg ?? it?.details?.Damage
     ?? it?.stats?.damage ?? it?.base_damage ?? it?.base?.damage ?? it?.weapon?.damage
@@ -10462,6 +10745,63 @@ function rollAbilityExpression(expr, idInfo){
   const formula = formatSignedFormula(pieces);
   return { total, formula };
 }
+function allSkillNames(){
+  return Array.from(new Set(CHARACS.flatMap(c=> c.skills || [])));
+}
+function abilitySkillOptions(ab){
+  const raw = Array.isArray(ab?.active?.skill_roll_skills) ? ab.active.skill_roll_skills : [];
+  const known = new Set(allSkillNames().map(s=> String(s).toLowerCase()));
+  return raw
+    .map(s=> String(s || '').trim())
+    .filter(Boolean)
+    .filter(s=> known.has(String(s).toLowerCase()));
+}
+function rollSkillSummaryLines(skillName){
+  const charKey = charKeyForSkillName(skillName);
+  const base = charKey ? skillAdjTotal(charKey, skillName).total : 0;
+  const cond = getCombatRollModifiers('skill', skillName);
+  const mod = Number(cond?.mod || 0) || 0;
+  const conds = cond?.conds || {};
+  const mode = cond?.adv || 'normal';
+  const rollModeLabel = mode === 'adv' ? 'Advantage' : (mode === 'dis' ? 'Disadvantage' : 'Simple');
+  const rollKind = 'skill';
+  const first = rollOnce(base, mod, conds, { kind: rollKind });
+  let second = null;
+  let chosen = first;
+  if (mode !== 'normal'){
+    second = rollOnce(base, mod, conds, { kind: rollKind });
+    chosen = (mode === 'adv')
+      ? (first.total >= second.total ? first : second)
+      : (first.total <= second.total ? first : second);
+  }
+  const isMaxRoll = chosen.crit
+    && chosen.crit.sign > 0
+    && chosen.crit.roll === 10
+    && Array.isArray(chosen.rolls)
+    && chosen.rolls[0] === 10;
+  const critNote = chosen.crit
+    ? {
+      label: isMaxRoll ? 'Maximum Roll' : (chosen.crit.sign > 0 ? 'Critical Success' : 'Critical Fail'),
+      delta: chosen.crit.sign * chosen.crit.roll,
+      isMax: isMaxRoll
+    }
+    : null;
+  const summaryLine = mode === 'normal'
+    ? rollSummaryText(chosen)
+    : `Roll A: ${rollSummaryText(first)} | Roll B: ${rollSummaryText(second)} | Chosen: ${chosen === first ? 'A' : 'B'}`;
+  const condSummary = formatConditionsSummary(conds);
+  const lines = [
+    `Skill: ${skillName}`,
+    `Roll type: ${rollModeLabel}`,
+    `Result: ${chosen.total}`,
+    `${summaryLine} | Base ${base} | Mod ${mod}`
+  ];
+  if (condSummary) lines.push(`Conditions: ${condSummary}`);
+  if (critNote){
+    lines.push(`Critical: ${critNote.label} ${critNote.delta >= 0 ? '+' : ''}${critNote.delta}`);
+  }
+  return { lines, total: chosen.total, critNote, rollModeLabel };
+}
 function appendAbilityInfoLog(ctx){
   const entry = document.createElement('div');
   entry.className = 'roll-entry';
@@ -10507,6 +10847,27 @@ function appendAbilityRollEntry({ title, template, rollLine }){
   const line = document.createElement('div');
   line.textContent = rollLine;
   entry.appendChild(line);
+  appendRollLog(entry);
+}
+
+function appendAbilityCombinedEntry({ title, lines }){
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const titleEl = document.createElement('div');
+  titleEl.className = 'title';
+  titleEl.textContent = title || 'Ability';
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  entry.appendChild(titleEl);
+  entry.appendChild(meta);
+  (lines || []).forEach(line=>{
+    if (!line) return;
+    const div = document.createElement('div');
+    div.className = 'muted';
+    div.textContent = line;
+    entry.appendChild(div);
+  });
   appendRollLog(entry);
 }
 
@@ -10710,7 +11071,7 @@ function rollCombatAttack(){
   state.special = specialName || state.special;
   state.offhand = isOffhand;
   queueSave();
-  const skill = it.skill || 'Technicity';
+  const skill = weaponSkillValue(it);
   const charKey = charKeyForSkillName(skill);
   const base = charKey ? skillAdjTotal(charKey, skill).total : 0;
   const cond = getCombatRollModifiers('offense', skill);
@@ -10775,7 +11136,7 @@ function renderCombatWeapons(){
   }
   items.forEach(it=>{
     const name = it.alt_name || it.name || 'Weapon';
-    const skill = it.skill || 'Technicity';
+    const skill = weaponSkillValue(it);
     const dmg = weaponDamageValue(it) || '--';
     const attrList = getWeaponAttributes(it);
     const attrs = attrList.length ? attrList.join(', ') : 'No properties';

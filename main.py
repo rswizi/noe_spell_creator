@@ -5579,6 +5579,10 @@ def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
                     "label": label,
                 })
         requires_skill_roll = bool(active_in.get("requires_skill_roll") or active_in.get("skill_roll") or False)
+        skill_roll_in = active_in.get("skill_roll_skills") or active_in.get("roll_skills") or []
+        skill_roll_skills = []
+        if isinstance(skill_roll_in, list):
+            skill_roll_skills = [str(s).strip() for s in skill_roll_in if str(s).strip()]
         active_block = {
             "activation": activation,
             "range": rng,
@@ -5587,6 +5591,7 @@ def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
             "costs_active": costs_active,
             "rolls": rolls,
             "requires_skill_roll": requires_skill_roll,
+            "skill_roll_skills": skill_roll_skills,
         }
 
     # --- passive part ---
@@ -5794,6 +5799,12 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
                     "label": label,
                 })
         requires_skill_roll = bool(active_in.get("requires_skill_roll") or active_in.get("skill_roll") or existing.get("active", {}).get("requires_skill_roll") or False)
+        skill_roll_in = active_in.get("skill_roll_skills")
+        if skill_roll_in is None:
+            skill_roll_in = existing.get("active", {}).get("skill_roll_skills") or existing.get("active", {}).get("roll_skills") or []
+        skill_roll_skills = []
+        if isinstance(skill_roll_in, list):
+            skill_roll_skills = [str(s).strip() for s in skill_roll_in if str(s).strip()]
         active_block = {
             "activation": activation,
             "range": rng,
@@ -5802,6 +5813,7 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
             "costs_active": costs_active,
             "rolls": rolls,
             "requires_skill_roll": requires_skill_roll,
+            "skill_roll_skills": skill_roll_skills,
         }
 
     passive_block = None

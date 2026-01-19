@@ -774,6 +774,46 @@
       if (!parsed) return null;
       return parsed;
     }
+    function parseAbilityRollCard(msg){
+      const lines = cleanChatLines(msg.lines);
+      const template = templateTagFromLines(lines);
+      if (!template || !template.includes('ability roll')) return null;
+      const baseLines = stripTemplateLines(lines);
+      const typeLine = baseLines.find(l=> /^Type:/i.test(l));
+      const details = typeLine ? detailMapFromLine(typeLine) : {};
+      const sourceLine = baseLines.find(l=> /^Source:/i.test(l)) || '';
+      const descLine = baseLines.find(l=> /^(Effect|Description):/i.test(l)) || '';
+      const desc = descLine ? descLine.replace(/^(Effect|Description):\s*/i, '').trim() : '';
+      const source = sourceLine ? sourceLine.replace(/^Source:\s*/i, '').trim() : '';
+      const skillStart = baseLines.findIndex(l=> /^Skill:/i.test(l));
+      let skillLines = [];
+      if (skillStart >= 0){
+        for (let i=skillStart; i<baseLines.length; i++){
+          const line = baseLines[i];
+          if (/^Roll:/i.test(line)) break;
+          skillLines.push(line);
+        }
+      }
+      const skillMeta = skillLines.length ? parseSkillCard({ lines: skillLines }) : null;
+      const skillLine = skillLines.find(l=> /^Skill:/i.test(l)) || '';
+      const skillName = skillLine ? skillLine.replace(/^Skill:\s*/i, '').trim() : '';
+      const critLine = skillLines.find(l=> /^Critical:/i.test(l)) || '';
+      const condLine = skillLines.find(l=> /^Conditions:/i.test(l)) || '';
+      const rollLines = baseLines.filter(l=> /^Roll:/i.test(l));
+      const rolls = [];
+      rollLines.forEach(line=>{
+        const parsed = parseRollSegments([line]);
+        if (!parsed) return;
+        parsed.types.forEach(t=>{
+          rolls.push({
+            name: t.name,
+            total: t.total,
+            formula: parsed.formulas[t.name] || ''
+          });
+        });
+      });
+      return { details, desc, source, skillMeta, skillName, critLine, condLine, rolls };
+    }
 
     function buildSegmentCard(meta, className, titleText){
       const card = document.createElement('div');
@@ -814,6 +854,132 @@
     }
 
     function buildRollCard(msg){
+      const abilityRollMeta = parseAbilityRollCard(msg);
+      if (abilityRollMeta){
+        const kind = String(abilityRollMeta.details?.type || '').toLowerCase();
+        const card = document.createElement('div');
+        card.className = `roll-card roll-ability ${kind === 'active' ? 'is-active' : 'is-passive'}`.trim();
+        const title = document.createElement('div');
+        title.className = 'roll-title';
+        title.textContent = msg.text || 'Ability';
+        const divider = document.createElement('div');
+        divider.className = 'roll-divider';
+        card.appendChild(title);
+        card.appendChild(divider);
+        if (kind === 'active'){
+          const metaLine = document.createElement('div');
+          metaLine.className = 'roll-meta-line';
+          const parts = [];
+          if (abilityRollMeta.details.cost) parts.push(`Cost: ${abilityRollMeta.details.cost}`);
+          if (abilityRollMeta.details.aoe) parts.push(`AoE: ${abilityRollMeta.details.aoe}`);
+          if (abilityRollMeta.details.range) parts.push(`Range: ${abilityRollMeta.details.range}`);
+          metaLine.textContent = parts.join(' || ');
+          if (metaLine.textContent) card.appendChild(metaLine);
+          if (abilityRollMeta.details.activation){
+            const activationLine = document.createElement('div');
+            activationLine.className = 'roll-meta-line';
+            activationLine.textContent = `Activation: ${abilityRollMeta.details.activation}`;
+            card.appendChild(activationLine);
+          }
+          const skillReq = abilityRollMeta.details['skill roll'];
+          if (skillReq){
+            const skillLine = document.createElement('div');
+            skillLine.className = 'roll-meta-line';
+            skillLine.textContent = `Skill Roll: ${skillReq}`;
+            card.appendChild(skillLine);
+          }
+        }
+        if (abilityRollMeta.source){
+          const srcLine = document.createElement('div');
+          srcLine.className = 'roll-meta-line';
+          srcLine.textContent = `Source: ${abilityRollMeta.source}`;
+          card.appendChild(srcLine);
+        }
+        if (abilityRollMeta.desc){
+          const desc = document.createElement('div');
+          desc.className = 'roll-desc';
+          desc.textContent = abilityRollMeta.desc;
+          card.appendChild(desc);
+        }
+        if (abilityRollMeta.skillMeta){
+          const skillDivider = document.createElement('div');
+          skillDivider.className = 'roll-divider';
+          card.appendChild(skillDivider);
+          const skillHeader = document.createElement('div');
+          skillHeader.className = 'roll-meta-line';
+          skillHeader.textContent = abilityRollMeta.skillName ? `Skill Roll: ${abilityRollMeta.skillName}` : 'Skill Roll';
+          card.appendChild(skillHeader);
+          const skillRow = document.createElement('div');
+          skillRow.className = 'roll-dmg-row';
+          const skillType = document.createElement('div');
+          skillType.className = 'roll-dmg-type';
+          skillType.textContent = abilityRollMeta.skillName || 'Skill';
+          const skillValue = document.createElement('div');
+          skillValue.className = 'roll-dmg-value';
+          skillValue.textContent = abilityRollMeta.skillMeta.total || '--';
+          skillRow.appendChild(skillType);
+          skillRow.appendChild(skillValue);
+          card.appendChild(skillRow);
+          if (abilityRollMeta.skillMeta.sub){
+            const sub = document.createElement('div');
+            sub.className = 'roll-sub';
+            sub.textContent = abilityRollMeta.skillMeta.sub;
+            card.appendChild(sub);
+          }
+          if (abilityRollMeta.skillMeta.formula){
+            const formula = document.createElement('div');
+            formula.className = 'roll-formula';
+            formula.textContent = abilityRollMeta.skillMeta.formula;
+            card.appendChild(formula);
+          }
+          if (abilityRollMeta.condLine){
+            const cond = document.createElement('div');
+            cond.className = 'roll-meta-line';
+            cond.textContent = abilityRollMeta.condLine;
+            card.appendChild(cond);
+          }
+          if (abilityRollMeta.critLine){
+            const crit = document.createElement('div');
+            crit.className = 'roll-meta-line';
+            crit.textContent = abilityRollMeta.critLine;
+            card.appendChild(crit);
+          }
+        }
+        if (abilityRollMeta.rolls && abilityRollMeta.rolls.length){
+          const rollDivider = document.createElement('div');
+          rollDivider.className = 'roll-divider';
+          card.appendChild(rollDivider);
+          const rollHeader = document.createElement('div');
+          rollHeader.className = 'roll-meta-line';
+          rollHeader.textContent = 'Rolls';
+          card.appendChild(rollHeader);
+          abilityRollMeta.rolls.forEach((roll, idx)=>{
+            const rowEl = document.createElement('div');
+            rowEl.className = 'roll-dmg-row';
+            const typeEl = document.createElement('div');
+            typeEl.className = 'roll-dmg-type';
+            typeEl.textContent = roll.name;
+            const valueEl = document.createElement('div');
+            valueEl.className = 'roll-dmg-value';
+            valueEl.textContent = roll.total;
+            rowEl.appendChild(typeEl);
+            rowEl.appendChild(valueEl);
+            card.appendChild(rowEl);
+            if (roll.formula){
+              const formula = document.createElement('div');
+              formula.className = 'roll-formula';
+              formula.textContent = `[ ${roll.formula} ]`;
+              card.appendChild(formula);
+            }
+            if (idx < abilityRollMeta.rolls.length - 1){
+              const sep = document.createElement('div');
+              sep.className = 'roll-divider';
+              card.appendChild(sep);
+            }
+          });
+        }
+        return card;
+      }
       const skillMeta = parseSkillCard(msg);
       if (skillMeta){
         const card = document.createElement('div');
