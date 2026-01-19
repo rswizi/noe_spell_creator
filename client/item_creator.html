@@ -1084,6 +1084,24 @@ function buildPayload(){
 
 function fillFromPayload(item){
   STATE.id = item.id || null;
+  const modList = document.querySelector("#mod-list");
+  const mods = Array.isArray(item.modifiers) ? item.modifiers : [];
+  modList.innerHTML = "";
+  if (mods.length){
+    mods.forEach(m=>{
+      addModRow({
+        target: m.target || m.key || "",
+        mode: m.mode || "add",
+        value: m.value ?? 0,
+        quality_step: m.quality_step ?? "",
+        note: m.note || "",
+        group: m.group || "",
+        group_max_choices: m.group_max_choices ?? ""
+      });
+    });
+  }else{
+    addModRow({});
+  }
   document.querySelector("#fld-name").value = item.name || "";
   document.querySelector("#fld-enc").value = item.enc ?? 0;
   document.querySelector("#fld-price").value = item.price ?? 0;

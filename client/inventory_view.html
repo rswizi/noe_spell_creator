@@ -305,22 +305,19 @@ function normalizeChoiceEntry(val){
   return { base, picks: picks.filter(Boolean) };
 }
 function choiceMaxForMod(mod){
-  if (!mod) return 0;
+  if (!mod) return 1;
   const choice = mod.choice || {};
   const rawChoice = choice.max_choices ?? choice.max ?? choice.maxChoices;
-  let raw = (rawChoice != null && rawChoice !== "") ? rawChoice : (mod.max_choices ?? mod.choice_max ?? mod.max_choice ?? mod.choiceMax);
-  if ((raw == null || raw === "") && mod.__source) raw = mod.group_max_choices;
+  const raw = (rawChoice != null && rawChoice !== "") ? rawChoice : (mod.max_choices ?? mod.choice_max ?? mod.max_choice ?? mod.choiceMax);
   const parsed = Number(raw);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 1;
 }
 function collectModifierGroups(mods){
   const map = new Map();
   (mods || []).forEach((m, idx)=>{
     const name = String(m?.group || "").trim();
     if (!name) return;
-    const raw = m?.group_max_choices ?? m?.groupMaxChoices ?? m?.group_max ?? m?.groupMax;
-    const parsed = Number(raw);
-    const max = Number.isFinite(parsed) ? Math.max(0, parsed) : 1;
+    const max = 1;
     const modIdx = Number.isFinite(Number(m?.__mod_idx)) ? Number(m.__mod_idx) : idx;
     const entry = map.get(name) || { name, max, options: [] };
     entry.options.push({ idx: modIdx, mod: m });
