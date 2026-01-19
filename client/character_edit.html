@@ -3664,6 +3664,49 @@ function normalizeChoiceEntry(val){
   const base = val.base || val.source || '';
   return { base, picks: picks.filter(Boolean) };
 }
+function choiceMaxForMod(mod){
+  if (!mod) return 0;
+  const choice = mod.choice || {};
+  const rawChoice = choice.max_choices ?? choice.max ?? choice.maxChoices;
+  let raw = (rawChoice != null && rawChoice !== '') ? rawChoice : (mod.max_choices ?? mod.choice_max ?? mod.max_choice ?? mod.choiceMax);
+  if ((raw == null || raw === '') && mod.__source) raw = mod.group_max_choices;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+function collectModifierGroups(mods){
+  const map = new Map();
+  (mods || []).forEach((m, idx)=>{
+    const name = String(m?.group || '').trim();
+    if (!name) return;
+    const raw = m?.group_max_choices ?? m?.groupMaxChoices ?? m?.group_max ?? m?.groupMax;
+    const parsed = Number(raw);
+    const max = Number.isFinite(parsed) ? Math.max(0, parsed) : 1;
+    const modIdx = Number.isFinite(Number(m?.__mod_idx)) ? Number(m.__mod_idx) : idx;
+    const entry = map.get(name) || { name, max, options: [] };
+    entry.options.push({ idx: modIdx, mod: m });
+    map.set(name, entry);
+  });
+  return Array.from(map.values());
+}
+function resolveModifierGroupSelections(mods, stored = {}){
+  const groups = collectModifierGroups(mods);
+  const selections = {};
+  const active = new Set();
+  groups.forEach(g=>{
+    const allowed = g.options.map(o=> o.idx);
+    const limit = g.max > 0 ? g.max : allowed.length;
+    const saved = Array.isArray(stored?.[g.name]) ? stored[g.name] : [];
+    let picks = saved.map(x=> Number(x)).filter(i=> allowed.includes(i));
+    if (!picks.length){
+      picks = allowed.slice(0, limit);
+    }else if (limit > 0 && picks.length > limit){
+      picks = picks.slice(0, limit);
+    }
+    selections[g.name] = picks;
+    picks.forEach(i=> active.add(i));
+  });
+  return { groups, selections, active };
+}
 function normalizeRestrict(choice){
   // Accept either the whole modifier or the nested choice object.
   if (!choice) return [];
@@ -3881,14 +3924,22 @@ function resolvedPassiveMods(ab){
   });
   return out;
 }
+function mergeAbilityListsUnique(...lists){
+  const out = [];
+  const seen = new Set();
+  lists.forEach(list=>{
+    (list || []).forEach(a=>{
+      const id = String(a?.id || '').trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      out.push(a);
+    });
+  });
+  return out;
+}
 function recomputePassiveAgg(){
   resetPassiveAgg();
-    const assignedIds = new Set((ASSIGNED||[]).map(a=> String(a?.id || '')));
-    const combined = (ASSIGNED||[])
-      .concat((ARC_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
-      .concat((EXP_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
-      .concat((DIMA_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
-      .concat((AWAK_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
+    const combined = mergeAbilityListsUnique(ASSIGNED, ARC_ASSIGNED, EXP_ASSIGNED, DIMA_ASSIGNED, AWAK_ASSIGNED);
     const passiveAbilities = combined.filter(a=>{
       const t = (a.type||'').toLowerCase();
       return t==='passive' || t==='mixed';
@@ -4225,8 +4276,16 @@ function getEquippedInventoryModifiers(){
   for (const it of items){
     if (it.equipped === false) continue;
     const itemKey = itemChoiceKey(it);
+    const itemMods = Array.isArray(it.modifiers) ? it.modifiers : [];
+    const itemGroupState = ITEM_CHOICES?.[itemKey]?._groups || {};
+    const itemGroupInfo = resolveModifierGroupSelections(itemMods, itemGroupState);
+    if (itemKey && itemGroupInfo.groups.length && JSON.stringify(itemGroupState) !== JSON.stringify(itemGroupInfo.selections)){
+      ITEM_CHOICES[itemKey] = { ...(ITEM_CHOICES[itemKey] || {}), _groups: itemGroupInfo.selections };
+      queueSave();
+    }
     const allMods = [
-      ...(it.modifiers || []).map(m=>({ ...m, __origin:'Item' })),
+      ...itemMods.filter((m, idx)=> !m?.group || !itemGroupInfo.groups.length || itemGroupInfo.active.has(idx))
+        .map(m=>({ ...m, __origin:'Item' })),
     ];
     (it.upgrades || []).forEach((u, idx)=>{
       const upgId = u?.id || u?.key || u;
@@ -4234,7 +4293,14 @@ function getEquippedInventoryModifiers(){
       const pool = resolveUpgradeModifiers(u, meta);
       const name = meta?.name || u?.name || upgId || 'Upgrade';
       const choiceKey = upgradeChoiceKey(it, u, idx);
-      (pool || []).forEach(m=>{
+      const upgGroupState = ITEM_CHOICES?.[choiceKey]?._groups || {};
+      const upgGroupInfo = resolveModifierGroupSelections(pool, upgGroupState);
+      if (choiceKey && upgGroupInfo.groups.length && JSON.stringify(upgGroupState) !== JSON.stringify(upgGroupInfo.selections)){
+        ITEM_CHOICES[choiceKey] = { ...(ITEM_CHOICES[choiceKey] || {}), _groups: upgGroupInfo.selections };
+        queueSave();
+      }
+      (pool || []).forEach((m, mIdx)=>{
+        if (m?.group && upgGroupInfo.groups.length && !upgGroupInfo.active.has(mIdx)) return;
         allMods.push({ ...m, __origin:`Upgrade: ${name}`, __choice_key: choiceKey });
       });
     });
@@ -6349,8 +6415,8 @@ function wireRollModal(){
 
   function itemChoiceMods(it){
     const mods = [];
-    (it.modifiers || []).forEach(m=>{
-      if (String(m.target||'').startsWith('choice:')) mods.push({ ...m, __source:'Item' });
+    (it.modifiers || []).forEach((m, idx)=>{
+      if (String(m.target||'').startsWith('choice:')) mods.push({ ...m, __source:'Item', __mod_idx: idx });
     });
     return mods;
   }
@@ -6366,11 +6432,17 @@ function wireRollModal(){
   function upgradeChoiceMods(u, meta, choiceKey){
     const name = meta?.name || u?.name || u?.id || 'Upgrade';
     const mods = resolveUpgradeModifiers(u, meta);
-    return (mods || []).filter(m=> String(m.target||'').startsWith('choice:')).map(m=> ({
-      ...m,
-      __source:`Upgrade: ${name}`,
-      __choice_key: choiceKey || ''
-    }));
+    const out = [];
+    (mods || []).forEach((m, idx)=>{
+      if (!String(m.target||'').startsWith('choice:')) return;
+      out.push({
+        ...m,
+        __source:`Upgrade: ${name}`,
+        __choice_key: choiceKey || '',
+        __mod_idx: idx
+      });
+    });
+    return out;
   }
 function itemHasChoice(it){
   return itemChoiceMods(it).length > 0;
@@ -6811,6 +6883,7 @@ async function invPromptPricingChoice(row){
 }
 
 function openCustomPriceModal(basePrice){
+  applyGroupLocks();
   return new Promise(resolve=>{
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:4001; display:grid; place-items:center; padding:12px;';
@@ -12266,12 +12339,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   }
 
   const ops = { set:[], mul:[], add:[] };
-    const assignedIds = new Set((ASSIGNED||[]).map(a=> String(a?.id || '')));
-    const combined = (ASSIGNED||[])
-      .concat((ARC_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
-      .concat((EXP_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
-      .concat((DIMA_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
-      .concat((AWAK_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
+    const combined = mergeAbilityListsUnique(ASSIGNED, ARC_ASSIGNED, EXP_ASSIGNED, DIMA_ASSIGNED, AWAK_ASSIGNED);
     const passiveAbilities = combined.filter(a=>{
       const t = (a.type||'').toLowerCase();
       return t==='passive' || t==='mixed';
@@ -13094,7 +13162,8 @@ async function resolveAssignedAbilities(){
   // Normalize ability ids and drop empties so we don't hit the bulk endpoint with invalid ids.
   const ids = (CHAR.abilities||[]).map(id=> String(id||'').trim()).filter(Boolean);
   CHAR.abilities = ids;
-  Object.keys(ABILITY_CHOICES).forEach(id=>{ if (!ids.includes(String(id))) delete ABILITY_CHOICES[id]; });
+  const keepIds = new Set(ids.concat(COMPUTED_ARC_ABILITIES || [], COMPUTED_EXP_ABILITIES || [], COMPUTED_DIMA_ABILITIES || [], COMPUTED_AWAK_ABILITIES || []).map(String));
+  Object.keys(ABILITY_CHOICES).forEach(id=>{ if (!keepIds.has(String(id))) delete ABILITY_CHOICES[id]; });
   if (!ids.length){ ASSIGNED = []; return; }
   const uniqueIds = Array.from(new Set(ids));
   const qs = '?ids=' + encodeURIComponent(uniqueIds.join(','));
@@ -13350,7 +13419,7 @@ async function openGroupModal(ab){
   });
 }
 
-async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>{}, { titleText = 'Configure choices', entityLabel = '' } = {}){
+async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>{}, { titleText = 'Configure choices', entityLabel = '', enableGroups = false } = {}){
   if (!mods.length) return false;
   try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
   choiceTitle.textContent = titleText || 'Configure choices';
@@ -13359,6 +13428,76 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
 
   const blocks = [];
   choiceBody.innerHTML = '';
+  const groupInfo = enableGroups ? resolveModifierGroupSelections(mods, existingMap?._groups || {}) : { groups:[], selections:{}, active:new Set() };
+  const groupSelections = groupInfo.selections || {};
+  let groupActive = new Set(groupInfo.active || []);
+  const applyGroupLocks = ()=>{
+    if (!groupInfo.groups.length) return;
+    blocks.forEach(b=>{
+      if (!b.groupName) return;
+      const enabled = groupActive.has(b.modIdx);
+      b.setEnabled?.(enabled);
+    });
+  };
+  if (groupInfo.groups.length){
+    const groupPanel = document.createElement('div');
+    groupPanel.className = 'panel';
+    const header = document.createElement('div');
+    header.innerHTML = `<strong>Exclusive groups</strong> <span class="muted">(select ${groupInfo.groups.length === 1 ? 'options' : 'options per group'})</span>`;
+    groupPanel.appendChild(header);
+    groupInfo.groups.forEach(g=>{
+      const block = document.createElement('div');
+      block.style.marginTop = '8px';
+      const title = document.createElement('div');
+      title.innerHTML = `<strong>${g.name}</strong> <span class="muted">(max ${g.max || 'no limit'})</span>`;
+      block.appendChild(title);
+      const list = document.createElement('div');
+      list.className = 'choice-table';
+      const counter = document.createElement('div');
+      counter.className = 'muted choice-counter';
+      const updateCounter = ()=>{
+        const checked = list.querySelectorAll(`input[data-group=\"${g.name}\"]:checked`).length;
+        counter.textContent = `Selected ${checked}${g.max>0?` / ${g.max}`:''}`;
+      };
+      g.options.forEach(opt=>{
+        const row = document.createElement('label');
+        row.className = 'choice-row';
+        row.style.gridTemplateColumns = 'auto 1fr';
+        const input = document.createElement('input');
+        input.type = g.max === 1 ? 'radio' : 'checkbox';
+        input.name = `group-${g.name}`;
+        input.dataset.group = g.name;
+        input.value = String(opt.idx);
+        input.checked = (groupSelections[g.name] || []).includes(opt.idx);
+        input.addEventListener('change', ()=>{
+          const checked = list.querySelectorAll(`input[data-group=\"${g.name}\"]:checked`);
+          if (g.max === 1){
+            checked.forEach(cb=>{ if (cb !== input) cb.checked = false; });
+          }else if (g.max > 0 && checked.length > g.max){
+            input.checked = false;
+          }
+          const picks = Array.from(list.querySelectorAll(`input[data-group=\"${g.name}\"]:checked`)).map(cb=> Number(cb.value));
+          groupSelections[g.name] = picks;
+          groupActive = new Set();
+          Object.values(groupSelections).forEach(arr=> (arr || []).forEach(i=> groupActive.add(i)));
+          applyGroupLocks();
+          updateCounter();
+        });
+        row.appendChild(input);
+        const label = document.createElement('span');
+        label.textContent = prettyTargetLabel(opt.mod?.target || opt.mod?.key || opt.mod?.name || 'Option');
+        row.appendChild(label);
+        list.appendChild(row);
+      });
+      updateCounter();
+      block.appendChild(list);
+      block.appendChild(counter);
+      groupPanel.appendChild(block);
+    });
+    choiceBody.appendChild(groupPanel);
+  }
+  const choicesWrap = document.createElement('div');
+  choiceBody.appendChild(choicesWrap);
 
   const normalizeMsBase = (kind, picks)=>{
     if (!picks || !picks.length || !SCHOOLS.length) return '';
@@ -13439,13 +13578,24 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
     });
   };
 
-  for (const m of mods){
+  for (const [modIdxFallback, m] of mods.entries()){
     const kind = String(m.target||'').replace('choice:','');
     const restrict = normalizeRestrict(m);
     const allowed = normalizeChoiceAllowed(m);
-    const max = Number(m.choice?.max_choices||0);
+    const max = choiceMaxForMod(m);
+    const modIdx = Number.isFinite(Number(m?.__mod_idx)) ? Number(m.__mod_idx) : modIdxFallback;
+    const groupName = String(m?.group || '').trim();
     const block = document.createElement('div');
     block.className = 'panel';
+    const setEnabled = (enabled)=>{
+      block.style.opacity = enabled ? '' : '0.55';
+      block.querySelectorAll('input, select, button').forEach(el=>{
+        if (el.closest('#choice-body') !== choiceBody) return;
+        if (el.tagName === 'BUTTON' || el.tagName === 'SELECT' || el.tagName === 'INPUT'){
+          el.disabled = !enabled;
+        }
+      });
+    };
     const title = document.createElement('div');
     const srcNote = m.__source ? `<div class="muted" style="font-size:0.85rem;">${m.__source}</div>` : '';
     title.innerHTML = `<strong>${kind.replace(/_/g,' ')}</strong> <span class="muted">(max ${max||'no limit'})</span>${srcNote}`;
@@ -13529,6 +13679,9 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
       blocks.push({
         kind,
         type:'ms',
+        groupName,
+        modIdx,
+        setEnabled,
         getValue: ()=>{
           const baseVal = baseSelect.value;
           if (!baseVal){
@@ -13548,7 +13701,7 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
           return { ok:true, value:{ base: baseVal, picks: selected } };
         }
       });
-      choiceBody.appendChild(block);
+      choicesWrap.appendChild(block);
       continue;
     }
 
@@ -13673,9 +13826,12 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
       kind,
       type:'simple',
       max,
+      groupName,
+      modIdx,
+      setEnabled,
       getPicks: ()=> rows.map(r=> r.select.value).filter(Boolean)
     });
-    choiceBody.appendChild(block);
+    choicesWrap.appendChild(block);
   }
 
   return new Promise(resolve=>{
@@ -13684,7 +13840,7 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
       resolve(false);
     };
     const save = ()=>{
-      const selections = {};
+      const selections = (existingMap && !Array.isArray(existingMap)) ? { ...existingMap } : {};
       for (const b of blocks){
         if (b.type === 'ms'){
           const res = b.getValue();
@@ -13698,6 +13854,9 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
           return;
         }
         selections[b.kind] = arr;
+      }
+      if (groupInfo.groups.length){
+        selections._groups = { ...groupSelections };
       }
       saveHandler(selections);
       choiceModal.classList.add('hidden'); choiceModal.classList.remove('open'); choiceBackdrop.classList.remove('open');
@@ -13748,7 +13907,7 @@ async function openItemChoiceModal(it){
     ITEM_CHOICES[key] = selections;
     queueSave();
     recomputePassiveAgg(); renderStatistics(); updateDerived();
-  }, { titleText: `Configure: ${it.alt_name || it.name || 'Item'}` });
+  }, { titleText: `Configure: ${it.alt_name || it.name || 'Item'}`, enableGroups: true });
 }
 
   async function openUpgradeChoiceModal(it, upgrade, idx){
@@ -13765,7 +13924,7 @@ async function openItemChoiceModal(it){
       if (legacyKey && legacyKey !== choiceKey) ITEM_CHOICES[legacyKey] = selections;
       queueSave();
       recomputePassiveAgg(); renderStatistics(); updateDerived();
-    }, { titleText: `Configure: ${meta.name || upgrade?.name || 'Upgrade'}` });
+    }, { titleText: `Configure: ${meta.name || upgrade?.name || 'Upgrade'}`, enableGroups: true });
   }
 
 async function addAbilityToChar(aid){

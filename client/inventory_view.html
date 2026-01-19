@@ -304,6 +304,49 @@ function normalizeChoiceEntry(val){
   const base = val.base || val.source || "";
   return { base, picks: picks.filter(Boolean) };
 }
+function choiceMaxForMod(mod){
+  if (!mod) return 0;
+  const choice = mod.choice || {};
+  const rawChoice = choice.max_choices ?? choice.max ?? choice.maxChoices;
+  let raw = (rawChoice != null && rawChoice !== "") ? rawChoice : (mod.max_choices ?? mod.choice_max ?? mod.max_choice ?? mod.choiceMax);
+  if ((raw == null || raw === "") && mod.__source) raw = mod.group_max_choices;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+function collectModifierGroups(mods){
+  const map = new Map();
+  (mods || []).forEach((m, idx)=>{
+    const name = String(m?.group || "").trim();
+    if (!name) return;
+    const raw = m?.group_max_choices ?? m?.groupMaxChoices ?? m?.group_max ?? m?.groupMax;
+    const parsed = Number(raw);
+    const max = Number.isFinite(parsed) ? Math.max(0, parsed) : 1;
+    const modIdx = Number.isFinite(Number(m?.__mod_idx)) ? Number(m.__mod_idx) : idx;
+    const entry = map.get(name) || { name, max, options: [] };
+    entry.options.push({ idx: modIdx, mod: m });
+    map.set(name, entry);
+  });
+  return Array.from(map.values());
+}
+function resolveModifierGroupSelections(mods, stored = {}){
+  const groups = collectModifierGroups(mods);
+  const selections = {};
+  const active = new Set();
+  groups.forEach(g=>{
+    const allowed = g.options.map(o=> o.idx);
+    const limit = g.max > 0 ? g.max : allowed.length;
+    const saved = Array.isArray(stored?.[g.name]) ? stored[g.name] : [];
+    let picks = saved.map(x=> Number(x)).filter(i=> allowed.includes(i));
+    if (!picks.length){
+      picks = allowed.slice(0, limit);
+    }else if (limit > 0 && picks.length > limit){
+      picks = picks.slice(0, limit);
+    }
+    selections[g.name] = picks;
+    picks.forEach(i=> active.add(i));
+  });
+  return { groups, selections, active };
+}
 function normalizeRestrict(choice){
   if (!choice) return [];
   const src = choice.choice || choice;
@@ -502,8 +545,8 @@ async function choiceItemsForKind(kind, restrict, allowed){
 
 function itemChoiceMods(it){
   const mods = [];
-  (it.modifiers || []).forEach(m=>{
-    if (String(m.target||"").startsWith("choice:")) mods.push({ ...m, __source:"Item" });
+  (it.modifiers || []).forEach((m, idx)=>{
+    if (String(m.target||"").startsWith("choice:")) mods.push({ ...m, __source:"Item", __mod_idx: idx });
   });
   return mods;
 }
@@ -519,11 +562,17 @@ function resolveUpgradeModifiers(u, meta){
 function upgradeChoiceMods(u, meta, choiceKey){
   const name = meta?.name || u?.name || u?.id || "Upgrade";
   const mods = resolveUpgradeModifiers(u, meta);
-  return (mods || []).filter(m=> String(m.target||"").startsWith("choice:")).map(m=> ({
-    ...m,
-    __source:`Upgrade: ${name}`,
-    __choice_key: choiceKey || ""
-  }));
+  const out = [];
+  (mods || []).forEach((m, idx)=>{
+    if (!String(m.target||"").startsWith("choice:")) return;
+    out.push({
+      ...m,
+      __source:`Upgrade: ${name}`,
+      __choice_key: choiceKey || "",
+      __mod_idx: idx
+    });
+  });
+  return out;
 }
 function itemHasChoice(it){
   return itemChoiceMods(it).length > 0;
@@ -582,7 +631,7 @@ function pruneItemChoices(){
   saveItemChoices();
 }
 
-async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>{}, { titleText = "Configure choices" } = {}){
+async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>{}, { titleText = "Configure choices", enableGroups = false } = {}){
   if (!mods.length) return false;
   try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
   choiceTitle.textContent = titleText || "Configure choices";
@@ -591,6 +640,76 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
 
   const blocks = [];
   choiceBody.innerHTML = "";
+  const groupInfo = enableGroups ? resolveModifierGroupSelections(mods, existingMap?._groups || {}) : { groups:[], selections:{}, active:new Set() };
+  const groupSelections = groupInfo.selections || {};
+  let groupActive = new Set(groupInfo.active || []);
+  const applyGroupLocks = ()=>{
+    if (!groupInfo.groups.length) return;
+    blocks.forEach(b=>{
+      if (!b.groupName) return;
+      const enabled = groupActive.has(b.modIdx);
+      b.setEnabled?.(enabled);
+    });
+  };
+  if (groupInfo.groups.length){
+    const groupPanel = document.createElement("div");
+    groupPanel.className = "panel";
+    const header = document.createElement("div");
+    header.innerHTML = `<strong>Exclusive groups</strong> <span class="muted">(select options per group)</span>`;
+    groupPanel.appendChild(header);
+    groupInfo.groups.forEach(g=>{
+      const block = document.createElement("div");
+      block.style.marginTop = "8px";
+      const title = document.createElement("div");
+      title.innerHTML = `<strong>${g.name}</strong> <span class="muted">(max ${g.max || "no limit"})</span>`;
+      block.appendChild(title);
+      const list = document.createElement("div");
+      list.className = "choice-table";
+      const counter = document.createElement("div");
+      counter.className = "muted choice-counter";
+      const updateCounter = ()=>{
+        const checked = list.querySelectorAll(`input[data-group=\"${g.name}\"]:checked`).length;
+        counter.textContent = `Selected ${checked}${g.max>0?` / ${g.max}`:""}`;
+      };
+      g.options.forEach(opt=>{
+        const row = document.createElement("label");
+        row.className = "choice-row";
+        row.style.gridTemplateColumns = "auto 1fr";
+        const input = document.createElement("input");
+        input.type = g.max === 1 ? "radio" : "checkbox";
+        input.name = `group-${g.name}`;
+        input.dataset.group = g.name;
+        input.value = String(opt.idx);
+        input.checked = (groupSelections[g.name] || []).includes(opt.idx);
+        input.addEventListener("change", ()=>{
+          const checked = list.querySelectorAll(`input[data-group=\"${g.name}\"]:checked`);
+          if (g.max === 1){
+            checked.forEach(cb=>{ if (cb !== input) cb.checked = false; });
+          }else if (g.max > 0 && checked.length > g.max){
+            input.checked = false;
+          }
+          const picks = Array.from(list.querySelectorAll(`input[data-group=\"${g.name}\"]:checked`)).map(cb=> Number(cb.value));
+          groupSelections[g.name] = picks;
+          groupActive = new Set();
+          Object.values(groupSelections).forEach(arr=> (arr || []).forEach(i=> groupActive.add(i)));
+          applyGroupLocks();
+          updateCounter();
+        });
+        row.appendChild(input);
+        const label = document.createElement("span");
+        label.textContent = prettyTargetLabel(opt.mod?.target || opt.mod?.key || opt.mod?.name || "Option");
+        row.appendChild(label);
+        list.appendChild(row);
+      });
+      updateCounter();
+      block.appendChild(list);
+      block.appendChild(counter);
+      groupPanel.appendChild(block);
+    });
+    choiceBody.appendChild(groupPanel);
+  }
+  const choicesWrap = document.createElement("div");
+  choiceBody.appendChild(choicesWrap);
 
   const normalizeMsBase = (kind, picks)=>{
     if (!picks || !picks.length || !SCHOOLS.length) return "";
@@ -671,13 +790,23 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
     });
   };
 
-  for (const m of mods){
+  for (const [modIdxFallback, m] of mods.entries()){
     const kind = String(m.target||"").replace("choice:","");
     const restrict = normalizeRestrict(m);
     const allowed = normalizeChoiceAllowed(m);
-    const max = Number(m.choice?.max_choices||0);
+    const max = choiceMaxForMod(m);
+    const modIdx = Number.isFinite(Number(m?.__mod_idx)) ? Number(m.__mod_idx) : modIdxFallback;
+    const groupName = String(m?.group || "").trim();
     const block = document.createElement("div");
     block.className = "panel";
+    const setEnabled = (enabled)=>{
+      block.style.opacity = enabled ? "" : "0.55";
+      block.querySelectorAll("input, select, button").forEach(el=>{
+        if (el.tagName === "BUTTON" || el.tagName === "SELECT" || el.tagName === "INPUT"){
+          el.disabled = !enabled;
+        }
+      });
+    };
     const titleEl = document.createElement("div");
     const srcNote = m.__source ? `<div class="muted" style="font-size:0.85rem;">${m.__source}</div>` : "";
     titleEl.innerHTML = `<strong>${kind.replace(/_/g," ")}</strong> <span class="muted">(max ${max||"no limit"})</span>${srcNote}`;
@@ -771,8 +900,8 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
       block.appendChild(baseWrap);
       block.appendChild(schoolsWrap);
       block.appendChild(counter);
-      choiceBody.appendChild(block);
-      blocks.push({ kind, max, node: schoolsWrap, baseSelect, isMs: true });
+      choicesWrap.appendChild(block);
+      blocks.push({ kind, max, node: schoolsWrap, baseSelect, isMs: true, groupName, modIdx, setEnabled });
       continue;
     }
 
@@ -894,17 +1023,18 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
       block.appendChild(table);
       block.appendChild(actions);
     }
-    choiceBody.appendChild(block);
-    blocks.push({ kind, max, rows, isMs: false });
+    choicesWrap.appendChild(block);
+    blocks.push({ kind, max, rows, isMs: false, groupName, modIdx, setEnabled });
   }
 
+  applyGroupLocks();
   return new Promise(resolve=>{
     const close = (saved=false)=>{
       choiceModal.classList.add("hidden");
       resolve(saved);
     };
     const save = ()=>{
-      const selections = {};
+      const selections = (existingMap && !Array.isArray(existingMap)) ? { ...existingMap } : {};
       for (const b of blocks){
         let picks = [];
         if (b.isMs){
@@ -917,6 +1047,9 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
           }
         }
         selections[b.kind] = { base: b.baseSelect?.value || "", picks };
+      }
+      if (groupInfo.groups.length){
+        selections._groups = { ...groupSelections };
       }
       saveHandler(selections);
       close(true);
@@ -936,7 +1069,7 @@ async function openItemChoiceModal(it){
     if (!key) return;
     ITEM_CHOICES[key] = selections;
     saveItemChoices();
-  }, { titleText: `Configure: ${it.alt_name || it.name || "Item"}` });
+  }, { titleText: `Configure: ${it.alt_name || it.name || "Item"}`, enableGroups: true });
 }
 
 async function openUpgradeChoiceModal(it, upgrade, idx){
@@ -952,7 +1085,7 @@ async function openUpgradeChoiceModal(it, upgrade, idx){
     ITEM_CHOICES[choiceKey] = selections;
     if (legacyKey && legacyKey !== choiceKey) ITEM_CHOICES[legacyKey] = selections;
     saveItemChoices();
-  }, { titleText: `Configure: ${meta.name || upgrade?.name || "Upgrade"}` });
+  }, { titleText: `Configure: ${meta.name || upgrade?.name || "Upgrade"}`, enableGroups: true });
 }
 
 

@@ -5222,6 +5222,10 @@ async def update_character(cid: str, request: Request):
         ac = body.get("ability_choices") or {}
         if isinstance(ac, dict):
             updates["ability_choices"] = ac
+    if "item_choices" in body:
+        ic = body.get("item_choices") or {}
+        if isinstance(ic, dict):
+            updates["item_choices"] = ic
     if "xp_ledger" in body:
         ledger = body.get("xp_ledger") or []
         if isinstance(ledger, list):
