@@ -3240,13 +3240,13 @@ function combatState(){
 }
 
 function skillMaxForLevel(lvl){
-  if (lvl <= 1) return 4;
-  if (lvl <= 10) return 5;
-  if (lvl <= 20) return 6;
-  if (lvl <= 30) return 7;
-  if (lvl <= 40) return 8;
-  if (lvl <= 50) return 9;
-  return 10;
+  const lv = Math.max(1, Math.floor(Number(lvl) || 1));
+  if (lv < 10) return 3;
+  if (lv < 20) return 4;
+  if (lv < 30) return 5;
+  if (lv < 40) return 6;
+  if (lv < 50) return 7;
+  return 8;
 }
 function skillPointPool(lvl){
   // 80 at level 1, +2 per level-up
@@ -3265,7 +3265,7 @@ function effectiveStatPointPool(lvl){
 function statInvestCap(lvl){
   const lv = Math.max(1, Math.floor(Number(lvl) || 1));
   // Base total cap 10, +2 every 15 levels, max 20
-  const maxTotal = Math.min(20, 10 + (Math.floor((lv - 1) / 15) * 2));
+  const maxTotal = Math.min(20, 10 + (Math.floor(lv / 15) * 2));
   return Math.max(0, maxTotal - 4); // convert back to invest (base is 4)
 }
 function statTotalCap(lvl){
@@ -3305,7 +3305,7 @@ function updatePointCounters(){
       skillCapEl.title = 'Override enabled: caps are hints only.';
     }
     if (statCapEl){
-      statCapEl.textContent = 'Max per characteristic (invest): 8';
+      statCapEl.textContent = `Max per characteristic: ${statTotalCap(lvl)}`;
       statCapEl.title = 'Override enabled: caps are hints only.';
     }
     return;
@@ -3322,8 +3322,8 @@ function updatePointCounters(){
     skillCapEl.title = 'Cap applies to invested points; bonuses can raise totals beyond this.';
   }
   if (statCapEl){
-    statCapEl.textContent = `Max per characteristic (invest): ${capStatInvest}`;
-    statCapEl.title = `Invest cap excludes the starting 4; base total cap is ${capStatTotal}. Modifiers can exceed caps.`;
+    statCapEl.textContent = `Max per characteristic: ${capStatTotal}`;
+    statCapEl.title = `Invest cap excludes the starting 4; invest cap is ${capStatInvest}. Modifiers can exceed caps.`;
   }
 }
 
@@ -10130,6 +10130,7 @@ function renderCombatDeathSaves(){
   if (deathSaveSuccessAddBtn) deathSaveSuccessAddBtn.disabled = lock;
   if (deathSaveFailAddBtn) deathSaveFailAddBtn.disabled = lock;
   if (deathSaveStabilizeBtn) deathSaveStabilizeBtn.disabled = !!(ds.dead || ds.stabilized);
+  if (deathResetBtn) deathResetBtn.style.display = ds.dead ? '' : 'none';
 }
 
 function renderCombatDerivedBadges(){
