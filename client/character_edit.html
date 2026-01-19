@@ -1060,8 +1060,10 @@
                   <button class="btn small" id="combat-open-spell">Use Spells</button>
                   <span class="combat-badge">ET Used: <span id="combat-et-used">0</span></span>
                 </div>
-                <div class="muted" style="margin-top:8px;">Active abilities</div>
+                <div class="muted" style="margin-top:8px;">Active abilities & spells</div>
                 <div id="combat-active-abilities" class="combat-pill-list" style="margin-top:6px;"></div>
+                <div class="muted" style="margin-top:8px;">Duration spells (2+)</div>
+                <div id="combat-duration-spells" class="combat-pill-list" style="margin-top:6px;"></div>
               </div>
             </details>
           </div>
@@ -2329,6 +2331,7 @@ const combatActionsEl = document.getElementById('combat-actions');
 const combatContextActionsEl = document.getElementById('combat-context-actions');
 const combatSpecialActionsEl = document.getElementById('combat-special-actions');
 const combatActiveAbilitiesEl = document.getElementById('combat-active-abilities');
+const combatDurationSpellsEl = document.getElementById('combat-duration-spells');
 const combatSpecialAttacksEl = document.getElementById('combat-special-attacks');
 const combatSecondaryModal = document.getElementById('combat-secondary-modal');
 const combatSecondaryBackdrop = document.getElementById('combat-secondary-backdrop');
@@ -3195,6 +3198,7 @@ function makeDefaultStats(){
     death_saves: { ko: false, successes: 0, failures: 0, dead: false, stabilized: false },
     active_abilities: [],
     active_spells: [],
+    duration_spells: [],
     weapon_states: {}
   };
   stats.species_ability_id = "";
@@ -3220,6 +3224,7 @@ function normalizeStats(stats){
   if (!Array.isArray(out.combat.critical_injuries)) out.combat.critical_injuries = [];
   if (!Array.isArray(out.combat.active_abilities)) out.combat.active_abilities = [];
   if (!Array.isArray(out.combat.active_spells)) out.combat.active_spells = [];
+  if (!Array.isArray(out.combat.duration_spells)) out.combat.duration_spells = [];
   if (!out.combat.death_saves || typeof out.combat.death_saves !== 'object'){
     out.combat.death_saves = { ko: false, successes: 0, failures: 0, dead: false, stabilized: false };
   }else{
@@ -9190,14 +9195,26 @@ function renderCombatEtUsage(){
   });
   const maxEt = numOr(DERIVED_CACHE?.et, 0);
   combatEtUsedEl.textContent = `${used} / ${maxEt}`;
+  combatEtUsedEl.style.color = used > maxEt ? '#f66' : '';
 }
 
 function renderCombatActiveAbilities(){
   if (!combatActiveAbilitiesEl) return;
   const st = combatState();
-  const activeIds = Array.from(new Set((st.active_abilities || []).map(String).filter(Boolean)));
+  const activeAbilityIds = Array.from(new Set((st.active_abilities || []).map(String).filter(Boolean)));
+  const activeSpellIds = Array.from(new Set((st.active_spells || []).map(String).filter(Boolean)));
+  const validSpellIds = new Set((SPELLLIST_SPELLS || []).map(sp=> String(sp?.id || '')));
+  const activeEligibilityReady = Object.keys(EFFECTS_BY_ID).length
+    || (SPELLLIST_SPELLS || []).some(sp=> (Array.isArray(sp?.effects_detail) && sp.effects_detail.length) || sp.effects_desc || sp.effect || sp.effects_description);
+  const eligibleSpellIds = activeEligibilityReady
+    ? new Set((SPELLLIST_SPELLS || []).filter(spellHasActiveCost).map(sp=> String(sp?.id || '')))
+    : null;
+  const cleanedSpellIds = activeSpellIds.filter(id=> validSpellIds.has(id) && (!eligibleSpellIds || eligibleSpellIds.has(id)));
+  if (cleanedSpellIds.length !== activeSpellIds.length){
+    st.active_spells = cleanedSpellIds;
+  }
   combatActiveAbilitiesEl.innerHTML = '';
-  if (!activeIds.length){
+  if (!activeAbilityIds.length && !cleanedSpellIds.length){
     combatActiveAbilitiesEl.innerHTML = '<span class="muted">None</span>';
     return;
   }
@@ -9207,13 +9224,77 @@ function renderCombatActiveAbilities(){
     const id = String(a?.id || '');
     if (id) byId[id] = a;
   });
-  activeIds.forEach(id=>{
-    const ability = byId[id];
-    const label = ability?.name || ability?.id || id;
+  const spellById = {};
+  (SPELLLIST_SPELLS || []).forEach(sp=>{
+    const id = String(sp?.id || '');
+    if (id) spellById[id] = sp;
+  });
+  const makePill = (label, onRemove, tagLabel)=>{
     const pill = document.createElement('span');
     pill.className = 'combat-pill';
-    pill.textContent = label;
+    pill.innerHTML = `${invEscapeHtml(label)}${tagLabel ? ` <span class="tag">${invEscapeHtml(tagLabel)}</span>` : ''} <button title="Remove">×</button>`;
+    pill.querySelector('button')?.addEventListener('click', onRemove);
     combatActiveAbilitiesEl.appendChild(pill);
+  };
+  activeAbilityIds.forEach(id=>{
+    const ability = byId[id];
+    const label = ability?.name || ability?.id || id;
+    makePill(label, ()=>{
+      const next = (st.active_abilities || []).map(String).filter(aid=> aid !== id);
+      st.active_abilities = next;
+      renderCombatEtUsage();
+      renderCombatAbilityList();
+      renderCombatActiveAbilities();
+      queueSave();
+    }, 'Ability');
+  });
+  cleanedSpellIds.forEach(id=>{
+    const spell = spellById[id];
+    const label = spell ? spellDisplayName(spell, SPELLLIST_META.spell_meta || {}) : id;
+    makePill(label, ()=>{
+      const next = (st.active_spells || []).map(String).filter(sid=> sid !== id);
+      st.active_spells = next;
+      renderCombatEtUsage();
+      renderCombatSpellList();
+      renderCombatActiveAbilities();
+      queueSave();
+    }, 'Spell');
+  });
+}
+
+function renderCombatDurationSpells(){
+  if (!combatDurationSpellsEl) return;
+  const st = combatState();
+  const durationIds = Array.from(new Set((st.duration_spells || []).map(String).filter(Boolean)));
+  const validSpellIds = new Set((SPELLLIST_SPELLS || []).map(sp=> String(sp?.id || '')));
+  const eligibleDurationIds = new Set((SPELLLIST_SPELLS || []).filter(spellHasDurationTrack).map(sp=> String(sp?.id || '')));
+  const cleanedDurationIds = durationIds.filter(id=> validSpellIds.has(id) && eligibleDurationIds.has(id));
+  if (cleanedDurationIds.length !== durationIds.length){
+    st.duration_spells = cleanedDurationIds;
+  }
+  combatDurationSpellsEl.innerHTML = '';
+  if (!cleanedDurationIds.length){
+    combatDurationSpellsEl.innerHTML = '<span class="muted">None</span>';
+    return;
+  }
+  const metaMap = SPELLLIST_META.spell_meta || {};
+  const byId = {};
+  (SPELLLIST_SPELLS || []).forEach(sp=>{
+    const id = String(sp?.id || '');
+    if (id) byId[id] = sp;
+  });
+  cleanedDurationIds.forEach(id=>{
+    const sp = byId[id];
+    const label = sp ? spellDisplayName(sp, metaMap) : id;
+    const pill = document.createElement('span');
+    pill.className = 'combat-pill';
+    pill.innerHTML = `${invEscapeHtml(label)} <span class="tag">Duration</span> <button title="Remove">×</button>`;
+    pill.querySelector('button')?.addEventListener('click', ()=>{
+      st.duration_spells = (st.duration_spells || []).map(String).filter(sid=> sid !== id);
+      renderCombatDurationSpells();
+      queueSave();
+    });
+    combatDurationSpellsEl.appendChild(pill);
   });
 }
 
@@ -9576,9 +9657,55 @@ function spellHasActiveCost(sp){
     if (direct === true) return true;
     return Number(direct || 0) !== 0;
   }
-  const duration = String(sp?.duration || '').trim().toLowerCase();
-  if (duration && !['--','—','instant','instantaneous','0','none'].includes(duration)) return true;
-  return false;
+  return spellHasActiveEffect(sp);
+}
+
+function spellDurationValue(sp){
+  const raw = String(sp?.duration || '').trim().toLowerCase();
+  if (!raw || ['--','—','instant','instantaneous','0','none'].includes(raw)) return 0;
+  const match = raw.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return 0;
+  return Number(match[1]) || 0;
+}
+
+function spellHasDurationTrack(sp){
+  return spellDurationValue(sp) >= 2;
+}
+
+function effectHasActiveTag(text){
+  if (!text) return false;
+  return /^\s*\[[^\]]*\bactive\b[^\]]*\]/i.test(String(text));
+}
+
+function spellEffectTexts(sp){
+  const out = [];
+  const detailList = Array.isArray(sp?.effects_detail) ? sp.effects_detail : [];
+  detailList.forEach(item=>{
+    if (typeof item === 'string') { out.push(item); return; }
+    if (item && typeof item === 'object'){
+      const val = item.description || item.detail || item.effect || item.text || item.name || '';
+      if (val) out.push(val);
+    }
+  });
+  const raw = sp?.effects_desc || sp?.effects_description || sp?.effect || sp?.effect_text || sp?.effectText || sp?.effects_text || '';
+  if (raw){
+    String(raw).split('|').forEach(part=>{
+      const clean = String(part || '').trim();
+      if (clean) out.push(clean);
+    });
+  }
+  const effectIds = Array.isArray(sp?.effects) ? sp.effects : [];
+  effectIds.forEach(eid=>{
+    const key = String(eid || '').toLowerCase();
+    const eff = EFFECTS_BY_ID[key] || {};
+    const val = eff.description || eff.effect || eff.text || eff.name || '';
+    if (val) out.push(val);
+  });
+  return out;
+}
+
+function spellHasActiveEffect(sp){
+  return spellEffectTexts(sp).some(effectHasActiveTag);
 }
 let ATTACK_MODAL_CTX = null;
 function renderAttackSpecialList(selected){
@@ -9925,8 +10052,17 @@ function renderCombatAbilityList(){
 
 function renderCombatSpellList(){
   if (!combatSpellListEl) return;
+  if (!Object.keys(EFFECTS_BY_ID).length && !EFFECTS_PROMISE){
+    ensureEffectsLoaded().then(()=>{
+      renderCombatSpellList();
+      renderCombatEtUsage();
+      renderCombatActiveAbilities();
+      renderCombatDurationSpells();
+    });
+  }
   const st = combatState();
   const activeSet = new Set((st.active_spells || []).map(String));
+  const durationSet = new Set((st.duration_spells || []).map(String));
   const search = String(combatSpellSearchEl?.value || '').trim().toLowerCase();
   const metaMap = SPELLLIST_META.spell_meta || {};
   combatSpellListEl.innerHTML = '';
@@ -9935,11 +10071,20 @@ function renderCombatSpellList(){
     return;
   }
   const validIds = new Set(SPELLLIST_SPELLS.map(sp=> String(sp?.id || '')));
-  const eligibleIds = new Set(SPELLLIST_SPELLS.filter(spellHasActiveCost).map(sp=> String(sp?.id || '')));
+  const activeEligibilityReady = Object.keys(EFFECTS_BY_ID).length
+    || SPELLLIST_SPELLS.some(sp=> (Array.isArray(sp?.effects_detail) && sp.effects_detail.length) || sp.effects_desc || sp.effect || sp.effects_description);
+  const eligibleIds = activeEligibilityReady
+    ? new Set(SPELLLIST_SPELLS.filter(spellHasActiveCost).map(sp=> String(sp?.id || '')))
+    : new Set();
+  const durationIds = new Set(SPELLLIST_SPELLS.filter(spellHasDurationTrack).map(sp=> String(sp?.id || '')));
   Array.from(activeSet).forEach(id=>{
-    if (!validIds.has(id) || !eligibleIds.has(id)) activeSet.delete(id);
+    if (!validIds.has(id) || (activeEligibilityReady && !eligibleIds.has(id))) activeSet.delete(id);
+  });
+  Array.from(durationSet).forEach(id=>{
+    if (!validIds.has(id) || !durationIds.has(id)) durationSet.delete(id);
   });
   st.active_spells = Array.from(activeSet);
+  st.duration_spells = Array.from(durationSet);
   let rendered = 0;
   SPELLLIST_SPELLS.forEach(sp=>{
     const meta = metaMap[String(sp?.id || '')] || {};
@@ -9952,11 +10097,12 @@ function renderCombatSpellList(){
     const cost = costParts.join(' || ');
     const canStayActive = eligibleIds.has(id);
     const isActive = activeSet.has(id);
+    const isDuration = durationSet.has(id);
     const row = document.createElement('div');
     row.className = 'combat-entry';
     row.innerHTML = `
       <div class="grow">
-        <div><strong>${invEscapeHtml(name)}</strong>${meta.status ? ` <span class="tag">${invEscapeHtml(meta.status)}</span>` : ''}${isActive ? ' <span class="tag">Active</span>' : ''}</div>
+        <div><strong>${invEscapeHtml(name)}</strong>${meta.status ? ` <span class="tag">${invEscapeHtml(meta.status)}</span>` : ''}${canStayActive ? ' <span class="tag">Active Cost</span>' : ''}${isActive ? ' <span class="tag">Active</span>' : ''}${isDuration ? ' <span class="tag">Duration</span>' : ''}</div>
         ${cost ? `<div class="muted">Cost: ${invEscapeHtml(cost)}</div>` : ''}
       </div>
       <div class="combat-actions-row">
@@ -9969,6 +10115,7 @@ function renderCombatSpellList(){
       st.active_spells = Array.from(activeSet);
       renderCombatEtUsage();
       renderCombatSpellList();
+      renderCombatActiveAbilities();
       queueSave();
     });
     row.querySelector('.spell-use')?.addEventListener('click', ()=>{
@@ -9977,8 +10124,14 @@ function renderCombatSpellList(){
         activeSet.add(id);
         st.active_spells = Array.from(activeSet);
       }
+      if (spellHasDurationTrack(sp) && !durationSet.has(id)){
+        durationSet.add(id);
+        st.duration_spells = Array.from(durationSet);
+      }
       renderCombatEtUsage();
       renderCombatSpellList();
+      renderCombatActiveAbilities();
+      renderCombatDurationSpells();
       queueSave();
       openCombatSpellRoll(sp, metaMap[id] || {}, { cost, range: sp.range, aoe: sp.aoe, desc: sp.description_html || sp.description || '', effectsDesc: sp.effects_desc || '', nameDisplay: name, statusLabel: meta.status || '' });
     });
@@ -10163,6 +10316,7 @@ function renderCombatTab(){
   renderCombatTension();
   renderCombatEtUsage();
   renderCombatActiveAbilities();
+  renderCombatDurationSpells();
   if (initBaseEl) initBaseEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(combatState().max_hp_damage || 0)));
   renderCombatDerivedBadges();
