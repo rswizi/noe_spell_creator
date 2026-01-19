@@ -120,6 +120,13 @@
     .abi-list { display:grid; gap:8px; }
     .abi-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #2b2b3b; border-radius:12px; background:linear-gradient(145deg, #14141d, #0f0f16); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
     .abi-item.abi-block { flex-direction: column; align-items: stretch; }
+    .abi-item.abi-card { display:grid; grid-template-columns: minmax(0, 1fr) auto; align-items:start; gap:12px; }
+    .abi-item.abi-card .abi-body { min-width:0; }
+    .abi-item.abi-card .abi-meta { display:flex; flex-direction:column; align-items:flex-end; gap:6px; min-width:160px; }
+    .abi-item.abi-card .abi-tags { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .abi-item.abi-card .abi-actions { display:flex; gap:6px; align-items:flex-start; justify-content:flex-end; }
+    .abi-item.abi-card .abi-move { display:flex; flex-direction:column; gap:6px; }
+    .abi-item.abi-card .abi-placeholder { visibility:hidden; pointer-events:none; }
     .abi-item .tag { border:1px solid #3b3b4b; border-radius:999px; padding:3px 8px; font-size:.75rem; opacity:.9; }
     .title-color-target { cursor:pointer; }
     .title-color-target:hover { text-shadow: 0 0 8px rgba(255,255,255,0.15); }
@@ -139,6 +146,12 @@
     .abi-add { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .abi-add input, .abi-add select { flex:1 1 auto; }
     .abi-hint { opacity:.75; font-size:.85rem; margin-top:6px; }
+    @media (max-width: 700px){
+      .abi-item.abi-card { grid-template-columns: 1fr; }
+      .abi-item.abi-card .abi-meta { width:100%; flex-direction:row; align-items:flex-start; justify-content:space-between; }
+      .abi-item.abi-card .abi-tags { justify-content:flex-start; }
+      .abi-item.abi-card .abi-actions { flex-wrap:wrap; justify-content:flex-end; }
+    }
     /* Modifiers breakdown */
     .mod-list { margin:6px 0 4px 16px; padding:0; list-style:disc; display:none; opacity:0.9; }
     .mod-list li { margin:0 0 3px 0; font-size:0.9rem; }
@@ -8626,7 +8639,7 @@ function renderAbilitySpellsBucket(){
     const range = sp.range != null ? `Range: ${sp.range}` : '';
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
     const div = document.createElement('div');
-    div.className = 'abi-item';
+    div.className = 'abi-item abi-card';
     const statusLabel = (meta.status === 'learnt') ? 'Prepared' : 'Learnt';
     const titleKey = spellColorKey(sp);
     const id = String(sp?.id || '');
@@ -8634,20 +8647,31 @@ function renderAbilitySpellsBucket(){
     const isFirst = moveIdx === 0;
     const isLast = moveIdx === visible.length - 1;
     const disableMove = !manualMode;
+    const tagA = String(sp.category || '').trim();
     div.innerHTML = `
-        <div class="grow">
-          <div><strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
-          <div class="muted" style="font-size:.85rem">${desc}</div>
-          ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
-          ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
-          ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
-          <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
+      <div class="abi-body">
+        <div><strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
+        <div class="muted" style="font-size:.85rem">${desc}</div>
+        ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
+        ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
+        ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
+        <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
+      </div>
+      <div class="abi-meta">
+        <div class="abi-tags">
+          <span class="tag ${tagA ? '' : 'abi-placeholder'}">${tagA || 'Tag'}</span>
+          <span class="tag abi-placeholder">Tag</span>
         </div>
-        <div class="row" style="gap:6px; flex-wrap:wrap;">
-          <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
-          <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
-          <span class="tag">${sp.category || ''}</span>
+        <div class="abi-actions">
+          <div class="abi-move">
+            <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
+            <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
+          </div>
+          <button class="btn small abi-placeholder" disabled>Configure</button>
+          <button class="btn small abi-placeholder" disabled>Natures</button>
+          <button class="btn small abi-placeholder" disabled>X</button>
         </div>
+      </div>
       `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
     div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, meta, { cost, range, aoe, desc, effectsLines, statusLabel, nameDisplay })));
@@ -8686,7 +8710,7 @@ function renderAbilitySpellsBucket(){
     const range = sp.range != null ? `Range: ${sp.range}` : '';
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
     const div = document.createElement('div');
-    div.className = 'abi-item';
+    div.className = 'abi-item abi-card';
     const statusLabel = 'Craftomancy';
     const titleKey = spellColorKey(sp) || entryColorKey('craft', cm);
     const id = String(cm?.id || '');
@@ -8694,19 +8718,29 @@ function renderAbilitySpellsBucket(){
     const isFirst = moveIdx === 0;
     const isLast = moveIdx === craftOrdered.length - 1;
     const disableMove = !manualMode || !id;
+    const tagA = String(sp.category || '').trim();
     div.innerHTML = `
-      <div class="grow">
+      <div class="abi-body">
         <div><strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
         <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
       </div>
-      <div class="row" style="gap:6px; flex-wrap:wrap;">
-        <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
-        <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
-        <span class="tag">${sp.category || ''}</span>
-        <span class="tag">Craftomancy</span>
+      <div class="abi-meta">
+        <div class="abi-tags">
+          <span class="tag ${tagA ? '' : 'abi-placeholder'}">${tagA || 'Tag'}</span>
+          <span class="tag">Craftomancy</span>
+        </div>
+        <div class="abi-actions">
+          <div class="abi-move">
+            <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
+            <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
+          </div>
+          <button class="btn small abi-placeholder" disabled>Configure</button>
+          <button class="btn small abi-placeholder" disabled>Natures</button>
+          <button class="btn small abi-placeholder" disabled>X</button>
+        </div>
       </div>
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
@@ -14735,7 +14769,7 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     const isLast = idx === list.length - 1;
     const disableMove = !manualMode;
     const div = document.createElement('div');
-    div.className = 'abi-item';
+    div.className = 'abi-item abi-card';
     const isPassive = (a.type||'').toLowerCase()!=='active';
     const hasChoice = abilityHasChoice(a);
     const rolls = normalizeAbilityRolls(a);
@@ -14744,22 +14778,32 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     const costText = abilityCostText(a);
     const titleKey = abilityColorKey(a);
     const titleText = a.name || a.id || 'Ability';
+    const typeTag = String(a.type || '').trim();
+    const sourceTag = String(a.source_category || '').trim();
+    const moveWrapClass = canMove ? '' : 'abi-placeholder';
+    const configClass = hasChoice ? '' : 'abi-placeholder';
+    const natureClass = needsNature ? '' : 'abi-placeholder';
+    const removeClass = canRemove ? '' : 'abi-placeholder';
     div.innerHTML = `
-      <div class="grow">
+      <div class="abi-body">
         <div><strong class="title-color-target">${titleText}</strong></div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${costText ? `<div class="muted" style="font-size:.8rem">Cost: ${costText}</div>` : ''}
       </div>
-      <span class="tag">${a.type||''}</span>
-      <span class="tag">${a.source_category||''}</span>
-      <div class="row" style="gap:6px; flex-wrap:wrap;">
-        ${canMove ? `
-        <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
-        <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
-        ` : ''}
-        ${hasChoice ? '<button class="btn small mod-config" title="Configure choices">Configure</button>' : ''}
-        ${needsNature ? '<button class="btn small abi-nature" title="Configure default natures">Natures</button>' : ''}
-        ${canRemove ? '<button class="btn small mod-remove" title="Remove">X</button>' : ''}
+      <div class="abi-meta">
+        <div class="abi-tags">
+          <span class="tag ${typeTag ? '' : 'abi-placeholder'}">${typeTag || 'Tag'}</span>
+          <span class="tag ${sourceTag ? '' : 'abi-placeholder'}">${sourceTag || 'Tag'}</span>
+        </div>
+        <div class="abi-actions">
+          <div class="abi-move ${moveWrapClass}">
+            <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst || !canMove ? 'disabled' : ''}>&#8593;</button>
+            <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast || !canMove ? 'disabled' : ''}>&#8595;</button>
+          </div>
+          <button class="btn small mod-config ${configClass}" title="Configure choices" ${hasChoice ? '' : 'disabled'}>Configure</button>
+          <button class="btn small abi-nature ${natureClass}" title="Configure default natures" ${needsNature ? '' : 'disabled'}>Natures</button>
+          <button class="btn small mod-remove ${removeClass}" title="Remove" ${canRemove ? '' : 'disabled'}>X</button>
+        </div>
       </div>
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
