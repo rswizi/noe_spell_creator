@@ -729,6 +729,19 @@
           </details>
         </div>
 
+        <div class="panel" id="awak-panel" style="display:none;">
+          <details open class="panel">
+            <summary class="hdr">
+              <strong>Awakenings</strong>
+              <span class="muted">(unlock by level)</span>
+            </summary>
+            <div class="panel-body">
+              <div id="awak-summary" class="muted"></div>
+              <div class="abi-list" id="awak-abilities"></div>
+            </div>
+          </details>
+        </div>
+
         <div class="panel">
           <details open class="panel">
             <summary class="hdr">
@@ -738,12 +751,14 @@
               <button class="btn small" id="abi-open-add">Add ability</button>
               <button class="btn small" id="exp-open-add">Add expertise</button>
               <button class="btn small" id="dima-open-add">Add divine manifestation</button>
+              <button class="btn small" id="awak-open-add">Add awakening</button>
             </summary>
             <div class="panel-body">
               <div class="abi-hint" id="talent-counter">Talents: -- / --</div>
               <div class="stat-counter" style="margin-top:6px;">
                 <span class="pill" id="expertise-counter">Expertise: -- / --</span>
                 <span class="pill" id="dima-counter">Divine Manifestation: -- / --</span>
+                <span class="pill" id="awak-counter">Awakenings: -- / --</span>
                 <span class="pill" id="craftomancy-counter">Craftomancy Focus: -- / --</span>
               </div>
 
@@ -1059,6 +1074,7 @@
                   <button class="btn small" id="combat-open-special">Use Special Action</button>
                   <button class="btn small" id="combat-open-ability">Use Ability</button>
                   <button class="btn small" id="combat-open-spell">Use Spells</button>
+                  <button class="btn small" id="combat-open-awaken">Awaken</button>
                   <span class="combat-badge">ET Used: <span id="combat-et-used">0</span></span>
                 </div>
                 <div class="muted" style="margin-top:8px;">Active abilities & spells</div>
@@ -1477,6 +1493,22 @@
     <div id="combat-spell-list" class="combat-list" style="margin-top:8px;"></div>
     <div class="row" style="margin-top:12px; gap:8px;">
       <button class="btn btn-secondary" id="combat-spell-cancel">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Combat awaken modal -->
+<div id="combat-awaken-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="combat-awaken-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="combat-awaken-title">
+  <div class="modal-card" style="max-width:900px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="combat-awaken-title">Awaken</div>
+      <button class="modal-close" id="combat-awaken-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="muted" style="margin-top:6px;">Select an awakening level to activate.</div>
+    <div id="combat-awaken-list" class="combat-list" style="margin-top:8px;"></div>
+    <div class="row" style="margin-top:12px; gap:8px;">
+      <button class="btn btn-secondary" id="combat-awaken-cancel">Close</button>
     </div>
   </div>
 </div>
@@ -2118,11 +2150,13 @@ let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
 let ARC_ASSIGNED = []; // full documents of archetype abilities (resolved by id)
 let EXP_ASSIGNED = []; // full documents of expertise abilities (resolved by id)
 let DIMA_ASSIGNED = []; // full documents of divine manifestation abilities (resolved by id)
+let AWAK_ASSIGNED = []; // full documents of awakening abilities (resolved by id)
 let ABI_SORT_PASSIVE = 'manual';
 let ABI_SORT_ACTIVE = 'manual';
 let ABI_SORT_SPELLS = 'manual';
 let COMPUTED_EXP_ABILITIES = [];
 let COMPUTED_DIMA_ABILITIES = [];
+let COMPUTED_AWAK_ABILITIES = [];
 let ABILITY_CHOICES = {}; // per-ability user selections for configurable modifiers (choices or groups)
 let ITEM_CHOICES = {}; // per-item (inventory) user selections for choice-based modifiers
 let TITLE_COLOR_MAP = {};
@@ -2165,6 +2199,7 @@ let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, initiative:null, spc
 let ARCHETYPES = [];
 let EXPERTISES = [];
 let DIVINE_MANIFESTATIONS = [];
+let AWAKENINGS = [];
 let SPECIES_ABILITIES = [];
 let BOON_ABILITIES = [];
 let COMPUTED_ARC_ABILITIES = [];
@@ -2327,6 +2362,7 @@ const combatContextOpenBtn = document.getElementById('combat-open-context');
 const combatSpecialOpenBtn = document.getElementById('combat-open-special');
 const combatAbilityOpenBtn = document.getElementById('combat-open-ability');
 const combatSpellOpenBtn = document.getElementById('combat-open-spell');
+const combatAwakenOpenBtn = document.getElementById('combat-open-awaken');
 const tensionValueEl = document.getElementById('tension-value');
 const tensionCapEl = document.getElementById('tension-cap');
 const tensionStrategyEl = document.getElementById('tension-strategy');
@@ -2357,6 +2393,11 @@ const combatSpellModal = document.getElementById('combat-spell-modal');
 const combatSpellBackdrop = document.getElementById('combat-spell-backdrop');
 const combatSpellClose = document.getElementById('combat-spell-close');
 const combatSpellCancel = document.getElementById('combat-spell-cancel');
+const combatAwakenModal = document.getElementById('combat-awaken-modal');
+const combatAwakenBackdrop = document.getElementById('combat-awaken-backdrop');
+const combatAwakenClose = document.getElementById('combat-awaken-close');
+const combatAwakenCancel = document.getElementById('combat-awaken-cancel');
+const combatAwakenListEl = document.getElementById('combat-awaken-list');
 const combatConditionsModal = document.getElementById('combat-conditions-modal');
 const combatConditionsBackdrop = document.getElementById('combat-conditions-backdrop');
 const combatConditionsClose = document.getElementById('combat-conditions-close');
@@ -2420,6 +2461,7 @@ const abiSearchBtn = document.getElementById('abi-search-btn');
 const abiResultsEl = document.getElementById('abi-results');
 const expOpenAddBtn = document.getElementById('exp-open-add');
 const dimaOpenAddBtn = document.getElementById('dima-open-add');
+const awakOpenAddBtn = document.getElementById('awak-open-add');
 const sourceAddModal = document.getElementById('source-add-modal');
 const sourceAddBackdrop = document.getElementById('source-add-backdrop');
 const sourceAddClose = document.getElementById('source-add-close');
@@ -2510,10 +2552,14 @@ const expSummaryEl    = document.getElementById('exp-summary');
 const expAbilitiesEl  = document.getElementById('exp-abilities');
 const dimaSummaryEl   = document.getElementById('dima-summary');
 const dimaAbilitiesEl = document.getElementById('dima-abilities');
+const awakSummaryEl   = document.getElementById('awak-summary');
+const awakAbilitiesEl = document.getElementById('awak-abilities');
 const expPanelEl = document.getElementById('exp-panel');
 const dimaPanelEl = document.getElementById('dima-panel');
+const awakPanelEl = document.getElementById('awak-panel');
 const expertiseCounterEl = document.getElementById('expertise-counter');
 const dimaCounterEl = document.getElementById('dima-counter');
+const awakCounterEl = document.getElementById('awak-counter');
 /* Inventory tab refs */
 const invSelectEl = document.getElementById('inv-select');
 const invLoadBtn = document.getElementById('inv-load-btn');
@@ -3056,6 +3102,13 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   combatSpellClose?.addEventListener('click', ()=> invToggleModal(combatSpellModal, combatSpellBackdrop, false));
   combatSpellCancel?.addEventListener('click', ()=> invToggleModal(combatSpellModal, combatSpellBackdrop, false));
   combatSpellBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatSpellBackdrop) invToggleModal(combatSpellModal, combatSpellBackdrop, false); });
+  combatAwakenOpenBtn?.addEventListener('click', ()=>{
+    renderCombatAwakenList();
+    invToggleModal(combatAwakenModal, combatAwakenBackdrop, true);
+  });
+  combatAwakenClose?.addEventListener('click', ()=> invToggleModal(combatAwakenModal, combatAwakenBackdrop, false));
+  combatAwakenCancel?.addEventListener('click', ()=> invToggleModal(combatAwakenModal, combatAwakenBackdrop, false));
+  combatAwakenBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatAwakenBackdrop) invToggleModal(combatAwakenModal, combatAwakenBackdrop, false); });
   conditionsAddBtn?.addEventListener('click', ()=>{
     renderCombatConditionModal();
     invToggleModal(combatConditionsModal, combatConditionsBackdrop, true);
@@ -3069,6 +3122,7 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   tensionValueEl?.addEventListener('input', ()=>{
     const st = combatState();
     st.tension = Math.max(0, Number(tensionValueEl.value || 0));
+    renderCombatAwakenList();
     queueSave();
   });
   tensionStrategyEl?.addEventListener('change', ()=>{
@@ -3208,6 +3262,7 @@ function makeDefaultStats(){
     death_saves: { ko: false, successes: 0, failures: 0, dead: false, stabilized: false },
     active_abilities: [],
     active_spells: [],
+    active_awakenings: [],
     duration_spells: [],
     weapon_states: {}
   };
@@ -3237,6 +3292,7 @@ function normalizeStats(stats){
   if (!Array.isArray(out.combat.critical_injuries)) out.combat.critical_injuries = [];
   if (!Array.isArray(out.combat.active_abilities)) out.combat.active_abilities = [];
   if (!Array.isArray(out.combat.active_spells)) out.combat.active_spells = [];
+  if (!Array.isArray(out.combat.active_awakenings)) out.combat.active_awakenings = [];
   if (!Array.isArray(out.combat.duration_spells)) out.combat.duration_spells = [];
   if (!out.combat.death_saves || typeof out.combat.death_saves !== 'object'){
     out.combat.death_saves = { ko: false, successes: 0, failures: 0, dead: false, stabilized: false };
@@ -3674,6 +3730,7 @@ function prettyTargetLabel(target){
     if (t === 'derived.craftomancy_max') return 'Max Craftomancies';
     if (t === 'derived.sublimation_slots') return 'Sublimation slots';
     if (t === 'derived.complex_schools') return 'Complex schools';
+    if (t === 'derived.max_awakenings') return 'Max Awakenings';
     if (t === 'derived.initiative') return 'Initiative';
     return t;
   }
@@ -3746,7 +3803,8 @@ function recomputePassiveAgg(){
     const combined = (ASSIGNED||[])
       .concat((ARC_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
       .concat((EXP_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
-      .concat((DIMA_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
+      .concat((DIMA_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
+      .concat((AWAK_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
     const passiveAbilities = combined.filter(a=>{
       const t = (a.type||'').toLowerCase();
       return t==='passive' || t==='mixed';
@@ -8303,6 +8361,19 @@ async function computeRankedUnlockedIds(sourceDoc, effRank){
   return keep;
 }
 
+function awakeningRankForLevel(lvl){
+  const lv = Math.max(1, Math.floor(Number(lvl) || 1));
+  if (lv >= 75) return 3;
+  if (lv >= 50) return 2;
+  if (lv >= 25) return 1;
+  return 0;
+}
+
+function awakeningTensionForRank(rank){
+  const map = { 1: 3, 2: 6, 3: 9 };
+  return map[Number(rank)] || 0;
+}
+
 function linkedSkillRank(sourceDoc){
   const skills = sourceDoc?.linked_skills || [];
   let best = 0;
@@ -8399,6 +8470,7 @@ async function refreshArchetypeAbilities(){
     await renderArchetypePanel();
     await refreshExpertiseAbilities();
     await refreshDivineManifestationAbilities();
+    await refreshAwakeningAbilities();
     return;
   }
   const arc = ARCHETYPES.find(a=>a.id===CHAR.archetype_id);
@@ -8408,6 +8480,7 @@ async function refreshArchetypeAbilities(){
     await renderArchetypePanel();
     await refreshExpertiseAbilities();
     await refreshDivineManifestationAbilities();
+    await refreshAwakeningAbilities();
     return;
   }
   CHAR.archetype_rank = _archetypeRankForLevel(Math.max(1, Number(CHAR.level)||1));
@@ -8417,6 +8490,7 @@ async function refreshArchetypeAbilities(){
   await renderArchetypePanel();
   await refreshExpertiseAbilities();
   await refreshDivineManifestationAbilities();
+  await refreshAwakeningAbilities();
 }
 
   async function renderArchetypePanel(){
@@ -8557,6 +8631,67 @@ async function refreshDivineManifestationAbilities(){
   renderSublimations();
 }
 
+async function refreshAwakeningAbilities(){
+  const ids = (CHAR?.awakening_ids || []).map(x=> String(x||'').trim()).filter(Boolean);
+  if (!awakAbilitiesEl) return;
+  if (!ids.length){
+    if (awakPanelEl) awakPanelEl.style.display = 'none';
+    AWAK_ASSIGNED = [];
+    COMPUTED_AWAK_ABILITIES = [];
+    if (awakSummaryEl) awakSummaryEl.textContent = 'No awakening linked.';
+    awakAbilitiesEl.innerHTML = '<div class="muted">No awakenings selected.</div>';
+    updateAwakeningCounters();
+    const st = combatState();
+    if (Array.isArray(st.active_awakenings) && st.active_awakenings.length){
+      st.active_awakenings = [];
+      renderCombatActiveAbilities();
+      renderCombatEtUsage();
+    }
+    renderAbilitiesTab();
+    recomputePassiveAgg();
+    renderStatistics();
+    updateDerived();
+    renderSublimations();
+    return;
+  }
+  if (awakPanelEl) awakPanelEl.style.display = '';
+  const entries = AWAKENINGS.filter(e=> ids.includes(String(e.id)));
+  const meta = [];
+  let allIds = [];
+  const rankCap = awakeningRankForLevel(Number(CHAR.level || 1));
+  for (const entry of entries){
+    const unlocked = await computeRankedUnlockedIds(entry, rankCap);
+    meta.push({ entry, rank: rankCap, unlocked });
+    allIds = allIds.concat(unlocked);
+  }
+  const uniqueIds = Array.from(new Set(allIds));
+  const docs = uniqueIds.length ? await fetchAbilitiesByIds(uniqueIds) : [];
+  AWAK_ASSIGNED = docs.slice();
+  COMPUTED_AWAK_ABILITIES = uniqueIds.slice();
+  renderAwakeningPanel(meta, docs);
+  updateAwakeningCounters();
+  const st = combatState();
+  const validAwakIds = new Set(ids);
+  const validAbilityIds = new Set(uniqueIds);
+  if (Array.isArray(st.active_awakenings)){
+    const cleaned = st.active_awakenings.filter(entry=>{
+      const awId = String(entry?.awakening_id || entry?.awakening || '').trim();
+      const abId = String(entry?.ability_id || entry?.ability || '').trim();
+      return awId && abId && validAwakIds.has(awId) && validAbilityIds.has(abId);
+    });
+    if (cleaned.length !== st.active_awakenings.length){
+      st.active_awakenings = cleaned;
+      renderCombatActiveAbilities();
+      renderCombatEtUsage();
+    }
+  }
+  renderAbilitiesTab();
+  recomputePassiveAgg();
+  renderStatistics();
+  updateDerived();
+  renderSublimations();
+}
+
 function renderExpertisePanel(meta, docs){
   if (!expAbilitiesEl) return;
   expAbilitiesEl.innerHTML = '';
@@ -8681,6 +8816,67 @@ function renderDivineManifestationPanel(meta, docs){
   });
 }
 
+function renderAwakeningPanel(meta, docs){
+  if (!awakAbilitiesEl) return;
+  awakAbilitiesEl.innerHTML = '';
+  if (awakSummaryEl){
+    awakSummaryEl.textContent = meta.length ? `Linked: ${meta.length}` : 'No awakening linked.';
+    awakSummaryEl.style.color = '';
+  }
+  if (!meta.length){
+    awakAbilitiesEl.innerHTML = '<div class="muted">No awakenings selected.</div>';
+    return;
+  }
+  if (awakSummaryEl){
+    const warn = [];
+    meta.forEach(item=>{
+      const entry = item.entry || {};
+      const errs = prereqErrorsForRules(entry.prereq_rules || {}, CHAR?.stats || {});
+      if (errs.length){
+        warn.push(`${entry.name || entry.id}: ${errs.join(' ')}`);
+      }
+    });
+    if (warn.length){
+      awakSummaryEl.textContent = `Linked: ${meta.length} - Prereq not met: ${warn.join(' | ')}`;
+      awakSummaryEl.style.color = '#f66';
+    }
+  }
+  meta.forEach(item=>{
+    const entry = item.entry || {};
+    const rankCap = Math.max(0, Number(item.rank || 0));
+    const rankMax = Array.isArray(entry.ranks) ? entry.ranks.length : rankCap;
+    const rank = Math.min(rankCap, rankMax);
+    const prereqErrors = prereqErrorsForRules(entry.prereq_rules || {}, CHAR?.stats || {});
+    const prereqNote = prereqErrors.length ? `Prereq not met: ${prereqErrors.join(' ')}` : '';
+    const unlockedCount = (item.unlocked || []).length;
+    const unlockedNote = unlockedCount
+      ? `${unlockedCount} ${unlockedCount === 1 ? 'ability' : 'abilities'} shown under Passive / Active.`
+      : 'No unlocked abilities yet.';
+    const div = document.createElement('div');
+    div.className = 'abi-item abi-block';
+    const entryKey = entryColorKey('awakening', entry);
+    const entryTitle = entry.name || entry.id || 'Awakening';
+    div.innerHTML = `
+      <div style="display:grid; gap:6px; margin-bottom:8px;">
+        <div class="row" style="gap:8px; align-items:center; justify-content:space-between;">
+          <div class="row" style="gap:8px; align-items:center;">
+            <strong class="title-color-target">${entryTitle}</strong>
+            <span class="tag">Rank ${rank}</span>
+          </div>
+          <button class="btn small awak-remove" data-id="${entry.id}">X</button>
+        </div>
+        ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
+        <div class="muted" style="font-size:.85rem">${unlockedNote}</div>
+      </div>
+    `;
+    registerTitleColorTarget(div.querySelector('.title-color-target'), entryKey, entryTitle);
+    div.querySelector('.awak-remove')?.addEventListener('click', ()=>{
+      removeAwakeningById(entry.id);
+    });
+    awakAbilitiesEl.appendChild(div);
+  });
+}
+
 function removeExpertiseById(id){
   const target = String(id||'').trim();
   if (!target) return;
@@ -8696,6 +8892,15 @@ function removeDivineManifestationById(id){
   CHAR.divine_manifestation_ids = (CHAR.divine_manifestation_ids || []).map(String).filter(x=> x !== target);
   updateExpertiseCounters();
   refreshDivineManifestationAbilities();
+  queueSave();
+}
+
+function removeAwakeningById(id){
+  const target = String(id||'').trim();
+  if (!target) return;
+  CHAR.awakening_ids = (CHAR.awakening_ids || []).map(String).filter(x=> x !== target);
+  updateAwakeningCounters();
+  refreshAwakeningAbilities();
   queueSave();
 }
 
@@ -9329,6 +9534,7 @@ function renderCombatTension(){
   if (exhaustedToggleEl && document.activeElement !== exhaustedToggleEl){
     exhaustedToggleEl.checked = !!st.exhausted;
   }
+  renderCombatAwakenList();
 }
 
 function renderCombatEtUsage(){
@@ -9336,8 +9542,10 @@ function renderCombatEtUsage(){
   const st = combatState();
   const abilityIds = new Set((st.active_abilities || []).map(String));
   const spellIds = new Set((st.active_spells || []).map(String));
+  const awakeningIds = new Set((st.active_awakenings || []).map(a=> String(a?.ability_id || a?.ability || '')).filter(Boolean));
   let used = 0;
-  (collectDisplayAbilities() || []).forEach(a=>{
+  const abilityList = collectDisplayAbilities() || [];
+  abilityList.forEach(a=>{
     const id = String(a?.id || '');
     if (!abilityIds.has(id)) return;
     if (!abilityHasActiveCost(a)) return;
@@ -9354,6 +9562,29 @@ function renderCombatEtUsage(){
       if (Number.isFinite(v) && label !== 'ms') used += v;
     }
   });
+  if (awakeningIds.size){
+    const byId = {};
+    abilityList.forEach(a=>{
+      const id = String(a?.id || '');
+      if (id) byId[id] = a;
+    });
+    awakeningIds.forEach(id=>{
+      const ability = byId[id];
+      if (!ability || !abilityHasActiveCost(ability)) return;
+      const costs = ability?.active?.costs || {};
+      const hpCost = Number(costs.HP || 0);
+      if (hpCost) used += Math.ceil(hpCost / 5);
+      ['EN','FO','MO','TX'].forEach(k=>{
+        const v = Number(costs[k] || 0);
+        if (Number.isFinite(v)) used += v;
+      });
+      if (costs.other_value != null){
+        const v = Number(costs.other_value || 0);
+        const label = String(costs.other_label || '').trim().toLowerCase().replace(/\s+/g, '');
+        if (Number.isFinite(v) && label !== 'ms') used += v;
+      }
+    });
+  }
   const metaMap = SPELLLIST_META.spell_meta || {};
   (SPELLLIST_SPELLS || []).forEach(sp=>{
     const id = String(sp?.id || '');
@@ -9373,6 +9604,7 @@ function renderCombatActiveAbilities(){
   const st = combatState();
   const activeAbilityIds = Array.from(new Set((st.active_abilities || []).map(String).filter(Boolean)));
   const activeSpellIds = Array.from(new Set((st.active_spells || []).map(String).filter(Boolean)));
+  const activeAwakenings = Array.isArray(st.active_awakenings) ? st.active_awakenings : [];
   const validSpellIds = new Set((SPELLLIST_SPELLS || []).map(sp=> String(sp?.id || '')));
   const metaMap = SPELLLIST_META.spell_meta || {};
   const activeEligibilityReady = Object.keys(EFFECTS_BY_ID).length
@@ -9393,17 +9625,26 @@ function renderCombatActiveAbilities(){
   if (cleanedSpellIds.length !== activeSpellIds.length){
     st.active_spells = cleanedSpellIds;
   }
-  combatActiveAbilitiesEl.innerHTML = '';
-  if (!activeAbilityIds.length && !cleanedSpellIds.length){
-    combatActiveAbilitiesEl.innerHTML = '<span class="muted">None</span>';
-    return;
-  }
   const list = collectDisplayAbilities() || [];
   const byId = {};
   list.forEach(a=>{
     const id = String(a?.id || '');
     if (id) byId[id] = a;
   });
+  const validAwakIds = new Set((CHAR?.awakening_ids || []).map(String));
+  const cleanedAwakenings = activeAwakenings.filter(entry=>{
+    const awId = String(entry?.awakening_id || entry?.awakening || '').trim();
+    const abId = String(entry?.ability_id || entry?.ability || '').trim();
+    return awId && abId && validAwakIds.has(awId) && byId[abId];
+  });
+  if (cleanedAwakenings.length !== activeAwakenings.length){
+    st.active_awakenings = cleanedAwakenings;
+  }
+  combatActiveAbilitiesEl.innerHTML = '';
+  if (!activeAbilityIds.length && !cleanedSpellIds.length && !cleanedAwakenings.length){
+    combatActiveAbilitiesEl.innerHTML = '<span class="muted">None</span>';
+    return;
+  }
   const spellById = {};
   (SPELLLIST_SPELLS || []).forEach(sp=>{
     const id = String(sp?.id || '');
@@ -9439,6 +9680,21 @@ function renderCombatActiveAbilities(){
       renderCombatActiveAbilities();
       queueSave();
     }, 'Spell');
+  });
+  cleanedAwakenings.forEach(entry=>{
+    const awId = String(entry?.awakening_id || entry?.awakening || '').trim();
+    const abId = String(entry?.ability_id || entry?.ability || '').trim();
+    const ability = byId[abId];
+    const label = ability?.name || ability?.id || abId || awId;
+    const rankLabel = entry?.rank ? `Rank ${entry.rank}` : '';
+    makePill(label, ()=>{
+      const next = (st.active_awakenings || []).filter(item=> String(item?.awakening_id || item?.awakening || '') !== awId);
+      st.active_awakenings = next;
+      renderCombatEtUsage();
+      renderCombatActiveAbilities();
+      renderCombatAwakenList();
+      queueSave();
+    }, rankLabel ? `Awakening ${rankLabel}` : 'Awakening');
   });
 }
 
@@ -10255,7 +10511,10 @@ function renderCombatAbilityList(){
   const st = combatState();
   const activeSet = new Set((st.active_abilities || []).map(String));
   const search = String(combatAbilitySearchEl?.value || '').trim().toLowerCase();
-  const list = (collectDisplayAbilities() || []).filter(a=> String(a?.type || '').toLowerCase() === 'active');
+  const list = (collectDisplayAbilities() || []).filter(a=>{
+    if (String(a?.type || '').toLowerCase() !== 'active') return false;
+    return String(a?.source_category || '').toLowerCase() !== 'awakening';
+  });
   const validIds = new Set(list.map(a=> String(a?.id || '')));
   const eligibleIds = new Set(list.filter(abilityHasActiveCost).map(a=> String(a?.id || '')));
   Array.from(activeSet).forEach(id=>{
@@ -10416,6 +10675,130 @@ function renderCombatSpellList(){
   }
 }
 
+function awakeningRankForTension(tension){
+  const t = Math.max(0, Number(tension || 0));
+  if (t >= 9) return 3;
+  if (t >= 6) return 2;
+  if (t >= 3) return 1;
+  return 0;
+}
+
+function combatEffectiveTension(){
+  const st = combatState();
+  const cur = Math.max(0, Number(st.tension || 0));
+  const inspired = activeConditionSet().has('inspired');
+  return cur + (inspired ? 2 : 0);
+}
+
+function renderCombatAwakenList(){
+  if (!combatAwakenListEl) return;
+  const st = combatState();
+  const learnedIds = (CHAR?.awakening_ids || []).map(String).filter(Boolean);
+  const learnedSet = new Set(learnedIds);
+  const entries = AWAKENINGS.filter(e=> learnedSet.has(String(e.id)));
+  const levelRank = awakeningRankForLevel(Number(CHAR?.level || 1));
+  const effectiveTension = combatEffectiveTension();
+  const tensionRank = awakeningRankForTension(effectiveTension);
+  const maxRank = Math.min(levelRank, tensionRank);
+  const abilityById = {};
+  (AWAK_ASSIGNED || []).forEach(a=>{
+    const id = String(a?.id || '').trim();
+    if (id) abilityById[id] = a;
+  });
+  const active = Array.isArray(st.active_awakenings) ? st.active_awakenings : [];
+  const activeByAwak = new Map();
+  active.forEach(entry=>{
+    const awId = String(entry?.awakening_id || entry?.awakening || '').trim();
+    if (!awId) return;
+    activeByAwak.set(awId, {
+      awakening_id: awId,
+      rank: Number(entry?.rank || 0),
+      ability_id: String(entry?.ability_id || entry?.ability || '').trim()
+    });
+  });
+  const options = [];
+  entries.forEach(entry=>{
+    const ranks = Array.isArray(entry?.ranks) ? entry.ranks.slice() : [];
+    ranks.sort((a,b)=> Number(a?.rank || 0) - Number(b?.rank || 0));
+    ranks.forEach(r=>{
+      const rank = Number(r?.rank || 0);
+      if (!rank || rank > maxRank) return;
+      const req = awakeningTensionForRank(rank);
+      if (effectiveTension < req) return;
+      const abilityId = String(r?.ability_id || r?.ability || r?.id || '').trim();
+      if (!abilityId) return;
+      options.push({ entry, rank, ability_id: abilityId, tension_req: req });
+    });
+  });
+  options.sort((a,b)=> (String(a.entry?.name||'').localeCompare(String(b.entry?.name||''))) || (a.rank - b.rank));
+
+  if (combatAwakenOpenBtn){
+    combatAwakenOpenBtn.style.display = options.length ? '' : 'none';
+    combatAwakenOpenBtn.disabled = options.length === 0;
+  }
+
+  combatAwakenListEl.innerHTML = '';
+  if (!options.length){
+    const msg = learnedIds.length ? 'No awakening levels available (check level/tension).' : 'No awakenings learned.';
+    combatAwakenListEl.innerHTML = `<div class="muted">${msg}</div>`;
+    return;
+  }
+  options.forEach(opt=>{
+    const ability = abilityById[opt.ability_id];
+    const entryId = String(opt.entry?.id || '').trim();
+    const activeEntry = entryId ? activeByAwak.get(entryId) : null;
+    const activeRank = activeEntry ? Number(activeEntry.rank || 0) : 0;
+    const activeAbilityId = activeEntry ? String(activeEntry.ability_id || '') : '';
+    const isActive = activeEntry && activeAbilityId === opt.ability_id;
+    const canUse = !!ability && !isActive;
+    const entryName = String(opt.entry?.name || '').trim();
+    const abilityName = String(ability?.name || '').trim();
+    const title = entryName && abilityName && entryName !== abilityName
+      ? `${entryName} - ${abilityName}`
+      : (abilityName || entryName || ability?.id || opt.ability_id);
+    const cost = abilityCostText(ability || {});
+    const row = document.createElement('div');
+    row.className = 'combat-entry';
+    const activeTag = activeEntry && !isActive ? ` <span class="tag">Active Rank ${activeRank}</span>` : '';
+    row.innerHTML = `
+      <div class="grow">
+        <div><strong>${invEscapeHtml(title)}</strong>${isActive ? ' <span class="tag">Active</span>' : ''}${activeTag}</div>
+        <div class="meta">Rank ${opt.rank} | Requires Tension ${opt.tension_req}</div>
+        ${cost ? `<div class="muted">Cost: ${invEscapeHtml(cost)}</div>` : ''}
+      </div>
+      <div class="combat-actions-row">
+        ${isActive ? '<button class="btn btn-secondary small awaken-deactivate">Deactivate</button>' : ''}
+        <button class="btn small awaken-use"${canUse ? '' : ' disabled'}>Awaken</button>
+      </div>
+    `;
+    row.querySelector('.awaken-deactivate')?.addEventListener('click', ()=>{
+      const next = (st.active_awakenings || []).filter(entry=> String(entry?.awakening_id || entry?.awakening || '') !== entryId);
+      st.active_awakenings = next;
+      renderCombatEtUsage();
+      renderCombatActiveAbilities();
+      renderCombatAwakenList();
+      queueSave();
+    });
+    row.querySelector('.awaken-use')?.addEventListener('click', ()=>{
+      if (!canUse) return;
+      if (!ability){
+        alert('Awakening ability data missing.');
+        return;
+      }
+      applyAbilityCosts(ability);
+      const next = (st.active_awakenings || []).filter(entry=> String(entry?.awakening_id || entry?.awakening || '') !== entryId);
+      next.push({ awakening_id: entryId, rank: opt.rank, ability_id: opt.ability_id });
+      st.active_awakenings = next;
+      renderCombatEtUsage();
+      renderCombatActiveAbilities();
+      renderCombatAwakenList();
+      queueSave();
+      openCombatAbilityRoll(ability, 'Awakening');
+    });
+    combatAwakenListEl.appendChild(row);
+  });
+}
+
 function renderCombatConditions(){
   if (!conditionsListEl) return;
   const st = combatState();
@@ -10491,6 +10874,7 @@ function renderCombatConditions(){
     renderRow(id, id, '', '');
   });
   st.conditions = Array.from(active);
+  renderCombatAwakenList();
 }
 
 function renderCombatConditionModal(){
@@ -10612,6 +10996,7 @@ function renderCombatTab(){
   renderCombatWeapons();
   renderCombatAbilityList();
   renderCombatSpellList();
+  renderCombatAwakenList();
   renderCombatActions();
   renderCombatConditions();
   renderCombatCritList();
@@ -11075,6 +11460,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
       talent_max:[`Base = ${base.talent_max ?? 0}`],
       max_expertise:[`Base = ${base.max_expertise ?? 0}`],
       max_divine_manifestation:[`Base = ${base.max_divine_manifestation ?? 0}`],
+      max_awakenings:[`Base = ${base.max_awakenings ?? 0}`],
       craftomancy_max:[`Base = ${base.craftomancy_max ?? 0}`],
       skill_points:[`Base = ${base.skill_points ?? 0}`],
       stat_points:[`Base = ${base.stat_points ?? 0}`],
@@ -11092,7 +11478,8 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
     const combined = (ASSIGNED||[])
       .concat((ARC_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
       .concat((EXP_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
-      .concat((DIMA_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
+      .concat((DIMA_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))))
+      .concat((AWAK_ASSIGNED||[]).filter(a=> !assignedIds.has(String(a?.id || ''))));
     const passiveAbilities = combined.filter(a=>{
       const t = (a.type||'').toLowerCase();
       return t==='passive' || t==='mixed';
@@ -11139,7 +11526,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
     const map = {
         'derived.hp':'hp','derived.en':'en','derived.fo':'fo','derived.mo':'mo','derived.initiative':'initiative',
       'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap','derived.talent_max':'talent_max',
-      'derived.max_expertise':'max_expertise','derived.max_divine_manifestation':'max_divine_manifestation',
+      'derived.max_expertise':'max_expertise','derived.max_divine_manifestation':'max_divine_manifestation','derived.max_awakenings':'max_awakenings',
       'derived.craftomancy_max':'craftomancy_max','derived.skill_points':'skill_points','derived.stat_points':'stat_points',
       'derived.sublimation_slots':'sublimation_slots','derived.complex_schools':'complex_schools','derived.weapon_neutral':'weapon_neutral'
     };
@@ -11243,6 +11630,9 @@ function expertiseMax(){
 function divineManifestationMax(){
   return Math.max(0, Math.floor(numOr(DERIVED_CACHE?.max_divine_manifestation, 0)));
 }
+function awakeningMax(){
+  return Math.max(0, Math.floor(numOr(DERIVED_CACHE?.max_awakenings, 0)));
+}
 function updateExpertiseCounters(){
   if (expertiseCounterEl){
     const count = (CHAR?.expertise_ids || []).length;
@@ -11255,6 +11645,14 @@ function updateExpertiseCounters(){
     const max = divineManifestationMax();
     dimaCounterEl.textContent = `Divine Manifestation: ${count} / ${max}`;
     dimaCounterEl.style.color = (count > max) ? '#f66' : '';
+  }
+}
+function updateAwakeningCounters(){
+  if (awakCounterEl){
+    const count = (CHAR?.awakening_ids || []).length;
+    const max = awakeningMax();
+    awakCounterEl.textContent = `Awakenings: ${count} / ${max}`;
+    awakCounterEl.style.color = (count > max) ? '#f66' : '';
   }
 }
 
@@ -11273,6 +11671,14 @@ async function loadDivineManifestationsList(){
     DIVINE_MANIFESTATIONS = res.divine_manifestations || [];
   }catch(e){
     if (dimaSummaryEl) dimaSummaryEl.textContent = 'Load divine manifestations failed: ' + e.message;
+  }
+}
+async function loadAwakeningsList(){
+  try{
+    const res = await api('/awakenings');
+    AWAKENINGS = res.awakenings || [];
+  }catch(e){
+    if (awakSummaryEl) awakSummaryEl.textContent = 'Load awakenings failed: ' + e.message;
   }
 }
 function skillTotalAdjustedFor(key, name){
@@ -11314,6 +11720,7 @@ function updateDerived(){
   base.talent_max = baseTalentMax(lvl);
   base.max_expertise = 0;
   base.max_divine_manifestation = 0;
+  base.max_awakenings = 0;
   base.skill_points = skillPointPool(lvl);
     base.stat_points = statPointPool(lvl);
     base.sublimation_slots = slotsForLevel(lvl) + (2 * msPRE);
@@ -11407,6 +11814,7 @@ function updateDerived(){
     renderAddedSchools();
     updateTalentCounter();
     updateExpertiseCounters();
+    updateAwakeningCounters();
     updateCraftomancyCounter();
     renderCombatEtUsage();
     renderCombatTension();
@@ -11444,6 +11852,7 @@ async function loadCharacter(){
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   if (!Array.isArray(CHAR.expertise_ids)) CHAR.expertise_ids = [];
   if (!Array.isArray(CHAR.divine_manifestation_ids)) CHAR.divine_manifestation_ids = [];
+  if (!Array.isArray(CHAR.awakening_ids)) CHAR.awakening_ids = [];
   ensureSpeciesAbilityLinked();
   ensureBoonAbilityLinked();
   ABILITY_CHOICES = CHAR.ability_choices || {};
@@ -11522,9 +11931,11 @@ async function loadCharacter(){
   await loadBoonList();
   await loadExpertiseList();
   await loadDivineManifestationsList();
+  await loadAwakeningsList();
   renderArchetypePanel();
   await refreshExpertiseAbilities();
   await refreshDivineManifestationAbilities();
+  await refreshAwakeningAbilities();
   if (CAN_EDIT) await loadSpellListsList();
   if (SELECTED_SPELL_LIST_ID) await loadSpellListById(SELECTED_SPELL_LIST_ID);
   if (CAN_EDIT) await loadInventoriesList();
@@ -11592,6 +12003,7 @@ async function saveNow(){
       abilities: CHAR.abilities || [],
       expertise_ids: CHAR.expertise_ids || [],
       divine_manifestation_ids: CHAR.divine_manifestation_ids || [],
+      awakening_ids: CHAR.awakening_ids || [],
       ability_choices: ABILITY_CHOICES || {},
       item_choices: ITEM_CHOICES || {},
       xp_ledger: XP_LEDGER || [],
@@ -11629,8 +12041,12 @@ function closeAbilityAddModal(){
 let SOURCE_ADD_KIND = 'expertise';
 function openSourceAddModal(kind){
   if (!sourceAddModal || !sourceAddBackdrop) return;
-  SOURCE_ADD_KIND = kind === 'dima' ? 'dima' : 'expertise';
-  if (sourceAddTitle) sourceAddTitle.textContent = SOURCE_ADD_KIND === 'dima' ? 'Add Divine Manifestation' : 'Add Expertise';
+  SOURCE_ADD_KIND = kind === 'dima' ? 'dima' : (kind === 'awakening' ? 'awakening' : 'expertise');
+  if (sourceAddTitle){
+    if (SOURCE_ADD_KIND === 'dima') sourceAddTitle.textContent = 'Add Divine Manifestation';
+    else if (SOURCE_ADD_KIND === 'awakening') sourceAddTitle.textContent = 'Add Awakening';
+    else sourceAddTitle.textContent = 'Add Expertise';
+  }
   sourceAddModal.classList.remove('hidden');
   sourceAddModal.classList.add('open');
   sourceAddBackdrop.classList.add('open');
@@ -11645,7 +12061,9 @@ function closeSourceAddModal(){
   sourceAddBackdrop.classList.remove('open');
 }
 function getSourceListForModal(){
-  return SOURCE_ADD_KIND === 'dima' ? (DIVINE_MANIFESTATIONS || []) : (EXPERTISES || []);
+  if (SOURCE_ADD_KIND === 'dima') return (DIVINE_MANIFESTATIONS || []);
+  if (SOURCE_ADD_KIND === 'awakening') return (AWAKENINGS || []);
+  return (EXPERTISES || []);
 }
 function renderSourceResults(list){
   if (!sourceResultsEl) return;
@@ -11692,6 +12110,18 @@ function addSourceEntry(entry){
     CHAR.divine_manifestation_ids = Array.from(arr);
     updateExpertiseCounters();
     refreshDivineManifestationAbilities();
+  }else if (SOURCE_ADD_KIND === 'awakening'){
+    const max = awakeningMax();
+    const curr = (CHAR.awakening_ids || []).length;
+    if (curr >= max){
+      alert(`Awakening limit reached (${max}).`);
+      return;
+    }
+    const arr = new Set((CHAR.awakening_ids || []).map(String));
+    arr.add(id);
+    CHAR.awakening_ids = Array.from(arr);
+    updateAwakeningCounters();
+    refreshAwakeningAbilities();
   }else{
     const max = expertiseMax();
     const curr = (CHAR.expertise_ids || []).length;
@@ -11742,6 +12172,7 @@ boonSelectEl?.addEventListener('change', ()=> applyBoonSelection(boonSelectEl.va
 abiOpenAddBtn?.addEventListener('click', openAbilityAddModal);
 expOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('expertise'));
 dimaOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('dima'));
+awakOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('awakening'));
 abiAddClose?.addEventListener('click', closeAbilityAddModal);
 abiAddCancel?.addEventListener('click', closeAbilityAddModal);
 sourceAddClose?.addEventListener('click', closeSourceAddModal);
@@ -12520,6 +12951,7 @@ function collectDisplayAbilities(){
   addUnique(ARC_ASSIGNED);
   addUnique(EXP_ASSIGNED);
   addUnique(DIMA_ASSIGNED);
+  addUnique(AWAK_ASSIGNED);
   return combined;
 }
 

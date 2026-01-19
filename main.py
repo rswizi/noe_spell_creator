@@ -2409,6 +2409,54 @@ def delete_divine_manifestation(did: str, request: Request):
         raise HTTPException(404, "Divine Manifestation not found")
     return {"status":"success","deleted": did}
 
+@app.get("/awakenings")
+def list_awakenings(request: Request):
+    docs = list(get_col("awakenings").find({}, {"_id":0}))
+    docs.sort(key=lambda d: d.get("name",""))
+    return {"status":"success","awakenings": docs}
+
+@app.post("/awakenings")
+async def create_awakening(request: Request):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    body = await request.json()
+    doc = _validate_awakening_doc(body or {})
+    if role not in ("moderator","admin"):
+        pending = _create_pending_submission(username, role, "awakening", doc)
+        return {"status":"pending","submission": pending}
+    doc["id"] = next_id_str("awakenings", padding=4)
+    doc["created_at"] = _now_iso()
+    doc["updated_at"] = doc["created_at"]
+    get_col("awakenings").insert_one(dict(doc))
+    return {"status":"success","awakening": {k:v for k,v in doc.items() if k!="_id"}}
+
+@app.get("/awakenings/{aid}")
+def get_awakening(aid: str, request: Request):
+    doc = get_col("awakenings").find_one({"id": aid}, {"_id":0})
+    if not doc:
+        raise HTTPException(404, "Awakening not found")
+    return {"status":"success","awakening": doc}
+
+@app.put("/awakenings/{aid}")
+async def update_awakening(aid: str, request: Request):
+    require_auth(request, roles=["moderator","admin"])
+    body = await request.json()
+    doc = get_col("awakenings").find_one({"id": aid})
+    if not doc:
+        raise HTTPException(404, "Awakening not found")
+    new_doc = _validate_awakening_doc(body or {}, is_update=True)
+    new_doc["updated_at"] = datetime.datetime.utcnow().isoformat()+"Z"
+    get_col("awakenings").update_one({"id": aid}, {"$set": new_doc})
+    out = get_col("awakenings").find_one({"id": aid}, {"_id":0})
+    return {"status":"success","awakening": out}
+
+@app.delete("/awakenings/{aid}")
+def delete_awakening(aid: str, request: Request):
+    require_auth(request, roles=["admin"])
+    res = get_col("awakenings").delete_one({"id": aid})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Awakening not found")
+    return {"status":"success","deleted": aid}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
 
@@ -3101,6 +3149,9 @@ def _validate_expertise_doc(doc: dict, is_update=False):
     return _validate_ranked_doc(doc, is_update=is_update, allow_hybrid=False)
 
 def _validate_divine_manifestation_doc(doc: dict, is_update=False):
+    return _validate_ranked_doc(doc, is_update=is_update, allow_hybrid=False)
+
+def _validate_awakening_doc(doc: dict, is_update=False):
     return _validate_ranked_doc(doc, is_update=is_update, allow_hybrid=False)
 
 def _compute_archetype_unlocked(archetype: dict, lvl: int) -> list[str]:
@@ -5106,6 +5157,7 @@ async def create_character(request: Request):
         "archetype_id": (body.get("archetype_id") or "").strip(),
         "expertise_ids": body.get("expertise_ids") or [],
         "divine_manifestation_ids": body.get("divine_manifestation_ids") or [],
+        "awakening_ids": body.get("awakening_ids") or [],
     }
     if inv_id:
         doc["inventory_id"] = inv_id
@@ -5212,6 +5264,11 @@ async def update_character(cid: str, request: Request):
         dima_ids = body.get("divine_manifestation_ids") or []
         if isinstance(dima_ids, list):
             updates["divine_manifestation_ids"] = [str(x).strip() for x in dima_ids if str(x).strip()]
+
+    if "awakening_ids" in body:
+        awake_ids = body.get("awakening_ids") or []
+        if isinstance(awake_ids, list):
+            updates["awakening_ids"] = [str(x).strip() for x in awake_ids if str(x).strip()]
 
     if "sublimations" in body:
         subs = body.get("sublimations") or []
@@ -5868,6 +5925,13 @@ async def approve_submission(sid: str, request: Request):
         doc["created_at"] = now
         doc["updated_at"] = now
         get_col("divine_manifestations").insert_one(dict(doc))
+        approved_id = doc["id"]
+    elif sub_type == "awakening":
+        doc = _validate_awakening_doc(payload or {})
+        doc["id"] = next_id_str("awakenings", padding=4)
+        doc["created_at"] = now
+        doc["updated_at"] = now
+        get_col("awakenings").insert_one(dict(doc))
         approved_id = doc["id"]
     elif sub_type == "upgrade":
         doc = _upgrade_from_body(payload or {})
