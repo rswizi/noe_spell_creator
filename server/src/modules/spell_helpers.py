@@ -262,7 +262,7 @@ def _recompute_spells_for_effect(effect_id: str) -> tuple[str, int]:
             int(sp.get("range", 0)),
             sp.get("aoe", "A Square"),
             int(sp.get("duration", 1)),
-            _unique_preserve([str(x) for x in (sp.get("effects") or [])])
+            [str(x) for x in (sp.get("effects") or [])]
         )
 
         new_mp, new_en, new_cat = cc["mp_cost"], cc["en_cost"], cc["category"]

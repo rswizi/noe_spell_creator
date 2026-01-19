@@ -11120,6 +11120,15 @@ function parseAbilityRollTokens(expr){
       token = token.slice(1);
     }
     if (!token) continue;
+    const msMatch = token.match(/^M\(([^)]+)\)$/i);
+    if (msMatch){
+      const code = String(msMatch[1] || '').trim().toUpperCase();
+      const key = milestoneKeyFromCode(code);
+      if (!key) return { error:`Unknown milestone "${code}".` };
+      const value = milestone(key);
+      parts.push({ type:'milestone', code, value, sign });
+      continue;
+    }
     const diceMatch = token.match(/^(\d+)?(d\d+|id)$/i);
     if (diceMatch){
       const count = Math.max(1, Number(diceMatch[1] || 1));
@@ -11164,6 +11173,10 @@ function rollAbilityExpression(expr, idInfo){
       total += part.sign * sum;
       const text = `${part.count}${dieLabel} (${rolls.join(' + ')} = ${sum})`;
       pieces.push({ sign: part.sign, text });
+    }else if (part.type === 'milestone'){
+      total += part.sign * part.value;
+      const label = `M(${part.code})=${part.value}`;
+      pieces.push({ sign: part.sign, text: label });
     }else if (part.type === 'flat'){
       total += part.sign * part.value;
       pieces.push({ sign: part.sign, text: String(part.value) });
