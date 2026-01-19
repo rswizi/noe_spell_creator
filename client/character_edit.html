@@ -122,8 +122,9 @@
     .abi-item.abi-block { flex-direction: column; align-items: stretch; }
     .abi-item.abi-card { display:grid; grid-template-columns: minmax(0, 1fr) auto; align-items:start; gap:12px; }
     .abi-item.abi-card .abi-body { min-width:0; }
-    .abi-item.abi-card .abi-meta { display:flex; flex-direction:column; align-items:flex-end; gap:6px; min-width:160px; }
-    .abi-item.abi-card .abi-tags { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .abi-item.abi-card .abi-meta { display:flex; flex-direction:column; align-items:flex-end; gap:6px; min-width:200px; }
+    .abi-item.abi-card .abi-title-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .abi-item.abi-card .abi-tags { display:flex; gap:6px; flex-wrap:wrap; }
     .abi-item.abi-card .abi-actions { display:flex; gap:6px; align-items:flex-start; justify-content:flex-end; }
     .abi-item.abi-card .abi-move { display:flex; flex-direction:column; gap:6px; }
     .abi-item.abi-card .abi-placeholder { visibility:hidden; pointer-events:none; }
@@ -149,7 +150,6 @@
     @media (max-width: 700px){
       .abi-item.abi-card { grid-template-columns: 1fr; }
       .abi-item.abi-card .abi-meta { width:100%; flex-direction:row; align-items:flex-start; justify-content:space-between; }
-      .abi-item.abi-card .abi-tags { justify-content:flex-start; }
       .abi-item.abi-card .abi-actions { flex-wrap:wrap; justify-content:flex-end; }
     }
     /* Modifiers breakdown */
@@ -8650,7 +8650,13 @@ function renderAbilitySpellsBucket(){
     const tagA = String(sp.category || '').trim();
     div.innerHTML = `
       <div class="abi-body">
-        <div><strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
+        <div class="abi-title-row">
+          <strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span>
+          <div class="abi-tags">
+            <span class="tag ${tagA ? '' : 'abi-placeholder'}">${tagA || 'Tag'}</span>
+            <span class="tag abi-placeholder">Tag</span>
+          </div>
+        </div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
@@ -8658,16 +8664,12 @@ function renderAbilitySpellsBucket(){
         <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
       </div>
       <div class="abi-meta">
-        <div class="abi-tags">
-          <span class="tag ${tagA ? '' : 'abi-placeholder'}">${tagA || 'Tag'}</span>
-          <span class="tag abi-placeholder">Tag</span>
-        </div>
         <div class="abi-actions">
+          <button class="btn small abi-placeholder" disabled>@</button>
           <div class="abi-move">
             <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           </div>
-          <button class="btn small abi-placeholder" disabled>Configure</button>
           <button class="btn small abi-placeholder" disabled>Natures</button>
           <button class="btn small abi-placeholder" disabled>X</button>
         </div>
@@ -8721,23 +8723,25 @@ function renderAbilitySpellsBucket(){
     const tagA = String(sp.category || '').trim();
     div.innerHTML = `
       <div class="abi-body">
-        <div><strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
+        <div class="abi-title-row">
+          <strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span>
+          <div class="abi-tags">
+            <span class="tag ${tagA ? '' : 'abi-placeholder'}">${tagA || 'Tag'}</span>
+            <span class="tag">Craftomancy</span>
+          </div>
+        </div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
         <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
       </div>
       <div class="abi-meta">
-        <div class="abi-tags">
-          <span class="tag ${tagA ? '' : 'abi-placeholder'}">${tagA || 'Tag'}</span>
-          <span class="tag">Craftomancy</span>
-        </div>
         <div class="abi-actions">
+          <button class="btn small abi-placeholder" disabled>@</button>
           <div class="abi-move">
             <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           </div>
-          <button class="btn small abi-placeholder" disabled>Configure</button>
           <button class="btn small abi-placeholder" disabled>Natures</button>
           <button class="btn small abi-placeholder" disabled>X</button>
         </div>
@@ -14786,21 +14790,23 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     const removeClass = canRemove ? '' : 'abi-placeholder';
     div.innerHTML = `
       <div class="abi-body">
-        <div><strong class="title-color-target">${titleText}</strong></div>
+        <div class="abi-title-row">
+          <strong class="title-color-target">${titleText}</strong>
+          <div class="abi-tags">
+            <span class="tag ${typeTag ? '' : 'abi-placeholder'}">${typeTag || 'Tag'}</span>
+            <span class="tag ${sourceTag ? '' : 'abi-placeholder'}">${sourceTag || 'Tag'}</span>
+          </div>
+        </div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${costText ? `<div class="muted" style="font-size:.8rem">Cost: ${costText}</div>` : ''}
       </div>
       <div class="abi-meta">
-        <div class="abi-tags">
-          <span class="tag ${typeTag ? '' : 'abi-placeholder'}">${typeTag || 'Tag'}</span>
-          <span class="tag ${sourceTag ? '' : 'abi-placeholder'}">${sourceTag || 'Tag'}</span>
-        </div>
         <div class="abi-actions">
+          <button class="btn small mod-config ${configClass}" title="Configure choices" ${hasChoice ? '' : 'disabled'}>@</button>
           <div class="abi-move ${moveWrapClass}">
             <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst || !canMove ? 'disabled' : ''}>&#8593;</button>
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast || !canMove ? 'disabled' : ''}>&#8595;</button>
           </div>
-          <button class="btn small mod-config ${configClass}" title="Configure choices" ${hasChoice ? '' : 'disabled'}>Configure</button>
           <button class="btn small abi-nature ${natureClass}" title="Configure default natures" ${needsNature ? '' : 'disabled'}>Natures</button>
           <button class="btn small mod-remove ${removeClass}" title="Remove" ${canRemove ? '' : 'disabled'}>X</button>
         </div>
