@@ -7835,25 +7835,7 @@ function renderAbilitySpellsBucket(){
     const desc = meta.description || sp.description || sp.description_long || sp.desc || '';
     const flavor = sp.flavor || sp.flavour || '';
     const userFlavor = meta.flavor || meta.flavour || '';
-    const effectDetails = Array.isArray(sp.effects_detail) ? sp.effects_detail : [];
-    let effectsDesc = effectDetails.map(e=> e.description || e.detail || e).filter(Boolean).join(' | ');
-    const effectCounts = {};
-    (sp.effects || []).forEach(eid=>{
-      const k = String(eid||'').toLowerCase();
-      effectCounts[k] = (effectCounts[k]||0) + 1;
-    });
-    const resolvedEffects = Object.entries(effectCounts).map(([id,count])=>{
-      const eff = EFFECTS_BY_ID[id] || {};
-      const base = eff.description || eff.effect || eff.text || eff.name || id;
-      const countTxt = count > 1 ? ` x${count}` : '';
-      return `${base}${countTxt}`;
-    }).filter(Boolean);
-    if (resolvedEffects.length){
-      effectsDesc = effectsDesc ? `${effectsDesc} | ${resolvedEffects.join(' | ')}` : resolvedEffects.join(' | ');
-    }else if (!effectsDesc){
-      const rawEffect = sp.effect || sp.effect_text || sp.effectText || sp.effect_description || sp.effects_description;
-      if (rawEffect) effectsDesc = String(rawEffect);
-    }
+    const effectsDesc = spellEffectsDesc(sp, meta);
     const costParts = [];
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
@@ -7911,22 +7893,7 @@ function renderAbilitySpellsBucket(){
     const nameDisplay = spellDisplayName(sp, metaMap);
     const desc = sp.description || sp.description_long || sp.desc || '';
     const flavor = sp.flavor || '';
-    const effectDetails = Array.isArray(sp.effects_detail) ? sp.effects_detail : [];
-    let effectsDesc = effectDetails.map(e=> e.description || e.detail || e).filter(Boolean).join(' | ');
-    const effectCounts = {};
-    (sp.effects || []).forEach(eid=>{
-      const k = String(eid||'').toLowerCase();
-      effectCounts[k] = (effectCounts[k]||0) + 1;
-    });
-    const resolvedEffects = Object.entries(effectCounts).map(([id,count])=>{
-      const eff = EFFECTS_BY_ID[id] || {};
-      const base = eff.description || eff.effect || eff.text || eff.name || id;
-      const countTxt = count > 1 ? ` x${count}` : '';
-      return `${base}${countTxt}`;
-    }).filter(Boolean);
-    if (resolvedEffects.length){
-      effectsDesc = effectsDesc ? `${effectsDesc} | ${resolvedEffects.join(' | ')}` : resolvedEffects.join(' | ');
-    }
+    const effectsDesc = spellEffectsDesc(sp);
     const costParts = [];
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
@@ -9186,10 +9153,12 @@ function renderCombatEtUsage(){
       if (Number.isFinite(v) && label !== 'ms') used += v;
     }
   });
+  const metaMap = SPELLLIST_META.spell_meta || {};
   (SPELLLIST_SPELLS || []).forEach(sp=>{
     const id = String(sp?.id || '');
     if (!spellIds.has(id)) return;
-    if (!spellHasActiveCost(sp)) return;
+    const meta = metaMap[id] || {};
+    if (!spellHasActiveCost(sp, meta)) return;
     const enCost = Number(sp?.en_cost || 0);
     if (Number.isFinite(enCost)) used += enCost;
   });
@@ -9204,10 +9173,20 @@ function renderCombatActiveAbilities(){
   const activeAbilityIds = Array.from(new Set((st.active_abilities || []).map(String).filter(Boolean)));
   const activeSpellIds = Array.from(new Set((st.active_spells || []).map(String).filter(Boolean)));
   const validSpellIds = new Set((SPELLLIST_SPELLS || []).map(sp=> String(sp?.id || '')));
+  const metaMap = SPELLLIST_META.spell_meta || {};
   const activeEligibilityReady = Object.keys(EFFECTS_BY_ID).length
-    || (SPELLLIST_SPELLS || []).some(sp=> (Array.isArray(sp?.effects_detail) && sp.effects_detail.length) || sp.effects_desc || sp.effect || sp.effects_description);
+    || (SPELLLIST_SPELLS || []).some(sp=>{
+      const meta = metaMap[String(sp?.id || '')] || {};
+      return (Array.isArray(sp?.effects_detail) && sp.effects_detail.length)
+        || sp.effects_desc || sp.effect || sp.effects_description
+        || (Array.isArray(meta?.effects_detail) && meta.effects_detail.length)
+        || meta.effects_desc || meta.effect || meta.effects_description;
+    });
   const eligibleSpellIds = activeEligibilityReady
-    ? new Set((SPELLLIST_SPELLS || []).filter(spellHasActiveCost).map(sp=> String(sp?.id || '')))
+    ? new Set((SPELLLIST_SPELLS || []).filter(sp=>{
+      const meta = metaMap[String(sp?.id || '')] || {};
+      return spellHasActiveCost(sp, meta);
+    }).map(sp=> String(sp?.id || '')))
     : null;
   const cleanedSpellIds = activeSpellIds.filter(id=> validSpellIds.has(id) && (!eligibleSpellIds || eligibleSpellIds.has(id)));
   if (cleanedSpellIds.length !== activeSpellIds.length){
@@ -9487,6 +9466,23 @@ function getWeaponAttributes(it){
   };
   addAttrs(it?.attributes);
   addAttrs(it?.effects);
+  const upgrades = Array.isArray(it?.upgrades) ? it.upgrades : [];
+  upgrades.forEach(u=>{
+    const upgId = u?.id || u?.key || u;
+    const meta = (window.UPGRADE_META || {})[upgId] || {};
+    const effects = Array.isArray(u?.item_effects) ? u.item_effects
+      : (Array.isArray(meta?.item_effects) ? meta.item_effects : []);
+    effects.forEach(e=>{
+      const type = String(e?.type || '').toLowerCase();
+      if (type === 'acuity') attrs.push('Acuity');
+      if (type === 'defense_attribute' || type === 'defense') attrs.push('Defense');
+    });
+    const token = [
+      upgId, u?.key, u?.name, meta?.key, meta?.name
+    ].map(v=> String(v || '').toLowerCase()).join(' ');
+    if (token.includes('acuity')) attrs.push('Acuity');
+    if (token.includes('defense')) attrs.push('Defense');
+  });
   const catalog = weaponCatalogLookup(it);
   addAttrs(catalog?.attributes);
   addAttrs(catalog?.effects);
@@ -9495,6 +9491,12 @@ function getWeaponAttributes(it){
 function weaponHasAttribute(it, name){
   const target = String(name || '').toLowerCase();
   return getWeaponAttributes(it).some(a=> String(a || '').toLowerCase() === target);
+}
+
+function defenseWeaponBonus(){
+  if (!LINKED_INV) return 0;
+  const items = (LINKED_INV.items || []).filter(it=> String(it?.kind || it?.type || '').toLowerCase() === 'weapon' && it?.equipped !== false);
+  return items.some(it=> weaponHasAttribute(it, 'Defense')) ? 1 : 0;
 }
 function weaponIsAnimarma(it){
   if (it?.is_animarma) return true;
@@ -9651,13 +9653,20 @@ function abilityHasActiveCost(a){
   ].map(v=> Number(v || 0));
   return values.some(v=> Number.isFinite(v) && v !== 0);
 }
-function spellHasActiveCost(sp){
+function spellHasActiveCost(sp, meta){
   const direct = sp?.active_cost ?? sp?.active_costs ?? sp?.sustain_cost ?? sp?.sustain ?? sp?.upkeep;
-  if (direct != null){
-    if (direct === true) return true;
-    return Number(direct || 0) !== 0;
+  const metaDirect = meta?.active_cost ?? meta?.active_costs ?? meta?.sustain_cost ?? meta?.sustain ?? meta?.upkeep;
+  const activeVal = (direct != null && String(direct).trim() !== '') ? direct : metaDirect;
+  if (activeVal != null){
+    if (activeVal === true) return true;
+    const num = Number(activeVal);
+    if (Number.isFinite(num) && num !== 0) return true;
+    if (typeof activeVal === 'string'){
+      const cleaned = activeVal.trim().toLowerCase();
+      if (cleaned && !['0','none','no','-','--'].includes(cleaned) && Number.isNaN(num)) return true;
+    }
   }
-  return spellHasActiveEffect(sp);
+  return spellHasActiveEffect(sp, meta);
 }
 
 function spellDurationValue(sp){
@@ -9672,40 +9681,90 @@ function spellHasDurationTrack(sp){
   return spellDurationValue(sp) >= 2;
 }
 
-function effectHasActiveTag(text){
-  if (!text) return false;
-  return /^\s*\[[^\]]*\bactive\b[^\]]*\]/i.test(String(text));
+function cleanEffectText(text){
+  return String(text || '').replace(/\s*\|\s*$/, '').replace(/\s+/g, ' ').trim();
 }
 
-function spellEffectTexts(sp){
+function splitEffectTextParts(text){
+  if (!text) return [];
+  return String(text)
+    .split('|')
+    .map(part=> cleanEffectText(part))
+    .filter(Boolean);
+}
+
+function normalizeEffectKey(text){
+  return cleanEffectText(text).toLowerCase();
+}
+
+function effectHasActiveTag(text){
+  if (!text) return false;
+  return /\[[^\]]*\bactive\b[^\]]*\]/i.test(String(text));
+}
+
+function extractEffectDetailTexts(list){
   const out = [];
-  const detailList = Array.isArray(sp?.effects_detail) ? sp.effects_detail : [];
-  detailList.forEach(item=>{
+  (Array.isArray(list) ? list : []).forEach(item=>{
     if (typeof item === 'string') { out.push(item); return; }
     if (item && typeof item === 'object'){
       const val = item.description || item.detail || item.effect || item.text || item.name || '';
       if (val) out.push(val);
     }
   });
-  const raw = sp?.effects_desc || sp?.effects_description || sp?.effect || sp?.effect_text || sp?.effectText || sp?.effects_text || '';
-  if (raw){
-    String(raw).split('|').forEach(part=>{
-      const clean = String(part || '').trim();
-      if (clean) out.push(clean);
+  return out.flatMap(splitEffectTextParts);
+}
+
+function spellEffectTexts(sp, meta){
+  const baseDetails = extractEffectDetailTexts(sp?.effects_detail);
+  const metaDetails = extractEffectDetailTexts(meta?.effects_detail);
+  let details = baseDetails.slice();
+  if (!details.length && metaDetails.length){
+    details = metaDetails.slice();
+  }else if (details.length && metaDetails.length){
+    const seen = new Set(details.map(normalizeEffectKey));
+    metaDetails.forEach(text=>{
+      const key = normalizeEffectKey(text);
+      if (key && !seen.has(key)){
+        seen.add(key);
+        details.push(text);
+      }
     });
   }
-  const effectIds = Array.isArray(sp?.effects) ? sp.effects : [];
+  if (details.length) return details.map(cleanEffectText).filter(Boolean);
+  const raw = sp?.effects_desc || sp?.effects_description || sp?.effect || sp?.effect_text || sp?.effectText || sp?.effects_text
+    || meta?.effects_desc || meta?.effects_description || meta?.effect || meta?.effect_text || meta?.effectText || meta?.effects_text || '';
+  const descParts = splitEffectTextParts(raw);
+  if (descParts.length) return descParts.map(cleanEffectText).filter(Boolean);
+  const baseEffects = Array.isArray(sp?.effects) ? sp.effects : [];
+  const effectIds = baseEffects.length ? baseEffects : (Array.isArray(meta?.effects) ? meta.effects : []);
+  const out = [];
   effectIds.forEach(eid=>{
     const key = String(eid || '').toLowerCase();
     const eff = EFFECTS_BY_ID[key] || {};
-    const val = eff.description || eff.effect || eff.text || eff.name || '';
+    const val = eff.description || eff.effect || eff.text || eff.name || eid;
     if (val) out.push(val);
   });
-  return out;
+  return out.map(cleanEffectText).filter(Boolean);
 }
 
-function spellHasActiveEffect(sp){
-  return spellEffectTexts(sp).some(effectHasActiveTag);
+function spellHasActiveEffect(sp, meta){
+  return spellEffectTexts(sp, meta).some(effectHasActiveTag);
+}
+
+function spellEffectsDesc(sp, meta){
+  const texts = spellEffectTexts(sp, meta);
+  if (!texts.length) return '';
+  const entries = new Map();
+  texts.forEach(text=>{
+    const clean = cleanEffectText(text);
+    if (!clean) return;
+    const key = normalizeEffectKey(clean);
+    const entry = entries.get(key) || { text: clean, count: 0 };
+    entry.count += 1;
+    if (!entry.text || clean.length > entry.text.length) entry.text = clean;
+    entries.set(key, entry);
+  });
+  return Array.from(entries.values()).map(entry=> entry.count > 1 ? `${entry.text} x${entry.count}` : entry.text).join('; ');
 }
 let ATTACK_MODAL_CTX = null;
 function renderAttackSpecialList(selected){
@@ -10072,9 +10131,18 @@ function renderCombatSpellList(){
   }
   const validIds = new Set(SPELLLIST_SPELLS.map(sp=> String(sp?.id || '')));
   const activeEligibilityReady = Object.keys(EFFECTS_BY_ID).length
-    || SPELLLIST_SPELLS.some(sp=> (Array.isArray(sp?.effects_detail) && sp.effects_detail.length) || sp.effects_desc || sp.effect || sp.effects_description);
+    || SPELLLIST_SPELLS.some(sp=>{
+      const meta = metaMap[String(sp?.id || '')] || {};
+      return (Array.isArray(sp?.effects_detail) && sp.effects_detail.length)
+        || sp.effects_desc || sp.effect || sp.effects_description
+        || (Array.isArray(meta?.effects_detail) && meta.effects_detail.length)
+        || meta.effects_desc || meta.effect || meta.effects_description;
+    });
   const eligibleIds = activeEligibilityReady
-    ? new Set(SPELLLIST_SPELLS.filter(spellHasActiveCost).map(sp=> String(sp?.id || '')))
+    ? new Set(SPELLLIST_SPELLS.filter(sp=>{
+      const meta = metaMap[String(sp?.id || '')] || {};
+      return spellHasActiveCost(sp, meta);
+    }).map(sp=> String(sp?.id || '')))
     : new Set();
   const durationIds = new Set(SPELLLIST_SPELLS.filter(spellHasDurationTrack).map(sp=> String(sp?.id || '')));
   Array.from(activeSet).forEach(id=>{
@@ -10092,6 +10160,7 @@ function renderCombatSpellList(){
     if (search && !String(name).toLowerCase().includes(search)) return;
     rendered += 1;
     const id = String(sp?.id || '');
+    const effectsDesc = spellEffectsDesc(sp, meta);
     const costParts = [];
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
@@ -10133,7 +10202,7 @@ function renderCombatSpellList(){
       renderCombatActiveAbilities();
       renderCombatDurationSpells();
       queueSave();
-      openCombatSpellRoll(sp, metaMap[id] || {}, { cost, range: sp.range, aoe: sp.aoe, desc: sp.description_html || sp.description || '', effectsDesc: sp.effects_desc || '', nameDisplay: name, statusLabel: meta.status || '' });
+      openCombatSpellRoll(sp, meta, { cost, range: sp.range, aoe: sp.aoe, desc: sp.description_html || sp.description || '', effectsDesc, nameDisplay: name, statusLabel: meta.status || '' });
     });
     combatSpellListEl.appendChild(row);
   });
@@ -10664,16 +10733,20 @@ function rollDefense(){
   const key = charKeyForSkillName(skill);
   const base = key ? skillAdjTotal(key, skill).total : 0;
   const cond = getCombatRollModifiers('defense', skill);
+  const defenseBonus = defenseWeaponBonus();
   openRollModal({
     title: `Defense: ${skill || 'Roll'}`,
     subtitle: 'Defense',
     baseLabel: 'Skill value',
     base,
-    mod: modInput + cond.mod,
+    mod: modInput + cond.mod + defenseBonus,
     adv: cond.adv || 'normal',
     autoConds: cond.conds,
-    detailsText: `Defense skill: ${skill || 'None'}`,
-    detailLines: [`Skill: ${skill || 'Defense'}`],
+    detailsText: `Defense skill: ${skill || 'None'}${defenseBonus ? ' | Defense +1 (weapon)' : ''}`,
+    detailLines: [
+      `Skill: ${skill || 'Defense'}`,
+      defenseBonus ? 'Defense +1 (weapon)' : ''
+    ].filter(Boolean),
     rollKind: 'skill'
   });
 }
