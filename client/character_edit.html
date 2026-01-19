@@ -950,6 +950,7 @@
                   <label class="muted">EN <input id="cur-en" type="number" min="0" class="combat-num"></label>
                   <label class="muted">FO <input id="cur-fo" type="number" min="0" class="combat-num"></label>
                   <label class="muted">SP <input id="cur-sp" type="number" min="0" class="combat-num"></label>
+                  <label class="muted">TX <input id="cur-tx" type="number" min="0" class="combat-num"></label>
                   <label class="muted">Max HP Dmg <input id="max-hp-dmg" type="number" min="0" step="1" class="combat-num"></label>
                   <label class="muted">Tension <input id="tension-value" type="number" min="0" step="1" class="combat-num"></label>
                   <span class="combat-badge">Cap <span id="tension-cap">--</span></span>
@@ -1077,6 +1078,8 @@
               <div class="panel-body">
                 <div class="combat-row">
                   <button class="btn small" id="conditions-add">Add Condition</button>
+                  <button class="btn small" id="conditions-apply">Apply Condition Effects</button>
+                  <button class="btn small" id="conditions-round">A Round Has Passed</button>
                 </div>
                 <div id="conditions-list" class="combat-list"></div>
               </div>
@@ -2156,7 +2159,7 @@ let SCHOOLS = [];
 let SUBLIMATIONS = [];
 let SUB_HIDDEN = {};
 let PERSONAL = {};
-let CURRENT = { hp:null, en:null, fo:null, sp:null };
+let CURRENT = { hp:null, en:null, fo:null, sp:null, tx:null };
 let OVERRIDE_ENABLED = false;
 let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, initiative:null, spcap:null, enc:null, et:null, tx:null, talent_max:null, skill_points:null, stat_points:null, sublimation_slots:null, complex_schools:null };
 let ARCHETYPES = [];
@@ -2277,6 +2280,7 @@ const curHpEl = document.getElementById('cur-hp');
 const curEnEl = document.getElementById('cur-en');
 const curFoEl = document.getElementById('cur-fo');
 const curSpEl = document.getElementById('cur-sp');
+const curTxEl = document.getElementById('cur-tx');
 const maxHpDmgEl = document.getElementById('max-hp-dmg');
 const combatMaxHpEl = document.getElementById('combat-max-hp');
 const combatMaxEnEl = document.getElementById('combat-max-en');
@@ -2359,6 +2363,8 @@ const combatConditionsClose = document.getElementById('combat-conditions-close')
 const combatConditionsCancel = document.getElementById('combat-conditions-cancel');
 const conditionsModalListEl = document.getElementById('conditions-modal-list');
 const conditionsAddBtn = document.getElementById('conditions-add');
+const conditionsApplyBtn = document.getElementById('conditions-apply');
+const conditionsRoundBtn = document.getElementById('conditions-round');
 const restOpenBtn = document.getElementById('rest-open');
 const combatRestModal = document.getElementById('combat-rest-modal');
 const combatRestBackdrop = document.getElementById('combat-rest-backdrop');
@@ -2931,13 +2937,14 @@ subCancel?.addEventListener('click', closeSubModal);
 subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) closeSubModal(); });
 
 // Overrides & current handlers
-  [curHpEl, curEnEl, curFoEl, curSpEl].forEach(el=>{
+  [curHpEl, curEnEl, curFoEl, curSpEl, curTxEl].forEach(el=>{
     el?.addEventListener('input', ()=>{
       CURRENT = {
         hp: Number(curHpEl?.value||0),
         en: Number(curEnEl?.value||0),
         fo: Number(curFoEl?.value||0),
         sp: Number(curSpEl?.value||0),
+        tx: Number(curTxEl?.value||0),
       };
       updateDerived(); queueSave();
     });
@@ -3053,6 +3060,8 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
     renderCombatConditionModal();
     invToggleModal(combatConditionsModal, combatConditionsBackdrop, true);
   });
+  conditionsApplyBtn?.addEventListener('click', applyAllConditionEffects);
+  conditionsRoundBtn?.addEventListener('click', advanceConditionDurations);
   combatConditionsClose?.addEventListener('click', ()=> invToggleModal(combatConditionsModal, combatConditionsBackdrop, false));
   combatConditionsCancel?.addEventListener('click', ()=> invToggleModal(combatConditionsModal, combatConditionsBackdrop, false));
   combatConditionsBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatConditionsBackdrop) invToggleModal(combatConditionsModal, combatConditionsBackdrop, false); });
@@ -3194,6 +3203,7 @@ function makeDefaultStats(){
     tension_strategy: "Offensive",
     exhausted: false,
     conditions: [],
+    condition_durations: {},
     critical_injuries: [],
     death_saves: { ko: false, successes: 0, failures: 0, dead: false, stabilized: false },
     active_abilities: [],
@@ -3221,6 +3231,9 @@ function normalizeStats(stats){
   out.combat = Object.assign({}, base.combat, out.combat || {});
   if (!Array.isArray(out.combat.defense_skills)) out.combat.defense_skills = base.combat.defense_skills.slice();
   if (!Array.isArray(out.combat.conditions)) out.combat.conditions = [];
+  if (!out.combat.condition_durations || typeof out.combat.condition_durations !== 'object'){
+    out.combat.condition_durations = {};
+  }
   if (!Array.isArray(out.combat.critical_injuries)) out.combat.critical_injuries = [];
   if (!Array.isArray(out.combat.active_abilities)) out.combat.active_abilities = [];
   if (!Array.isArray(out.combat.active_spells)) out.combat.active_spells = [];
@@ -3241,6 +3254,9 @@ function combatState(){
   if (!CHAR?.stats) CHAR.stats = normalizeStats(CHAR?.stats || {});
   if (!CHAR.stats.combat) CHAR.stats.combat = normalizeStats({}).combat;
   if (!Number.isFinite(Number(CHAR.stats.combat.max_hp_damage))) CHAR.stats.combat.max_hp_damage = 0;
+  if (!CHAR.stats.combat.condition_durations || typeof CHAR.stats.combat.condition_durations !== 'object'){
+    CHAR.stats.combat.condition_durations = {};
+  }
   return CHAR.stats.combat;
 }
 
@@ -9013,6 +9029,212 @@ function conditionLevel(prefix){
   });
   return max;
 }
+function conditionDurationMap(){
+  const st = combatState();
+  if (!st.condition_durations || typeof st.condition_durations !== 'object') st.condition_durations = {};
+  return st.condition_durations;
+}
+function getConditionDuration(id){
+  const raw = conditionDurationMap()[String(id || '')];
+  const val = Number(raw);
+  return Number.isFinite(val) ? val : null;
+}
+function setConditionDuration(id, rounds){
+  const map = conditionDurationMap();
+  const key = String(id || '');
+  const val = Number(rounds);
+  if (!Number.isFinite(val) || val <= 0){
+    delete map[key];
+    return;
+  }
+  map[key] = Math.floor(val);
+}
+const CONDITION_ROLL_EFFECTS = {
+  stunned: { defenseMod: -2 },
+  disturbed: { offenseMod: -2 },
+  hindered: { offenseMod: -2, defenseMod: -2 },
+  unbalanced: { offenseMod: -2, defenseMod: -2 },
+  camouflaged: { defenseMod: 1, skillAdv: { stealth: 'adv' } },
+  blinded: { offenseAdv: 'dis', defenseAdv: 'dis' },
+  prone: { offenseAdv: 'dis' },
+  frightened: { offenseAdv: 'dis' },
+  invisible: { offenseAdv: 'adv', defenseAdv: 'adv' }
+};
+function mergeAdv(current, next){
+  if (!next) return current;
+  if (!current) return next;
+  if (current === next) return current;
+  return 'normal';
+}
+function applyConditionRollEffects(active, kind, skillName, out){
+  const isDefense = kind === 'defense';
+  const isOffense = kind === 'offense';
+  active.forEach(id=>{
+    const rule = CONDITION_ROLL_EFFECTS[id];
+    if (!rule) return;
+    if (isDefense && rule.defenseMod) out.mod += rule.defenseMod;
+    if (isOffense && rule.offenseMod) out.mod += rule.offenseMod;
+    if (isDefense && rule.defenseAdv) out.adv = mergeAdv(out.adv, rule.defenseAdv);
+    if (isOffense && rule.offenseAdv) out.adv = mergeAdv(out.adv, rule.offenseAdv);
+    if (skillName && rule.skillAdv){
+      const key = String(skillName || '').trim().toLowerCase();
+      if (rule.skillAdv[key]) out.adv = mergeAdv(out.adv, rule.skillAdv[key]);
+    }
+  });
+}
+function conditionTickEffect(condId){
+  const id = String(condId || '').toLowerCase();
+  const maxHp = Math.max(0, numOr(DERIVED_CACHE?.hp, 0));
+  const pctDamage = (pct)=> Math.max(0, Math.round(maxHp * pct));
+  let normalDamage = 0;
+  let trueDamage = 0;
+  let en = 0;
+  let fo = 0;
+  let tx = 0;
+  if (id.startsWith('bleeding-')){
+    const lvl = Number(id.replace('bleeding-', '').replace(/[^0-9]/g, ''));
+    const pct = [0, 0.02, 0.05, 0.10][lvl] || 0;
+    if (pct) trueDamage = pctDamage(pct);
+  }else if (id.startsWith('burned-')){
+    const lvl = Number(id.replace('burned-', '').replace(/[^0-9]/g, ''));
+    const pct = [0, 0.05, 0.10, 0.15][lvl] || 0;
+    if (pct) normalDamage = pctDamage(pct);
+  }else if (id.startsWith('poisoned-')){
+    const lvl = Number(id.replace('poisoned-', '').replace(/[^0-9]/g, ''));
+    tx = [0, 2, 4, 6][lvl] || 0;
+  }else if (id === 'contagious' || id === 'airborne-contagious'){
+    trueDamage = 10;
+  }else if (id === 'panicked'){
+    fo = -1;
+  }else if (id.startsWith('optimized-magic-')){
+    const lvl = Number(id.replace('optimized-magic-', '').replace(/[^0-9]/g, ''));
+    en = [0, 1, 3, 5][lvl] || 0;
+  }
+  return { normalDamage, trueDamage, en, fo, tx };
+}
+function conditionHasTickEffect(condId){
+  const id = String(condId || '').toLowerCase();
+  if (id.startsWith('bleeding-') || id.startsWith('burned-') || id.startsWith('poisoned-')
+    || id.startsWith('optimized-magic-') || id === 'contagious' || id === 'airborne-contagious' || id === 'panicked'){
+    return true;
+  }
+  const eff = conditionTickEffect(condId);
+  return !!(eff.normalDamage || eff.trueDamage || eff.en || eff.fo || eff.tx);
+}
+function applyConditionResourceAdjustments(delta){
+  const active = activeConditionSet();
+  const out = { ...delta };
+  const rawHeal = Number(out.hp || 0);
+  const rawEnLoss = Number(out.en || 0);
+  const foLoss = Number(out.fo || 0);
+  if (rawEnLoss < 0){
+    const extraLoss = conditionLevel('obstructed-');
+    if (extraLoss) out.en -= extraLoss;
+  }
+  if (out.en > 0 && active.has('aether-drained')){
+    out.en = 0;
+  }
+  if (foLoss < 0){
+    if (active.has('deeply-relaxed')){
+      out.fo = 0;
+    }else if (active.has('relaxed')){
+      out.fo = Math.floor(out.fo * 0.5);
+    }
+  }
+  if (rawHeal > 0){
+    if (active.has('deficient-metabolism')){
+      out.hp = 0;
+    }else{
+      if (active.has('slowed-metabolism')) out.hp = Math.floor(out.hp * 0.5);
+      if (rawHeal >= 4){
+        if (active.has('optimized-metabolism')) out.hp += 8;
+        else if (active.has('improved-metabolism')) out.hp += 4;
+      }
+    }
+  }
+  return out;
+}
+function logConditionResourceChange(label, delta){
+  const parts = [];
+  if (delta.en) parts.push(`EN ${delta.en > 0 ? '+' : ''}${delta.en}`);
+  if (delta.fo) parts.push(`FO ${delta.fo > 0 ? '+' : ''}${delta.fo}`);
+  if (delta.tx) parts.push(`TX ${delta.tx > 0 ? '+' : ''}${delta.tx}`);
+  if (!parts.length) return;
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = 'Condition Effect';
+  entry.appendChild(title);
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  entry.appendChild(meta);
+  const line = document.createElement('div');
+  line.textContent = `${label}: ${parts.join(' | ')}`;
+  entry.appendChild(line);
+  appendRollLog(entry);
+}
+function applyConditionEffect(condId, label){
+  const eff = conditionTickEffect(condId);
+  if (!eff) return;
+  if (eff.normalDamage) applyDamageAmount(eff.normalDamage, false);
+  if (eff.trueDamage) applyDamageAmount(eff.trueDamage, true);
+  const delta = { en: eff.en || 0, fo: eff.fo || 0, tx: eff.tx || 0 };
+  const hasDelta = [delta.en, delta.fo, delta.tx].some(v=> Number(v || 0) !== 0);
+  if (hasDelta){
+    const applied = applyCurrentDelta(delta);
+    logConditionResourceChange(label, applied);
+  }
+}
+function applyAllConditionEffects(){
+  const st = combatState();
+  const active = new Set((st.conditions || []).map(String));
+  if (st.exhausted) active.add('exhausted');
+  const byId = {};
+  CONDITION_DEFS.forEach(cond=>{ byId[cond.id] = cond; });
+  let applied = 0;
+  active.forEach(id=>{
+    if (!conditionHasTickEffect(id)) return;
+    const label = byId[id]?.name || id;
+    applyConditionEffect(id, label);
+    applied += 1;
+  });
+  if (!applied){
+    openRollModal({ title:'Condition Effects', infoOnly:true, descText:'No active conditions have automatic effects to apply.' });
+  }
+}
+function advanceConditionDurations(){
+  const st = combatState();
+  const durations = conditionDurationMap();
+  const active = new Set((st.conditions || []).map(String));
+  let changed = false;
+  Object.keys(durations).forEach(id=>{
+    if (!active.has(id)){
+      delete durations[id];
+      changed = true;
+      return;
+    }
+    const next = Number(durations[id]) - 1;
+    if (!Number.isFinite(next) || next <= 0){
+      delete durations[id];
+      active.delete(id);
+      if (id === 'exhausted') st.exhausted = false;
+      changed = true;
+    }else{
+      durations[id] = next;
+      changed = true;
+    }
+  });
+  st.conditions = Array.from(active);
+  if (changed){
+    renderCombatConditions();
+    renderCombatActions();
+    renderCombatTension();
+    updateDerived();
+    queueSave();
+  }
+}
 function getCombatConditionFlags(){
   const active = activeConditionSet();
   return {
@@ -9023,28 +9245,7 @@ function getCombatConditionFlags(){
 function getCombatRollModifiers(kind, skillName){
   const active = activeConditionSet();
   const out = { mod: 0, adv: null, conds: { jinxed: 0, motivated: 0, reckless: false, meticulous: false } };
-  const isDefense = kind === 'defense';
-  const isOffense = kind === 'offense';
-  if (isDefense){
-    if (active.has('stunned')) out.mod -= 2;
-    if (active.has('hindered')) out.mod -= 2;
-    if (active.has('unbalanced')) out.mod -= 2;
-    if (active.has('camouflaged')) out.mod += 1;
-  }
-  if (isOffense){
-    if (active.has('disturbed')) out.mod -= 2;
-    if (active.has('hindered')) out.mod -= 2;
-    if (active.has('unbalanced')) out.mod -= 2;
-  }
-  if (active.has('blinded')){
-    if (isDefense || isOffense) out.adv = 'dis';
-  }
-  if (active.has('prone') && isOffense){
-    out.adv = 'dis';
-  }
-  if (skillName && active.has('camouflaged')){
-    if (String(skillName).toLowerCase() === 'stealth') out.adv = 'adv';
-  }
+  applyConditionRollEffects(active, kind, skillName, out);
   out.conds.jinxed = conditionLevel('jinxed-');
   out.conds.motivated = conditionLevel('motivated-');
   out.conds.reckless = active.has('reckless');
@@ -9383,7 +9584,9 @@ function renderCombatActions(){
     const st = combatState();
     const exhausted = st.exhausted;
     const cur = Math.max(0, Number(st.tension || 0));
-    SPECIAL_ACTIONS.filter(action=> action.tier <= cur).forEach(action=>{
+    const inspired = activeConditionSet().has('inspired');
+    const effectiveTension = cur + (inspired ? 2 : 0);
+    SPECIAL_ACTIONS.filter(action=> action.tier <= effectiveTension).forEach(action=>{
       const row = document.createElement('div');
       row.className = 'combat-entry';
       row.title = action.effect || '';
@@ -9398,7 +9601,9 @@ function renderCombatActions(){
         if (exhausted) return;
         const st = combatState();
         const cur = Math.max(0, Number(st.tension || 0));
-        if (cur < action.tier){
+        const inspired = activeConditionSet().has('inspired');
+        const effectiveTension = cur + (inspired ? 2 : 0);
+        if (effectiveTension < action.tier){
           alert('Not enough Tension for this Special Action.');
           return;
         }
@@ -10216,6 +10421,10 @@ function renderCombatConditions(){
   const st = combatState();
   const active = new Set((st.conditions || []).map(String));
   if (st.exhausted) active.add('exhausted');
+  const durations = conditionDurationMap();
+  Object.keys(durations).forEach(id=>{
+    if (!active.has(id)) delete durations[id];
+  });
   conditionsListEl.innerHTML = '';
   const activeDefs = CONDITION_DEFS.filter(cond=> active.has(cond.id));
   const unknownIds = Array.from(active).filter(id=> !activeDefs.some(cond=> cond.id === id));
@@ -10224,22 +10433,29 @@ function renderCombatConditions(){
     return;
   }
   const renderRow = (condId, name, kind, effect)=>{
+    const duration = getConditionDuration(condId);
+    const durationText = Number.isFinite(duration) ? `Duration: ${duration} round${duration === 1 ? '' : 's'}` : '';
+    const hasTick = conditionHasTickEffect(condId);
     const row = document.createElement('div');
     row.className = 'combat-entry';
     row.title = effect || '';
     row.innerHTML = `
       <div class="grow">
         <div><strong>${invEscapeHtml(name)}</strong>${kind ? ` <span class="tag">${invEscapeHtml(kind)}</span>` : ''}</div>
+        ${durationText ? `<div class="meta">${invEscapeHtml(durationText)}</div>` : ''}
         <div class="muted">${invEscapeHtml(effect || '')}</div>
       </div>
-      <button class="btn small" data-cond="${invEscapeHtml(condId)}">Remove</button>
+      <div class="combat-actions-row">
+        ${hasTick ? '<button class="btn small cond-apply">Apply</button>' : ''}
+        <button class="btn btn-secondary small cond-duration">Duration</button>
+        <button class="btn small cond-remove">Remove</button>
+      </div>
     `;
-    row.querySelector('button')?.addEventListener('click', (e)=>{
-      const id = e.target.getAttribute('data-cond');
-      if (!id) return;
-      active.delete(id);
+    row.querySelector('.cond-remove')?.addEventListener('click', ()=>{
+      active.delete(condId);
+      delete durations[condId];
       st.conditions = Array.from(active);
-      if (id === 'exhausted'){
+      if (condId === 'exhausted'){
         st.exhausted = false;
         renderCombatTension();
       }
@@ -10248,6 +10464,23 @@ function renderCombatConditions(){
       updateDerived();
       renderCombatConditions();
       queueSave();
+    });
+    row.querySelector('.cond-duration')?.addEventListener('click', ()=>{
+      const current = getConditionDuration(condId);
+      const raw = prompt(`Rounds remaining for ${name}:`, current != null ? String(current) : '');
+      if (raw === null) return;
+      const val = Number(String(raw).trim());
+      if (!raw.trim() || !Number.isFinite(val) || val <= 0){
+        delete durations[condId];
+      }else{
+        durations[condId] = Math.floor(val);
+      }
+      renderCombatConditions();
+      queueSave();
+    });
+    row.querySelector('.cond-apply')?.addEventListener('click', ()=>{
+      const label = name || condId;
+      applyConditionEffect(condId, label);
     });
     conditionsListEl.appendChild(row);
   };
@@ -10283,6 +10516,7 @@ function renderCombatConditionModal(){
       if (!id) return;
       if (active.has(id)){
         active.delete(id);
+        delete conditionDurationMap()[id];
       }else{
         active.add(id);
       }
@@ -10396,18 +10630,22 @@ function renderCombatTab(){
 }
 
 function applyCurrentDelta(delta){
+  const adj = applyConditionResourceAdjustments(delta || {});
   const hp = numOr(CURRENT.hp ?? DERIVED_CACHE?.hp, 0);
   const en = numOr(CURRENT.en ?? DERIVED_CACHE?.en, 0);
   const fo = numOr(CURRENT.fo ?? DERIVED_CACHE?.fo, 0);
   const sp = numOr(CURRENT.sp ?? DERIVED_CACHE?.spcap, 0);
+  const tx = numOr(CURRENT.tx ?? 0, 0);
   CURRENT = {
-    hp: hp + numOr(delta.hp, 0),
-    en: en + numOr(delta.en, 0),
-    fo: fo + numOr(delta.fo, 0),
-    sp: sp + numOr(delta.sp, 0),
+    hp: hp + numOr(adj.hp, 0),
+    en: en + numOr(adj.en, 0),
+    fo: fo + numOr(adj.fo, 0),
+    sp: sp + numOr(adj.sp, 0),
+    tx: tx + numOr(adj.tx, 0),
   };
   updateDerived();
   queueSave();
+  return adj;
 }
 
 function applyDamageAmount(amount, trueDamage){
@@ -10470,10 +10708,11 @@ function applyAbilityCosts(a){
     hp: -Number(costs.HP || 0),
     en: -Number(costs.EN || 0),
     fo: -Number(costs.FO || 0),
+    tx: Number(costs.TX || 0),
   };
   applyCurrentDelta(delta);
   const missing = [];
-  ['MO','TX'].forEach(k=>{
+  ['MO'].forEach(k=>{
     const v = Number(costs[k] || 0);
     if (Number.isFinite(v) && v !== 0) missing.push(`${k}: ${v}`);
   });
@@ -11109,26 +11348,31 @@ function updateDerived(){
       });
     }
     DERIVED_CACHE = { ...final, ...maxVals };
+    const curTxRaw = numOr(CURRENT.tx ?? 0, 0);
     const cur = OVERRIDE_ENABLED ? {
       hp: numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp),
       en: numOr(CURRENT.en ?? maxVals.en, maxVals.en),
       fo: numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo),
       sp: numOr(CURRENT.sp ?? maxVals.spcap, maxVals.spcap),
+      tx: curTxRaw,
     } : {
       hp: Math.max(0, Math.min(numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp), maxVals.hp)),
       en: Math.max(0, Math.min(numOr(CURRENT.en ?? maxVals.en, maxVals.en), maxVals.en)),
       fo: Math.max(0, Math.min(numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo), maxVals.fo)),
       sp: Math.max(0, Math.min(numOr(CURRENT.sp ?? maxVals.spcap, maxVals.spcap), maxVals.spcap)),
+      tx: Math.max(0, Math.min(curTxRaw, maxVals.tx)),
     };
   if (CURRENT.hp == null) cur.hp = maxVals.hp;
   if (CURRENT.en == null) cur.en = maxVals.en;
   if (CURRENT.fo == null) cur.fo = maxVals.fo;
   if (CURRENT.sp == null) cur.sp = maxVals.spcap;
+  if (CURRENT.tx == null) cur.tx = 0;
   CURRENT = cur;
   if (curHpEl) curHpEl.value = cur.hp;
   if (curEnEl) curEnEl.value = cur.en;
   if (curFoEl) curFoEl.value = cur.fo;
   if (curSpEl) curSpEl.value = cur.sp;
+  if (curTxEl) curTxEl.value = cur.tx;
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
     if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
     [
@@ -11209,7 +11453,7 @@ async function loadCharacter(){
   SELECTED_SPELL_LIST_ID = CHAR.spell_list_id || '';
   SELECTED_INV_ID = CHAR.inventory_id || '';
    COMPUTED_ARC_ABILITIES = CHAR.computed_archetype_abilities || [];
-  CURRENT = Object.assign({hp:null,en:null,fo:null,sp:null}, CHAR.current || {});
+  CURRENT = Object.assign({hp:null,en:null,fo:null,sp:null,tx:null}, CHAR.current || {});
   OVERRIDE_ENABLED = !!CHAR.override_stats?.enabled;
   OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,initiative:null,spcap:null,enc:null,et:null,tx:null,talent_max:null,skill_points:null,stat_points:null,sublimation_slots:null,complex_schools:null}, CHAR.override_stats?.values || {});
   if (overrideToggle) overrideToggle.checked = OVERRIDE_ENABLED;
