@@ -460,7 +460,7 @@
       <a class="btn" href="portal.html">Portal</a>
       <a class="btn" href="character_admin.html" id="admin-link" style="display:none">All Characters</a>
       <button class="btn secondary" id="unlink-campaign" style="display:none;">Unlink from Campaign</button>
-      <button class="btn" id="delete-char" style="border-color:#7a1b1b; background:linear-gradient(135deg, rgba(197,53,53,0.35), rgba(60,10,14,0.9)); color:#fff;">Delete</button>
+      <button class="btn" id="delete-char" style="border-color:#7a1b1b; background:linear-gradient(135deg, rgba(197,53,53,0.35), rgba(60,10,14,0.9)); color:#fff;" title="Delete" aria-label="Delete character"><i class="fa-solid fa-trash"></i></button>
       <label class="row" style="gap:6px; margin-left:8px;">
         <input type="checkbox" id="override-derived"> <span class="muted">Override values (GM)</span>
       </label>
@@ -4545,7 +4545,7 @@ function renderInventoryUI(){
           <label class="row muted" style="gap:6px; align-items:center;">
             <input type="checkbox" data-cont="${c.id}" ${c.include===false?'':'checked'}> Include
           </label>
-          ${c.built_in ? '' : `<button class="btn small" data-del="${c.id}">Delete</button>`}
+          ${c.built_in ? '' : `<button class="btn small" data-del="${c.id}" title="Delete"><i class="fa-solid fa-trash"></i></button>`}
         </div>
         <div class="items"></div>
       `;
@@ -7677,8 +7677,9 @@ function openInvItemModal(it){
           if (choiceMods.length){
             const edit = document.createElement("button");
             edit.className = "btn small";
-            edit.textContent = "Configure";
+            edit.innerHTML = '<i class="fa-solid fa-gear"></i>';
             edit.title = "Configure upgrade choices";
+            edit.setAttribute('aria-label', 'Configure upgrade choices');
             edit.addEventListener("click", ()=> openUpgradeChoiceModal(it, u, idx));
             btns.appendChild(edit);
           }
@@ -7811,7 +7812,9 @@ function openInvItemModal(it){
   if (hasChoice){
     const choiceBtn = document.createElement("button");
     choiceBtn.className = "btn small";
-    choiceBtn.textContent = "Configure choices";
+    choiceBtn.innerHTML = '<i class="fa-solid fa-gear"></i>';
+    choiceBtn.title = "Configure choices";
+    choiceBtn.setAttribute('aria-label', 'Configure choices');
     choiceBtn.addEventListener("click", async ()=>{
       await openItemChoiceModal(it);
       closeInvItemModal();
@@ -8410,7 +8413,7 @@ async function renderAddedSchools(){
       <div class="row" style="gap:6px; flex-wrap:wrap;">
         <button class="btn small" data-move="up" data-id="${id}" ${isFirst ? 'disabled' : ''}>↑</button>
         <button class="btn small" data-move="down" data-id="${id}" ${isLast ? 'disabled' : ''}>↓</button>
-        <button class="btn small" data-remove="${id}">X</button>
+        <button class="btn small" data-remove="${id}" title="Remove"><i class="fa-solid fa-trash"></i></button>
       </div>
     `;
     const remBtn = div.querySelector('button[data-remove]');
@@ -8565,7 +8568,7 @@ function renderSpellRows(){
         <option value="learnt" ${status==="learnt"?"selected":""}>Prepared</option>
         </select>
       </td>
-      <td><button class="btn small" data-remove="${sp.id}">X</button></td>
+      <td><button class="btn small" data-remove="${sp.id}" title="Remove"><i class="fa-solid fa-trash"></i></button></td>
     `;
     slSpellsBody.appendChild(tr);
   });
@@ -8665,13 +8668,13 @@ function renderAbilitySpellsBucket(){
       </div>
       <div class="abi-meta">
         <div class="abi-actions">
-          <button class="btn small abi-placeholder" disabled>@</button>
+          <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-gear"></i></button>
           <div class="abi-move">
             <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           </div>
           <button class="btn small abi-placeholder" disabled>Natures</button>
-          <button class="btn small abi-placeholder" disabled>X</button>
+          <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
         </div>
       </div>
       `;
@@ -8737,13 +8740,13 @@ function renderAbilitySpellsBucket(){
       </div>
       <div class="abi-meta">
         <div class="abi-actions">
-          <button class="btn small abi-placeholder" disabled>@</button>
+          <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-gear"></i></button>
           <div class="abi-move">
             <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           </div>
           <button class="btn small abi-placeholder" disabled>Natures</button>
-          <button class="btn small abi-placeholder" disabled>X</button>
+          <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
         </div>
       </div>
     `;
@@ -9498,7 +9501,7 @@ function renderExpertisePanel(meta, docs){
             <strong class="title-color-target">${entryTitle}</strong>
             <span class="tag">Rank ${rank}</span>
           </div>
-          <button class="btn small exp-remove" data-id="${entry.id}">X</button>
+          <button class="btn small exp-remove" data-id="${entry.id}" title="Remove"><i class="fa-solid fa-trash"></i></button>
         </div>
         ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
         ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
@@ -9560,7 +9563,7 @@ function renderDivineManifestationPanel(meta, docs){
             <strong class="title-color-target">${entryTitle}</strong>
             <span class="tag">Rank ${rank}</span>
           </div>
-          <button class="btn small dima-remove" data-id="${entry.id}">X</button>
+          <button class="btn small dima-remove" data-id="${entry.id}" title="Remove"><i class="fa-solid fa-trash"></i></button>
         </div>
         ${bestSkill ? `<div class="muted" style="font-size:.85rem">Linked skill: ${bestSkill}</div>` : ''}
         ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
@@ -9622,7 +9625,7 @@ function renderAwakeningPanel(meta, docs){
             <strong class="title-color-target">${entryTitle}</strong>
             <span class="tag">Rank ${rank}</span>
           </div>
-          <button class="btn small awak-remove" data-id="${entry.id}">X</button>
+          <button class="btn small awak-remove" data-id="${entry.id}" title="Remove"><i class="fa-solid fa-trash"></i></button>
         </div>
         ${prereqNote ? `<div class="prereq-warn">${prereqNote}</div>` : ''}
         <div class="muted" style="font-size:.85rem">${unlockedNote}</div>
@@ -10256,7 +10259,7 @@ function renderCombatDefenseSkills(){
     list.forEach(skill=>{
       const pill = document.createElement('span');
       pill.className = 'combat-pill';
-      pill.innerHTML = `${invEscapeHtml(skill)} <button data-skill="${invEscapeHtml(skill)}" title="Remove">x</button>`;
+      pill.innerHTML = `${invEscapeHtml(skill)} <button data-skill="${invEscapeHtml(skill)}" title="Remove"><i class="fa-solid fa-trash"></i></button>`;
       pill.querySelector('button')?.addEventListener('click', ()=>{
         st.defense_skills = (st.defense_skills || []).filter(s=> String(s) !== String(skill));
         renderCombatDefenseSkills();
@@ -14802,13 +14805,13 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
       </div>
       <div class="abi-meta">
         <div class="abi-actions">
-          <button class="btn small mod-config ${configClass}" title="Configure choices" ${hasChoice ? '' : 'disabled'}>@</button>
+          <button class="btn small mod-config ${configClass}" title="Configure choices" ${hasChoice ? '' : 'disabled'}><i class="fa-solid fa-gear"></i></button>
           <div class="abi-move ${moveWrapClass}">
             <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst || !canMove ? 'disabled' : ''}>&#8593;</button>
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast || !canMove ? 'disabled' : ''}>&#8595;</button>
           </div>
           <button class="btn small abi-nature ${natureClass}" title="Configure default natures" ${needsNature ? '' : 'disabled'}>Natures</button>
-          <button class="btn small mod-remove ${removeClass}" title="Remove" ${canRemove ? '' : 'disabled'}>X</button>
+          <button class="btn small mod-remove ${removeClass}" title="Remove" ${canRemove ? '' : 'disabled'}><i class="fa-solid fa-trash"></i></button>
         </div>
       </div>
     `;
