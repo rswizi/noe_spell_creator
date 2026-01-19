@@ -3192,7 +3192,7 @@ function makeDefaultStats(){
     exhausted: false,
     conditions: [],
     critical_injuries: [],
-    death_saves: { ko: false, successes: 0, failures: 0, dead: false },
+    death_saves: { ko: false, successes: 0, failures: 0, dead: false, stabilized: false },
     active_abilities: [],
     active_spells: [],
     weapon_states: {}
@@ -3221,9 +3221,10 @@ function normalizeStats(stats){
   if (!Array.isArray(out.combat.active_abilities)) out.combat.active_abilities = [];
   if (!Array.isArray(out.combat.active_spells)) out.combat.active_spells = [];
   if (!out.combat.death_saves || typeof out.combat.death_saves !== 'object'){
-    out.combat.death_saves = { ko: false, successes: 0, failures: 0, dead: false };
-  }else if (out.combat.death_saves.dead == null){
-    out.combat.death_saves.dead = false;
+    out.combat.death_saves = { ko: false, successes: 0, failures: 0, dead: false, stabilized: false };
+  }else{
+    if (out.combat.death_saves.dead == null) out.combat.death_saves.dead = false;
+    if (out.combat.death_saves.stabilized == null) out.combat.death_saves.stabilized = false;
   }
   if (!out.combat.weapon_states || typeof out.combat.weapon_states !== 'object'){
     out.combat.weapon_states = {};
@@ -10123,7 +10124,12 @@ function renderCombatDeathSaves(){
   const ds = ensureDeathSaves();
   if (deathSaveSuccessEl) deathSaveSuccessEl.textContent = String(ds.successes || 0);
   if (deathSaveFailEl) deathSaveFailEl.textContent = String(ds.failures || 0);
-  if (deathStatusEl) deathStatusEl.textContent = ds.dead ? 'Dead' : 'Alive';
+  if (deathStatusEl) deathStatusEl.textContent = ds.dead ? 'Dead' : (ds.stabilized ? 'Stabilized' : 'Alive');
+  const lock = !!(ds.dead || ds.stabilized);
+  if (deathSaveRollBtn) deathSaveRollBtn.disabled = lock;
+  if (deathSaveSuccessAddBtn) deathSaveSuccessAddBtn.disabled = lock;
+  if (deathSaveFailAddBtn) deathSaveFailAddBtn.disabled = lock;
+  if (deathSaveStabilizeBtn) deathSaveStabilizeBtn.disabled = !!(ds.dead || ds.stabilized);
 }
 
 function renderCombatDerivedBadges(){
@@ -10319,9 +10325,10 @@ function rollInitiativeSpecial(){
 function ensureDeathSaves(){
   const st = combatState();
   if (!st.death_saves || typeof st.death_saves !== 'object'){
-    st.death_saves = { ko:false, successes:0, failures:0, dead:false };
+    st.death_saves = { ko:false, successes:0, failures:0, dead:false, stabilized:false };
   }
   if (st.death_saves.dead == null) st.death_saves.dead = false;
+  if (st.death_saves.stabilized == null) st.death_saves.stabilized = false;
   st.death_saves.successes = Number(st.death_saves.successes || 0);
   st.death_saves.failures = Number(st.death_saves.failures || 0);
   return st.death_saves;
@@ -10330,11 +10337,17 @@ function clampDeathSaves(ds){
   ds.successes = Math.max(0, Math.min(3, Number(ds.successes || 0)));
   ds.failures = Math.max(0, Math.min(3, Number(ds.failures || 0)));
   if (ds.failures >= 3) ds.dead = true;
+  if (ds.dead){
+    ds.stabilized = false;
+    return;
+  }
+  if (ds.successes >= 3) ds.stabilized = true;
 }
 
 function rollDeathSave(){
   const st = combatState();
   const ds = ensureDeathSaves();
+  if (ds.dead || ds.stabilized) return;
   const penalty = (st.critical_injuries || []).filter(i=> !i.stabilized).length;
   const raw = rollD10();
   const result = raw - penalty;
@@ -10349,6 +10362,7 @@ function rollDeathSave(){
     ds.failures = 0;
     ds.dead = false;
     ds.ko = false;
+    ds.stabilized = false;
     CURRENT = { ...CURRENT, hp: Math.max(1, numOr(CURRENT.hp, 0)) };
     updateDerived();
   }
@@ -10395,6 +10409,7 @@ function rollDeathSave(){
 
 function addDeathSaveSuccess(){
   const ds = ensureDeathSaves();
+  if (ds.dead || ds.stabilized) return;
   ds.successes = Number(ds.successes || 0) + 1;
   clampDeathSaves(ds);
   renderCombatDeathSaves();
@@ -10402,6 +10417,7 @@ function addDeathSaveSuccess(){
 }
 function addDeathSaveFailure(){
   const ds = ensureDeathSaves();
+  if (ds.dead || ds.stabilized) return;
   ds.failures = Number(ds.failures || 0) + 1;
   clampDeathSaves(ds);
   renderCombatDeathSaves();
@@ -10411,6 +10427,7 @@ function resetDeathSaves(){
   const ds = ensureDeathSaves();
   ds.successes = 0;
   ds.failures = 0;
+  ds.stabilized = false;
   renderCombatDeathSaves();
   queueSave();
 }
@@ -10419,6 +10436,7 @@ function resetDeathStatus(){
   ds.successes = 0;
   ds.failures = 0;
   ds.dead = false;
+  ds.stabilized = false;
   renderCombatDeathSaves();
   queueSave();
 }
@@ -10426,6 +10444,7 @@ function stabilizeDeathSaves(){
   const ds = ensureDeathSaves();
   ds.successes = 3;
   ds.dead = false;
+  ds.stabilized = true;
   renderCombatDeathSaves();
   queueSave();
 }
