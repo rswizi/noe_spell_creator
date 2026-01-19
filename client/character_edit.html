@@ -3934,9 +3934,16 @@ function mergeAbilityListsUnique(...lists){
   });
   return out;
 }
+function mergeAbilityListsAll(...lists){
+  const out = [];
+  lists.forEach(list=>{
+    (list || []).forEach(a=> out.push(a));
+  });
+  return out;
+}
 function recomputePassiveAgg(){
   resetPassiveAgg();
-    const combined = mergeAbilityListsUnique(ASSIGNED, ARC_ASSIGNED, EXP_ASSIGNED, DIMA_ASSIGNED, AWAK_ASSIGNED);
+    const combined = mergeAbilityListsAll(ASSIGNED, ARC_ASSIGNED, EXP_ASSIGNED, DIMA_ASSIGNED, AWAK_ASSIGNED);
     const passiveAbilities = combined.filter(a=>{
       const t = (a.type||'').toLowerCase();
       return t==='passive' || t==='mixed';
@@ -4606,6 +4613,8 @@ async function loadInventoryById(id){
       recomputePassiveAgg();
       renderStatistics();
       updateDerived();
+      renderAbilitySpellsBucket();
+      renderCombatSpellList();
       invStatusEl.textContent = 'Inventory loaded';
       queueSave();
     }else{
@@ -5229,7 +5238,7 @@ function parseCustomCard(msg){
 function parseAbilityRollCard(msg){
   const lines = cleanChatLines(msg.lines);
   const template = templateTagFromLines(lines);
-  if (!template || !template.includes('ability roll')) return null;
+  if (!template || (!template.includes('ability roll') && !template.includes('spell roll'))) return null;
   const baseLines = stripTemplateLines(lines);
   const typeLine = baseLines.find(l=> /^Type:/i.test(l));
   const details = typeLine ? detailMapFromLine(typeLine) : {};
@@ -6355,7 +6364,7 @@ function openSpellRoll(sp, meta, info){
   if (aoeText) parts.push(aoeText);
   if (activationText) parts.push(activationText);
   const detailLine = parts.join(' | ');
-  const effectText = String(info?.desc || '').replace(/<[^>]+>/g, '').trim();
+  const effectText = normalizeDescText(info?.desc || '');
   const lines = [];
   if (detailLine) lines.push(detailLine);
   if (effectText) lines.push(`Effect: ${effectText}`);
@@ -6376,7 +6385,7 @@ function openSpellRoll(sp, meta, info){
   });
 }
 
-function openCombatSpellRoll(sp, meta, info){
+async function openCombatSpellRoll(sp, meta, info){
   const titleText = info?.nameDisplay || meta?.alt_name || sp?.name || 'Spell';
   const rangeText = info?.range ? (String(info.range).toLowerCase().startsWith('range:') ? info.range : `Range: ${info.range}`) : '';
   const aoeText = info?.aoe ? (String(info.aoe).toLowerCase().startsWith('aoe:') ? info.aoe : `AoE: ${info.aoe}`) : '';
@@ -6388,26 +6397,115 @@ function openCombatSpellRoll(sp, meta, info){
   if (aoeText) parts.push(aoeText);
   if (activationText) parts.push(activationText);
   const detailLine = parts.join(' | ');
-  const effectText = String(info?.desc || '').replace(/<[^>]+>/g, '').trim();
-  const lines = [];
+  const effectText = normalizeDescText(info?.desc || '');
+  const effectsLines = Array.isArray(info?.effectsLines) ? info.effectsLines : [];
+
+  const instances = spellEffectInstances(sp || {});
+  const aggregatedRolls = aggregateSpellRolls(instances);
+  const needsSkillRoll = instances.some(inst=> inst?.meta?.skill_roll);
+  if (!needsSkillRoll && !aggregatedRolls.length){
+    const lines = [];
+    if (detailLine) lines.push(detailLine);
+    if (effectText) lines.push(`Effect: ${effectText}`);
+    if (effectsLines.length){
+      lines.push('Effects:');
+      effectsLines.forEach(line=> lines.push(line));
+    }
+    openRollModal({
+      title: titleText,
+      subtitle: 'Spell',
+      baseLabel: 'Base value',
+      base: 0,
+      detailsText: detailLine,
+      descHtml: info?.desc || '',
+      logDescHtml: info?.desc || '',
+      detailLines: lines,
+      infoOnly: false
+    });
+    return;
+  }
+
+  try{ await ensureEffectsLoaded(); }catch{}
+  try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
+
+  const lines = ['Template: Spell Roll'];
+  if (info?.statusLabel) lines.push(`Source: ${info.statusLabel}`);
   if (detailLine) lines.push(detailLine);
   if (effectText) lines.push(`Effect: ${effectText}`);
-  const effectsLines = Array.isArray(info?.effectsLines) ? info.effectsLines : [];
   if (effectsLines.length){
     lines.push('Effects:');
     effectsLines.forEach(line=> lines.push(line));
   }
-  openRollModal({
-    title: titleText,
-    subtitle: 'Spell',
-    baseLabel: 'Base value',
-    base: 0,
-    detailsText: detailLine,
-    descHtml: info?.desc || '',
-    logDescHtml: info?.desc || '',
-    detailLines: lines,
-    infoOnly: false
-  });
+
+  if (needsSkillRoll){
+    const skillEntries = spellSkillEntries(instances);
+    const selections = await resolveSpellSkillSelections(skillEntries, titleText);
+    if (!selections) return;
+    selections.forEach(sel=>{
+      if (sel.schoolName) lines.push(`School: ${sel.schoolName}`);
+      const summary = rollSkillSummaryLines(sel.skill);
+      lines.push(...(summary.lines || []));
+    });
+  }
+
+  const needsNature = abilityNeedsNatureSelection(aggregatedRolls);
+  let selectedNatures = [];
+  if (needsNature){
+    const picked = await openNatureSelectModal({
+      titleText: `${titleText} natures`,
+      subtitleText: 'Select up to 2 natures for magic damage or ID.',
+      selected: [],
+      max: 2
+    });
+    if (!picked || !picked.length) return;
+    selectedNatures = picked;
+  }
+
+  const natureLabel = formatNatureList(selectedNatures || []);
+  const needsId = aggregatedRolls.some(r=> rollExprHasId(r.expr));
+  let idInfo = null;
+  if (needsId){
+    const resolved = resolveIdDieFromNatures(selectedNatures || []);
+    if (resolved.error){
+      openRollModal({ title: `${titleText} Roll`, infoOnly:true, descText: resolved.error });
+      return;
+    }
+    idInfo = { die: resolved.die, label: resolved.label };
+  }
+
+  for (const r of aggregatedRolls){
+    const kind = String(r.kind || 'custom').toLowerCase();
+    let label = '';
+    if (kind === 'damage'){
+      const dmgType = String(r.damage_type || 'Neutral');
+      const dmgLower = dmgType.toLowerCase();
+      if (dmgLower === 'magic' || dmgLower === 'magical'){
+        label = natureLabel || 'Magic';
+      }else{
+        label = formatNatureLabel(dmgType);
+      }
+    }else if (kind === 'true_damage'){
+      label = 'True Damage';
+    }else if (kind === 'heal_hp'){
+      label = 'HP';
+    }else if (kind === 'restore_fo'){
+      label = 'FO';
+    }else if (kind === 'restore_en'){
+      label = 'EN';
+    }else if (kind === 'sp_gain'){
+      label = 'SP';
+    }else{
+      label = r.label || 'Custom';
+    }
+    const result = rollAbilityExpression(r.expr, idInfo);
+    if (result.error){
+      openRollModal({ title: `${titleText} Roll`, infoOnly:true, descText: result.error });
+      return;
+    }
+    lines.push(`Roll: ${label} ${result.total}${result.formula ? ` (${result.formula})` : ''}`);
+  }
+
+  appendAbilityCombinedEntry({ title: titleText, lines });
 }
 
 function wireRollModal(){
@@ -8570,6 +8668,7 @@ function renderAbilitySpellsBucket(){
       flavor: cm.spell_flavor || '',
       effects: cm.spell_effects || [],
       effects_detail: cm.spell_effects_detail || [],
+      effects_meta: cm.spell_effects_meta || [],
       mp_cost: cm.spell_mp_cost,
       en_cost: cm.spell_en_cost,
       range: cm.spell_range,
@@ -10737,6 +10836,9 @@ function rollDamageDice(count, die){
 function normalizeAbilityRolls(a){
   const active = a?.active || {};
   const raw = Array.isArray(active.rolls) ? active.rolls : (Array.isArray(a?.rolls) ? a.rolls : []);
+  return normalizeRollList(raw);
+}
+function normalizeRollList(raw){
   return (raw || []).map(r=>({
     expr: String(r?.expr || r?.expression || '').trim(),
     kind: String(r?.kind || r?.reason || 'custom').trim().toLowerCase(),
@@ -10785,6 +10887,233 @@ function resolveIdDieFromNatures(natures){
     label: formatNatureList(natures),
     info: best || null
   };
+}
+
+function normalizeSkillLabel(name){
+  const raw = String(name || '').trim();
+  if (!raw) return '';
+  const key = normSkillKey(raw);
+  const label = SKILL_LABEL[key];
+  if (label) return label;
+  const match = allSkillNames().find(s=> String(s).toLowerCase() === raw.toLowerCase());
+  return match || raw;
+}
+function normalizeSkillList(list){
+  const pool = allSkillNames();
+  const byLower = new Map(pool.map(s=> [String(s).toLowerCase(), s]));
+  return (Array.isArray(list) ? list : [])
+    .map(s=> String(s || '').trim())
+    .filter(Boolean)
+    .map(s=>{
+      const key = normSkillKey(s);
+      const label = SKILL_LABEL[key];
+      if (label) return label;
+      return byLower.get(String(s).toLowerCase()) || '';
+    })
+    .filter(Boolean);
+}
+function effectNameForId(effectId){
+  const eff = EFFECTS_BY_ID[String(effectId || '').toLowerCase()] || {};
+  return eff.name || effectId;
+}
+function effectSchoolIdForEffect(effectId){
+  const eff = EFFECTS_BY_ID[String(effectId || '').toLowerCase()] || {};
+  return String(eff.school || eff.school_id || eff.schoolId || eff.school_obj?.id || '').trim();
+}
+function schoolForId(schoolId){
+  const id = String(schoolId || '').toLowerCase();
+  if (!id) return null;
+  return (SCHOOLS || []).find(s=> String(s.id || '').toLowerCase() === id) || null;
+}
+function effectSchoolNameForEffect(effectId){
+  const school = schoolForId(effectSchoolIdForEffect(effectId));
+  return school?.name || school?.id || '';
+}
+function effectLinkedSkillForEffect(effectId){
+  const school = schoolForId(effectSchoolIdForEffect(effectId));
+  const raw = school?.linked_skill || '';
+  return normalizeSkillLabel(raw);
+}
+function uniqueSkillList(list){
+  const out = [];
+  const seen = new Set();
+  (list || []).forEach(item=>{
+    const key = String(item || '').toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  });
+  return out;
+}
+function normalizeSpellEffectMetaEntry(entry, effectId){
+  const base = entry && typeof entry === 'object' ? entry : {};
+  return {
+    id: String(base.id || effectId || '').trim(),
+    skill_roll: !!base.skill_roll || !!base.skillRoll,
+    skill_roll_skills: normalizeSkillList(base.skill_roll_skills || base.skillRollSkills || base.skills || []),
+    rolls: normalizeRollList(base.rolls || [])
+  };
+}
+function spellEffectInstances(sp){
+  const effects = Array.isArray(sp?.effects) ? sp.effects.map(e=> String(e || '').trim()).filter(Boolean) : [];
+  const rawMeta = Array.isArray(sp?.effects_meta) ? sp.effects_meta : [];
+  const useIndex = rawMeta.length === effects.length && rawMeta.some(e=> e && typeof e === 'object');
+  if (useIndex){
+    return effects.map((eid, idx)=>({
+      id: eid,
+      meta: normalizeSpellEffectMetaEntry(rawMeta[idx], eid),
+      count: 1
+    }));
+  }
+  const metaById = new Map();
+  rawMeta.forEach(entry=>{
+    if (!entry || typeof entry !== 'object') return;
+    const id = String(entry.id || entry.effect_id || '').trim();
+    if (!id || metaById.has(id)) return;
+    metaById.set(id, entry);
+  });
+  const counts = {};
+  effects.forEach(eid=>{ counts[eid] = (counts[eid] || 0) + 1; });
+  return Object.keys(counts).map(eid=>({
+    id: eid,
+    meta: normalizeSpellEffectMetaEntry(metaById.get(eid), eid),
+    count: counts[eid]
+  }));
+}
+function expandRollExpression(expr, count){
+  const clean = String(expr || '').trim();
+  if (!clean) return '';
+  if (!count || count <= 1) return clean;
+  return Array.from({ length: count }, ()=> clean).join(' + ');
+}
+function spellRollGroupKey(roll){
+  const kind = String(roll?.kind || 'custom').toLowerCase();
+  if (kind === 'damage'){
+    const dmg = String(roll?.damage_type || 'neutral').toLowerCase();
+    return `damage:${dmg}`;
+  }
+  if (kind === 'custom'){
+    const label = String(roll?.label || 'custom').toLowerCase();
+    return `custom:${label || 'custom'}`;
+  }
+  return kind;
+}
+function aggregateSpellRolls(instances){
+  const groups = new Map();
+  (instances || []).forEach(inst=>{
+    const rolls = inst?.meta?.rolls || [];
+    rolls.forEach(r=>{
+      const key = spellRollGroupKey(r);
+      const entry = groups.get(key) || {
+        kind: String(r.kind || 'custom').toLowerCase(),
+        damage_type: String(r.damage_type || '').trim(),
+        label: String(r.label || '').trim(),
+        exprParts: []
+      };
+      const expanded = expandRollExpression(r.expr, Math.max(1, Number(inst.count || 1)));
+      if (expanded) entry.exprParts.push(expanded);
+      groups.set(key, entry);
+    });
+  });
+  const out = [];
+  groups.forEach(entry=>{
+    const expr = entry.exprParts.join(' + ').trim();
+    if (!expr) return;
+    out.push({
+      kind: entry.kind,
+      damage_type: entry.damage_type,
+      label: entry.label,
+      expr
+    });
+  });
+  return out;
+}
+function spellSkillEntries(instances){
+  const entries = [];
+  (instances || []).forEach(inst=>{
+    const meta = inst?.meta || {};
+    if (!meta.skill_roll) return;
+    const effectId = inst.id;
+    const schoolId = effectSchoolIdForEffect(effectId);
+    const schoolName = effectSchoolNameForEffect(effectId);
+    const linkedSkill = effectLinkedSkillForEffect(effectId);
+    const extraSkills = normalizeSkillList(meta.skill_roll_skills || []);
+    const allowed = uniqueSkillList([linkedSkill, ...extraSkills].filter(Boolean));
+    entries.push({
+      effectId,
+      effectName: effectNameForId(effectId),
+      schoolId,
+      schoolName,
+      allowedSkills: allowed
+    });
+  });
+  return entries;
+}
+function intersectSkillLists(lists){
+  if (!lists.length) return [];
+  const lowerLists = lists.map(list=> new Set((list || []).map(s=> String(s).toLowerCase())));
+  const base = (lists[0] || []).filter(s=> lowerLists.every(set=> set.has(String(s).toLowerCase())));
+  return uniqueSkillList(base);
+}
+async function resolveSpellSkillSelections(entries, titleText){
+  if (!entries.length) return [];
+  const bySchool = new Map();
+  entries.forEach(entry=>{
+    const key = entry.schoolId || `__no_school__${entry.effectId}`;
+    if (!bySchool.has(key)) bySchool.set(key, []);
+    bySchool.get(key).push(entry);
+  });
+  const selections = [];
+  for (const [schoolKey, group] of bySchool.entries()){
+    const schoolName = group[0]?.schoolName || group[0]?.schoolId || 'School';
+    const allowedLists = group.map(e=> e.allowedSkills || []);
+    if (allowedLists.some(list=> !list.length)){
+      openRollModal({ title: `${titleText} Roll`, infoOnly:true, descText:'Skill roll requires a linked skill for every effect.' });
+      return null;
+    }
+    const intersection = intersectSkillLists(allowedLists);
+    const chosenByEffect = new Map();
+    if (intersection.length){
+      let chosen = intersection[0];
+      if (intersection.length > 1){
+        const options = intersection.map(name=>({ name, label: name }));
+        chosen = await openSkillSelectModal({
+          titleText: `${titleText} - ${schoolName}`,
+          subtitleText: 'Select one skill for this school.',
+          options
+        });
+        if (!chosen) return null;
+      }
+      group.forEach(entry=> chosenByEffect.set(entry, chosen));
+    }else{
+      for (const entry of group){
+        const opts = entry.allowedSkills || [];
+        let chosen = opts[0];
+        if (opts.length > 1){
+          const effectLabel = entry.effectName || schoolName || entry.effectId;
+          const options = opts.map(name=>({ name, label: name }));
+          chosen = await openSkillSelectModal({
+            titleText: `${titleText} - ${effectLabel}`,
+            subtitleText: 'Select one skill for this effect.',
+            options
+          });
+          if (!chosen) return null;
+        }
+        chosenByEffect.set(entry, chosen);
+      }
+    }
+    const bySkill = new Map();
+    group.forEach(entry=>{
+      const skill = chosenByEffect.get(entry) || '';
+      if (!skill) return;
+      const key = `${schoolKey}|${String(skill).toLowerCase()}`;
+      if (!bySkill.has(key)){
+        bySkill.set(key, { schoolId: entry.schoolId, schoolName, skill });
+      }
+    });
+    bySkill.forEach(sel=> selections.push(sel));
+  }
+  return selections;
 }
 function parseAbilityRollTokens(expr){
   const compact = String(expr || '').replace(/\s+/g, '');
@@ -11036,6 +11365,14 @@ function spellHasDurationTrack(sp){
 
 function cleanEffectText(text){
   return String(text || '').replace(/\s*\|\s*$/, '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeDescText(raw){
+  const text = String(raw || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  const lower = text.toLowerCase();
+  if (['-', '--', 'none', 'nothing', 'n/a', 'na'].includes(lower)) return '';
+  return text;
 }
 
 function splitEffectTextParts(text){
@@ -11509,8 +11846,9 @@ function renderCombatSpellList(){
   const durationSet = new Set((st.duration_spells || []).map(String));
   const search = String(combatSpellSearchEl?.value || '').trim().toLowerCase();
   const metaMap = SPELLLIST_META.spell_meta || {};
+  const craftEntries = collectFocusedCraftomancies();
   combatSpellListEl.innerHTML = '';
-  if (!SPELLLIST_SPELLS.length){
+  if (!SPELLLIST_SPELLS.length && !craftEntries.length){
     combatSpellListEl.innerHTML = '<div class="muted">No spells linked.</div>';
     return;
   }
@@ -11588,6 +11926,62 @@ function renderCombatSpellList(){
       renderCombatDurationSpells();
       queueSave();
       openCombatSpellRoll(sp, meta, { cost, range: sp.range, aoe: sp.aoe, desc: sp.description_html || sp.description || '', effectsLines, nameDisplay: name, statusLabel: meta.status || '' });
+    });
+    combatSpellListEl.appendChild(row);
+  });
+  craftEntries.forEach(entry=>{
+    const cm = entry.craft || {};
+    const sp = {
+      id: cm.spell_id || '',
+      name: cm.spell_name || '',
+      category: cm.effective_category || cm.spell_category || '',
+      description: cm.spell_description || '',
+      description_long: cm.spell_description_long || '',
+      desc: cm.spell_description || '',
+      flavor: cm.spell_flavor || '',
+      effects: cm.spell_effects || [],
+      effects_detail: cm.spell_effects_detail || [],
+      effects_meta: cm.spell_effects_meta || [],
+      mp_cost: cm.spell_mp_cost,
+      en_cost: cm.spell_en_cost,
+      range: cm.spell_range,
+      aoe: cm.spell_aoe,
+      duration: cm.spell_duration
+    };
+    const name = spellDisplayName(sp, metaMap);
+    if (search && !String(name).toLowerCase().includes(search)) return;
+    rendered += 1;
+    const effectsLines = spellEffectsLines(sp);
+    const costParts = [];
+    if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
+    const cost = costParts.join(' || ');
+    const row = document.createElement('div');
+    row.className = 'combat-entry';
+    row.innerHTML = `
+      <div class="grow">
+        <div><strong>${invEscapeHtml(name)}</strong> <span class="tag">Craftomancy</span></div>
+        ${cost ? `<div class="muted">Cost: ${invEscapeHtml(cost)}</div>` : ''}
+      </div>
+      <div class="combat-actions-row">
+        <button class="btn small spell-use">Use</button>
+      </div>
+    `;
+    row.querySelector('.spell-use')?.addEventListener('click', ()=>{
+      applySpellCosts(sp);
+      renderCombatEtUsage();
+      renderCombatSpellList();
+      renderCombatActiveAbilities();
+      renderCombatDurationSpells();
+      queueSave();
+      openCombatSpellRoll(sp, {}, {
+        cost,
+        range: sp.range,
+        aoe: sp.aoe,
+        desc: sp.description_html || sp.description || sp.desc || '',
+        effectsLines,
+        nameDisplay: name,
+        statusLabel: 'Craftomancy'
+      });
     });
     combatSpellListEl.appendChild(row);
   });
@@ -12395,7 +12789,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   }
 
   const ops = { set:[], mul:[], add:[] };
-    const combined = mergeAbilityListsUnique(ASSIGNED, ARC_ASSIGNED, EXP_ASSIGNED, DIMA_ASSIGNED, AWAK_ASSIGNED);
+    const combined = mergeAbilityListsAll(ASSIGNED, ARC_ASSIGNED, EXP_ASSIGNED, DIMA_ASSIGNED, AWAK_ASSIGNED);
     const passiveAbilities = combined.filter(a=>{
       const t = (a.type||'').toLowerCase();
       return t==='passive' || t==='mixed';

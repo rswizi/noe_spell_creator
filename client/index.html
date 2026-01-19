@@ -12,6 +12,17 @@
     .effect-col{flex:1;min-width:0}
     .effect-desc{opacity:.85;margin-top:6px;font-size:.95rem}
     .effect-cost{margin-top:6px;font-size:.9rem;opacity:.9}
+    .effect-rolls{margin-top:8px;padding-top:8px;border-top:1px dashed #ddd}
+    .effect-skill-line{font-size:.85rem;opacity:.85;margin-top:6px}
+    .roll-list{display:grid;gap:6px;margin-top:6px}
+    .roll-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .roll-expr{flex:2;min-width:160px}
+    .roll-kind{flex:1;min-width:140px}
+    .roll-dmg-type{flex:1;min-width:120px}
+    .roll-label{flex:1;min-width:140px}
+    .skill-roll-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:6px}
+    .skill-roll-group{border:1px solid #eee;border-radius:6px;padding:6px}
+    .skill-roll-item{display:flex;align-items:center;gap:6px;font-size:.9rem}
     .tiny{font-size:.85rem;opacity:.75}
   </style>
 </head>
@@ -129,6 +140,26 @@
 /* ---------- Config & caches ---------- */
 const API_BASE = "";
 const TYPE_ORDER = { A:1, B:2, C:3 };
+const ROLL_KINDS = [
+  { value:'damage', label:'Damage' },
+  { value:'true_damage', label:'True Damage' },
+  { value:'heal_hp', label:'HP Heal' },
+  { value:'restore_fo', label:'FO Restore' },
+  { value:'restore_en', label:'EN Restore' },
+  { value:'sp_gain', label:'SP Gain' },
+  { value:'custom', label:'Custom' },
+];
+const DAMAGE_TYPES = ['Neutral','Fire','Water','Earth','Wind','Lightning','Sun','Moon','Ki','Magic'];
+const SKILL_GROUPS = [
+  { label:'Reflex', skills:['Technicity','Dodge','Counter','Reactivity'] },
+  { label:'Dexterity', skills:['Accuracy','Evasion','Stealth','Acrobatics'] },
+  { label:'Body', skills:['Brutality','Blocking','Resistance','Athletics'] },
+  { label:'Wisdom', skills:['Survival','Education','Perception','Psychology','Investigation'] },
+  { label:'Presence', skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
+  { label:'Magic', skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
+  { label:'Willpower', skills:['Intimidation','Spirit','Instinct','Absorption'] },
+  { label:'Tech', skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
+];
 
 let ALL_SCHOOLS = [];          // [{id,name,range_type,aoe_type,...}]
 let SCHOOL_BY_ID = {};         // id -> school
@@ -157,6 +188,35 @@ function escapeHtml(str) {
 }
 
 function normalize(s) { return (s || "").toString().toLowerCase().trim(); }
+function uniqueList(list){
+  const out = [];
+  const seen = new Set();
+  (list || []).forEach(item=>{
+    const key = String(item || '').toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  });
+  return out;
+}
+function allSkillNames(){
+  return SKILL_GROUPS.flatMap(group=> group.skills || []);
+}
+function normalizeSkillKey(name){
+  const cleaned = String(name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+  if (cleaned === 'enchantement') return 'enchantment';
+  return cleaned;
+}
+function linkedSkillForEffectId(effectId){
+  const eff = EFFECTS_BY_ID[String(effectId || '')] || null;
+  const schoolId = eff?.school || eff?.school_id || eff?.schoolId || eff?.school_obj?.id || '';
+  const school = SCHOOL_BY_ID[String(schoolId || '')] || null;
+  const raw = (school?.linked_skill || '').trim();
+  if (!raw) return '';
+  const rawKey = normalizeSkillKey(raw);
+  const match = allSkillNames().find(s=> normalizeSkillKey(s) === rawKey);
+  return match || raw;
+}
 
 /* ---------- Loaders ---------- */
 async function loadSchools() {
@@ -253,7 +313,127 @@ function populateEffectSelect(selectEl, list, opts = {}) {
   }
 }
 
-function addEffectRow(prefillId="") {
+function renderSkillOptions(container, selected, defaultSkill){
+  if (!container) return;
+  const picked = new Set((selected || []).map(s=> normalizeSkillKey(s)));
+  const defaultKey = normalizeSkillKey(defaultSkill);
+  container.innerHTML = '';
+  SKILL_GROUPS.forEach(group=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'skill-roll-group';
+    const title = document.createElement('div');
+    title.textContent = group.label;
+    title.className = 'tiny';
+    wrap.appendChild(title);
+    (group.skills || []).forEach(skill=>{
+      const key = normalizeSkillKey(skill);
+      if (!key || key === defaultKey) return;
+      const row = document.createElement('label');
+      row.className = 'skill-roll-item';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = skill;
+      if (picked.has(key)) cb.checked = true;
+      row.appendChild(cb);
+      const span = document.createElement('span');
+      span.textContent = skill;
+      row.appendChild(span);
+      wrap.appendChild(row);
+    });
+    container.appendChild(wrap);
+  });
+}
+
+function readSkillOptions(container){
+  if (!container) return [];
+  return Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(cb=> String(cb.value || '').trim())
+    .filter(Boolean);
+}
+
+function addEffectRollRow(listEl, initial){
+  if (!listEl) return;
+  const row = document.createElement('div');
+  row.className = 'roll-row';
+
+  const expr = document.createElement('input');
+  expr.className = 'roll-expr';
+  expr.placeholder = 'Expression (ex: 2d6 + 4 or 2 ID + 5)';
+  expr.value = initial?.expr || initial?.expression || '';
+
+  const kind = document.createElement('select');
+  kind.className = 'roll-kind';
+  ROLL_KINDS.forEach(opt=>{
+    const o = document.createElement('option');
+    o.value = opt.value;
+    o.textContent = opt.label;
+    kind.appendChild(o);
+  });
+  kind.value = initial?.kind || initial?.reason || 'damage';
+
+  const dmgType = document.createElement('select');
+  dmgType.className = 'roll-dmg-type';
+  DAMAGE_TYPES.forEach(t=>{
+    const o = document.createElement('option');
+    o.value = t;
+    o.textContent = t;
+    dmgType.appendChild(o);
+  });
+  const initType = (initial?.damage_type || initial?.damageType || '').trim();
+  if (initType && DAMAGE_TYPES.some(t=> t.toLowerCase() === initType.toLowerCase())){
+    dmgType.value = DAMAGE_TYPES.find(t=> t.toLowerCase() === initType.toLowerCase()) || 'Neutral';
+  }else{
+    dmgType.value = 'Neutral';
+  }
+
+  const label = document.createElement('input');
+  label.className = 'roll-label';
+  label.placeholder = 'Custom label';
+  label.value = initial?.label || initial?.custom_label || '';
+
+  const rm = document.createElement('button');
+  rm.className = 'btn small';
+  rm.type = 'button';
+  rm.textContent = 'X';
+  rm.addEventListener('click', ()=> row.remove());
+
+  const syncVisibility = ()=>{
+    const k = kind.value;
+    dmgType.style.display = k === 'damage' ? '' : 'none';
+    label.style.display = k === 'custom' ? '' : 'none';
+  };
+  kind.addEventListener('change', syncVisibility);
+  syncVisibility();
+
+  row.appendChild(expr);
+  row.appendChild(kind);
+  row.appendChild(dmgType);
+  row.appendChild(label);
+  row.appendChild(rm);
+  listEl.appendChild(row);
+}
+
+function readEffectRolls(listEl){
+  if (!listEl) return [];
+  const rolls = [];
+  listEl.querySelectorAll('.roll-row').forEach(row=>{
+    const expr = row.querySelector('.roll-expr')?.value || '';
+    const kind = row.querySelector('.roll-kind')?.value || 'custom';
+    const dmgType = row.querySelector('.roll-dmg-type')?.value || '';
+    const label = row.querySelector('.roll-label')?.value || '';
+    const cleanExpr = expr.trim();
+    if (!cleanExpr) return;
+    rolls.push({
+      expr: cleanExpr,
+      kind,
+      damage_type: kind === 'damage' ? dmgType : '',
+      label: kind === 'custom' ? label.trim() : ''
+    });
+  });
+  return rolls;
+}
+
+function addEffectRow(prefillId="", prefillMeta=null) {
   const container = $("#effects-container");
 
   const entry = document.createElement("div");
@@ -295,10 +475,66 @@ function addEffectRow(prefillId="") {
   };
   setEffCost();
 
+  const rollsWrap = document.createElement('div');
+  rollsWrap.className = 'effect-rolls';
+
+  const rollToggle = document.createElement('label');
+  rollToggle.className = 'row';
+  rollToggle.style.gap = '6px';
+  rollToggle.style.margin = '0';
+  const rollReq = document.createElement('input');
+  rollReq.type = 'checkbox';
+  rollReq.className = 'effect-skill-required';
+  rollReq.checked = !!prefillMeta?.skill_roll;
+  const rollReqSpan = document.createElement('span');
+  rollReqSpan.textContent = 'Requires skill roll';
+  rollToggle.appendChild(rollReq);
+  rollToggle.appendChild(rollReqSpan);
+
+  const defaultSkillLine = document.createElement('div');
+  defaultSkillLine.className = 'effect-skill-line';
+
+  const skillOptionsWrap = document.createElement('div');
+  skillOptionsWrap.className = 'skill-roll-grid';
+
+  const rollList = document.createElement('div');
+  rollList.className = 'roll-list';
+  const rolls = Array.isArray(prefillMeta?.rolls) ? prefillMeta.rolls : [];
+  rolls.forEach(r=> addEffectRollRow(rollList, r));
+
+  const addRollBtn = document.createElement('button');
+  addRollBtn.type = 'button';
+  addRollBtn.className = 'btn small';
+  addRollBtn.textContent = '+ Add Roll';
+  addRollBtn.addEventListener('click', ()=> addEffectRollRow(rollList));
+
+  const updateSkillLines = ()=>{
+    const linkedSkill = linkedSkillForEffectId(sel.value || '');
+    defaultSkillLine.textContent = linkedSkill ? `School skill: ${linkedSkill}` : 'School skill: --';
+    const picked = Array.isArray(prefillMeta?.skill_roll_skills) ? prefillMeta.skill_roll_skills : [];
+    renderSkillOptions(skillOptionsWrap, picked, linkedSkill);
+  };
+  updateSkillLines();
+
+  const updateSkillVisibility = ()=>{
+    const show = !!rollReq.checked;
+    defaultSkillLine.style.display = show ? '' : 'none';
+    skillOptionsWrap.style.display = show ? '' : 'none';
+  };
+  rollReq.addEventListener('change', updateSkillVisibility);
+  updateSkillVisibility();
+
+  rollsWrap.appendChild(rollToggle);
+  rollsWrap.appendChild(defaultSkillLine);
+  rollsWrap.appendChild(skillOptionsWrap);
+  rollsWrap.appendChild(rollList);
+  rollsWrap.appendChild(addRollBtn);
+
   // hook changes
   sel.addEventListener("change", () => {
     setDesc();
     setEffCost();
+    updateSkillLines();
     recomputeKnobTypes();
     updatePreview();
   });
@@ -306,6 +542,7 @@ function addEffectRow(prefillId="") {
   left.appendChild(sel);
   left.appendChild(desc);
   left.appendChild(costDiv);
+  left.appendChild(rollsWrap);
 
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
@@ -422,9 +659,25 @@ function handleSubmit(e) {
   const params = new URLSearchParams(location.search);
   const editId = params.get("edit_id");
   const token  = localStorage.getItem("auth_token") || "";
-
   const fd = new FormData($("#spell-form"));
-  const effects = fd.getAll("effects[]").filter(v => v && v.trim() !== "");
+
+  const effects = [];
+  const effects_meta = [];
+  document.querySelectorAll("#effects-container .effect-entry").forEach(entry=>{
+    const id = entry.querySelector('select[name="effects[]"]')?.value || "";
+    const cleanId = id.trim();
+    if (!cleanId) return;
+    effects.push(cleanId);
+    const skillRoll = !!entry.querySelector('.effect-skill-required')?.checked;
+    const skillList = readSkillOptions(entry.querySelector('.skill-roll-grid'));
+    const rolls = readEffectRolls(entry.querySelector('.roll-list'));
+    effects_meta.push({
+      id: cleanId,
+      skill_roll: skillRoll,
+      skill_roll_skills: skillList,
+      rolls
+    });
+  });
 
   const body = {
     name: (fd.get("school_name") || "Unnamed Spell"),
@@ -432,7 +685,8 @@ function handleSubmit(e) {
     range: parseInt(fd.get("range") || "0", 10),
     aoe: fd.get("aoe"),
     duration: parseInt(fd.get("duration") || "1", 10),
-    effects
+    effects,
+    effects_meta
 
   };
 
@@ -467,6 +721,17 @@ async function prefillFromSpell(id) {
   const j = await r.json();
   if (!j || !j.spell) throw new Error("Spell not found");
   const sp = j.spell;
+  const rawMeta = Array.isArray(sp.effects_meta) ? sp.effects_meta : [];
+  const metaById = new Map();
+  rawMeta.forEach(entry=>{
+    if (!entry || typeof entry !== "object") return;
+    const eid = String(entry.id || entry.effect_id || "").trim();
+    if (!eid || metaById.has(eid)) return;
+    metaById.set(eid, entry);
+  });
+  const metaList = Array.isArray(sp.effects) && rawMeta.length === sp.effects.length
+    ? rawMeta
+    : (Array.isArray(sp.effects) ? sp.effects.map(eid=> metaById.get(String(eid)) || {}) : []);
 
   $("#school_name").value = sp.name || "";
   $("#activation").value  = sp.activation || "Action";
@@ -476,7 +741,9 @@ async function prefillFromSpell(id) {
 
   $("#effects-container").innerHTML = "";
   if (Array.isArray(sp.effects)) {
-    for (const eid of sp.effects) addEffectRow(String(eid));
+    sp.effects.forEach((eid, idx)=>{
+      addEffectRow(String(eid), metaList[idx] || null);
+    });
   }
 }
 

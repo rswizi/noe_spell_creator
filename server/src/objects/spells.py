@@ -46,6 +46,7 @@ class Spell:
     duration: int
     category: str
     effects: List[Union[str, Effect]]
+    effects_meta: List[dict] | None = None
     spell_type: str
     mp_cost: int
     en_cost: int

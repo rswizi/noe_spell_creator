@@ -797,6 +797,45 @@ def admin_list_spell_lists(request: Request, owner: str | None = Query(default=N
     return {"status": "success", "spelllists": items, "page": page, "limit": limit, "total": total}
 
 # ---------- Spells ----------
+def _normalize_effects_meta(effect_ids: list[str], raw_meta):
+    if not isinstance(raw_meta, list):
+        return []
+    out = []
+    for idx, eid in enumerate(effect_ids or []):
+        entry = raw_meta[idx] if idx < len(raw_meta) else {}
+        if not isinstance(entry, dict):
+            entry = {}
+        cleaned = {"id": eid}
+        if "skill_roll" in entry:
+            cleaned["skill_roll"] = bool(entry.get("skill_roll"))
+        raw_skills = entry.get("skill_roll_skills")
+        if isinstance(raw_skills, list):
+            skills = [str(x).strip() for x in raw_skills if str(x).strip()]
+            if skills:
+                cleaned["skill_roll_skills"] = skills
+        raw_rolls = entry.get("rolls")
+        if isinstance(raw_rolls, list):
+            rolls = []
+            for r in raw_rolls:
+                if not isinstance(r, dict):
+                    continue
+                expr = str(r.get("expr") or r.get("expression") or "").strip()
+                if not expr:
+                    continue
+                kind = str(r.get("kind") or r.get("reason") or "custom").strip()
+                dmg_type = str(r.get("damage_type") or r.get("damageType") or "").strip()
+                label = str(r.get("label") or r.get("custom_label") or "").strip()
+                rolls.append({
+                    "expr": expr,
+                    "kind": kind,
+                    "damage_type": dmg_type,
+                    "label": label,
+                })
+            if rolls:
+                cleaned["rolls"] = rolls
+        out.append(cleaned)
+    return out
+
 @app.get("/spells")
 def list_spells(request: Request):
     import re
@@ -962,6 +1001,8 @@ async def update_spell(spell_id: str, request: Request):
             "spell_type": body.get("spell_type") or before.get("spell_type") or "Simple",
             # DO NOT touch status here (moderation workflow)
         }
+        if "effects_meta" in body:
+            updates["effects_meta"] = _normalize_effects_meta(effect_ids, body.get("effects_meta"))
 
         r = get_col("spells").update_one({"id": spell_id}, {"$set": updates}, upsert=False)
         if r.matched_count == 0:
@@ -1016,6 +1057,7 @@ def clone_from_template(spell_id: str, request: Request):
         "aoe": base.get("aoe","A Square"),
         "duration": int(base.get("duration",1)),
         "effects": [str(x) for x in (base.get("effects") or [])],
+        "effects_meta": base.get("effects_meta") or [],
         "mp_cost": int(base.get("mp_cost",0)),
         "en_cost": int(base.get("en_cost",0)),
         "category": base.get("category",""),
@@ -1094,6 +1136,7 @@ async def submit_spell(request: Request):
             return JSONResponse({"status": "error", "message": "duration must be an integer"}, status_code=400)
 
         effect_ids = [str(e).strip() for e in (body.get("effects") or []) if str(e).strip()]
+        effects_meta = _normalize_effects_meta(effect_ids, body.get("effects_meta"))
 
         unique_ids = {eid for eid in effect_ids}
         missing = [eid for eid in unique_ids if not get_col("effects").find_one({"id": eid}, {"_id": 1})]
@@ -1129,6 +1172,7 @@ async def submit_spell(request: Request):
             "aoe": aoe_val,
             "duration": duration,
             "effects": effect_ids,
+            "effects_meta": effects_meta,
             "mp_cost": cc["mp_cost"],
             "en_cost": cc["en_cost"],
             "category": cc["category"],
@@ -4441,6 +4485,7 @@ def add_craftomancy(request: Request, inv_id: str, item_id: str, payload: dict =
         "spell_duration": sp.get("duration"),
         "spell_effects": sp.get("effects") or [],
         "spell_effects_detail": sp.get("effects_detail") or [],
+        "spell_effects_meta": sp.get("effects_meta") or [],
         "schools": schools,
         "supreme": supreme,
         "focused": False,
