@@ -46,11 +46,11 @@ class Spell:
     duration: int
     category: str
     effects: List[Union[str, Effect]]
-    effects_meta: List[dict] | None = None
     spell_type: str
     mp_cost: int
     en_cost: int
     description: str = ""
+    effects_meta: List[dict] | None = None
 
     def to_dict(self):
         d = asdict(self)
