@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NoE -- Edit Character (with Abilities)</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer" />
 
   <style>
     :root {
@@ -32,8 +33,9 @@
     .sheet-layout { display:grid; grid-template-columns: minmax(0, 1fr) 320px; gap:16px; align-items:start; }
     .sheet-main { min-width:0; }
 
-    .topbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
+    .topbar { display:flex; gap:12px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
     .topbar h1 { font-size: 22px; margin: 0; }
+    .name-status-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     a.btn, button, input, select, textarea {
       padding:10px 12px; border-radius:12px; border:1px solid var(--border);
       background: #181821; color: var(--text); text-decoration:none;
@@ -122,7 +124,7 @@
     .abi-item.abi-block { flex-direction: column; align-items: stretch; }
     .abi-item.abi-card { display:grid; grid-template-columns: minmax(0, 1fr) auto; align-items:start; gap:12px; }
     .abi-item.abi-card .abi-body { min-width:0; }
-    .abi-item.abi-card .abi-meta { display:flex; flex-direction:column; align-items:flex-end; gap:6px; min-width:200px; }
+    .abi-item.abi-card .abi-meta { display:flex; flex-direction:column; align-items:flex-end; gap:6px; min-width:0; }
     .abi-item.abi-card .abi-title-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .abi-item.abi-card .abi-tags { display:flex; gap:6px; flex-wrap:wrap; }
     .abi-item.abi-card .abi-actions { display:flex; gap:6px; align-items:flex-start; justify-content:flex-end; }
@@ -198,17 +200,18 @@
       .override-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
       #override-inputs { display:none; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap:8px; margin-top:10px; }
   /* Avatar */
-  .avatar-card { display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
-  .avatar-frame { width:180px; height:180px; border:1px solid #333; border-radius:18px; overflow:hidden; background:#08080e; display:grid; place-items:center; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
+  .avatar-card { display:grid; gap:18px; align-items:flex-start; grid-template-columns: 220px minmax(0, 1fr); }
+  .avatar-frame { width:220px; height:220px; border:1px solid #333; border-radius:18px; overflow:hidden; background:#08080e; display:grid; place-items:center; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
   .avatar-frame img { width:100%; height:100%; object-fit:cover; }
-  .avatar-tools { display:grid; gap:8px; min-width:280px; flex:1 1 320px; }
+  .avatar-tools { display:grid; gap:8px; min-width:0; }
   .name-input { font-size:1.3rem; font-weight:600; letter-spacing:0.2px; }
   .avatar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .public-toggle { display:flex; align-items:center; gap:8px; }
   .public-toggle input { width:auto; }
   .avatar-crop { border:1px solid #333; border-radius:14px; background:#0b0b12; }
   @media (max-width: 720px){
-    .avatar-frame { width:160px; height:160px; }
+    .avatar-card { grid-template-columns: 1fr; }
+    .avatar-frame { width:180px; height:180px; }
   }
   /* Inventory UI */
   .home-card { border:1px solid var(--border); border-radius:14px; padding:12px; background: #14141d; margin-bottom:12px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.02); }
@@ -454,7 +457,12 @@
   <div class="page"><div class="wrap sheet-layout"><div class="sheet-main">
 
     <div class="topbar">
-      <h1 id="title">Edit Character</h1>
+      <div class="name-status-bar">
+        <strong>Name</strong>
+        <span class="muted">(autosaves)</span>
+        <span class="muted status" id="status">Loaded.</span>
+        <span class="pill" id="readonly-pill" style="display:none;">Read-only</span>
+      </div>
       <span id="login-chip" class="muted right"></span>
       <a class="btn" id="back-link" href="characters.html">Back to My Characters</a>
       <a class="btn" href="portal.html">Portal</a>
@@ -468,45 +476,35 @@
 
     <!-- Name card -->
     <div class="panel" style="margin-bottom:12px;">
-      <details open class="panel">
-        <summary class="hdr">
-          <div class="hdr-left">
-            <strong>Name</strong>
-            <span class="muted">(autosaves)</span>
-            <span class="muted status" id="status">Loaded.</span>
-            <span class="pill" id="readonly-pill" style="display:none;">Read-only</span>
-          </div>
-          <div class="hdr-right xp-card">
-            <div class="xp-top">
-              <span class="k">Level</span>
-              <input id="level" type="text" class="num" value="1" readonly />
-              <button class="btn small" id="xp-add-btn" title="Add XP">+ XP</button>
-              <button class="btn small" id="level-set-btn" title="Set level">Set</button>
-              <button class="btn small" id="xp-ledger-btn" title="Open XP ledger">Ledger</button>
-            </div>
-            <div class="xp-bar" aria-label="XP progress">
-              <div class="xp-bar-fill" id="xp-bar-fill"><span id="xp-bar-text">--</span></div>
-            </div>
-            <div class="xp-meta" id="xp-progress">XP: --</div>
-          </div>
-        </summary>
-          <div class="panel-body">
-            <div class="avatar-card">
-              <div class="avatar-frame"><img id="avatar-preview" alt="Avatar preview"></div>
-              <div class="avatar-tools">
-                <input id="name" placeholder="Enter a name..." class="grow name-input" maxlength="22" />
-                <div class="avatar-actions">
-                  <button id="avatar-open" class="btn small">Set avatar</button>
-                  <label class="public-toggle muted">
-                    <input type="checkbox" id="public-toggle">
-                    <span>Public Character</span>
-                  </label>
-                </div>
-                <div id="avatar-status" class="muted"></div>
+      <div class="panel-body">
+        <div class="avatar-card">
+          <div class="avatar-frame"><img id="avatar-preview" alt="Avatar preview"></div>
+          <div class="avatar-tools">
+            <input id="name" placeholder="Enter a name..." class="grow name-input" maxlength="22" />
+            <div class="xp-card">
+              <div class="xp-top">
+                <span class="k">Level</span>
+                <input id="level" type="text" class="num" value="1" readonly />
+                <button class="btn small" id="xp-add-btn" title="Add XP">+ XP</button>
+                <button class="btn small" id="level-set-btn" title="Set level">Set</button>
+                <button class="btn small" id="xp-ledger-btn" title="Open XP ledger">Ledger</button>
               </div>
+              <div class="xp-bar" aria-label="XP progress">
+                <div class="xp-bar-fill" id="xp-bar-fill"><span id="xp-bar-text">--</span></div>
+              </div>
+              <div class="xp-meta" id="xp-progress">XP: --</div>
             </div>
+            <div class="avatar-actions">
+              <button id="avatar-open" class="btn small">Set avatar</button>
+              <label class="public-toggle muted">
+                <input type="checkbox" id="public-toggle">
+                <span>Public Character</span>
+              </label>
+            </div>
+            <div id="avatar-status" class="muted"></div>
           </div>
-        </details>
+        </div>
+      </div>
     </div>
 
     <!-- Tabs -->
