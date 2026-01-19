@@ -6359,7 +6359,11 @@ function openSpellRoll(sp, meta, info){
   const lines = [];
   if (detailLine) lines.push(detailLine);
   if (effectText) lines.push(`Effect: ${effectText}`);
-  if (info?.effectsDesc) lines.push(`Effects: ${info.effectsDesc}`);
+  const effectsLines = Array.isArray(info?.effectsLines) ? info.effectsLines : [];
+  if (effectsLines.length){
+    lines.push('Effects:');
+    effectsLines.forEach(line=> lines.push(line));
+  }
   openRollModal({
     title: titleText,
     subtitle: 'Spell',
@@ -6388,7 +6392,11 @@ function openCombatSpellRoll(sp, meta, info){
   const lines = [];
   if (detailLine) lines.push(detailLine);
   if (effectText) lines.push(`Effect: ${effectText}`);
-  if (info?.effectsDesc) lines.push(`Effects: ${info.effectsDesc}`);
+  const effectsLines = Array.isArray(info?.effectsLines) ? info.effectsLines : [];
+  if (effectsLines.length){
+    lines.push('Effects:');
+    effectsLines.forEach(line=> lines.push(line));
+  }
   openRollModal({
     title: titleText,
     subtitle: 'Spell',
@@ -6502,11 +6510,18 @@ function craftomancyMax(){
 }
 function collectFocusedCraftomancies(){
   const list = [];
-  (LINKED_INV?.items || []).forEach(it=>{
-    (it.craftomancies || []).forEach(cm=>{
+  (LINKED_INV?.items || []).forEach((it, itemIdx)=>{
+    (it.craftomancies || []).forEach((cm, craftIdx)=>{
       if (!cm || !cm.focused) return;
-      list.push({ item: it, craft: cm });
+      list.push({ item: it, craft: cm, _fallback_order: (itemIdx * 10) + craftIdx });
     });
+  });
+  list.sort((a, b)=>{
+    const aOrder = Number(a?.craft?.order);
+    const bOrder = Number(b?.craft?.order);
+    const aVal = Number.isFinite(aOrder) ? aOrder : a._fallback_order;
+    const bVal = Number.isFinite(bOrder) ? bOrder : b._fallback_order;
+    return aVal - bVal;
   });
   return list;
 }
@@ -8495,13 +8510,18 @@ function renderAbilitySpellsBucket(){
     });
     if (sortMode === 'za') craftOrdered.reverse();
   }
+  const craftMoveIndexById = {};
+  if (manualMode){
+    craftOrdered.forEach((entry, idx)=>{ craftMoveIndexById[String(entry?.craft?.id || '')] = idx; });
+  }
   visible.forEach(sp=>{
     const meta = metaMap[sp.id] || {};
     const nameDisplay = spellDisplayName(sp, metaMap);
     const desc = meta.description || sp.description || sp.description_long || sp.desc || '';
     const flavor = sp.flavor || sp.flavour || '';
     const userFlavor = meta.flavor || meta.flavour || '';
-    const effectsDesc = spellEffectsDesc(sp, meta);
+    const effectsLines = spellEffectsLines(sp, meta);
+    const effectsHtml = effectsLines.length ? `Effects:<br>${effectsLines.join('<br>')}` : '';
     const costParts = [];
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
@@ -8522,7 +8542,7 @@ function renderAbilitySpellsBucket(){
           <div class="muted" style="font-size:.85rem">${desc}</div>
           ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
           ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
-          ${effectsDesc ? `<div class="muted" style="font-size:.8rem">Effects: ${effectsDesc}</div>` : ''}
+          ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
           <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap;">
@@ -8532,7 +8552,7 @@ function renderAbilitySpellsBucket(){
         </div>
       `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
-    div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, meta, { cost, range, aoe, desc, effectsDesc, statusLabel, nameDisplay })));
+    div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, meta, { cost, range, aoe, desc, effectsLines, statusLabel, nameDisplay })));
     div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveSpellOrder(sp.id, 'up', { onlyLearned }));
     div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveSpellOrder(sp.id, 'down', { onlyLearned }));
     el.appendChild(div);
@@ -8559,7 +8579,8 @@ function renderAbilitySpellsBucket(){
     const nameDisplay = spellDisplayName(sp, metaMap);
     const desc = sp.description || sp.description_long || sp.desc || '';
     const flavor = sp.flavor || '';
-    const effectsDesc = spellEffectsDesc(sp);
+    const effectsLines = spellEffectsLines(sp);
+    const effectsHtml = effectsLines.length ? `Effects:<br>${effectsLines.join('<br>')}` : '';
     const costParts = [];
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
@@ -8569,21 +8590,30 @@ function renderAbilitySpellsBucket(){
     div.className = 'abi-item';
     const statusLabel = 'Craftomancy';
     const titleKey = spellColorKey(sp) || entryColorKey('craft', cm);
+    const id = String(cm?.id || '');
+    const moveIdx = craftMoveIndexById[id];
+    const isFirst = moveIdx === 0;
+    const isLast = moveIdx === craftOrdered.length - 1;
+    const disableMove = !manualMode || !id;
     div.innerHTML = `
       <div class="grow">
         <div><strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span></div>
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
-        ${effectsDesc ? `<div class="muted" style="font-size:.8rem">Effects: ${effectsDesc}</div>` : ''}
+        ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
         <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
       </div>
       <div class="row" style="gap:6px; flex-wrap:wrap;">
+        <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
+        <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
         <span class="tag">${sp.category || ''}</span>
         <span class="tag">Craftomancy</span>
       </div>
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
-    div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, {}, { cost, range, aoe, desc, effectsDesc, statusLabel, nameDisplay })));
+    div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, {}, { cost, range, aoe, desc, effectsLines, statusLabel, nameDisplay })));
+    div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveCraftomancyOrder(id, 'up'));
+    div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveCraftomancyOrder(id, 'down'));
     el.appendChild(div);
   });
 }
@@ -11020,6 +11050,31 @@ function normalizeEffectKey(text){
   return cleanEffectText(text).toLowerCase();
 }
 
+function splitEffectTags(text){
+  const raw = String(text || '').trim();
+  if (!raw) return { tags: [], rest: '' };
+  const match = raw.match(/^(\[[^\]]+\]\s*)+/);
+  if (!match) return { tags: [], rest: raw };
+  const tagChunk = match[0];
+  const tags = (tagChunk.match(/\[[^\]]+\]/g) || []).map(tag=> tag.trim());
+  const rest = raw.slice(tagChunk.length).replace(/^\s+/, '');
+  return { tags, rest };
+}
+
+function formatEffectLine(text, count){
+  const cleaned = cleanEffectText(text);
+  if (!cleaned) return '';
+  const info = splitEffectTags(cleaned);
+  const tags = info.tags || [];
+  const rest = String(info.rest || '').trim();
+  const parts = [];
+  if (tags.length) parts.push(tags.join(' '));
+  if (count > 1) parts.push(`(x${count})`);
+  if (rest) parts.push(rest);
+  const line = parts.join(' ').trim();
+  return line || cleaned;
+}
+
 function effectHasActiveTag(text){
   if (!text) return false;
   return /\[[^\]]*\bactive\b[^\]]*\]/i.test(String(text));
@@ -11074,9 +11129,9 @@ function spellHasActiveEffect(sp, meta){
   return spellEffectTexts(sp, meta).some(effectHasActiveTag);
 }
 
-function spellEffectsDesc(sp, meta){
+function spellEffectsLines(sp, meta){
   const texts = spellEffectTexts(sp, meta);
-  if (!texts.length) return '';
+  if (!texts.length) return [];
   const entries = new Map();
   texts.forEach(text=>{
     const clean = cleanEffectText(text);
@@ -11087,7 +11142,11 @@ function spellEffectsDesc(sp, meta){
     if (!entry.text || clean.length > entry.text.length) entry.text = clean;
     entries.set(key, entry);
   });
-  return Array.from(entries.values()).map(entry=> entry.count > 1 ? `${entry.text} x${entry.count}` : entry.text).join('; ');
+  return Array.from(entries.values()).map(entry=> formatEffectLine(entry.text, entry.count)).filter(Boolean);
+}
+
+function spellEffectsDesc(sp, meta){
+  return spellEffectsLines(sp, meta).join('\n');
 }
 let ATTACK_MODAL_CTX = null;
 function renderAttackSpecialList(selected){
@@ -11486,7 +11545,7 @@ function renderCombatSpellList(){
     if (search && !String(name).toLowerCase().includes(search)) return;
     rendered += 1;
     const id = String(sp?.id || '');
-    const effectsDesc = spellEffectsDesc(sp, meta);
+    const effectsLines = spellEffectsLines(sp, meta);
     const costParts = [];
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
@@ -11528,7 +11587,7 @@ function renderCombatSpellList(){
       renderCombatActiveAbilities();
       renderCombatDurationSpells();
       queueSave();
-      openCombatSpellRoll(sp, meta, { cost, range: sp.range, aoe: sp.aoe, desc: sp.description_html || sp.description || '', effectsDesc, nameDisplay: name, statusLabel: meta.status || '' });
+      openCombatSpellRoll(sp, meta, { cost, range: sp.range, aoe: sp.aoe, desc: sp.description_html || sp.description || '', effectsLines, nameDisplay: name, statusLabel: meta.status || '' });
     });
     combatSpellListEl.appendChild(row);
   });
@@ -14177,6 +14236,77 @@ function moveSpellOrder(id, direction, { onlyLearned = false } = {}){
   ABI_SORT_SPELLS = 'manual';
   if (abiSpellOrderEl) abiSpellOrderEl.value = 'manual';
   setSpellOrder(updated);
+  renderAbilitySpellsBucket();
+}
+
+function getCraftomancyOrderIds(entries){
+  const withOrder = [];
+  const withoutOrder = [];
+  (entries || []).forEach((entry, idx)=>{
+    const id = String(entry?.craft?.id || '').trim();
+    if (!id) return;
+    const rawOrder = entry?.craft?.order;
+    const order = Number(rawOrder);
+    if (Number.isFinite(order)){
+      withOrder.push({ id, order, idx });
+    }else{
+      withoutOrder.push({ id, idx });
+    }
+  });
+  if (!withOrder.length){
+    return (entries || []).map(entry=> String(entry?.craft?.id || '')).filter(Boolean);
+  }
+  withOrder.sort((a,b)=> (a.order - b.order) || (a.idx - b.idx));
+  return withOrder.map(x=> x.id).concat(withoutOrder.map(x=> x.id));
+}
+
+async function setCraftomancyOrder(it, cm, order, { silent = false } = {}){
+  const sourceId = getInventorySourceId();
+  if (!sourceId) return;
+  try{
+    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/craftomancy/${encodeURIComponent(cm.id)}`, {
+      method:'PATCH',
+      headers:{ 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ order })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== 'success') throw new Error(j.message || 'Update failed');
+    LINKED_INV = j.inventory;
+    if (!silent){
+      renderAbilitySpellsBucket();
+      updateCraftomancyCounter();
+    }
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function moveCraftomancyOrder(id, direction){
+  const list = collectFocusedCraftomancies();
+  if (list.length < 2) return;
+  const orderIds = getCraftomancyOrderIds(list);
+  const updated = moveSubsetOrder(orderIds, orderIds, id, direction);
+  if (!updated || updated === orderIds) return;
+  ABI_SORT_SPELLS = 'manual';
+  if (abiSpellOrderEl) abiSpellOrderEl.value = 'manual';
+  const orderMap = new Map();
+  updated.forEach((cid, idx)=>{ orderMap.set(cid, idx); });
+  const updates = [];
+  list.forEach(entry=>{
+    const cid = String(entry?.craft?.id || '').trim();
+    if (!cid) return;
+    const nextOrder = orderMap.get(cid);
+    if (nextOrder == null) return;
+    const current = Number(entry?.craft?.order);
+    if (!Number.isFinite(current) || current !== nextOrder){
+      updates.push({ entry, order: nextOrder });
+    }
+  });
+  if (!updates.length) return;
+  for (let i = 0; i < updates.length; i++){
+    const update = updates[i];
+    await setCraftomancyOrder(update.entry.item, update.entry.craft, update.order, { silent: true });
+  }
   renderAbilitySpellsBucket();
 }
 

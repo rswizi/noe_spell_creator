@@ -4444,6 +4444,7 @@ def add_craftomancy(request: Request, inv_id: str, item_id: str, payload: dict =
         "schools": schools,
         "supreme": supreme,
         "focused": False,
+        "order": len(crafts),
         "is_complex": is_complex,
         "focus_cost": focus_cost,
         "craft_quality": quality,
@@ -4483,8 +4484,9 @@ def update_craftomancy(request: Request, inv_id: str, item_id: str, craft_id: st
         raise HTTPException(404, "Inventory not found")
 
     focused = payload.get("focused", None)
-    if focused is None:
-        raise HTTPException(400, "focused required")
+    order = payload.get("order", None)
+    if focused is None and order is None:
+        raise HTTPException(400, "focused or order required")
 
     items = inv.get("items") or []
     idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
@@ -4495,7 +4497,13 @@ def update_craftomancy(request: Request, inv_id: str, item_id: str, craft_id: st
     hit = next((c for c in crafts if c.get("id") == craft_id), None)
     if not hit:
         raise HTTPException(404, "Craftomancy not found")
-    hit["focused"] = bool(focused)
+    if focused is not None:
+        hit["focused"] = bool(focused)
+    if order is not None:
+        try:
+            hit["order"] = int(order)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "order must be an integer")
     it["craftomancies"] = crafts
     items[idx] = it
     db.inventories.update_one({"id": inv_id, "owner": user}, {"$set": {"items": items}})
