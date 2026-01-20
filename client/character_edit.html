@@ -8820,14 +8820,14 @@ function renderAbilitySpellsBucket(){
       <div class="abi-meta">
         <div class="abi-actions">
           <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-gear"></i></button>
-          <div class="abi-move">
-            <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
-            <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
-          </div>
-          <button class="btn small abi-placeholder" disabled>Natures</button>
+          <button class="btn small abi-placeholder" disabled title="Natures"><i class="fa-solid fa-fire"></i></button>
           <div class="abi-trash-stack">
             <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
             <button class="btn small abi-pin ${pinClass}" data-pin="${pinKey}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon} pin-icon"></i></button>
+          </div>
+          <div class="abi-move">
+            <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
+            <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           </div>
         </div>
       </div>
@@ -8901,14 +8901,14 @@ function renderAbilitySpellsBucket(){
       <div class="abi-meta">
         <div class="abi-actions">
           <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-gear"></i></button>
-          <div class="abi-move">
-            <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
-            <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
-          </div>
-          <button class="btn small abi-placeholder" disabled>Natures</button>
+          <button class="btn small abi-placeholder" disabled title="Natures"><i class="fa-solid fa-fire"></i></button>
           <div class="abi-trash-stack">
             <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
             <button class="btn small abi-pin ${pinClass}" data-pin="${pinKey}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon} pin-icon"></i></button>
+          </div>
+          <div class="abi-move">
+            <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst ? 'disabled' : ''}>&#8593;</button>
+            <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           </div>
         </div>
       </div>
