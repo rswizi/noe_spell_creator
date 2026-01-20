@@ -200,11 +200,12 @@
       .override-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
       #override-inputs { display:none; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap:8px; margin-top:10px; }
   /* Avatar */
-  .avatar-card { display:grid; gap:18px; align-items:flex-start; grid-template-columns: 220px minmax(0, 1fr); }
-  .avatar-frame { width:220px; height:220px; border:1px solid #333; border-radius:18px; overflow:hidden; background:#08080e; display:grid; place-items:center; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
-  .avatar-frame img { width:100%; height:100%; object-fit:cover; }
-  .avatar-tools { display:grid; gap:8px; min-width:0; }
-  .name-input { font-size:1.3rem; font-weight:600; letter-spacing:0.2px; }
+    .avatar-card { display:grid; gap:18px; align-items:flex-start; grid-template-columns: 220px minmax(0, 1fr); }
+    .avatar-frame { width:220px; height:220px; border:1px solid #333; border-radius:18px; overflow:hidden; background:#08080e; display:grid; place-items:center; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
+    .avatar-frame img { width:100%; height:100%; object-fit:cover; }
+    .avatar-tools { display:grid; gap:8px; min-width:0; }
+    .name-panel .panel-body { padding:16px; }
+    .name-input { font-size:1.3rem; font-weight:600; letter-spacing:0.2px; box-sizing:border-box; max-width:100%; }
   .avatar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .public-toggle { display:flex; align-items:center; gap:8px; }
   .public-toggle input { width:auto; }
@@ -475,7 +476,7 @@
     </div>
 
     <!-- Name card -->
-    <div class="panel" style="margin-bottom:12px;">
+    <div class="panel name-panel" style="margin-bottom:12px;">
       <div class="panel-body">
         <div class="avatar-card">
           <div class="avatar-frame"><img id="avatar-preview" alt="Avatar preview"></div>
