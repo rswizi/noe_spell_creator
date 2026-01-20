@@ -134,6 +134,19 @@
     .abi-item.abi-card .abi-move { display:flex; flex-direction:column; gap:6px; }
     .abi-item.abi-card .abi-trash-stack { display:flex; flex-direction:column; gap:6px; }
     .abi-item.abi-card .abi-placeholder { visibility:hidden; pointer-events:none; }
+    .abi-pin { position:relative; }
+    .abi-pin .pin-icon { position:relative; display:inline-block; }
+    .abi-pin.is-pinned .pin-icon::after {
+      content:"";
+      position:absolute;
+      left:-4px;
+      right:-4px;
+      top:50%;
+      height:2px;
+      background:#d06363;
+      transform:rotate(-45deg);
+      border-radius:2px;
+    }
     .abi-item .tag { border:1px solid #3b3b4b; border-radius:999px; padding:3px 8px; font-size:.75rem; opacity:.9; }
     .title-color-target { cursor:pointer; }
     .title-color-target:hover { text-shadow: 0 0 8px rgba(255,255,255,0.15); }
@@ -8781,7 +8794,8 @@ function renderAbilitySpellsBucket(){
     const id = String(sp?.id || '');
     const pinKey = spellPinKey(id);
     const pinned = pinnedSet.has(pinKey);
-    const pinIcon = pinned ? 'fa-thumbtack-slash' : 'fa-thumbtack';
+    const pinIcon = 'fa-thumbtack';
+    const pinClass = pinned ? 'is-pinned' : '';
     const pinTitle = pinned ? 'Unpin' : 'Pin';
     const moveIdx = moveIndexById[id];
     const isFirst = moveIdx === 0;
@@ -8813,7 +8827,7 @@ function renderAbilitySpellsBucket(){
           <button class="btn small abi-placeholder" disabled>Natures</button>
           <div class="abi-trash-stack">
             <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
-            <button class="btn small abi-pin" data-pin="${pinKey}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon}"></i></button>
+            <button class="btn small abi-pin ${pinClass}" data-pin="${pinKey}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon} pin-icon"></i></button>
           </div>
         </div>
       </div>
@@ -8862,7 +8876,8 @@ function renderAbilitySpellsBucket(){
     const id = String(cm?.id || '');
     const pinKey = craftPinKey(id);
     const pinned = pinnedSet.has(pinKey);
-    const pinIcon = pinned ? 'fa-thumbtack-slash' : 'fa-thumbtack';
+    const pinIcon = 'fa-thumbtack';
+    const pinClass = pinned ? 'is-pinned' : '';
     const pinTitle = pinned ? 'Unpin' : 'Pin';
     const moveIdx = craftMoveIndexById[id];
     const isFirst = moveIdx === 0;
@@ -8893,7 +8908,7 @@ function renderAbilitySpellsBucket(){
           <button class="btn small abi-placeholder" disabled>Natures</button>
           <div class="abi-trash-stack">
             <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
-            <button class="btn small abi-pin" data-pin="${pinKey}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon}"></i></button>
+            <button class="btn small abi-pin ${pinClass}" data-pin="${pinKey}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon} pin-icon"></i></button>
           </div>
         </div>
       </div>
@@ -15100,7 +15115,8 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     const natureClass = needsNature ? '' : 'abi-placeholder';
     const removeClass = canRemove ? '' : 'abi-placeholder';
     const pinned = bucketType ? pinnedSet.has(id) : false;
-    const pinIcon = pinned ? 'fa-thumbtack-slash' : 'fa-thumbtack';
+    const pinIcon = 'fa-thumbtack';
+    const pinClass = pinned ? 'is-pinned' : '';
     const pinTitle = pinned ? 'Unpin' : 'Pin';
     div.innerHTML = `
       <div class="abi-body">
@@ -15126,7 +15142,7 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
           </div>
           <div class="abi-trash-stack">
             <button class="btn small mod-remove ${removeClass}" title="Remove" ${canRemove ? '' : 'disabled'}><i class="fa-solid fa-trash"></i></button>
-            <button class="btn small abi-pin" data-pin="${id}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon}"></i></button>
+            <button class="btn small abi-pin ${pinClass}" data-pin="${id}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon} pin-icon"></i></button>
           </div>
         </div>
       </div>
