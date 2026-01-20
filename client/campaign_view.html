@@ -369,6 +369,7 @@
     let CHAT_WS = null;
     let CHAT_WS_RETRY = null;
     let CHAT_POLL = null;
+    let CHAT_REFRESH_TIMER = null;
 
     function authHeaders(){
       const t = localStorage.getItem('auth_token') || '';
@@ -1181,6 +1182,14 @@
       }
     }
 
+    function scheduleChatRefresh(){
+      if (CHAT_REFRESH_TIMER) return;
+      CHAT_REFRESH_TIMER = setTimeout(()=>{
+        CHAT_REFRESH_TIMER = null;
+        loadChat();
+      }, 500);
+    }
+
     async function loadChat(){
       if (!CID) return;
       if (!CHAT_API_OK){
@@ -1220,7 +1229,7 @@
             headers:{ 'content-type':'application/json' },
             body: JSON.stringify(payload)
           });
-          await loadChat();
+          scheduleChatRefresh();
           return;
         }catch{
           CHAT_API_OK = false;

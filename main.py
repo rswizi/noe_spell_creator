@@ -45,6 +45,27 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
                 if assigned_to == user or visible_to_others:
                     visible_chars.append(c)
             d["characters"] = visible_chars
+    chars = d.get("characters") or []
+    if chars:
+        ids = []
+        for c in chars:
+            cid = str(c.get("character_id") or c.get("id") or "").strip()
+            if cid:
+                ids.append(cid)
+        if ids:
+            name_map = {
+                str(c.get("id")): (c.get("name") or "")
+                for c in get_col("characters").find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1})
+            }
+            for c in chars:
+                cid = str(c.get("character_id") or c.get("id") or "").strip()
+                if not cid:
+                    continue
+                if not c.get("name") and not c.get("character_name"):
+                    nm = name_map.get(cid)
+                    if nm:
+                        c["name"] = nm
+                        c["character_name"] = nm
     # compute avatar url if stored
     if d.get("avatar"):
         d["avatar_url"] = f"/campaigns/{d['id']}/avatar"
