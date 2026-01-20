@@ -306,9 +306,10 @@ function normalizeChoiceEntry(val){
 }
 function choiceMaxForMod(mod){
   if (!mod) return 1;
-  const choice = mod.choice || {};
-  const rawChoice = choice.max_choices ?? choice.max ?? choice.maxChoices;
-  const raw = (rawChoice != null && rawChoice !== "") ? rawChoice : (mod.max_choices ?? mod.choice_max ?? mod.max_choice ?? mod.choiceMax);
+  const choice = (mod.choice && typeof mod.choice === "object") ? mod.choice : {};
+  const rawChoice = choice.max_choices ?? choice.max_choice ?? choice.choice_max ?? choice.max ?? choice.maxChoices ?? choice.choiceMax;
+  const raw = (rawChoice != null && rawChoice !== "") ? rawChoice
+    : (mod.max_choices ?? mod.choice_max ?? mod.max_choice ?? mod.choiceMax ?? mod.choice_max_choices ?? mod.choiceMaxChoices);
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 1;
 }
