@@ -3719,10 +3719,29 @@ function normalizeChoiceEntry(val){
   const base = val.base || val.source || '';
   return { base, picks: picks.filter(Boolean) };
 }
+function normalizeChoiceSource(src){
+  if (!src) return {};
+  if (typeof src === 'string'){
+    const trimmed = src.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))){
+      try{
+        return normalizeChoiceSource(JSON.parse(trimmed));
+      }catch{
+        return {};
+      }
+    }
+    return {};
+  }
+  if (Array.isArray(src)) return { choices: src };
+  if (typeof src === 'object') return src;
+  return {};
+}
 function choiceMaxForMod(mod){
   if (!mod) return 1;
-  const choice = (mod.choice && typeof mod.choice === 'object') ? mod.choice : {};
-  const rawChoice = choice.max_choices ?? choice.max_choice ?? choice.choice_max ?? choice.max ?? choice.maxChoices ?? choice.choiceMax;
+  const choice = normalizeChoiceSource(mod.choice);
+  const inner = normalizeChoiceSource(choice.choice);
+  const src = Object.keys(inner).length ? inner : choice;
+  const rawChoice = src.max_choices ?? src.max_choice ?? src.choice_max ?? src.max ?? src.maxChoices ?? src.choiceMax;
   const raw = (rawChoice != null && rawChoice !== '') ? rawChoice
     : (mod.max_choices ?? mod.choice_max ?? mod.max_choice ?? mod.choiceMax ?? mod.choice_max_choices ?? mod.choiceMaxChoices);
   const parsed = Number(raw);
@@ -3763,7 +3782,7 @@ function resolveModifierGroupSelections(mods, stored = {}){
 function normalizeRestrict(choice){
   // Accept either the whole modifier or the nested choice object.
   if (!choice) return [];
-  const src = choice.choice || choice;
+  const src = normalizeChoiceSource(choice.choice || choice);
   if (Array.isArray(src.restrict)) return src.restrict.map(s=> String(s).trim()).filter(Boolean);
   if (Array.isArray(src.choice_restrict)) return src.choice_restrict.map(s=> String(s).trim()).filter(Boolean);
   if (Array.isArray(src.restrict_list)) return src.restrict_list.map(s=> String(s).trim()).filter(Boolean);
@@ -3780,7 +3799,7 @@ function normalizeRestrict(choice){
 }
 function normalizeChoiceAllowed(choice){
   if (!choice) return [];
-  const src = choice.choice || choice;
+  const src = normalizeChoiceSource(choice.choice || choice);
   if (Array.isArray(src.choices)) return src.choices.map(s=> String(s).trim()).filter(Boolean);
   const txt = src.choices_text || '';
   if (typeof txt === 'string' && txt.trim()){
