@@ -128,6 +128,7 @@
     .abi-item.abi-card .abi-title-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .abi-item.abi-card .abi-tags { display:flex; gap:6px; flex-wrap:wrap; }
     .abi-item.abi-card .abi-actions { display:flex; gap:6px; align-items:flex-start; justify-content:flex-end; }
+    .abi-item.abi-card .abi-config-stack { display:flex; flex-direction:column; gap:6px; }
     .abi-item.abi-card .abi-move { display:flex; flex-direction:column; gap:6px; }
     .abi-item.abi-card .abi-placeholder { visibility:hidden; pointer-events:none; }
     .abi-item .tag { border:1px solid #3b3b4b; border-radius:999px; padding:3px 8px; font-size:.75rem; opacity:.9; }
@@ -4559,6 +4560,13 @@ function renderInventoryUI(){
           row.className = 'item-row';
           row.title = buildModifierSummary(it) || "";
           const hasChoice = itemHasChoice(it);
+          const toggleTitle = it.consumable ? 'Use' : (it.equipped!==false ? 'Unequip' : 'Equip');
+          const toggleInner = it.consumable
+            ? 'Use'
+            : (it.equipped!==false ? '<i class="fa-solid fa-suitcase"></i>' : '<i class="fa-solid fa-circle-up"></i>');
+          const choiceBtn = hasChoice
+            ? '<button class="btn small choices" title="Choices" aria-label="Choices"><i class="fa-solid fa-gear"></i></button>'
+            : '';
           row.innerHTML = `
             <div class="grow">
               <div><strong>${invEscapeHtml(it.alt_name || it.name || 'Item')}</strong> <span class="muted">x${it.quantity||1}</span></div>
@@ -4566,9 +4574,9 @@ function renderInventoryUI(){
             </div>
             <div class="item-actions">
               <div class="pill">${Number(it.enc||0).toFixed(1)} enc</div>
-              <button class="btn small toggle">${it.consumable ? 'Use' : (it.equipped!==false?'Unequip':'Equip')}</button>
-              ${hasChoice ? '<button class="btn small choices">Choices</button>' : ''}
-              <button class="btn small open">Open</button>
+              <button class="btn small toggle" title="${toggleTitle}" aria-label="${toggleTitle}">${toggleInner}</button>
+              ${choiceBtn}
+              <button class="btn small open" title="Open" aria-label="Open"><i class="fa-solid fa-pen"></i></button>
             </div>
           `;
           row.querySelector('.toggle').addEventListener('click', ()=> it.consumable ? useItemInline(it) : toggleEquipInline(it));
@@ -7708,7 +7716,10 @@ function openInvItemModal(it){
   }else{
     const equipBtn = document.createElement("button");
     equipBtn.className = "btn small";
-    equipBtn.textContent = equipped ? "Unequip" : "Equip";
+    const equipTitle = equipped ? "Unequip" : "Equip";
+    equipBtn.title = equipTitle;
+    equipBtn.setAttribute("aria-label", equipTitle);
+    equipBtn.innerHTML = `<i class="fa-solid ${equipped ? "fa-suitcase" : "fa-circle-up"}"></i>`;
     equipBtn.addEventListener("click", async ()=>{
       await toggleEquipInline(it);
       closeInvItemModal();
@@ -14805,8 +14816,10 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
       </div>
       <div class="abi-meta">
         <div class="abi-actions">
-          <button class="btn small mod-config ${configClass}" title="Configure choices" ${hasChoice ? '' : 'disabled'}><i class="fa-solid fa-gear"></i></button>
-          <button class="btn small abi-nature ${natureClass}" title="Configure default natures" aria-label="Configure default natures" ${needsNature ? '' : 'disabled'}><i class="fa-solid fa-fire"></i></button>
+          <div class="abi-config-stack">
+            <button class="btn small mod-config ${configClass}" title="Configure choices" ${hasChoice ? '' : 'disabled'}><i class="fa-solid fa-gear"></i></button>
+            <button class="btn small abi-nature ${natureClass}" title="Configure default natures" aria-label="Configure default natures" ${needsNature ? '' : 'disabled'}><i class="fa-solid fa-fire"></i></button>
+          </div>
           <div class="abi-move ${moveWrapClass}">
             <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst || !canMove ? 'disabled' : ''}>&#8593;</button>
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast || !canMove ? 'disabled' : ''}>&#8595;</button>
