@@ -119,6 +119,14 @@
               <label>AoE Type</label>
               <input id="f-aoe" type="text" placeholder="A/B/C">
             </div>
+            <div>
+              <label>Cost Mode</label>
+              <select id="f-cost-mode">
+                <option value="en">EN</option>
+                <option value="nen">nEN</option>
+                <option value="hp">HP (x5)</option>
+              </select>
+            </div>
             <div style="display:flex;align-items:end;gap:8px;">
               <input id="f-upgrade" type="checkbox"><label for="f-upgrade" style="margin:0;">Upgrade</label>
             </div>
@@ -295,6 +303,7 @@
       const s = SCHOOLS.find(x=>x.id===id); if(!s) return;
       $("#f-name").value  = s.name || "";
       $("#f-type").value  = s.school_type || "";
+      $("#f-cost-mode").value = s.cost_mode || "en";
       $("#f-range").value = s.range_type || "";
       $("#f-aoe").value   = s.aoe_type || "";
       $("#f-upgrade").checked = !!s.upgrade;
@@ -316,6 +325,7 @@
       const payload = {
         name: $("#f-name").value.trim(),
         school_type: $("#f-type").value.trim(),
+        cost_mode: $("#f-cost-mode").value || "en",
         range_type: $("#f-range").value.trim(),
         aoe_type: $("#f-aoe").value.trim(),
         upgrade: $("#f-upgrade").checked,

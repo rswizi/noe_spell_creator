@@ -573,6 +573,7 @@ def list_schools():
             "upgrade": bool(upg),
             "range_type": s.get("range_type"),
             "aoe_type": s.get("aoe_type"),
+            "cost_mode": s.get("cost_mode", "en"),
             "linked_skill": s.get("linked_skill"),
             "linked_intensities": s.get("linked_intensities", []),
         })
@@ -1711,6 +1712,9 @@ async def admin_update_school(school_id: str, request: Request):
     range_type  = (body.get("range_type")  or old.get("range_type","A")).strip().upper()
     aoe_type    = (body.get("aoe_type")    or old.get("aoe_type","A")).strip().upper()
     upgrade     = bool(body.get("upgrade", old.get("upgrade", old.get("is_upgrade", False))))
+    cost_mode   = (body.get("cost_mode")  or old.get("cost_mode", "en")).strip().lower()
+    if cost_mode not in ("en", "nen", "hp"):
+        cost_mode = old.get("cost_mode", "en")
 
     VALID_SKILLS = {"aura","incantation","enchantement","potential","restoration","stealth","investigation","charm","intimidation","absorption","spirit"}
     VALID_INTS   = {"fire","water","wind","earth","sun","moon","lightning","ki"}
@@ -1727,6 +1731,7 @@ async def admin_update_school(school_id: str, request: Request):
         "range_type": range_type,
         "aoe_type": aoe_type,
         "upgrade": bool(upgrade),
+        "cost_mode": cost_mode,
         "linked_skill": linked_skill,
         "linked_intensities": linked_intensities,
     }})
@@ -1739,6 +1744,7 @@ async def admin_update_school(school_id: str, request: Request):
     _chg("Range Type", old.get("range_type",""), range_type)
     _chg("AoE Type", old.get("aoe_type",""), aoe_type)
     _chg("Upgrade", bool(old.get("upgrade", old.get("is_upgrade", False))), bool(upgrade))
+    _chg("Cost Mode", old.get("cost_mode","en"), cost_mode)
 
     header = [f"Edited School [{school_id}] {name}", ""]
     header.extend(ch if ch else ["No direct field changes"])
