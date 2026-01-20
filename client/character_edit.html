@@ -2245,6 +2245,7 @@ let TITLE_COLOR_MAP = {};
 let INVENTORIES = [];
 let LINKED_INV = null;
 let SELECTED_INV_ID = '';
+let ACTIVE_INV_ITEM_ID = '';
 let WEAPON_CATALOG_BY_ID = {};
 let WEAPON_CATALOG_BY_NAME = {};
 let WEAPON_CATALOG_PROMISE = null;
@@ -7503,6 +7504,7 @@ async function deleteContainer(containerId){
 }
 
 function openInvItemModal(it){
+  ACTIVE_INV_ITEM_ID = it.item_id;
   const equipped = it.equipped !== false;
   const qty = Number(it.quantity || 1);
   const encUnit = Number(it.enc || 0);
@@ -7703,7 +7705,10 @@ function openInvItemModal(it){
       try{
         const inv = await installUpgrade(it.item_id, sel, target);
         if (inv){ LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave(); }
-        closeInvItemModal();
+        if (ACTIVE_INV_ITEM_ID === it.item_id) {
+          const updated = (LINKED_INV?.items || []).find(i=>i.item_id===it.item_id);
+          if (updated) openInvItemModal(updated);
+        }
       }catch(e){ alert(e.message); }
     });
 
@@ -7943,6 +7948,7 @@ function openInvItemModal(it){
 }
 
 function closeInvItemModal(){
+  ACTIVE_INV_ITEM_ID = '';
   invItemModal.classList.add('hidden');
   invItemModal.classList.remove('open');
   invItemBackdrop.classList.remove('open');
@@ -11759,7 +11765,7 @@ function renderCombatWeapons(){
     const nature = natureRaw.toLowerCase();
     const natureLabel = formatNatureLabel(natureRaw);
     const subHidden = SUB_HIDDEN || {};
-    const derivedNeutral = isAnimarma ? 0 : Number(DERIVED_CACHE?.weapon_neutral || 0);
+    const derivedNeutral = Number(DERIVED_CACHE?.weapon_neutral || 0);
     const subNeutral = !isAnimarma ? (subHidden.weaponNeutral || 0) : 0;
     const magicBucket = isAnimarma ? (PASSIVE.magic_damage.spell || {}) : (PASSIVE.magic_damage.weapon || {});
     let baseMagic = 0;

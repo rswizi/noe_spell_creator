@@ -205,6 +205,7 @@ let INV = null;
 let LAST_RESULTS = [];
 let FILTERED = [];
 let PRICE_MOD = 1;
+let ACTIVE_ITEM_ID = "";
 const invPriceModEl = $("#price-mod");
 const choiceModal = $("#choice-modal");
 const choiceTitle = $("#choice-title");
@@ -1740,6 +1741,7 @@ async function disposeItem(item_id){
 
 /* ------- Item Details Modal (incl. upgrades/quality/alt name) ------- */
 function openItemModal(it){
+  ACTIVE_ITEM_ID = it.item_id;
   const equipped = it.equipped !== false;
   const qty = Number(it.quantity || 1);
   const encUnit = Number(it.enc || 0);
@@ -1847,7 +1849,6 @@ function openItemModal(it){
         target = choice;
       }
       await installUpgrade(it.item_id, sel, target);
-      closeItemModal();
     });
 
     const upList = document.createElement("div");
@@ -2026,6 +2027,7 @@ function openItemModal(it){
 
 
 function closeItemModal(){
+  ACTIVE_ITEM_ID = "";
   $("#item-modal").classList.add("hidden");
 }
 
@@ -2079,8 +2081,11 @@ async function installUpgrade(item_id, upgrade, targetOverride=""){
   });
   const j = await r.json();
   if (j.status !== "success"){ alert(j.message || "Install failed"); return; }
-  closeItemModal();
   applyInventory(j.inventory);
+  if (ACTIVE_ITEM_ID === item_id) {
+    const updated = (INV?.items || []).find(i=>i.item_id===item_id);
+    if (updated) openItemModal(updated);
+  }
 }
 
 async function removeUpgrade(item_id, upgrade_id, target=""){
