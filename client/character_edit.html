@@ -4289,7 +4289,7 @@ document.addEventListener('click', (e)=>{
 
 function getEquippedInventoryModifiers(){
   if (!LINKED_INV) return [];
-  const items = LINKED_INV.items || [];
+  const items = stackInventoryItems(LINKED_INV.items || []);
   const mods = [];
   for (const it of items){
     if (it.equipped === false) continue;
@@ -4655,11 +4655,25 @@ function escapeHtml(s){ return invEscapeHtml(s); }
 function buildModifierSummary(it){
   const out = [];
   const mods = Array.isArray(it?.modifiers) ? it.modifiers : [];
+  const formatLine = (mode, value, target)=>{
+    const label = prettyTargetLabel(target);
+    const num = Number(value);
+    const raw = value ?? "";
+    if (mode === "set"){
+      return `Set ${label} to ${Number.isFinite(num) ? num : raw}`;
+    }
+    if (mode === "mul"){
+      const mul = Number.isFinite(num) ? num : raw;
+      return `x${mul} ${label}`;
+    }
+    const delta = Number.isFinite(num) ? (num >= 0 ? `+${num}` : `${num}`) : `${raw}`;
+    return `${delta} ${label}`;
+  };
   mods.forEach(m=>{
     const mode = m.mode || "add";
     const val = m.value ?? "";
     const tgt = m.target || "";
-    out.push(`${mode} ${val}${tgt ? " -> " + tgt : ""}`);
+    out.push(formatLine(mode, val, tgt));
   });
   const ups = Array.isArray(it?.upgrades) ? it.upgrades : [];
   ups.forEach(u=>{
@@ -4670,10 +4684,10 @@ function buildModifierSummary(it){
       const mode = m.mode || "add";
       const val = m.value ?? "";
       const tgt = m.target || "";
-      out.push(`${mode} ${val}${tgt ? " -> " + tgt : ""}`);
+      out.push(formatLine(mode, val, tgt));
     });
   });
-  return out.join(", ");
+  return out.join("; ");
 }
 function invToggleModal(modal, backdrop, open){
   if (!modal || !backdrop) return;
@@ -7236,6 +7250,59 @@ function normalizeItemKind(it){
 function normalizeItemSlot(it){
   return String(it?.equipment_slot || it?.slot || '').trim().toLowerCase();
 }
+function stackInventoryItems(items){
+  const stacked = [];
+  const groups = new Map();
+  const getQty = (it)=>{
+    const q = Number(it?.quantity ?? 1);
+    return Number.isFinite(q) && q > 0 ? q : 1;
+  };
+  const buildKey = (it, containerKey)=>{
+    const desc = (it.description || it.desc || it.description_html || '').toString().trim();
+    const paid = it.paid_unit ?? it.base_price ?? '';
+    return [
+      containerKey,
+      normalizeItemKind(it),
+      it.name || '',
+      it.alt_name || '',
+      it.variant || '',
+      it.quality || '',
+      String(paid),
+      String(it.enc ?? ''),
+      String(it.consumable ?? ''),
+      String(it.equipped ?? ''),
+      String(it.linked_nature ?? ''),
+      String(it.alchemy_tool ?? ''),
+      desc,
+      JSON.stringify(it.modifiers || []),
+      JSON.stringify(it.upgrades || []),
+      JSON.stringify(it.craftomancies || [])
+    ].join('||');
+  };
+
+  (items || []).forEach((it)=>{
+    const kind = normalizeItemKind(it);
+    if (kind === 'weapon' || kind === 'equipment'){
+      stacked.push(it);
+      return;
+    }
+    const containerKey = (it.equipped !== false) ? SELF_CONTAINER_ID : (it.container_id || '');
+    const key = buildKey(it, containerKey);
+    const existing = groups.get(key);
+    if (existing){
+      existing.quantity = getQty(existing) + getQty(it);
+      existing.__stack_ids.push(it.item_id || it.id);
+      return;
+    }
+    const entry = { ...it };
+    entry.quantity = getQty(it);
+    entry.__stack_ids = [it.item_id || it.id];
+    entry.__stack_key = key;
+    groups.set(key, entry);
+    stacked.push(entry);
+  });
+  return stacked;
+}
 function upgradeMatchesItem(upg, it){
   const itemKind = normalizeItemKind(it);
   if (itemKind){
@@ -7503,14 +7570,6 @@ function openInvItemModal(it){
     invItemBody.appendChild(desc);
   }
 
-  const modLine = buildModifierSummary(it);
-  if (modLine){
-    const mods = document.createElement("div");
-    mods.className = "muted";
-    mods.textContent = `Applies: ${modLine}`;
-    invItemBody.appendChild(mods);
-  }
-
   const craftSection = document.createElement("div");
   craftSection.className = "home-card";
   const craftHead = document.createElement("div");
@@ -7521,7 +7580,9 @@ function openInvItemModal(it){
   craftHead.innerHTML = `<h3 style="margin:0;">Craftomancy</h3><span class="pill-soft">${craftCount} / 1</span>`;
   const craftAddBtn = document.createElement("button");
   craftAddBtn.className = "btn small";
-  craftAddBtn.textContent = "Add craftomancy";
+  craftAddBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+  craftAddBtn.title = "Add craftomancy";
+  craftAddBtn.setAttribute('aria-label', 'Add craftomancy');
   if (!it.quality){
     craftAddBtn.disabled = true;
     craftAddBtn.title = "Item quality required.";
@@ -7577,7 +7638,9 @@ function openInvItemModal(it){
       btnRow.className = "btn-row";
       const rem = document.createElement("button");
       rem.className = "btn btn-secondary small";
-      rem.textContent = "Remove";
+      rem.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      rem.title = "Remove";
+      rem.setAttribute('aria-label', 'Remove');
       rem.addEventListener("click", async ()=>{ await removeCraftomancy(it, cm); closeInvItemModal(); });
       btnRow.appendChild(rem);
       row.appendChild(btnRow);
@@ -7648,7 +7711,7 @@ function openInvItemModal(it){
           const upgId = u.id || u.key || u;
           const meta = (window.UPGRADE_META || {})[upgId] || {};
           const title = meta.name || u.name || upgId || "Upgrade";
-          const desc = u.description_html || u.description || meta.description_html || meta.description || "";
+          const desc = u.description_html || u.description || meta.description_html || meta.description_long || meta.description || meta.desc || "";
 
         const row = document.createElement("div");
         row.className = "upg-row";
@@ -7657,7 +7720,43 @@ function openInvItemModal(it){
         head.className = "row";
         head.style.justifyContent = "space-between";
         head.style.alignItems = "center";
-        head.innerHTML = `<h4 style="margin:0;">${invEscapeHtml(title)}</h4>${u.target ? `<span class="pill-soft">Target: ${invEscapeHtml(u.target)}</span>` : ""}`;
+        head.style.gap = "8px";
+        const titleWrap = document.createElement("div");
+        titleWrap.className = "row";
+        titleWrap.style.alignItems = "center";
+        titleWrap.style.gap = "8px";
+        titleWrap.innerHTML = `<h4 style="margin:0;">${invEscapeHtml(title)}</h4>${u.target ? `<span class="pill-soft">Target: ${invEscapeHtml(u.target)}</span>` : ""}`;
+        head.appendChild(titleWrap);
+
+        const btns = document.createElement("div");
+        btns.className = "row";
+        btns.style.alignItems = "center";
+        btns.style.gap = "6px";
+        const rem = document.createElement("button");
+        rem.className = "btn btn-secondary small";
+        rem.innerHTML = '<i class="fa-solid fa-trash"></i>';
+        rem.title = "Remove";
+        rem.setAttribute('aria-label', 'Remove');
+        rem.addEventListener("click", async ()=>{
+          try{
+            const inv = await removeUpgrade(it.item_id, upgId, u.target || "");
+            LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+            closeInvItemModal();
+          }catch(e){ alert(e.message); }
+        });
+        const choiceKey = upgradeChoiceKey(it, u, idx);
+        const choiceMods = upgradeChoiceMods(u, meta, choiceKey);
+        btns.appendChild(rem);
+        if (choiceMods.length){
+          const edit = document.createElement("button");
+          edit.className = "btn small";
+          edit.innerHTML = '<i class="fa-solid fa-gear"></i>';
+          edit.title = "Configure upgrade choices";
+          edit.setAttribute('aria-label', 'Configure upgrade choices');
+          edit.addEventListener("click", ()=> openUpgradeChoiceModal(it, u, idx));
+          btns.appendChild(edit);
+        }
+        head.appendChild(btns);
         row.appendChild(head);
 
         if (desc){
@@ -7666,32 +7765,6 @@ function openInvItemModal(it){
           dd.innerHTML = desc;
           row.appendChild(dd);
         }
-
-        const btns = document.createElement("div");
-        btns.className = "btn-row";
-        const rem = document.createElement("button");
-        rem.className = "btn btn-secondary small";
-        rem.textContent = "Remove";
-        rem.addEventListener("click", async ()=>{
-          try{
-            const inv = await removeUpgrade(it.item_id, upgId, u.target || "");
-            LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
-            closeInvItemModal();
-          }catch(e){ alert(e.message); }
-        });
-          const choiceKey = upgradeChoiceKey(it, u, idx);
-          const choiceMods = upgradeChoiceMods(u, meta, choiceKey);
-          btns.appendChild(rem);
-          if (choiceMods.length){
-            const edit = document.createElement("button");
-            edit.className = "btn small";
-            edit.innerHTML = '<i class="fa-solid fa-gear"></i>';
-            edit.title = "Configure upgrade choices";
-            edit.setAttribute('aria-label', 'Configure upgrade choices');
-            edit.addEventListener("click", ()=> openUpgradeChoiceModal(it, u, idx));
-            btns.appendChild(edit);
-          }
-        row.appendChild(btns);
         upList.appendChild(row);
       });
     }
@@ -7786,6 +7859,8 @@ function openInvItemModal(it){
     const qWrap = document.createElement("div");
     qWrap.className = "row";
     qWrap.style.gap = "6px";
+    qWrap.style.alignItems = "center";
+    qWrap.style.flexWrap = "nowrap";
     const qSelect = document.createElement("select");
     const currentQuality = String(it.quality || "Adequate");
     QUALITY_ORDER.forEach(q=>{
@@ -7798,6 +7873,7 @@ function openInvItemModal(it){
     const qBtn = document.createElement("button");
     qBtn.className = "btn small";
     qBtn.textContent = "Change quality";
+    qBtn.style.whiteSpace = "nowrap";
     qBtn.addEventListener("click", async ()=>{
       const target = qSelect.value;
       if (!target) return;
