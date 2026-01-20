@@ -14805,11 +14805,11 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
       <div class="abi-meta">
         <div class="abi-actions">
           <button class="btn small mod-config ${configClass}" title="Configure choices" ${hasChoice ? '' : 'disabled'}><i class="fa-solid fa-gear"></i></button>
+          <button class="btn small abi-nature ${natureClass}" title="Configure default natures" aria-label="Configure default natures" ${needsNature ? '' : 'disabled'}><i class="fa-solid fa-fire"></i></button>
           <div class="abi-move ${moveWrapClass}">
             <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst || !canMove ? 'disabled' : ''}>&#8593;</button>
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast || !canMove ? 'disabled' : ''}>&#8595;</button>
           </div>
-          <button class="btn small abi-nature ${natureClass}" title="Configure default natures" ${needsNature ? '' : 'disabled'}>Natures</button>
           <button class="btn small mod-remove ${removeClass}" title="Remove" ${canRemove ? '' : 'disabled'}><i class="fa-solid fa-trash"></i></button>
         </div>
       </div>
