@@ -116,6 +116,30 @@
       if (adminLink) adminLink.style.display = "none";
     }
 
+    async function handlePasswordReset(username, currentPassword) {
+      const newPassword = prompt("Password reset required. Enter a new password:");
+      if (!newPassword) {
+        statusEl.textContent = "Password reset required.";
+        return false;
+      }
+      if (newPassword.length < 6) {
+        statusEl.textContent = "Password must be at least 6 characters.";
+        return false;
+      }
+      const res = await fetch(`${API_BASE}/auth/reset-required`, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ username, current_password: currentPassword, new_password: newPassword })
+      });
+      const data = await res.json();
+      if (data.status !== "success") {
+        statusEl.textContent = data.message || "Reset failed";
+        return false;
+      }
+      statusEl.textContent = "Password updated. Please log in again.";
+      return true;
+    }
+
     // --- auth calls ---
     async function login() {
       const username = document.getElementById("login-username").value.trim();
@@ -134,6 +158,8 @@
         localStorage.setItem("auth_role", data.role);
         setLoggedInUI(data.username, data.role);
         closeLogin();
+      } else if (data.status === "reset_required") {
+        await handlePasswordReset(username, password);
       } else {
         statusEl.textContent = data.message || "Login failed";
       }

@@ -61,6 +61,15 @@ def _ensure_join_code():
             return code
     return _gen_join_code()
 
+PASSWORD_RESET_VERSION = 1
+
+def _needs_password_reset(user: dict) -> bool:
+    try:
+        current = int(user.get("password_reset_version") or 0)
+    except (TypeError, ValueError):
+        current = 0
+    return current < PASSWORD_RESET_VERSION
+
 # ---------- Lifespan (startup/shutdown) ----------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -481,7 +490,12 @@ async def auth_login(request: Request):
         return {"status": "error", "message": "Missing username or password"}
 
     user = find_user(username)
-    if not user or not verify_password(password, user):
+    if not user:
+        logger.info("Login failed for user=%s", username)
+        return {"status": "error", "message": "Login failed"}
+    if _needs_password_reset(user):
+        return {"status": "reset_required", "message": "Password reset required", "username": username}
+    if not verify_password(password, user):
         logger.info("Login failed for user=%s", username)
         return {"status": "error", "message": "Login failed"}
 
@@ -522,7 +536,47 @@ async def auth_reset(request: Request):
         user = users.find_one({"username": username, "reset_code": code})
     if not user:
         return {"status":"error","message":"Invalid code"}
-    users.update_one({"_id": user["_id"]}, {"$set": {"password": _sha256(new_pw)}, "$unset": {"reset_code": "", "reset_at": ""}})
+    users.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "password_hash": _sha256(new_pw),
+                "password_reset_version": PASSWORD_RESET_VERSION,
+            },
+            "$unset": {"password": "", "reset_code": "", "reset_at": ""},
+        },
+    )
+    return {"status":"success"}
+
+@app.post("/auth/reset-required")
+async def auth_reset_required(request: Request):
+    body = await request.json()
+    username = (body.get("username") or "").strip()
+    current_pw = body.get("current_password") or ""
+    new_pw = body.get("new_password") or ""
+    if not username or not new_pw:
+        return {"status":"error","message":"Missing fields"}
+    if len(new_pw) < 6:
+        return {"status": "error", "message": "Password must be at least 6 characters."}
+    users = get_col("users")
+    user = users.find_one({"username": username})
+    if not user:
+        return {"status":"error","message":"Invalid credentials"}
+    if not _needs_password_reset(user):
+        if not current_pw:
+            return {"status":"error","message":"Missing fields"}
+        if not verify_password(current_pw, user):
+            return {"status":"error","message":"Invalid credentials"}
+    users.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "password_hash": _sha256(new_pw),
+                "password_reset_version": PASSWORD_RESET_VERSION,
+            },
+            "$unset": {"password": "", "reset_code": "", "reset_at": ""},
+        },
+    )
     return {"status":"success"}
 
 @app.get("/auth/me/details")
@@ -538,13 +592,19 @@ async def update_account(req: Request):
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
     update = {}
+    unset = {}
     if email:
         update["email"] = email
     if password:
-        update["password"] = _sha256(password)
-    if not update:
+        update["password_hash"] = _sha256(password)
+        update["password_reset_version"] = PASSWORD_RESET_VERSION
+        unset["password"] = ""
+    if not update and not unset:
         return {"status":"error","message":"Nothing to update"}
-    get_col("users").update_one({"username": username}, {"$set": update})
+    update_doc = {"$set": update} if update else {}
+    if unset:
+        update_doc["$unset"] = unset
+    get_col("users").update_one({"username": username}, update_doc)
     return {"status":"success"}
 
 @app.get("/auth/me")
@@ -1256,6 +1316,7 @@ async def auth_signup(request: Request):
         "username": username,
         "email": email,
         "password_hash": _sha256(password),
+        "password_reset_version": PASSWORD_RESET_VERSION,
         "role": "user",
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
     }
