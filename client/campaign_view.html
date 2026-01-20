@@ -1159,6 +1159,12 @@
         lines.appendChild(line);
         if (lastGroup) lastGroup.lastTs = msg.ts;
       });
+      scrollChatToBottom();
+    }
+
+    function scrollChatToBottom(){
+      if (!chatLog) return;
+      requestAnimationFrame(()=>{ chatLog.scrollTop = chatLog.scrollHeight; });
     }
 
     function saveChatLocal(){

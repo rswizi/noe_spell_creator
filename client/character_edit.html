@@ -119,6 +119,8 @@
     /* Abilities tab */
     .abi-grid { display:grid; gap:12px; grid-template-columns: 1fr; }
     .abi-bucket h3 { margin:6px 0 8px; font-size:1rem; }
+    .abi-head { display:flex; align-items:center; gap:6px; }
+    .abi-head .abi-hide-toggle { padding:4px 8px; }
     .abi-list { display:grid; gap:8px; }
     .abi-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #2b2b3b; border-radius:12px; background:linear-gradient(145deg, #14141d, #0f0f16); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
     .abi-item.abi-block { flex-direction: column; align-items: stretch; }
@@ -130,6 +132,7 @@
     .abi-item.abi-card .abi-actions { display:flex; gap:6px; align-items:flex-start; justify-content:flex-end; }
     .abi-item.abi-card .abi-config-stack { display:flex; flex-direction:column; gap:6px; }
     .abi-item.abi-card .abi-move { display:flex; flex-direction:column; gap:6px; }
+    .abi-item.abi-card .abi-trash-stack { display:flex; flex-direction:column; gap:6px; }
     .abi-item.abi-card .abi-placeholder { visibility:hidden; pointer-events:none; }
     .abi-item .tag { border:1px solid #3b3b4b; border-radius:999px; padding:3px 8px; font-size:.75rem; opacity:.9; }
     .title-color-target { cursor:pointer; }
@@ -807,7 +810,11 @@
 
               <div class="abi-grid" style="margin-top:16px;">
                 <div class="abi-bucket">
-                  <h3>Passive</h3>
+                  <h3 class="abi-head">Passive
+                    <button class="btn small abi-hide-toggle" type="button" data-bucket="passive" title="Hide unpinned" aria-pressed="false">
+                      <i class="fa-solid fa-eye-slash"></i>
+                    </button>
+                  </h3>
                   <div class="row" style="gap:6px; align-items:center; margin-bottom:6px;">
                     <label class="muted" for="abi-passive-order">Order</label>
                     <select id="abi-passive-order" style="min-width:160px;">
@@ -820,7 +827,11 @@
                   <div id="abi-list-passive" class="abi-list"></div>
                 </div>
                 <div class="abi-bucket">
-                  <h3>Active</h3>
+                  <h3 class="abi-head">Active
+                    <button class="btn small abi-hide-toggle" type="button" data-bucket="active" title="Hide unpinned" aria-pressed="false">
+                      <i class="fa-solid fa-eye-slash"></i>
+                    </button>
+                  </h3>
                   <div class="row" style="gap:6px; align-items:center; margin-bottom:6px;">
                     <label class="muted" for="abi-active-order">Order</label>
                     <select id="abi-active-order" style="min-width:160px;">
@@ -833,7 +844,11 @@
                   <div id="abi-list-active" class="abi-list"></div>
                 </div>
                 <div class="abi-bucket">
-                  <h3>Spells (from linked list)</h3>
+                  <h3 class="abi-head">Spells (from linked list)
+                    <button class="btn small abi-hide-toggle" type="button" data-bucket="spell" title="Hide unpinned" aria-pressed="false">
+                      <i class="fa-solid fa-eye-slash"></i>
+                    </button>
+                  </h3>
                   <div class="row" style="gap:6px; align-items:center; margin-bottom:6px;">
                     <label class="muted" for="abi-spell-order">Order</label>
                     <select id="abi-spell-order" style="min-width:160px;">
@@ -2236,6 +2251,10 @@ let AWAK_ASSIGNED = []; // full documents of awakening abilities (resolved by id
 let ABI_SORT_PASSIVE = 'manual';
 let ABI_SORT_ACTIVE = 'manual';
 let ABI_SORT_SPELLS = 'manual';
+const ABI_PIN_KEY = CID ? `abi_pins:${CID}` : '';
+const ABI_HIDE_KEY = CID ? `abi_hide_unpinned:${CID}` : '';
+let ABI_PINNED = { passive:new Set(), active:new Set(), spell:new Set() };
+let ABI_HIDE_UNPINNED = { passive:false, active:false, spell:false };
 let COMPUTED_EXP_ABILITIES = [];
 let COMPUTED_DIMA_ABILITIES = [];
 let COMPUTED_AWAK_ABILITIES = [];
@@ -8708,14 +8727,19 @@ function renderAbilitySpellsBucket(){
     ensureEffectsLoaded().then(()=> renderAbilitySpellsBucket());
   }
   const metaMap = SPELLLIST_META.spell_meta || {};
+  const pinnedSet = ABI_PINNED.spell || new Set();
+  const hideUnpinned = !!ABI_HIDE_UNPINNED.spell;
   const onlyLearned = !!(abiSpellsOnlyLearnedEl && abiSpellsOnlyLearnedEl.checked);
   const ordered = applySpellSort(SPELLLIST_SPELLS, ABI_SORT_SPELLS, metaMap);
   const visible = ordered.filter(sp=> !onlyLearned || (metaMap[sp.id]?.status === 'learnt'));
+  const filtered = hideUnpinned
+    ? visible.filter(sp=> pinnedSet.has(spellPinKey(sp.id)))
+    : visible;
   const sortMode = String(ABI_SORT_SPELLS || '').toLowerCase();
   const manualMode = sortMode === 'manual';
   const moveIndexById = {};
-  visible.forEach((sp, idx)=>{ moveIndexById[String(sp?.id || '')] = idx; });
-  const craftOrdered = craftEntries.slice();
+  filtered.forEach((sp, idx)=>{ moveIndexById[String(sp?.id || '')] = idx; });
+  let craftOrdered = craftEntries.slice();
   if (sortMode === 'az' || sortMode === 'za'){
     craftOrdered.sort((a, b)=>{
       const aCraft = a?.craft || {};
@@ -8726,11 +8750,18 @@ function renderAbilitySpellsBucket(){
     });
     if (sortMode === 'za') craftOrdered.reverse();
   }
+  if (hideUnpinned){
+    craftOrdered = craftOrdered.filter(entry=> pinnedSet.has(craftPinKey(entry?.craft?.id || '')));
+  }
   const craftMoveIndexById = {};
   if (manualMode){
     craftOrdered.forEach((entry, idx)=>{ craftMoveIndexById[String(entry?.craft?.id || '')] = idx; });
   }
-  visible.forEach(sp=>{
+  if (!filtered.length && !craftOrdered.length){
+    el.innerHTML = '<div class="muted">--</div>';
+    return;
+  }
+  filtered.forEach(sp=>{
     const meta = metaMap[sp.id] || {};
     const nameDisplay = spellDisplayName(sp, metaMap);
     const desc = meta.description || sp.description || sp.description_long || sp.desc || '';
@@ -8748,9 +8779,13 @@ function renderAbilitySpellsBucket(){
     const statusLabel = (meta.status === 'learnt') ? 'Prepared' : 'Learnt';
     const titleKey = spellColorKey(sp);
     const id = String(sp?.id || '');
+    const pinKey = spellPinKey(id);
+    const pinned = pinnedSet.has(pinKey);
+    const pinIcon = pinned ? 'fa-thumbtack-slash' : 'fa-thumbtack';
+    const pinTitle = pinned ? 'Unpin' : 'Pin';
     const moveIdx = moveIndexById[id];
     const isFirst = moveIdx === 0;
-    const isLast = moveIdx === visible.length - 1;
+    const isLast = moveIdx === filtered.length - 1;
     const disableMove = !manualMode;
     const tagA = String(sp.category || '').trim();
     div.innerHTML = `
@@ -8776,7 +8811,10 @@ function renderAbilitySpellsBucket(){
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           </div>
           <button class="btn small abi-placeholder" disabled>Natures</button>
-          <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
+          <div class="abi-trash-stack">
+            <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
+            <button class="btn small abi-pin" data-pin="${pinKey}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon}"></i></button>
+          </div>
         </div>
       </div>
       `;
@@ -8784,6 +8822,7 @@ function renderAbilitySpellsBucket(){
     div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, meta, { cost, range, aoe, desc, effectsLines, statusLabel, nameDisplay })));
     div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveSpellOrder(sp.id, 'up', { onlyLearned }));
     div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveSpellOrder(sp.id, 'down', { onlyLearned }));
+    div.querySelector('.abi-pin')?.addEventListener('click', ()=> toggleAbiPin('spell', pinKey));
     el.appendChild(div);
   });
 
@@ -8821,6 +8860,10 @@ function renderAbilitySpellsBucket(){
     const statusLabel = 'Craftomancy';
     const titleKey = spellColorKey(sp) || entryColorKey('craft', cm);
     const id = String(cm?.id || '');
+    const pinKey = craftPinKey(id);
+    const pinned = pinnedSet.has(pinKey);
+    const pinIcon = pinned ? 'fa-thumbtack-slash' : 'fa-thumbtack';
+    const pinTitle = pinned ? 'Unpin' : 'Pin';
     const moveIdx = craftMoveIndexById[id];
     const isFirst = moveIdx === 0;
     const isLast = moveIdx === craftOrdered.length - 1;
@@ -8848,7 +8891,10 @@ function renderAbilitySpellsBucket(){
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           </div>
           <button class="btn small abi-placeholder" disabled>Natures</button>
-          <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
+          <div class="abi-trash-stack">
+            <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
+            <button class="btn small abi-pin" data-pin="${pinKey}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon}"></i></button>
+          </div>
         </div>
       </div>
     `;
@@ -8856,6 +8902,7 @@ function renderAbilitySpellsBucket(){
     div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, {}, { cost, range, aoe, desc, effectsLines, statusLabel, nameDisplay })));
     div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveCraftomancyOrder(id, 'up'));
     div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveCraftomancyOrder(id, 'down'));
+    div.querySelector('.abi-pin')?.addEventListener('click', ()=> toggleAbiPin('spell', pinKey));
     el.appendChild(div);
   });
 }
@@ -13682,6 +13729,16 @@ abiSpellSortBtn?.addEventListener('click', ()=>{
   ABI_SORT_SPELLS = abiSpellOrderEl?.value || 'manual';
   renderAbilitySpellsBucket();
 });
+document.querySelectorAll('.abi-hide-toggle').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const bucket = btn.getAttribute('data-bucket');
+    if (!bucket) return;
+    ABI_HIDE_UNPINNED[bucket] = !ABI_HIDE_UNPINNED[bucket];
+    saveAbiHidePref();
+    setAbiHideToggleUI(bucket);
+    renderAbilitiesTab();
+  });
+});
 speciesSelectEl?.addEventListener('change', ()=> applySpeciesSelection(speciesSelectEl.value));
 boonSelectEl?.addEventListener('change', ()=> applyBoonSelection(boonSelectEl.value));
 abiOpenAddBtn?.addEventListener('click', openAbilityAddModal);
@@ -14921,18 +14978,110 @@ function applyAbilitySort(list, mode){
   return sorted;
 }
 
+function loadAbiPins(){
+  if (!ABI_PIN_KEY) return;
+  try{
+    const raw = JSON.parse(localStorage.getItem(ABI_PIN_KEY) || '{}');
+    ABI_PINNED = {
+      passive: new Set(Array.isArray(raw.passive) ? raw.passive.map(String) : []),
+      active: new Set(Array.isArray(raw.active) ? raw.active.map(String) : []),
+      spell: new Set(Array.isArray(raw.spell) ? raw.spell.map(String) : []),
+    };
+  }catch{
+    ABI_PINNED = { passive:new Set(), active:new Set(), spell:new Set() };
+  }
+}
+
+function saveAbiPins(){
+  if (!ABI_PIN_KEY) return;
+  const payload = {
+    passive: Array.from(ABI_PINNED.passive || []),
+    active: Array.from(ABI_PINNED.active || []),
+    spell: Array.from(ABI_PINNED.spell || []),
+  };
+  try{ localStorage.setItem(ABI_PIN_KEY, JSON.stringify(payload)); }catch{}
+}
+
+function loadAbiHidePref(){
+  if (!ABI_HIDE_KEY) return;
+  try{
+    const raw = JSON.parse(localStorage.getItem(ABI_HIDE_KEY) || '{}');
+    ABI_HIDE_UNPINNED = {
+      passive: !!raw.passive,
+      active: !!raw.active,
+      spell: !!raw.spell,
+    };
+  }catch{
+    ABI_HIDE_UNPINNED = { passive:false, active:false, spell:false };
+  }
+}
+
+function saveAbiHidePref(){
+  if (!ABI_HIDE_KEY) return;
+  const payload = {
+    passive: !!ABI_HIDE_UNPINNED.passive,
+    active: !!ABI_HIDE_UNPINNED.active,
+    spell: !!ABI_HIDE_UNPINNED.spell,
+  };
+  try{ localStorage.setItem(ABI_HIDE_KEY, JSON.stringify(payload)); }catch{}
+}
+
+function isAbiPinned(bucket, key){
+  if (!bucket || !key) return false;
+  return !!ABI_PINNED[bucket]?.has(String(key));
+}
+
+function toggleAbiPin(bucket, key){
+  if (!bucket || !key) return;
+  const set = ABI_PINNED[bucket] || new Set();
+  const strKey = String(key);
+  if (set.has(strKey)) set.delete(strKey);
+  else set.add(strKey);
+  ABI_PINNED[bucket] = set;
+  saveAbiPins();
+  renderAbilitiesTab();
+}
+
+function setAbiHideToggleUI(bucket){
+  const btn = document.querySelector(`.abi-hide-toggle[data-bucket="${bucket}"]`);
+  if (!btn) return;
+  const hidden = !!ABI_HIDE_UNPINNED[bucket];
+  btn.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+  btn.title = hidden ? 'Show all' : 'Hide unpinned';
+  btn.innerHTML = hidden
+    ? '<i class="fa-solid fa-eye"></i>'
+    : '<i class="fa-solid fa-eye-slash"></i>';
+}
+
+function setAllAbiHideToggleUI(){
+  setAbiHideToggleUI('passive');
+  setAbiHideToggleUI('active');
+  setAbiHideToggleUI('spell');
+}
+
+function spellPinKey(id){
+  return `spell:${String(id || '')}`;
+}
+
+function craftPinKey(id){
+  return `craft:${String(id || '')}`;
+}
+
 function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } = {}){
   if (!el) return;
   el.innerHTML = '';
-  if (!list.length){ el.innerHTML = '<div class="muted">--</div>'; return; }
+  const hideUnpinned = !!(bucketType && ABI_HIDE_UNPINNED[bucketType]);
+  const pinnedSet = bucketType ? (ABI_PINNED[bucketType] || new Set()) : new Set();
+  const viewList = hideUnpinned ? list.filter(a=> pinnedSet.has(String(a?.id || ''))) : list;
+  if (!viewList.length){ el.innerHTML = '<div class="muted">--</div>'; return; }
   const manualMode = String(sortMode || '').toLowerCase() === 'manual';
-  for (let idx = 0; idx < list.length; idx++){
-    const a = list[idx];
+  for (let idx = 0; idx < viewList.length; idx++){
+    const a = viewList[idx];
     const id = String(a?.id || '');
     const canRemove = assignedIds ? assignedIds.has(id) : true;
     const canMove = !!bucketType;
     const isFirst = idx === 0;
-    const isLast = idx === list.length - 1;
+    const isLast = idx === viewList.length - 1;
     const disableMove = !manualMode;
     const div = document.createElement('div');
     div.className = 'abi-item abi-card';
@@ -14950,6 +15099,9 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     const configClass = hasChoice ? '' : 'abi-placeholder';
     const natureClass = needsNature ? '' : 'abi-placeholder';
     const removeClass = canRemove ? '' : 'abi-placeholder';
+    const pinned = bucketType ? pinnedSet.has(id) : false;
+    const pinIcon = pinned ? 'fa-thumbtack-slash' : 'fa-thumbtack';
+    const pinTitle = pinned ? 'Unpin' : 'Pin';
     div.innerHTML = `
       <div class="abi-body">
         <div class="abi-title-row">
@@ -14972,7 +15124,10 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
             <button class="btn small" data-move="up" data-id="${id}" title="${manualMode ? 'Move up' : 'Switch order to Manual to move'}" ${disableMove || isFirst || !canMove ? 'disabled' : ''}>&#8593;</button>
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast || !canMove ? 'disabled' : ''}>&#8595;</button>
           </div>
-          <button class="btn small mod-remove ${removeClass}" title="Remove" ${canRemove ? '' : 'disabled'}><i class="fa-solid fa-trash"></i></button>
+          <div class="abi-trash-stack">
+            <button class="btn small mod-remove ${removeClass}" title="Remove" ${canRemove ? '' : 'disabled'}><i class="fa-solid fa-trash"></i></button>
+            <button class="btn small abi-pin" data-pin="${id}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon}"></i></button>
+          </div>
         </div>
       </div>
     `;
@@ -14981,6 +15136,7 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     if (canRemove){
       div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));
     }
+    div.querySelector('.abi-pin')?.addEventListener('click', ()=> toggleAbiPin(bucketType, id));
     if (hasChoice){
       div.querySelector('.mod-config')?.addEventListener('click', ()=> openChoiceModal(a));
     }
@@ -14996,6 +15152,7 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
 }
 
 function renderAbilitiesTab(){
+  setAllAbiHideToggleUI();
   const docs = collectDisplayAbilities();
   const assignedIds = new Set((ASSIGNED||[]).map(a=> String(a?.id || '')));
   const passive   = docs.filter(a=> ((a.type||'').toLowerCase()!=='active'));
@@ -15051,6 +15208,9 @@ function wirePersonal(){
 }
 
 /* boot */
+loadAbiPins();
+loadAbiHidePref();
+setAllAbiHideToggleUI();
 checkMe().then(async ()=>{
   await loadCharacter();
   await initCampaignChat();
