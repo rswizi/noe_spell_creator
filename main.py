@@ -405,6 +405,12 @@ def _chat_lines(val: Any) -> list[str]:
             out.append(s[:400])
     return out[:40]
 
+def _next_chat_id() -> str:
+    try:
+        return f"msg_{next_id_str('campaign_chat', padding=6)}"
+    except Exception:
+        return f"msg_{secrets.token_hex(4)}"
+
 def _chat_doc(cid: str, user: str, body: dict) -> dict:
     ts = body.get("ts")
     try:
@@ -412,7 +418,7 @@ def _chat_doc(cid: str, user: str, body: dict) -> dict:
     except Exception:
         ts_val = int(datetime.datetime.utcnow().timestamp() * 1000)
     doc = {
-        "id": f"msg_{next_id_str('campaign_chat', padding=6)}",
+        "id": _next_chat_id(),
         "campaign_id": cid,
         "ts": ts_val,
         "visibility": _chat_visibility(body.get("visibility")),
@@ -457,7 +463,10 @@ async def get_campaign_chat(cid: str, req: Request, limit: int = Query(200, ge=1
 async def post_campaign_chat(cid: str, req: Request):
     user, role = require_auth(req)
     _require_campaign_access(cid, user, role)
-    body = await req.json()
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
     doc = _chat_doc(cid, user, body or {})
     try:
         CAMPAIGN_CHAT_COL.insert_one(doc)

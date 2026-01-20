@@ -5959,9 +5959,9 @@ async function postCampaignChatMessage(payload){
       });
       return true;
     }catch(e){
-      CAMPAIGN_CHAT_API_OK = false;
-      closeCampaignChatSocket();
-      if (campaignChatStatus) campaignChatStatus.textContent = 'Chat API unavailable, using local log.';
+      if (campaignChatStatus) campaignChatStatus.textContent = 'Send failed. Retrying...';
+      scheduleCampaignChatRefresh();
+      return false;
     }
   }
   addCampaignChatMessage(payload);
