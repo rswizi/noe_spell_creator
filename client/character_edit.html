@@ -8781,12 +8781,13 @@ function renderAbilitySpellsBucket(){
     const flavor = sp.flavor || sp.flavour || '';
     const userFlavor = meta.flavor || meta.flavour || '';
     const effectsLines = spellEffectsLines(sp, meta);
-    const effectsHtml = effectsLines.length ? `Effects:<br>${effectsLines.join('<br>')}` : '';
+    const effectsHtml = effectsLines.length ? effectsLines.join('<br>') : '';
     const costParts = [];
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
     const range = sp.range != null ? `Range: ${sp.range}` : '';
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
+    const metaLine = [cost || '', range || '', aoe || ''].filter(Boolean).join(' || ');
     const div = document.createElement('div');
     div.className = 'abi-item abi-card';
     const statusLabel = (meta.status === 'learnt') ? 'Prepared' : 'Learnt';
@@ -8811,11 +8812,11 @@ function renderAbilitySpellsBucket(){
             <span class="tag abi-placeholder">Tag</span>
           </div>
         </div>
+        ${metaLine ? `<div class="muted" style="font-size:.8rem">${metaLine}</div>` : ''}
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
         ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
-        <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
       </div>
       <div class="abi-meta">
         <div class="abi-actions">
@@ -8863,12 +8864,13 @@ function renderAbilitySpellsBucket(){
     const desc = sp.description || sp.description_long || sp.desc || '';
     const flavor = sp.flavor || '';
     const effectsLines = spellEffectsLines(sp);
-    const effectsHtml = effectsLines.length ? `Effects:<br>${effectsLines.join('<br>')}` : '';
+    const effectsHtml = effectsLines.length ? effectsLines.join('<br>') : '';
     const costParts = [];
     if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
     const cost = costParts.join(' || ');
     const range = sp.range != null ? `Range: ${sp.range}` : '';
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
+    const metaLine = [cost || '', range || '', aoe || ''].filter(Boolean).join(' || ');
     const div = document.createElement('div');
     div.className = 'abi-item abi-card';
     const statusLabel = 'Craftomancy';
@@ -8893,10 +8895,10 @@ function renderAbilitySpellsBucket(){
             <span class="tag">Craftomancy</span>
           </div>
         </div>
+        ${metaLine ? `<div class="muted" style="font-size:.8rem">${metaLine}</div>` : ''}
         <div class="muted" style="font-size:.85rem">${desc}</div>
         ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
         ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
-        <div class="muted" style="font-size:.8rem">${cost} ${range?` || ${range}`:''} ${aoe?` || ${aoe}`:''}</div>
       </div>
       <div class="abi-meta">
         <div class="abi-actions">
