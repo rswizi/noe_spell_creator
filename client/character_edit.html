@@ -3691,9 +3691,12 @@ function collectModifierGroups(mods){
   (mods || []).forEach((m, idx)=>{
     const name = String(m?.group || '').trim();
     if (!name) return;
-    const max = 1;
+    const rawMax = m?.group_max_choices ?? m?.group_max_choice ?? m?.group_max ?? m?.groupMaxChoices ?? m?.groupMax;
+    const parsedMax = Number(rawMax);
+    const max = Number.isFinite(parsedMax) ? Math.max(0, parsedMax) : 1;
     const modIdx = Number.isFinite(Number(m?.__mod_idx)) ? Number(m.__mod_idx) : idx;
     const entry = map.get(name) || { name, max, options: [] };
+    if (Number.isFinite(parsedMax)) entry.max = max;
     entry.options.push({ idx: modIdx, mod: m });
     map.set(name, entry);
   });
