@@ -13227,7 +13227,7 @@ async function loadCharacter(){
   fillPersonal();
 
   // Name
-  titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
+  if (titleEl) titleEl.textContent = 'Edit: ' + (CHAR.name || '(unnamed)');
   nameEl.value = (CHAR.name || '').slice(0,22);
   nameEl.addEventListener('input', ()=>{
     if (nameEl.value.length > 22) nameEl.value = nameEl.value.slice(0,22);
@@ -13371,7 +13371,7 @@ async function saveNow(){
     const res = await api('/characters/' + encodeURIComponent(CID), {
       method:'PUT', headers:{ 'content-type':'application/json' }, body: JSON.stringify(payload)
     });
-    titleEl.textContent = 'Edit: ' + (res.character?.name || '(unnamed)');
+    if (titleEl) titleEl.textContent = 'Edit: ' + (res.character?.name || '(unnamed)');
     statusEl.textContent = 'Saved at ' + new Date().toLocaleTimeString();
   }catch(err){
     statusEl.textContent = 'Save failed: ' + err.message;
