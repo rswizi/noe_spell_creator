@@ -121,6 +121,8 @@
     .abi-bucket h3 { margin:6px 0 8px; font-size:1rem; }
     .abi-head { display:flex; align-items:center; gap:6px; }
     .abi-head .abi-hide-toggle { padding:4px 8px; }
+    .abi-sort-row { flex-wrap:nowrap; }
+    .arc-row { flex-wrap:nowrap; }
     .abi-list { display:grid; gap:8px; }
     .abi-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #2b2b3b; border-radius:12px; background:linear-gradient(145deg, #14141d, #0f0f16); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
     .abi-item.abi-block { flex-direction: column; align-items: stretch; }
@@ -750,7 +752,7 @@
               <span class="muted">(auto unlock by level)</span>
             </summary>
             <div class="panel-body">
-              <div class="row" style="gap:8px; flex-wrap:wrap;">
+              <div class="row arc-row" style="gap:8px;">
                 <select id="arc-select" class="grow"></select>
                 <button id="arc-apply" class="btn">Apply</button>
                 <span id="arc-status" class="muted"></span>
@@ -828,7 +830,7 @@
                       <i class="fa-solid fa-eye-slash"></i>
                     </button>
                   </h3>
-                  <div class="row" style="gap:6px; align-items:center; margin-bottom:6px;">
+                  <div class="row abi-sort-row" style="gap:6px; align-items:center; margin-bottom:6px;">
                     <label class="muted" for="abi-passive-order">Order</label>
                     <select id="abi-passive-order" style="min-width:160px;">
                       <option value="manual">Manual</option>
@@ -845,7 +847,7 @@
                       <i class="fa-solid fa-eye-slash"></i>
                     </button>
                   </h3>
-                  <div class="row" style="gap:6px; align-items:center; margin-bottom:6px;">
+                  <div class="row abi-sort-row" style="gap:6px; align-items:center; margin-bottom:6px;">
                     <label class="muted" for="abi-active-order">Order</label>
                     <select id="abi-active-order" style="min-width:160px;">
                       <option value="manual">Manual</option>
@@ -862,7 +864,7 @@
                       <i class="fa-solid fa-eye-slash"></i>
                     </button>
                   </h3>
-                  <div class="row" style="gap:6px; align-items:center; margin-bottom:6px;">
+                  <div class="row abi-sort-row" style="gap:6px; align-items:center; margin-bottom:6px;">
                     <label class="muted" for="abi-spell-order">Order</label>
                     <select id="abi-spell-order" style="min-width:160px;">
                       <option value="manual">Manual</option>
@@ -870,9 +872,9 @@
                       <option value="za">Z->A</option>
                     </select>
                     <button class="btn small" id="abi-spell-sort">Sort</button>
-                    <label class="row muted" style="gap:6px; align-items:center; margin-left:8px;">
-                      <input type="checkbox" id="abi-spells-only-learned" checked> Prepared Only
-                    </label>
+                    <button class="btn small" id="abi-spells-only-learned" title="Prepared only" aria-pressed="true" style="margin-left:8px;">
+                      <i class="fa-solid fa-book"></i>
+                    </button>
                   </div>
                   <div id="abi-list-spells" class="abi-list"></div>
                 </div>
@@ -981,6 +983,18 @@
             <div class="row" style="gap:10px; flex-wrap:wrap; margin-bottom:8px;">
               <input id="sl-search-q" placeholder="Search spells..." style="flex:1; min-width:240px;">
               <button class="btn" id="sl-search-btn">Search</button>
+            </div>
+            <div class="row" style="gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+              <label class="muted">Category
+                <select id="sl-filter-category" style="min-width:200px;">
+                  <option value="">All categories</option>
+                </select>
+              </label>
+              <label class="muted">School
+                <select id="sl-filter-school" style="min-width:220px;">
+                  <option value="">All schools</option>
+                </select>
+              </label>
             </div>
             <div class="table-wrap">
               <table class="table">
@@ -2845,22 +2859,41 @@ const slAddCancel = document.getElementById('sl-add-cancel');
 const slSearchQ = document.getElementById('sl-search-q');
 const slSearchBtn = document.getElementById('sl-search-btn');
 const slSearchBody = document.getElementById('sl-search-body');
+const slFilterCategory = document.getElementById('sl-filter-category');
+const slFilterSchool = document.getElementById('sl-filter-school');
 const slAddStatus = document.getElementById('sl-add-status');
 const abiSpellsOnlyLearnedEl = document.getElementById('abi-spells-only-learned');
 const ABI_SPELLS_FILTER_KEY = 'abi_spells_only_learned';
 let EFFECTS_BY_ID = {};
 let EFFECTS_PROMISE = null;
+let SL_SEARCH_CACHE = [];
 
 function initAbiSpellsFilter(){
   if (!abiSpellsOnlyLearnedEl) return;
   try{
     const stored = localStorage.getItem(ABI_SPELLS_FILTER_KEY);
-    abiSpellsOnlyLearnedEl.checked = stored ? stored === '1' : true;
+    const onlyPrepared = stored ? stored === '1' : true;
+    setAbiPreparedOnlyUI(onlyPrepared);
   }catch{}
-  abiSpellsOnlyLearnedEl.addEventListener('change', ()=>{
-    try{ localStorage.setItem(ABI_SPELLS_FILTER_KEY, abiSpellsOnlyLearnedEl.checked ? '1' : '0'); }catch{}
+  abiSpellsOnlyLearnedEl.addEventListener('click', ()=>{
+    const next = !getAbiPreparedOnly();
+    setAbiPreparedOnlyUI(next);
+    try{ localStorage.setItem(ABI_SPELLS_FILTER_KEY, next ? '1' : '0'); }catch{}
     renderAbilitySpellsBucket();
   });
+}
+
+function setAbiPreparedOnlyUI(value){
+  if (!abiSpellsOnlyLearnedEl) return;
+  abiSpellsOnlyLearnedEl.setAttribute('aria-pressed', value ? 'true' : 'false');
+  abiSpellsOnlyLearnedEl.title = value ? 'Prepared only' : 'All spells';
+  abiSpellsOnlyLearnedEl.innerHTML = value
+    ? '<i class="fa-solid fa-book"></i>'
+    : '<i class="fa-solid fa-hand"></i>';
+}
+
+function getAbiPreparedOnly(){
+  return abiSpellsOnlyLearnedEl?.getAttribute('aria-pressed') === 'true';
 }
 
 const TITLE_COLOR_STORAGE_PREFIX = 'title_colors:';
@@ -8761,7 +8794,7 @@ function renderAbilitySpellsBucket(){
   const metaMap = SPELLLIST_META.spell_meta || {};
   const pinnedSet = ABI_PINNED.spell || new Set();
   const hideUnpinned = !!ABI_HIDE_UNPINNED.spell;
-  const onlyLearned = !!(abiSpellsOnlyLearnedEl && abiSpellsOnlyLearnedEl.checked);
+  const onlyLearned = getAbiPreparedOnly();
   const ordered = applySpellSort(SPELLLIST_SPELLS, ABI_SORT_SPELLS, metaMap);
   const visible = ordered.filter(sp=> !onlyLearned || (metaMap[sp.id]?.status === 'learnt'));
   const filtered = hideUnpinned
@@ -9035,29 +9068,103 @@ async function searchSpells(q){
   return res.spells || [];
 }
 
+function spellSchoolKey(val){
+  return String(val || '').trim().toLowerCase();
+}
+
+function spellSchoolLabel(raw){
+  const key = spellSchoolKey(raw);
+  if (!key) return '';
+  const found = (SCHOOLS || []).find(s=> String(s.id || '').toLowerCase() === key || String(s.name || '').toLowerCase() === key);
+  return (found?.name || found?.id || raw || '').toString();
+}
+
+function updateSpellSearchFilters(rows){
+  if (!slFilterCategory || !slFilterSchool) return;
+  const prevCat = slFilterCategory.value || '';
+  const prevSchool = slFilterSchool.value || '';
+  const catMap = new Map();
+  const schoolMap = new Map();
+  (rows || []).forEach(sp=>{
+    const catRaw = String(sp.category || '').trim();
+    if (catRaw){
+      const key = catRaw.toLowerCase();
+      if (!catMap.has(key)) catMap.set(key, catRaw);
+    }
+    (sp.schools || []).forEach(s=>{
+      const raw = (s && (s.id || s.name)) ? (s.id || s.name) : s;
+      const key = spellSchoolKey(raw);
+      if (!key) return;
+      if (!schoolMap.has(key)) schoolMap.set(key, spellSchoolLabel(raw));
+    });
+  });
+  slFilterCategory.innerHTML = '<option value="">All categories</option>';
+  Array.from(catMap.entries()).sort((a,b)=> a[1].localeCompare(b[1])).forEach(([key, label])=>{
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = label;
+    slFilterCategory.appendChild(opt);
+  });
+  slFilterSchool.innerHTML = '<option value="">All schools</option>';
+  Array.from(schoolMap.entries()).sort((a,b)=> a[1].localeCompare(b[1])).forEach(([key, label])=>{
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = label;
+    slFilterSchool.appendChild(opt);
+  });
+  if (prevCat && Array.from(slFilterCategory.options).some(o=> o.value === prevCat)) slFilterCategory.value = prevCat;
+  if (prevSchool && Array.from(slFilterSchool.options).some(o=> o.value === prevSchool)) slFilterSchool.value = prevSchool;
+}
+
+function applySpellSearchFilters(rows){
+  const cat = (slFilterCategory?.value || '').toLowerCase();
+  const school = (slFilterSchool?.value || '').toLowerCase();
+  return (rows || []).filter(sp=>{
+    if (cat){
+      const spCat = String(sp.category || '').trim().toLowerCase();
+      if (spCat !== cat) return false;
+    }
+    if (school){
+      const schools = (sp.schools || []).map(s=>{
+        const raw = (s && (s.id || s.name)) ? (s.id || s.name) : s;
+        return spellSchoolKey(raw);
+      });
+      if (!schools.includes(school)) return false;
+    }
+    return true;
+  });
+}
+
+function renderSpellSearchResults(rows){
+  const filtered = applySpellSearchFilters(rows);
+  if (!filtered.length){
+    slSearchBody.innerHTML = '<tr><td colspan="4" class="empty">No results.</td></tr>';
+    return;
+  }
+  slSearchBody.innerHTML = '';
+  filtered.forEach(sp=>{
+    const tr = document.createElement('tr');
+    const schools = (sp.schools || []).map(s=> s.name || s.id || s).join(', ');
+    tr.innerHTML = `
+      <td>${sp.name || 'Spell'}</td>
+      <td>${schools || '-'}</td>
+      <td>${sp.category || '-'}</td>
+      <td><button class="btn small" data-add="${sp.id}">Add</button></td>
+    `;
+    tr.querySelector('button').addEventListener('click', ()=> addSpellsToList([sp.id]));
+    slSearchBody.appendChild(tr);
+  });
+}
+
 async function renderSpellSearch(){
   const q = slSearchQ.value.trim();
   slAddStatus.textContent = '';
   slSearchBody.innerHTML = '<tr><td colspan="4" class="empty">Searching...</td></tr>';
   try{
     const rows = await searchSpells(q);
-    if (!rows.length){
-      slSearchBody.innerHTML = '<tr><td colspan="4" class="empty">No results.</td></tr>';
-      return;
-    }
-    slSearchBody.innerHTML = '';
-    rows.forEach(sp=>{
-      const tr = document.createElement('tr');
-      const schools = (sp.schools||[]).map(s=>s.name||s.id).join(', ');
-      tr.innerHTML = `
-        <td>${sp.name || 'Spell'}</td>
-        <td>${schools || '—'}</td>
-        <td>${sp.category || '—'}</td>
-        <td><button class="btn small" data-add="${sp.id}">Add</button></td>
-      `;
-      tr.querySelector('button').addEventListener('click', ()=> addSpellsToList([sp.id]));
-      slSearchBody.appendChild(tr);
-    });
+    SL_SEARCH_CACHE = rows || [];
+    updateSpellSearchFilters(SL_SEARCH_CACHE);
+    renderSpellSearchResults(SL_SEARCH_CACHE);
   }catch(e){
     slSearchBody.innerHTML = `<tr><td colspan="4" class="empty">Error: ${e.message}</td></tr>`;
   }
@@ -13877,6 +13984,8 @@ xpLedgerClose?.addEventListener('click', ()=> toggleXpLedger(false));
 xpLedgerBackdrop?.addEventListener('click', (e)=>{ if (e.target===xpLedgerBackdrop) toggleXpLedger(false); });
 slSearchBtn.addEventListener('click', renderSpellSearch);
 slSearchQ.addEventListener('keydown', (e)=>{ if (e.key==='Enter') renderSpellSearch(); });
+slFilterCategory?.addEventListener('change', ()=> renderSpellSearchResults(SL_SEARCH_CACHE));
+slFilterSchool?.addEventListener('change', ()=> renderSpellSearchResults(SL_SEARCH_CACHE));
 craftSearchBtn?.addEventListener('click', searchCraftomancySpells);
 craftSearchQ?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchCraftomancySpells(); });
 craftSupremeEl?.addEventListener('change', renderCraftSearchResults);
