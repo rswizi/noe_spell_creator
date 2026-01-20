@@ -466,12 +466,21 @@ function addModifierRow(container, initial={}){
   value.className = 'mod-value';
   value.type = 'number'; value.step = '1'; value.value = initial.value ?? 0;
 
+  const getChoiceMax = (mod)=>{
+    const choice = (mod?.choice && typeof mod.choice === 'object') ? mod.choice : {};
+    const rawChoice = choice.max_choices ?? choice.max_choice ?? choice.choice_max ?? choice.max ?? choice.maxChoices ?? choice.choiceMax;
+    const raw = (rawChoice != null && rawChoice !== '') ? rawChoice
+      : (mod?.max_choices ?? mod?.choice_max ?? mod?.max_choice ?? mod?.choiceMax ?? mod?.choice_max_choices ?? mod?.choiceMaxChoices);
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 1;
+  };
+
   const choiceMax = document.createElement('input');
   choiceMax.className = 'choice-max';
   choiceMax.type = 'number';
   choiceMax.min = '0';
   choiceMax.placeholder = 'Max choices (0 = unlimited)';
-  choiceMax.value = initial?.choice?.max_choices ?? 1;
+  choiceMax.value = getChoiceMax(initial);
   choiceMax.style.display = 'none';
 
   const qStep = document.createElement('input');
