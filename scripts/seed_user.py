@@ -8,7 +8,7 @@ def sha(s): return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 get_col("users").update_one(
     {"username": "wizi"},
-    {"$set": {"username": "wizi", "password_hash": sha("YourPassword"), "role": "admin"}},
+    {"$set": {"username": "wizi", "password_hash": sha("admin"), "role": "admin"}},
     upsert=True
 )
 print("seeded")
