@@ -122,6 +122,8 @@
     .abi-head { display:flex; align-items:center; gap:6px; }
     .abi-head .abi-hide-toggle { padding:4px 8px; }
     .abi-sort-row { flex-wrap:nowrap; }
+    .abi-sort-row .btn { padding:4px 8px; font-size:.8rem; }
+    .abi-sort-row select { min-width:120px; width:120px; }
     .arc-row { flex-wrap:nowrap; }
     .abi-list { display:grid; gap:8px; }
     .abi-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #2b2b3b; border-radius:12px; background:linear-gradient(145deg, #14141d, #0f0f16); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
@@ -815,7 +817,9 @@
               <button class="btn small" id="awak-open-add">Add awakening</button>
             </summary>
             <div class="panel-body">
-              <div class="abi-hint" id="talent-counter">Talents: -- / --</div>
+              <div class="stat-counter" style="margin-top:6px;">
+                <span class="pill" id="talent-counter">Talents: -- / --</span>
+              </div>
               <div class="stat-counter" style="margin-top:6px;">
                 <span class="pill" id="expertise-counter">Expertise: -- / --</span>
                 <span class="pill" id="dima-counter">Divine Manifestation: -- / --</span>
@@ -825,53 +829,47 @@
 
               <div class="abi-grid" style="margin-top:16px;">
                 <div class="abi-bucket">
-                  <h3 class="abi-head">Passive
-                    <button class="btn small abi-hide-toggle" type="button" data-bucket="passive" title="Hide unpinned" aria-pressed="false">
-                      <i class="fa-solid fa-eye-slash"></i>
-                    </button>
-                  </h3>
+                  <h3 class="abi-head">Passive</h3>
                   <div class="row abi-sort-row" style="gap:6px; align-items:center; margin-bottom:6px;">
-                    <label class="muted" for="abi-passive-order">Order</label>
                     <select id="abi-passive-order" style="min-width:160px;">
                       <option value="manual">Manual</option>
                       <option value="az">A->Z</option>
                       <option value="za">Z->A</option>
                     </select>
                     <button class="btn small" id="abi-passive-sort">Sort</button>
+                    <button class="btn small abi-hide-toggle" type="button" data-bucket="passive" title="Hide unpinned" aria-pressed="false">
+                      <i class="fa-solid fa-eye-slash"></i>
+                    </button>
                   </div>
                   <div id="abi-list-passive" class="abi-list"></div>
                 </div>
                 <div class="abi-bucket">
-                  <h3 class="abi-head">Active
-                    <button class="btn small abi-hide-toggle" type="button" data-bucket="active" title="Hide unpinned" aria-pressed="false">
-                      <i class="fa-solid fa-eye-slash"></i>
-                    </button>
-                  </h3>
+                  <h3 class="abi-head">Active</h3>
                   <div class="row abi-sort-row" style="gap:6px; align-items:center; margin-bottom:6px;">
-                    <label class="muted" for="abi-active-order">Order</label>
                     <select id="abi-active-order" style="min-width:160px;">
                       <option value="manual">Manual</option>
                       <option value="az">A->Z</option>
                       <option value="za">Z->A</option>
                     </select>
                     <button class="btn small" id="abi-active-sort">Sort</button>
+                    <button class="btn small abi-hide-toggle" type="button" data-bucket="active" title="Hide unpinned" aria-pressed="false">
+                      <i class="fa-solid fa-eye-slash"></i>
+                    </button>
                   </div>
                   <div id="abi-list-active" class="abi-list"></div>
                 </div>
                 <div class="abi-bucket">
-                  <h3 class="abi-head">Spells (from linked list)
-                    <button class="btn small abi-hide-toggle" type="button" data-bucket="spell" title="Hide unpinned" aria-pressed="false">
-                      <i class="fa-solid fa-eye-slash"></i>
-                    </button>
-                  </h3>
+                  <h3 class="abi-head">Spells (from linked list)</h3>
                   <div class="row abi-sort-row" style="gap:6px; align-items:center; margin-bottom:6px;">
-                    <label class="muted" for="abi-spell-order">Order</label>
                     <select id="abi-spell-order" style="min-width:160px;">
                       <option value="manual">Manual</option>
                       <option value="az">A->Z</option>
                       <option value="za">Z->A</option>
                     </select>
                     <button class="btn small" id="abi-spell-sort">Sort</button>
+                    <button class="btn small abi-hide-toggle" type="button" data-bucket="spell" title="Hide unpinned" aria-pressed="false">
+                      <i class="fa-solid fa-eye-slash"></i>
+                    </button>
                     <button class="btn small" id="abi-spells-only-learned" title="Prepared only" aria-pressed="true" style="margin-left:8px;">
                       <i class="fa-solid fa-book"></i>
                     </button>
@@ -989,6 +987,10 @@
                 <select id="sl-filter-category" style="min-width:200px;">
                   <option value="">All categories</option>
                 </select>
+              </label>
+              <label class="row muted" style="gap:6px; align-items:center;">
+                <input type="checkbox" id="sl-filter-category-lower">
+                or Lower
               </label>
               <label class="muted">School
                 <select id="sl-filter-school" style="min-width:220px;">
@@ -1930,6 +1932,7 @@ const CHARACS = [
 const NATURES = ['Fire','Lightning','Water','Earth','Wind','Sun','Moon','Ki'];
 const INTENSITIES = ['Fire','Water','Earth','Wind','Lightning','Sun','Moon','Ki'];
 const SUB_TIER_SLOTS = {1:1, 2:3, 3:5, 4:7};
+const SUB_TIER_MIN_LEVELS = {1:1, 2:25, 3:50, 4:75};
 const SUB_TYPES = [
   { key:'lethality', label:'Lethality' },
   { key:'blessing', label:'Blessing' },
@@ -2860,6 +2863,7 @@ const slSearchQ = document.getElementById('sl-search-q');
 const slSearchBtn = document.getElementById('sl-search-btn');
 const slSearchBody = document.getElementById('sl-search-body');
 const slFilterCategory = document.getElementById('sl-filter-category');
+const slFilterCategoryLower = document.getElementById('sl-filter-category-lower');
 const slFilterSchool = document.getElementById('sl-filter-school');
 const slAddStatus = document.getElementById('sl-add-status');
 const abiSpellsOnlyLearnedEl = document.getElementById('abi-spells-only-learned');
@@ -3132,6 +3136,7 @@ const pBackstoryEl = document.getElementById('p-backstory');
   updateSubSpecialFields();
 })();
 subOpenBtn?.addEventListener('click', ()=>{
+  updateSubTierOptions();
   subModal?.classList.remove('hidden');
   subBackdrop?.classList.remove('hidden');
   subModal?.classList.add('open');
@@ -3624,6 +3629,27 @@ function updateSubSpecialFields(){
   subNatureEl.style.display = subNatureLabel.style.display = isBless ? '' : 'none';
 }
 
+function minLevelForSubTier(tier){
+  return SUB_TIER_MIN_LEVELS[Number(tier) || 1] || 1;
+}
+
+function updateSubTierOptions(){
+  if (!subTierEl) return;
+  const lvl = Math.max(1, Math.floor(Number(levelEl?.value || CHAR?.level || 1)));
+  let firstAllowed = null;
+  Array.from(subTierEl.options).forEach(opt=>{
+    const tier = Number(opt.value || 1);
+    const allowed = lvl >= minLevelForSubTier(tier);
+    opt.disabled = !allowed;
+    if (allowed && firstAllowed === null) firstAllowed = opt.value;
+  });
+  const current = subTierEl.value;
+  const currentOpt = Array.from(subTierEl.options).find(o=> o.value === current);
+  if (!currentOpt || currentOpt.disabled){
+    if (firstAllowed !== null) subTierEl.value = firstAllowed;
+  }
+}
+
 function sublimationDescription(sub){
   const t = (sub.type || '').toLowerCase();
   const tier = Math.min(4, Math.max(1, Number(sub.tier) || 1));
@@ -3701,6 +3727,12 @@ function addSublimationFromForm(){
   const skill = subSkillEl.value || '';
   const nature = subNatureEl.value || '';
   if (!type){ subWarningEl.textContent = 'Pick a type'; return; }
+  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const minLvl = minLevelForSubTier(tier);
+  if (lvl < minLvl){
+    subWarningEl.textContent = `Tier ${tier} requires level ${minLvl}.`;
+    return;
+  }
   if (type === 'excellence' && !skill){ subWarningEl.textContent = 'Choose a skill for Excellence'; return; }
   if (type === 'blessing' && !nature){ subWarningEl.textContent = 'Choose a nature for Blessing'; return; }
   if (type !== 'excellence' && SUBLIMATIONS.some(s=>s.type===type)){
@@ -3711,7 +3743,6 @@ function addSublimationFromForm(){
     subWarningEl.textContent = 'That skill already has an Excellence';
     return;
   }
-  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
   const cap = effectiveSublimationSlots(lvl);
   const newUsed = slotsUsed(SUBLIMATIONS) + (SUB_TIER_SLOTS[tier] || 0);
   if (newUsed > cap){
@@ -8708,6 +8739,7 @@ function addXp(amount){
   renderXpProgress();
   updateDerived();
   renderSublimations();
+  updateSubTierOptions();
   refreshArchetypeAbilities();
   logXpChange('Add XP', XP - prevXp, `Added ${inc} XP`);
   queueSave();
@@ -8724,6 +8756,7 @@ function setLevelManual(lvl){
   renderXpProgress();
   updateDerived();
   renderSublimations();
+  updateSubTierOptions();
   refreshArchetypeAbilities();
   logXpChange('Set level', XP - prevXp, `Set level to ${val}`);
   queueSave();
@@ -8977,6 +9010,7 @@ function renderAbilitySpellsBucket(){
 }
 
 function openSpellAddModal(){
+  populateSpellSearchSchools();
   slAddModal.classList.remove('hidden');
   slAddModal.classList.add('open');
   slAddBackdrop.classList.add('open');
@@ -9062,87 +9096,44 @@ async function addSpellsToList(ids){
   await reloadSpellListData();
 }
 
-async function searchSpells(q){
-  const qs = q ? `?name=${encodeURIComponent(q)}` : '';
-  const res = await api('/spells'+qs);
+async function searchSpells(q, { category = '', schoolId = '' } = {}){
+  const params = new URLSearchParams();
+  if (q) params.set('name', q);
+  if (category) params.set('category', category);
+  if (schoolId) params.set('school_id', schoolId);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const res = await api('/spells' + qs);
   return res.spells || [];
 }
 
-function spellSchoolKey(val){
-  return String(val || '').trim().toLowerCase();
-}
-
-function spellSchoolLabel(raw){
-  const key = spellSchoolKey(raw);
-  if (!key) return '';
-  const found = (SCHOOLS || []).find(s=> String(s.id || '').toLowerCase() === key || String(s.name || '').toLowerCase() === key);
-  return (found?.name || found?.id || raw || '').toString();
-}
-
 function updateSpellSearchFilters(rows){
-  if (!slFilterCategory || !slFilterSchool) return;
+  if (!slFilterCategory) return;
   const prevCat = slFilterCategory.value || '';
-  const prevSchool = slFilterSchool.value || '';
   const catMap = new Map();
-  const schoolMap = new Map();
   (rows || []).forEach(sp=>{
     const catRaw = String(sp.category || '').trim();
     if (catRaw){
       const key = catRaw.toLowerCase();
       if (!catMap.has(key)) catMap.set(key, catRaw);
     }
-    (sp.schools || []).forEach(s=>{
-      const raw = (s && (s.id || s.name)) ? (s.id || s.name) : s;
-      const key = spellSchoolKey(raw);
-      if (!key) return;
-      if (!schoolMap.has(key)) schoolMap.set(key, spellSchoolLabel(raw));
-    });
   });
   slFilterCategory.innerHTML = '<option value="">All categories</option>';
   Array.from(catMap.entries()).sort((a,b)=> a[1].localeCompare(b[1])).forEach(([key, label])=>{
     const opt = document.createElement('option');
-    opt.value = key;
+    opt.value = label;
     opt.textContent = label;
     slFilterCategory.appendChild(opt);
   });
-  slFilterSchool.innerHTML = '<option value="">All schools</option>';
-  Array.from(schoolMap.entries()).sort((a,b)=> a[1].localeCompare(b[1])).forEach(([key, label])=>{
-    const opt = document.createElement('option');
-    opt.value = key;
-    opt.textContent = label;
-    slFilterSchool.appendChild(opt);
-  });
   if (prevCat && Array.from(slFilterCategory.options).some(o=> o.value === prevCat)) slFilterCategory.value = prevCat;
-  if (prevSchool && Array.from(slFilterSchool.options).some(o=> o.value === prevSchool)) slFilterSchool.value = prevSchool;
-}
-
-function applySpellSearchFilters(rows){
-  const cat = (slFilterCategory?.value || '').toLowerCase();
-  const school = (slFilterSchool?.value || '').toLowerCase();
-  return (rows || []).filter(sp=>{
-    if (cat){
-      const spCat = String(sp.category || '').trim().toLowerCase();
-      if (spCat !== cat) return false;
-    }
-    if (school){
-      const schools = (sp.schools || []).map(s=>{
-        const raw = (s && (s.id || s.name)) ? (s.id || s.name) : s;
-        return spellSchoolKey(raw);
-      });
-      if (!schools.includes(school)) return false;
-    }
-    return true;
-  });
 }
 
 function renderSpellSearchResults(rows){
-  const filtered = applySpellSearchFilters(rows);
-  if (!filtered.length){
+  if (!rows.length){
     slSearchBody.innerHTML = '<tr><td colspan="4" class="empty">No results.</td></tr>';
     return;
   }
   slSearchBody.innerHTML = '';
-  filtered.forEach(sp=>{
+  rows.forEach(sp=>{
     const tr = document.createElement('tr');
     const schools = (sp.schools || []).map(s=> s.name || s.id || s).join(', ');
     tr.innerHTML = `
@@ -9156,13 +9147,52 @@ function renderSpellSearchResults(rows){
   });
 }
 
+function buildCategoryOrder(){
+  const order = [];
+  Array.from(slFilterCategory?.options || []).forEach(opt=>{
+    const val = String(opt.value || '').trim();
+    if (val) order.push(val);
+  });
+  return order;
+}
+
+function applyCategoryLowerFilter(rows){
+  const category = String(slFilterCategory?.value || '').trim();
+  if (!category) return rows || [];
+  if (!(slFilterCategoryLower && slFilterCategoryLower.checked)) return rows || [];
+  const order = buildCategoryOrder();
+  const targetIdx = order.indexOf(category);
+  if (targetIdx < 0) return rows || [];
+  const allowed = new Set(order.slice(0, targetIdx + 1).map(v=> v.toLowerCase()));
+  return (rows || []).filter(sp=> allowed.has(String(sp.category || '').trim().toLowerCase()));
+}
+
+async function populateSpellSearchSchools(){
+  if (!slFilterSchool) return;
+  try{
+    if (!SCHOOLS.length) await fetchSchools();
+  }catch{}
+  const prev = slFilterSchool.value || '';
+  const sorted = (SCHOOLS || []).slice().sort((a,b)=> String(a.name || a.id || '').localeCompare(String(b.name || b.id || '')));
+  slFilterSchool.innerHTML = '<option value="">All schools</option>';
+  sorted.forEach(s=>{
+    const opt = document.createElement('option');
+    opt.value = String(s.id || '');
+    opt.textContent = s.name || s.id;
+    slFilterSchool.appendChild(opt);
+  });
+  if (prev && Array.from(slFilterSchool.options).some(o=> o.value === prev)) slFilterSchool.value = prev;
+}
+
 async function renderSpellSearch(){
   const q = slSearchQ.value.trim();
+  const category = (slFilterCategory?.value || '').trim();
+  const schoolId = (slFilterSchool?.value || '').trim();
   slAddStatus.textContent = '';
   slSearchBody.innerHTML = '<tr><td colspan="4" class="empty">Searching...</td></tr>';
   try{
-    const rows = await searchSpells(q);
-    SL_SEARCH_CACHE = rows || [];
+    const rows = await searchSpells(q, { category, schoolId });
+    SL_SEARCH_CACHE = applyCategoryLowerFilter(rows || []);
     updateSpellSearchFilters(SL_SEARCH_CACHE);
     renderSpellSearchResults(SL_SEARCH_CACHE);
   }catch(e){
@@ -13615,6 +13645,7 @@ async function loadCharacter(){
   renderXpProgress();
   updateDerived();
   renderSublimations();
+  updateSubTierOptions();
   refreshArchetypeAbilities();
   queueSave();
 });
@@ -13631,6 +13662,7 @@ async function loadCharacter(){
   renderStatistics();
   updateDerived();
   renderSublimations();
+  updateSubTierOptions();
   await loadArchetypesList();
   await loadSpeciesList();
   await loadBoonList();
@@ -13984,8 +14016,9 @@ xpLedgerClose?.addEventListener('click', ()=> toggleXpLedger(false));
 xpLedgerBackdrop?.addEventListener('click', (e)=>{ if (e.target===xpLedgerBackdrop) toggleXpLedger(false); });
 slSearchBtn.addEventListener('click', renderSpellSearch);
 slSearchQ.addEventListener('keydown', (e)=>{ if (e.key==='Enter') renderSpellSearch(); });
-slFilterCategory?.addEventListener('change', ()=> renderSpellSearchResults(SL_SEARCH_CACHE));
-slFilterSchool?.addEventListener('change', ()=> renderSpellSearchResults(SL_SEARCH_CACHE));
+slFilterCategory?.addEventListener('change', renderSpellSearch);
+slFilterCategoryLower?.addEventListener('change', renderSpellSearch);
+slFilterSchool?.addEventListener('change', renderSpellSearch);
 craftSearchBtn?.addEventListener('click', searchCraftomancySpells);
 craftSearchQ?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchCraftomancySpells(); });
 craftSupremeEl?.addEventListener('change', renderCraftSearchResults);
