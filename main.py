@@ -459,7 +459,11 @@ async def post_campaign_chat(cid: str, req: Request):
     _require_campaign_access(cid, user, role)
     body = await req.json()
     doc = _chat_doc(cid, user, body or {})
-    CAMPAIGN_CHAT_COL.insert_one(doc)
+    try:
+        CAMPAIGN_CHAT_COL.insert_one(doc)
+    except DuplicateKeyError:
+        doc["id"] = f"msg_{secrets.token_hex(4)}"
+        CAMPAIGN_CHAT_COL.insert_one(doc)
     await _broadcast_campaign_chat(cid, doc)
     return {"status": "success", "message": doc}
 

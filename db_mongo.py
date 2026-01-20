@@ -84,6 +84,18 @@ def sync_counters() -> None:
             except Exception:
                 pass
         db.counters.update_one({"_id": coll}, {"$max": {"seq": max_id}}, upsert=True)
+    max_chat = 0
+    for d in db.campaign_chat.find({}, {"id": 1, "_id": 0}):
+        raw = str(d.get("id", "") or "")
+        match = re.search(r"(\d+)$", raw)
+        if not match:
+            continue
+        try:
+            max_chat = max(max_chat, int(match.group(1)))
+        except Exception:
+            pass
+    if max_chat:
+        db.counters.update_one({"_id": "campaign_chat"}, {"$max": {"seq": max_chat}}, upsert=True)
 
 def spell_sig(activation: str, range_val: int, aoe: str, duration: int, effect_ids: List[str]) -> str:
     """Stable signature for a spell's parameters (NOT the name)."""
