@@ -451,6 +451,7 @@ function addModifierRow(container, initial={}){
     const isCustom = target.value === '__custom__';
     custom.style.display = isCustom ? '' : 'none';
     if (!isCustom) custom.value = '';
+    syncChoiceState();
   });
 
   const mode = document.createElement('select');
@@ -462,9 +463,19 @@ function addModifierRow(container, initial={}){
   });
 
   const value = document.createElement('input');
+  value.className = 'mod-value';
   value.type = 'number'; value.step = '1'; value.value = initial.value ?? 0;
 
+  const choiceMax = document.createElement('input');
+  choiceMax.className = 'choice-max';
+  choiceMax.type = 'number';
+  choiceMax.min = '0';
+  choiceMax.placeholder = 'Max choices (0 = unlimited)';
+  choiceMax.value = initial?.choice?.max_choices ?? 1;
+  choiceMax.style.display = 'none';
+
   const qStep = document.createElement('input');
+  qStep.className = 'quality-step';
   qStep.type = 'number'; qStep.step = '1'; qStep.placeholder = '+ per quality'; qStep.value = initial.quality_step ?? '';
 
   const note = document.createElement('input');
@@ -480,10 +491,18 @@ function addModifierRow(container, initial={}){
   rm.className = 'btn secondary'; rm.type='button'; rm.textContent='Remove';
   rm.addEventListener('click', ()=> row.remove());
 
+  const syncChoiceState = ()=>{
+    const isChoice = (target.value || '').startsWith('choice:');
+    choiceMax.style.display = isChoice ? '' : 'none';
+    if (!isChoice) choiceMax.value = 1;
+  };
+  syncChoiceState();
+
   row.appendChild(target);
   row.appendChild(custom);
   row.appendChild(mode);
   row.appendChild(value);
+  row.appendChild(choiceMax);
   row.appendChild(qStep);
   row.appendChild(note);
   row.appendChild(group);
@@ -496,17 +515,21 @@ function collectModifiers(container){
   container.querySelectorAll('.mod-row').forEach(row=>{
     const targetSel = row.querySelector('select');
     const custom = row.querySelector('.custom');
+    const choiceMaxEl = row.querySelector('.choice-max');
     const target = targetSel.value === '__custom__' ? (custom.value||'').trim() : (targetSel.value || custom.value || '').trim();
     if (!target) return;
     const mode = row.querySelectorAll('select')[1]?.value || 'add';
-    const nums = row.querySelectorAll('input[type=\"number\"]');
-    const val = parseFloat(nums[0]?.value || '0');
-    const qStep = parseFloat(nums[1]?.value || '0');
+    const val = parseFloat(row.querySelector('.mod-value')?.value || '0');
+    const qStep = parseFloat(row.querySelector('.quality-step')?.value || '0');
     const note = row.querySelector('.note')?.value || '';
     const g = row.querySelector('.group')?.children || [];
     const groupName = g[0]?.value || '';
     const groupMax = parseInt(g[1]?.value || '0', 10);
     const mod = { target, mode, value: val, note };
+    if (target.startsWith('choice:')){
+      const kind = target.replace('choice:','');
+      mod.choice = { kind, max_choices: Math.max(0, Number(choiceMaxEl?.value || 0)) || 1, choices: [], restrict: [] };
+    }
     if (!Number.isNaN(qStep) && qStep) mod.quality_step = qStep;
     if (groupName){ mod.group = groupName; mod.group_max_choices = Math.max(0, groupMax); }
     mods.push(mod);

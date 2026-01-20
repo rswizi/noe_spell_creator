@@ -855,7 +855,16 @@ function addModRow(initial={}){
     const isCustom = target.value === "__custom__";
     custom.style.display = isCustom ? "" : "none";
     if (!isCustom) custom.value = "";
+    syncChoiceState();
   });
+
+  const choiceMax = document.createElement("input");
+  choiceMax.className = "choice-max";
+  choiceMax.type = "number";
+  choiceMax.min = "0";
+  choiceMax.placeholder = "Max choices (0 = unlimited)";
+  choiceMax.value = initial?.choice?.max_choices ?? 1;
+  choiceMax.style.display = "none";
 
   const mode = document.createElement("select");
   ["add","mul","set"].forEach(m=>{
@@ -866,9 +875,11 @@ function addModRow(initial={}){
   });
 
   const value = document.createElement("input");
+  value.className = "mod-value";
   value.type = "number"; value.step = "0.1"; value.value = initial.value ?? 0;
 
   const qStep = document.createElement("input");
+  qStep.className = "quality-step";
   qStep.type = "number"; qStep.step = "0.1"; qStep.placeholder = "+ per quality"; qStep.value = initial.quality_step ?? "";
 
   const note = document.createElement("input");
@@ -886,10 +897,18 @@ function addModRow(initial={}){
   rm.type="button"; rm.textContent = "Remove";
   rm.addEventListener("click", ()=> row.remove());
 
+  const syncChoiceState = ()=>{
+    const isChoice = (target.value || "").startsWith("choice:");
+    choiceMax.style.display = isChoice ? "" : "none";
+    if (!isChoice) choiceMax.value = 1;
+  };
+  syncChoiceState();
+
   row.appendChild(target);
   row.appendChild(custom);
   row.appendChild(mode);
   row.appendChild(value);
+  row.appendChild(choiceMax);
   row.appendChild(qStep);
   row.appendChild(note);
   row.appendChild(group);
@@ -902,11 +921,12 @@ function collectModifiers(){
   document.querySelector("#mod-list").querySelectorAll(".mod-row").forEach(row=>{
     const targetSel = row.querySelector("select");
     const custom = row.querySelector(".custom");
+    const choiceMaxEl = row.querySelector(".choice-max");
     const target = targetSel.value === "__custom__" ? (custom.value||"").trim() : (targetSel.value || custom.value || "").trim();
     if (!target) return;
     const mode = row.querySelectorAll("select")[1]?.value || "add";
-    const value = parseFloat(row.querySelector('input[type="number"]').value || "0");
-    const qStep = parseFloat(row.querySelectorAll('input[type="number"]')[1]?.value || "0");
+    const value = parseFloat(row.querySelector(".mod-value")?.value || "0");
+    const qStep = parseFloat(row.querySelector(".quality-step")?.value || "0");
     const noteInput = row.querySelector(".note");
     let note = noteInput.value || "";
     if (qStep){ note = `${note ? note+" " : ""}(+${qStep}/quality)`; }
@@ -914,6 +934,10 @@ function collectModifiers(){
     const groupName = g[0]?.value || "";
     const groupMax = parseInt(g[1]?.value || "0", 10);
     const mod = { target, mode, value, note, quality_step: Number.isFinite(qStep) ? qStep : 0 };
+    if (target.startsWith("choice:")){
+      const kind = target.replace("choice:","");
+      mod.choice = { kind, max_choices: Math.max(0, Number(choiceMaxEl?.value || 0)) || 1, choices: [], restrict: [] };
+    }
     if (groupName){ mod.group = groupName; mod.group_max_choices = Math.max(0, groupMax); }
     mods.push(mod);
   });
