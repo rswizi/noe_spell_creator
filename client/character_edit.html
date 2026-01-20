@@ -1006,6 +1006,7 @@
                 <div class="combat-vitals">
                   <label class="muted">HP <input id="cur-hp" type="number" min="0" class="combat-num"></label>
                   <label class="muted">EN <input id="cur-en" type="number" min="0" class="combat-num"></label>
+                  <label class="muted">nEN <input id="cur-nen" type="number" min="0" class="combat-num"></label>
                   <label class="muted">FO <input id="cur-fo" type="number" min="0" class="combat-num"></label>
                   <label class="muted">SP <input id="cur-sp" type="number" min="0" class="combat-num"></label>
                   <label class="muted">TX <input id="cur-tx" type="number" min="0" class="combat-num"></label>
@@ -2394,6 +2395,7 @@ const ovSubSlotsEl = document.getElementById('ov-sub-slots');
 const ovComplexSchoolsEl = document.getElementById('ov-complex-schools');
 const curHpEl = document.getElementById('cur-hp');
 const curEnEl = document.getElementById('cur-en');
+const curNenEl = document.getElementById('cur-nen');
 const curFoEl = document.getElementById('cur-fo');
 const curSpEl = document.getElementById('cur-sp');
 const curTxEl = document.getElementById('cur-tx');
@@ -3092,6 +3094,11 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
       updateDerived(); queueSave();
     });
   });
+  curNenEl?.addEventListener('input', ()=>{
+    const st = combatState();
+    st.nen = Math.max(0, Number(curNenEl.value || 0));
+    queueSave();
+  });
 
   function bindOverrideInput(el, key){
     if (!el) return;
@@ -3349,6 +3356,7 @@ function makeDefaultStats(){
   };
   stats.combat = {
     max_hp_damage: 0,
+    nen: 0,
     defense_skills: ["Dodge", "Evasion", "Blocking", "Absorption"],
     tension: 3,
     tension_strategy: "Offensive",
@@ -3407,6 +3415,7 @@ function combatState(){
   if (!CHAR?.stats) CHAR.stats = normalizeStats(CHAR?.stats || {});
   if (!CHAR.stats.combat) CHAR.stats.combat = normalizeStats({}).combat;
   if (!Number.isFinite(Number(CHAR.stats.combat.max_hp_damage))) CHAR.stats.combat.max_hp_damage = 0;
+  if (!Number.isFinite(Number(CHAR.stats.combat.nen))) CHAR.stats.combat.nen = 0;
   if (!CHAR.stats.combat.condition_durations || typeof CHAR.stats.combat.condition_durations !== 'object'){
     CHAR.stats.combat.condition_durations = {};
   }
@@ -12017,9 +12026,8 @@ function renderCombatSpellList(){
     rendered += 1;
     const id = String(sp?.id || '');
     const effectsLines = spellEffectsLines(sp, meta);
-    const costParts = [];
-    if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
-    const cost = costParts.join(' || ');
+    const costInfo = spellCostDisplay(sp);
+    const cost = costInfo.label;
     const canStayActive = eligibleIds.has(id);
     const isActive = activeSet.has(id);
     const isDuration = durationSet.has(id);
@@ -12085,9 +12093,8 @@ function renderCombatSpellList(){
     if (search && !String(name).toLowerCase().includes(search)) return;
     rendered += 1;
     const effectsLines = spellEffectsLines(sp);
-    const costParts = [];
-    if (sp.en_cost != null) costParts.push(`EN: ${sp.en_cost}`);
-    const cost = costParts.join(' || ');
+    const costInfo = spellCostDisplay(sp);
+    const cost = costInfo.label;
     const row = document.createElement('div');
     row.className = 'combat-entry';
     row.innerHTML = `
@@ -12535,6 +12542,51 @@ function applyHealAmount(amount){
   appendRollLog(entry);
 }
 
+function addNen(amount){
+  const inc = Math.max(0, Number(amount || 0));
+  if (!inc) return;
+  const st = combatState();
+  st.nen = Math.max(0, Number(st.nen || 0) + inc);
+  if (curNenEl) curNenEl.value = st.nen;
+  queueSave();
+}
+
+function spellSchoolCostMode(sp){
+  const ids = [];
+  const schools = sp?.schools;
+  if (Array.isArray(schools)){
+    schools.forEach(s=>{
+      if (!s) return;
+      if (typeof s === 'string') ids.push(s);
+      else if (s.id) ids.push(s.id);
+      else if (s.school_id) ids.push(s.school_id);
+      else if (s.name) ids.push(s.name);
+    });
+  }
+  const rawSchool = sp?.school || sp?.school_id;
+  if (rawSchool){
+    if (typeof rawSchool === 'string') ids.push(rawSchool);
+    else if (rawSchool.id) ids.push(rawSchool.id);
+    else if (rawSchool.name) ids.push(rawSchool.name);
+  }
+  const found = ids.map(id=>{
+    const key = String(id || '').trim().toLowerCase();
+    return (SCHOOLS || []).find(s=> String(s.id||'').toLowerCase() === key || String(s.name||'').toLowerCase() === key);
+  }).filter(Boolean);
+  if (found.some(s=> (s.cost_mode || '').toLowerCase() === 'hp')) return 'hp';
+  if (found.some(s=> (s.cost_mode || '').toLowerCase() === 'nen')) return 'nen';
+  return 'en';
+}
+
+function spellCostDisplay(sp){
+  const en = Number(sp?.en_cost || 0);
+  if (!Number.isFinite(en) || en === 0) return { label: '', mode: 'en', enCost: 0 };
+  const mode = spellSchoolCostMode(sp);
+  if (mode === 'hp') return { label: `HP: ${en * 5}`, mode, enCost: en };
+  if (mode === 'nen') return { label: `nEN: ${en}`, mode, enCost: en };
+  return { label: `EN: ${en}`, mode, enCost: en };
+}
+
 function applyAbilityCosts(a){
   const costs = a?.active?.costs || {};
   const delta = {
@@ -12544,6 +12596,7 @@ function applyAbilityCosts(a){
     tx: Number(costs.TX || 0),
   };
   applyCurrentDelta(delta);
+  if (Number(costs.EN || 0) > 0) addNen(costs.EN);
   const missing = [];
   ['MO'].forEach(k=>{
     const v = Number(costs[k] || 0);
@@ -12560,9 +12613,18 @@ function applyAbilityCosts(a){
 
 function applySpellCosts(sp){
   const en = Number(sp?.en_cost || 0);
-  if (Number.isFinite(en) && en !== 0){
-    applyCurrentDelta({ en: -en });
+  if (!Number.isFinite(en) || en === 0) return;
+  const mode = spellSchoolCostMode(sp);
+  if (mode === 'hp'){
+    applyCurrentDelta({ hp: -(en * 5) });
+    return;
   }
+  if (mode === 'nen'){
+    addNen(en);
+    return;
+  }
+  applyCurrentDelta({ en: -en });
+  addNen(en);
 }
 
 function rollInitiativeSpecial(){
@@ -12785,6 +12847,9 @@ function applyRest(){
   enGain = Math.floor(enGain * mult);
   foGain = Math.floor(foGain * mult);
   applyCurrentDelta({ hp: hpGain, en: enGain, fo: foGain });
+  const st = combatState();
+  st.nen = 0;
+  if (curNenEl) curNenEl.value = 0;
   openRollModal({ title:'Rest', infoOnly:true, descText:`Recovered HP ${hpGain}, EN ${enGain}, FO ${foGain} (${type}, ${quality})` });
 }
 
@@ -13220,6 +13285,7 @@ function updateDerived(){
   CURRENT = cur;
   if (curHpEl) curHpEl.value = cur.hp;
   if (curEnEl) curEnEl.value = cur.en;
+  if (curNenEl) curNenEl.value = Math.max(0, Number(combatState().nen || 0));
   if (curFoEl) curFoEl.value = cur.fo;
   if (curSpEl) curSpEl.value = cur.sp;
   if (curTxEl) curTxEl.value = cur.tx;

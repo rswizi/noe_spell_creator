@@ -12,6 +12,7 @@ class School:
     upgrade: bool = False
     range_type: str = "A"
     aoe_type: str = "A"
+    cost_mode: str = "en"
 
     def to_dict(self): 
         return asdict(self)
@@ -21,6 +22,8 @@ class School:
         # retro-compat for older dumps
         if "upgrade" not in d and "is_upgrade" in d:
             d["upgrade"] = bool(d.pop("is_upgrade"))
+        if "cost_mode" not in d:
+            d["cost_mode"] = "en"
         return cls(**d)
 
 def load_school(id: str) -> School:
