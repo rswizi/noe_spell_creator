@@ -434,6 +434,8 @@ def _chat_doc(cid: str, user: str, body: dict) -> dict:
     return doc
 
 async def _broadcast_campaign_chat(cid: str, msg: dict) -> None:
+    if "_id" in msg:
+        msg = {k: v for k, v in msg.items() if k != "_id"}
     sockets = list(CAMPAIGN_CHAT_WS.get(cid, set()))
     if not sockets:
         return
@@ -473,6 +475,7 @@ async def post_campaign_chat(cid: str, req: Request):
     except DuplicateKeyError:
         doc["id"] = f"msg_{secrets.token_hex(4)}"
         CAMPAIGN_CHAT_COL.insert_one(doc)
+    doc.pop("_id", None)
     await _broadcast_campaign_chat(cid, doc)
     return {"status": "success", "message": doc}
 
