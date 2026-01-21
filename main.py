@@ -4520,7 +4520,7 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
                 it["stowed_container_id"] = it["container_id"]
     elif move_target is not None:
         # only move / update stow without toggling equip
-        if it.get("equipped"):
+        if it.get("equipped") is not False:
             it["stowed_container_id"] = move_target or _default_stow_container(containers)
         else:
             it["container_id"] = move_target or _default_stow_container(containers)
