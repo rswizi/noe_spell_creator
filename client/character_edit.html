@@ -448,8 +448,8 @@
     .price-choice-card{ max-width:520px; width:min(520px, 96vw); }
     .price-choice-title{ font-weight:700; line-height:1.2; word-break:break-word; }
     .price-choice-grid{ display:grid; gap:8px; }
-    .price-choice-option{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    .price-choice-option input{ margin:0; }
+    .price-choice-option{ display:flex; flex-direction:column; gap:4px; }
+    .price-choice-option select{ width:100%; padding:10px 12px; border-radius:12px; border:1px solid #2a2f3a; background:#0d0f16; color:var(--ink); }
     .price-choice-custom{ display:grid; gap:8px; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
     .price-choice-field{ display:flex; gap:6px; align-items:center; min-width:0; }
     .price-choice-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
@@ -7115,15 +7115,14 @@ async function invPromptPricingChoice(row){
         </div>
         <button id="price-close" class="btn small" style="background:#222635; border-color:#2f3548;">?</button>
       </div>
-      <div class="price-choice-grid">
+    <div class="price-choice-grid">
         <label class="price-choice-option">
-          <input type="radio" name="price-mode" value="market" checked> <span>Buy at market price</span>
-        </label>
-        <label class="price-choice-option">
-          <input type="radio" name="price-mode" value="custom"> <span>Custom</span>
-        </label>
-        <label class="price-choice-option">
-          <input type="radio" name="price-mode" value="take"> <span>Take (price 0)</span>
+          <span>Action</span>
+          <select id="price-mode-select">
+            <option value="market">Buy at market price</option>
+            <option value="custom">Custom</option>
+            <option value="take">Take (price 0)</option>
+          </select>
         </label>
         <div class="price-choice-actions">
           <button id="price-cancel" class="btn small btn-secondary">Cancel</button>
@@ -7141,7 +7140,7 @@ async function invPromptPricingChoice(row){
 
     const applyBtn = card.querySelector('#price-apply');
     applyBtn.addEventListener('click', ()=>{
-      const mode = card.querySelector('input[name="price-mode"]:checked')?.value || 'market';
+      const mode = card.querySelector('#price-mode-select')?.value || 'market';
       if (mode === 'take'){ cleanup({ pricingMode:'take', customPrice:0 }); return; }
       if (mode === 'market'){ cleanup({ pricingMode:'market' }); return; }
       openCustomPriceModal(basePrice).then(choice=>{
