@@ -627,7 +627,7 @@
           <details open class="panel">
             <summary class="hdr">
               <strong>Inventory</strong>
-              <span class="muted">(linked & fully managed here)</span>
+              <span class="muted">(click 'Create & Link' to start.)</span>
             </summary>
             <div class="panel-body">
               <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
@@ -719,7 +719,6 @@
           <details open class="panel">
             <summary class="hdr">
               <strong>Species</strong>
-              <span class="muted">(auto bonus ability)</span>
             </summary>
             <div class="panel-body">
               <div class="row" style="gap:8px; flex-wrap:wrap;">
@@ -735,7 +734,6 @@
           <details open class="panel">
             <summary class="hdr">
               <strong>Boon</strong>
-              <span class="muted">(auto bonus ability)</span>
             </summary>
             <div class="panel-body">
               <div class="row" style="gap:8px; flex-wrap:wrap;">
@@ -751,7 +749,6 @@
           <details open class="panel">
             <summary class="hdr">
               <strong>Archetype</strong>
-              <span class="muted">(auto unlock by level)</span>
             </summary>
             <div class="panel-body">
               <div class="row arc-row" style="gap:8px;">
@@ -770,7 +767,6 @@
           <details open class="panel">
             <summary class="hdr">
               <strong>Expertise</strong>
-              <span class="muted">(unlock by linked skill)</span>
             </summary>
             <div class="panel-body">
               <div id="exp-summary" class="muted"></div>
@@ -783,7 +779,6 @@
           <details open class="panel">
             <summary class="hdr">
               <strong>Divine Manifestation</strong>
-              <span class="muted">(unlock by linked skill)</span>
             </summary>
             <div class="panel-body">
               <div id="dima-summary" class="muted"></div>
@@ -796,7 +791,6 @@
           <details open class="panel">
             <summary class="hdr">
               <strong>Awakenings</strong>
-              <span class="muted">(unlock by level)</span>
             </summary>
             <div class="panel-body">
               <div id="awak-summary" class="muted"></div>
@@ -808,8 +802,7 @@
         <div class="panel">
           <details open class="panel">
             <summary class="hdr">
-              <strong>Abilities on this Character</strong>
-              <span class="muted">(Archetype / Passive / Active)</span>
+              <strong>Abilities</strong>
               <span class="grow"></span>
               <button class="btn small" id="abi-open-add">Add ability</button>
               <button class="btn small" id="exp-open-add">Add expertise</button>
@@ -819,8 +812,6 @@
             <div class="panel-body">
               <div class="stat-counter" style="margin-top:6px;">
                 <span class="pill" id="talent-counter">Talents: -- / --</span>
-              </div>
-              <div class="stat-counter" style="margin-top:6px;">
                 <span class="pill" id="expertise-counter">Expertise: -- / --</span>
                 <span class="pill" id="dima-counter">Divine Manifestation: -- / --</span>
                 <span class="pill" id="awak-counter">Awakenings: -- / --</span>
@@ -859,7 +850,7 @@
                   <div id="abi-list-active" class="abi-list"></div>
                 </div>
                 <div class="abi-bucket">
-                  <h3 class="abi-head">Spells (from linked list)</h3>
+                  <h3 class="abi-head">Spells</h3>
                   <div class="row abi-sort-row" style="gap:6px; align-items:center; margin-bottom:6px;">
                     <select id="abi-spell-order" style="min-width:160px;">
                       <option value="manual">Manual</option>
@@ -888,7 +879,7 @@
           <details open class="panel">
             <summary class="hdr">
               <strong>Spell List</strong>
-              <span class="muted">(linked & managed here)</span>
+              <span class="muted">(click 'Create & Link' to start.)</span>
             </summary>
             <div class="panel-body">
               <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
@@ -1144,6 +1135,16 @@
                 <span class="muted">(equipped)</span>
               </summary>
               <div class="panel-body">
+                <div class="combat-actions-row" style="margin-bottom:8px;">
+                  <select id="combat-special-weapon">
+                    <option value="">Add unarmed/improvised...</option>
+                    <option value="unarmed_brutality">Unarmed (Brutality)</option>
+                    <option value="unarmed_accuracy">Unarmed (Accuracy)</option>
+                    <option value="unarmed_technicity">Unarmed (Technicity)</option>
+                    <option value="improvised_brutality">Improvised (Brutality)</option>
+                  </select>
+                  <button class="btn small" id="combat-special-weapon-add">Add</button>
+                </div>
                 <div id="combat-weapon-list" class="combat-list"></div>
               </div>
             </details>
@@ -1206,7 +1207,6 @@
       <div id="tab-per" class="tabpane" style="display:none;">
         <div class="panel">
           <details open class="panel">
-            <summary class="hdr"><strong>Personal</strong><span class="muted">(freeform character info)</span></summary>
             <div class="panel-body">
               <div class="personal-grid">
                 <label class="kv-field">
@@ -1926,7 +1926,7 @@ const CHARACS = [
   { key:'wisdom',    code:'WIS', name:'Wisdom',    skills:['Survival','Education','Perception','Psychology','Investigation'] },
   { key:'presence',  code:'PRE', name:'Presence',  skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
   { key:'magic',     code:'MAG', name:'Magic',     skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
-  { key:'tech',      code:'TECH',name:'Tech',      skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
+  { key:'tech',      code:'TEC',name:'Tech',      skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
 ];
 
 const NATURES = ['Fire','Lightning','Water','Earth','Wind','Sun','Moon','Ki'];
@@ -10181,7 +10181,7 @@ function renderStatistics(){
   const intPanel = document.createElement('details'); intPanel.className='panel'; intPanel.open = true;
   intPanel.classList.add('intensities-panel');
   const intSummary = document.createElement('summary'); intSummary.className = 'hdr';
-  intSummary.innerHTML = `<strong>Intensities</strong><span class="muted">(scale on MAGIC)</span>`;
+  intSummary.innerHTML = `<strong>Intensities</strong><span class="muted">(MAG)</span>`;
   intPanel.appendChild(intSummary);
   const intBody = document.createElement('div'); intBody.className = 'panel-body';
   const intGrid = document.createElement('div'); intGrid.className = 'skills intensities-grid';
@@ -11151,7 +11151,7 @@ function weaponDamageParts(it){
 }
 
 function milestoneKeyFromCode(code){
-  const map = { REF:'reflex', DEX:'dexterity', BODY:'body', WIS:'wisdom', PRE:'presence', MAG:'magic', WILL:'willpower', TECH:'tech' };
+  const map = { REF:'reflex', DEX:'dexterity', BODY:'body', WIS:'wisdom', PRE:'presence', MAG:'magic', WIL:'willpower', TEC:'tech' };
   return map[String(code || '').toUpperCase()] || '';
 }
 function resolveMilestoneCodes(codes){
