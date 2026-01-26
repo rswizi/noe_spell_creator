@@ -13951,15 +13951,14 @@ function updateDerived(){
   const msPRE = milestone('presence');
   const msREF = milestone('reflex');
   const msDEX = milestone('dexterity');
-  const msWIS = milestone('wisdom');
   const magTotal = totalFromInvest(investVal(CHAR.stats.magic?.invest, 0));
 
   // Base
   const base = {};
   const msTEC = milestone('tech');
-  base.hp = 39 + lvl + 12*msBOD + 6*msWIL;
-  base.en = 5 + Math.floor(lvl/5) + msWIL + 2*msMAG;
-  base.fo = 2 + Math.floor(lvl/5) + msWIL + (2*msPRE) + msWIS;
+  base.hp = 100 + (5 * lvl) + (12 * msBOD) + (6 * msWIL);
+  base.en = 5 + lvl + msWIL + (2 * msMAG);
+  base.fo = 2 + lvl + msWIL + msPRE;
     base.mo = 4 + msDEX + msREF;
     base.initiative = base.mo;
     base.spcap = Math.floor(base.hp * 0.10);
@@ -13967,8 +13966,8 @@ function updateDerived(){
     base.complex_schools = complexSchools;
   base.enc = 10 + (10 * msBOD) + (5 * msWIL);
   const invEnc = LINKED_INV?.enc_total || 0;
-  base.et = 1 + Math.floor(lvl/10) + msMAG;
-  const etTech = 1 + Math.floor(lvl/10) + msTEC;
+  base.et = 1 + Math.floor(lvl / 2) + msMAG;
+  const etTech = 1 + Math.floor(lvl / 2) + msTEC;
   base._notes = Object.assign(base._notes || {}, {
     et: [`Alt (TEC): ${etTech}`],
     sublimation_slots: [`Base ${slotsForLevel(lvl)} + PRE milestone ${msPRE * 2}`],
@@ -14063,7 +14062,7 @@ function updateDerived(){
   encEl.textContent = `${Number(final.current_enc || 0).toFixed(1)} / ${maxVals.enc ?? final.enc}`;
   const etDisplay = (()=> {
     const etVal = maxVals.et ?? final.et;
-    const etTech = 1 + Math.floor(lvl/10) + milestone('tech');
+    const etTech = 1 + Math.floor(lvl / 2) + milestone('tech');
     return `${etVal} (TEC ${etTech})`;
   })();
   etEl.textContent = etDisplay;
