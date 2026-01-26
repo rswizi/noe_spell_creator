@@ -7034,6 +7034,16 @@ async function invAddFunds(){
   if (!amountRaw){ invFundStatus.textContent = "Enter a non-zero amount."; return; }
   const sourceId = getInventorySourceId();
   if (!sourceId){ invFundStatus.textContent = "Link an inventory first."; return; }
+  if (amountRaw < 0){
+    const balance = Number(LINKED_INV?.currencies?.[currency] ?? 0);
+    if (Math.abs(amountRaw) > balance){
+      const proceed = await promptInsufficientFundsWarning(currency, Math.abs(amountRaw), balance);
+      if (!proceed){
+        invFundStatus.textContent = "Transaction cancelled.";
+        return;
+      }
+    }
+  }
   invFundStatus.textContent = "Saving transaction...";
   try{
     const path = `/inventories/${encodeURIComponent(sourceId)}/deposit`;
@@ -7224,6 +7234,45 @@ async function invPromptPricingChoice(row){
         cleanup({ pricingMode:'custom', ...choice });
       });
     });
+  });
+}
+
+function promptInsufficientFundsWarning(currency, required, available){
+  return new Promise(resolve=>{
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:4500; display:grid; place-items:center; padding:12px;';
+    const card = document.createElement('div');
+    card.className = 'price-choice-card';
+    card.style.cssText = 'background:#11121b; border:1px solid #2a2a3a; border-radius:12px; padding:18px; box-shadow:0 14px 36px rgba(0,0,0,0.55); color:#f3f3f5; font-family:inherit; width:min(320px,100%);';
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+        <div style="min-width:0;">
+          <div class="price-choice-title">Insufficient funds</div>
+          <div class="muted" style="font-size:0.85rem;">Currency: ${invEscapeHtml(currency)}</div>
+        </div>
+        <button class="btn small" id="fund-warning-close" style="background:#222635; border-color:#2f3548;" aria-label="Close">&times;</button>
+      </div>
+      <div style="margin-bottom:10px;">
+        <strong>You fund are unsufficient!!</strong>
+      </div>
+      <div class="muted" style="font-size:.85rem; margin-bottom:12px;">
+        Required: ${required}; Available: ${available}
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; margin-top:8px;">
+        <button id="fund-warning-cancel" class="btn small btn-secondary">Cancel</button>
+        <button id="fund-warning-proceed" class="btn small">Proceed</button>
+      </div>
+    `;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    const cleanup = (result)=>{
+      overlay.remove();
+      resolve(result);
+    };
+    card.querySelector('#fund-warning-close')?.addEventListener('click', ()=>cleanup(false));
+    card.querySelector('#fund-warning-cancel')?.addEventListener('click', ()=>cleanup(false));
+    card.querySelector('#fund-warning-proceed')?.addEventListener('click', ()=>cleanup(true));
+    overlay.addEventListener('click', (e)=>{ if (e.target === overlay) cleanup(false); });
   });
 }
 
