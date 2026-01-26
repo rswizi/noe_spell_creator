@@ -1,5 +1,6 @@
 import datetime
 import json
+import math
 import re
 import secrets
 import string
@@ -3193,14 +3194,9 @@ def _fs():
 
 # ---------- Archetypes ----------
 def _archetype_rank_for_level(lvl: int) -> int:
-    # Provided table (level: rank)
-    # 1->4, 10->5, 20->6, 30->7, 40->8, 50->9, 60->10, 70->11, 80->12
-    thresholds = [(80,12),(70,11),(60,10),(50,9),(40,8),(30,7),(20,6),(10,5),(1,4)]
-    lvl = max(1, int(lvl or 1))
-    for lv, rk in thresholds:
-        if lvl >= lv:
-            return rk
-    return 1
+    target = max(1, int(lvl or 1))
+    rank = 3 + math.ceil(target / 2.0)
+    return min(12, rank)
 
 def _total_from_invest(v: int) -> int:
     try:
