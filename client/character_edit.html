@@ -2320,26 +2320,26 @@ function craftSpellIsComplex(sp){
 }
 const MAX_LEVEL = 20;
 const LEVEL_REWARD_PROFILES = [
-  { level:1, skillPoints:80, skillCap:3, charPoints:24, charCap:10, archetypeRank:4, abilityPoints:0, tensionCap:3, subSlots:0, maxSublimationTier:1, maxCraftomancy:0, awakeningStage:0 },
-  { level:2, skillPoints:90, skillCap:4, charPoints:28, charCap:10, archetypeRank:4, abilityPoints:1, tensionCap:6, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, awakeningStage:0 },
-  { level:3, skillPoints:100, skillCap:4, charPoints:28, charCap:12, archetypeRank:5, abilityPoints:1, tensionCap:6, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, awakeningStage:0 },
-  { level:4, skillPoints:110, skillCap:5, charPoints:32, charCap:12, archetypeRank:5, abilityPoints:2, tensionCap:9, subSlots:2, maxSublimationTier:1, maxCraftomancy:2, awakeningStage:0 },
-  { level:5, skillPoints:120, skillCap:5, charPoints:32, charCap:12, archetypeRank:6, abilityPoints:2, tensionCap:9, subSlots:4, maxSublimationTier:2, maxCraftomancy:2, awakeningStage:1 },
-  { level:6, skillPoints:130, skillCap:6, charPoints:36, charCap:14, archetypeRank:6, abilityPoints:3, tensionCap:12, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, awakeningStage:1 },
-  { level:7, skillPoints:140, skillCap:6, charPoints:36, charCap:14, archetypeRank:7, abilityPoints:3, tensionCap:12, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, awakeningStage:1 },
-  { level:8, skillPoints:150, skillCap:7, charPoints:40, charCap:14, archetypeRank:7, abilityPoints:4, tensionCap:15, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, awakeningStage:1 },
-  { level:9, skillPoints:160, skillCap:7, charPoints:40, charCap:16, archetypeRank:8, abilityPoints:4, tensionCap:15, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, awakeningStage:1 },
-  { level:10, skillPoints:170, skillCap:8, charPoints:44, charCap:16, archetypeRank:8, abilityPoints:5, tensionCap:18, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, awakeningStage:2 },
-  { level:11, skillPoints:180, skillCap:8, charPoints:44, charCap:16, archetypeRank:9, abilityPoints:5, tensionCap:18, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, awakeningStage:2 },
-  { level:12, skillPoints:190, skillCap:8, charPoints:48, charCap:18, archetypeRank:9, abilityPoints:6, tensionCap:18, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, awakeningStage:2 },
-  { level:13, skillPoints:200, skillCap:8, charPoints:48, charCap:18, archetypeRank:10, abilityPoints:6, tensionCap:18, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, awakeningStage:2 },
-  { level:14, skillPoints:210, skillCap:8, charPoints:52, charCap:18, archetypeRank:10, abilityPoints:7, tensionCap:18, subSlots:14, maxSublimationTier:3, maxCraftomancy:7, awakeningStage:2 },
-  { level:15, skillPoints:220, skillCap:8, charPoints:52, charCap:20, archetypeRank:11, abilityPoints:7, tensionCap:18, subSlots:14, maxSublimationTier:4, maxCraftomancy:7, awakeningStage:3 },
-  { level:16, skillPoints:230, skillCap:8, charPoints:56, charCap:20, archetypeRank:11, abilityPoints:8, tensionCap:18, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, awakeningStage:3 },
-  { level:17, skillPoints:240, skillCap:8, charPoints:56, charCap:20, archetypeRank:12, abilityPoints:8, tensionCap:18, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, awakeningStage:3 },
-  { level:18, skillPoints:250, skillCap:8, charPoints:60, charCap:20, archetypeRank:12, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3 },
-  { level:19, skillPoints:260, skillCap:8, charPoints:60, charCap:20, archetypeRank:12, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3 },
-  { level:20, skillPoints:270, skillCap:8, charPoints:64, charCap:20, archetypeRank:12, abilityPoints:10, tensionCap:18, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, awakeningStage:3 },
+  { level:1, skillPoints:80, skillCap:3, charPoints:24, charCap:10, archetypeRank:4, abilityPoints:0, tensionCap:3, subSlots:0, maxSublimationTier:1, maxCraftomancy:0, awakeningStage:0, boonStage:1 },
+  { level:2, skillPoints:90, skillCap:4, charPoints:28, charCap:10, archetypeRank:4, abilityPoints:1, tensionCap:6, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, awakeningStage:0, boonStage:2 },
+  { level:3, skillPoints:100, skillCap:4, charPoints:28, charCap:12, archetypeRank:5, abilityPoints:1, tensionCap:6, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, awakeningStage:0, boonStage:2 },
+  { level:4, skillPoints:110, skillCap:5, charPoints:32, charCap:12, archetypeRank:5, abilityPoints:2, tensionCap:9, subSlots:2, maxSublimationTier:1, maxCraftomancy:2, awakeningStage:0, boonStage:3 },
+  { level:5, skillPoints:120, skillCap:5, charPoints:32, charCap:12, archetypeRank:6, abilityPoints:2, tensionCap:9, subSlots:4, maxSublimationTier:2, maxCraftomancy:2, awakeningStage:1, boonStage:3 },
+  { level:6, skillPoints:130, skillCap:6, charPoints:36, charCap:14, archetypeRank:6, abilityPoints:3, tensionCap:12, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, awakeningStage:1, boonStage:4 },
+  { level:7, skillPoints:140, skillCap:6, charPoints:36, charCap:14, archetypeRank:7, abilityPoints:3, tensionCap:12, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, awakeningStage:1, boonStage:4 },
+  { level:8, skillPoints:150, skillCap:7, charPoints:40, charCap:14, archetypeRank:7, abilityPoints:4, tensionCap:15, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, awakeningStage:1, boonStage:5 },
+  { level:9, skillPoints:160, skillCap:7, charPoints:40, charCap:16, archetypeRank:8, abilityPoints:4, tensionCap:15, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, awakeningStage:1, boonStage:5 },
+  { level:10, skillPoints:170, skillCap:8, charPoints:44, charCap:16, archetypeRank:8, abilityPoints:5, tensionCap:18, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, awakeningStage:2, boonStage:6 },
+  { level:11, skillPoints:180, skillCap:8, charPoints:44, charCap:16, archetypeRank:9, abilityPoints:5, tensionCap:18, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, awakeningStage:2, boonStage:6 },
+  { level:12, skillPoints:190, skillCap:8, charPoints:48, charCap:18, archetypeRank:9, abilityPoints:6, tensionCap:18, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, awakeningStage:2, boonStage:7 },
+  { level:13, skillPoints:200, skillCap:8, charPoints:48, charCap:18, archetypeRank:10, abilityPoints:6, tensionCap:18, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, awakeningStage:2, boonStage:7 },
+  { level:14, skillPoints:210, skillCap:8, charPoints:52, charCap:18, archetypeRank:10, abilityPoints:7, tensionCap:18, subSlots:14, maxSublimationTier:3, maxCraftomancy:7, awakeningStage:2, boonStage:8 },
+  { level:15, skillPoints:220, skillCap:8, charPoints:52, charCap:20, archetypeRank:11, abilityPoints:7, tensionCap:18, subSlots:14, maxSublimationTier:4, maxCraftomancy:7, awakeningStage:3, boonStage:8 },
+  { level:16, skillPoints:230, skillCap:8, charPoints:56, charCap:20, archetypeRank:11, abilityPoints:8, tensionCap:18, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, awakeningStage:3, boonStage:9 },
+  { level:17, skillPoints:240, skillCap:8, charPoints:56, charCap:20, archetypeRank:12, abilityPoints:8, tensionCap:18, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, awakeningStage:3, boonStage:9 },
+  { level:18, skillPoints:250, skillCap:8, charPoints:60, charCap:20, archetypeRank:12, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3, boonStage:10 },
+  { level:19, skillPoints:260, skillCap:8, charPoints:60, charCap:20, archetypeRank:13, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3, boonStage:10 },
+  { level:20, skillPoints:270, skillCap:8, charPoints:64, charCap:20, archetypeRank:13, abilityPoints:10, tensionCap:18, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, awakeningStage:3, boonStage:11 },
 ];
 function levelProfile(lvl){
   const target = Math.max(1, Math.floor(Number(lvl) || 1));
@@ -2358,6 +2358,7 @@ function levelProfile(lvl){
     abilityPoints: Math.floor(target / 2),
     tensionCap: base.tensionCap,
     subSlots: base.subSlots + extra,
+    boonStage: 1 + Math.floor(target / 2),
     maxSublimationTier: base.maxSublimationTier,
     maxCraftomancy: base.maxCraftomancy + Math.floor((extra + 1) / 2),
     awakeningStage: 3,
@@ -3974,6 +3975,13 @@ function renderSublimations(){
         onSublimationChanged();
       });
       row.appendChild(rem);
+      const tierBtn = document.createElement('button');
+      tierBtn.className = 'btn btn-secondary small';
+      tierBtn.textContent = 'Change Tier';
+      tierBtn.addEventListener('click', ()=>{
+        changeSublimationTier(sub);
+      });
+      row.appendChild(tierBtn);
 
       subListEl.appendChild(row);
     });
@@ -4027,6 +4035,31 @@ function addSublimationFromForm(){
   SUBLIMATIONS = SUBLIMATIONS.concat([{ id:`sub_${Date.now()}_${Math.random().toString(16).slice(2)}`, type, tier, skill, nature }]);
   onSublimationChanged();
   if (typeof closeSubModal === 'function') closeSubModal();
+}
+
+function changeSublimationTier(sub){
+  if (!sub) return;
+  const current = Math.min(4, Math.max(1, Number(sub.tier)||1));
+  const entry = prompt('New tier (1-4)', String(current));
+  if (entry == null) return;
+  const requested = Math.min(4, Math.max(1, Number(entry) || current));
+  if (requested === current) return;
+  const lvl = Math.max(1, Math.floor(Number(levelEl?.value || CHAR?.level || 1)));
+  const minLvl = minLevelForSubTier(requested);
+  if (lvl < minLvl){
+    alert(`Tier ${requested} requires level ${minLvl}.`);
+    return;
+  }
+  const baseCap = effectiveSublimationSlots(lvl);
+  const currentSlots = slotsUsed(SUBLIMATIONS);
+  const remainingSlots = currentSlots - (SUB_TIER_SLOTS[current] || 0);
+  const newSlots = remainingSlots + (SUB_TIER_SLOTS[requested] || 0);
+  if (newSlots > baseCap){
+    alert('Not enough slots for that tier.');
+    return;
+  }
+  SUBLIMATIONS = SUBLIMATIONS.map(s=> s.id === sub.id ? { ...s, tier: requested } : s);
+  onSublimationChanged();
 }
 
 /* ---------- PASSIVE AGGREGATION (char & skills) ---------- */
@@ -9341,6 +9374,7 @@ function showLevelRewardModal(newLvl, prevLvl, mode='level'){
       maxSublimationTier: newProfile.maxSublimationTier - oldProfile.maxSublimationTier,
       maxCraftomancy: newProfile.maxCraftomancy - oldProfile.maxCraftomancy,
       awakeningStage: newProfile.awakeningStage - oldProfile.awakeningStage,
+      boonStage: (newProfile.boonStage || 0) - (oldProfile.boonStage || 0),
     };
     summaryParts.push(`<div class="level-reward-line"><strong>Level ${target}</strong> reached!</div>`);
     summaryParts.push(`<div class="level-reward-line">Skill points pool: ${newProfile.skillPoints}${delta.skillPoints>0?` (+${delta.skillPoints})`:''}</div>`);
@@ -9354,6 +9388,7 @@ function showLevelRewardModal(newLvl, prevLvl, mode='level'){
     summaryParts.push(`<div class="level-reward-line">Craftomancy cap: ${newProfile.maxCraftomancy}</div>`);
     summaryParts.push(`<div class="level-reward-line">Archetype rank: ${newProfile.archetypeRank}</div>`);
     summaryParts.push(`<div class="level-reward-line">Awakening stage: ${newProfile.awakeningStage}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Boon stage: ${newProfile.boonStage}${delta.boonStage>0?` (+${delta.boonStage})`:''}</div>`);
     levelRewardSubtitle.textContent = 'New rewards unlocked! Configure ability points below.';
   }else{
     summaryParts.push(`<div class="level-reward-line">Configure ability point bonuses below.</div>`);
