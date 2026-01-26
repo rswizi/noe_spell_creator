@@ -689,27 +689,31 @@
           </details>
         </div>
 
-        <div id="level-reward-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
-        <div id="level-reward-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="level-reward-title">
-          <div class="modal-card" style="max-width:520px;">
-            <div class="row" style="justify-content:space-between; align-items:flex-start;">
-              <div>
-                <div class="modal-title" id="level-reward-title">Level Reward</div>
-                <div class="muted" id="level-reward-subtitle"></div>
-              </div>
-              <button class="modal-close" id="level-reward-close" aria-label="Close">&times;</button>
+      </div>
+
+      <!-- Level reward modal -->
+      <div id="level-reward-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
+      <div id="level-reward-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="level-reward-title">
+        <div class="modal-card" style="max-width:520px;">
+          <div class="row" style="justify-content:space-between; align-items:flex-start;">
+            <div>
+              <div class="modal-title" id="level-reward-title">Level Reward</div>
+              <div class="muted" id="level-reward-subtitle"></div>
             </div>
-            <div id="level-reward-summary" class="level-reward-summary"></div>
-            <div class="muted" id="level-reward-options-subtitle">Spend ability points to unlock bonuses.</div>
-            <div class="muted" style="margin-top:6px;">Remaining ability points: <span id="level-reward-available">0</span></div>
-            <div id="level-reward-options" class="level-reward-options"></div>
-            <div class="btn-row" style="margin-top:10px;">
-              <button class="btn small" id="level-reward-apply">Apply</button>
-              <button class="btn small btn-secondary" id="level-reward-cancel">Close</button>
-            </div>
+            <button class="modal-close" id="level-reward-close" aria-label="Close">&times;</button>
+          </div>
+          <div id="level-reward-summary" class="level-reward-summary"></div>
+          <div class="muted" id="level-reward-options-subtitle">Spend ability points to unlock bonuses.</div>
+          <div class="muted" style="margin-top:6px;">Remaining ability points: <span id="level-reward-available">0</span></div>
+          <div id="level-reward-options" class="level-reward-options"></div>
+          <div class="btn-row" style="margin-top:10px;">
+            <button class="btn small" id="level-reward-apply">Apply</button>
+            <button class="btn small btn-secondary" id="level-reward-cancel">Close</button>
           </div>
         </div>
-        <!-- Item modal -->
+      </div>
+
+      <!-- Item modal -->
         <div id="inv-item-backdrop" class="modal-backdrop" aria-hidden="true"></div>
 <div id="inv-item-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-item-title">
   <div class="modal-card">
@@ -2453,6 +2457,13 @@ function normalizeLevelRewardAllocations(raw){
     out[key] = Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
   });
   return out;
+}
+
+function persistLevelRewardAllocations(){
+  if (!CHAR) return;
+  if (!CHAR.stats) CHAR.stats = {};
+  CHAR.level_reward_allocations = { ...LEVEL_REWARD_ALLOCATIONS };
+  CHAR.stats.level_reward_allocations = { ...LEVEL_REWARD_ALLOCATIONS };
 }
 
 let REFRESH_NOTICE_QUEUE = [];
@@ -9267,7 +9278,7 @@ function adjustLevelRewardAllocation(key, delta, lvl){
   const next = Math.max(0, current + delta);
   if (next === current) return;
   LEVEL_REWARD_ALLOCATIONS[key] = next;
-  if (CHAR) CHAR.level_reward_allocations = { ...LEVEL_REWARD_ALLOCATIONS };
+  persistLevelRewardAllocations();
   renderStatistics();
   updatePointCounters();
   updateDerived();
@@ -14099,8 +14110,9 @@ async function loadCharacter(){
   if (XP < xpForLevel(CHAR.level)) XP = xpForLevel(CHAR.level);
   CHAR.xp = XP;
   CHAR.stats.level = CHAR.level;
-  LEVEL_REWARD_ALLOCATIONS = normalizeLevelRewardAllocations(CHAR.level_reward_allocations);
-  CHAR.level_reward_allocations = { ...LEVEL_REWARD_ALLOCATIONS };
+  const savedAllocations = CHAR.level_reward_allocations || CHAR.stats?.level_reward_allocations;
+  LEVEL_REWARD_ALLOCATIONS = normalizeLevelRewardAllocations(savedAllocations);
+  persistLevelRewardAllocations();
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   if (!Array.isArray(CHAR.expertise_ids)) CHAR.expertise_ids = [];
   if (!Array.isArray(CHAR.divine_manifestation_ids)) CHAR.divine_manifestation_ids = [];
