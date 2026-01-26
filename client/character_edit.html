@@ -2341,10 +2341,16 @@ const LEVEL_REWARD_PROFILES = [
   { level:19, skillPoints:260, skillCap:8, charPoints:60, charCap:20, archetypeRank:13, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3, boonStage:10 },
   { level:20, skillPoints:270, skillCap:8, charPoints:64, charCap:20, archetypeRank:13, abilityPoints:10, tensionCap:18, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, awakeningStage:3, boonStage:11 },
 ];
+function computeArchetypeRank(lvl){
+  const target = Math.max(1, Math.floor(Number(lvl) || 1));
+  return 3 + Math.ceil((target + 1) / 2);
+}
 function levelProfile(lvl){
   const target = Math.max(1, Math.floor(Number(lvl) || 1));
   if (target <= LEVEL_REWARD_PROFILES.length){
-    return LEVEL_REWARD_PROFILES[target - 1];
+    const entry = { ...LEVEL_REWARD_PROFILES[target - 1] };
+    entry.archetypeRank = computeArchetypeRank(target);
+    return entry;
   }
   const base = LEVEL_REWARD_PROFILES[LEVEL_REWARD_PROFILES.length - 1];
   const extra = target - base.level;
@@ -2354,7 +2360,7 @@ function levelProfile(lvl){
     skillCap: base.skillCap,
     charPoints: base.charPoints,
     charCap: base.charCap,
-    archetypeRank: 12,
+    archetypeRank: computeArchetypeRank(target),
     abilityPoints: Math.floor(target / 2),
     tensionCap: base.tensionCap,
     subSlots: base.subSlots + extra,
