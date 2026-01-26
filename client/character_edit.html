@@ -10168,6 +10168,35 @@ async function fetchAbilitiesByIds(ids){
   return res.abilities || [];
 }
 
+function markReplacedViaOriginalRank(unlocked, replaced){
+  if (!Array.isArray(unlocked) || !unlocked.length || !replaced) return;
+  const versionFor = (entry)=> Math.max(1, Math.floor(Number(entry?.version ?? entry?.archetype_version ?? 1)));
+  const grouped = new Map();
+  unlocked.forEach(entry=>{
+    const original = Number(entry.original_rank ?? entry.rank);
+    if (!Number.isFinite(original) || original < 1) return;
+    const key = String(original);
+    const list = grouped.get(key) || [];
+    list.push(entry);
+    grouped.set(key, list);
+  });
+  grouped.forEach(group=>{
+    if (group.length < 2) return;
+    let best = group[0];
+    for (let i=1;i<group.length;i++){
+      const current = group[i];
+      if (versionFor(current) > versionFor(best) || (versionFor(current) === versionFor(best) && Number(current.rank || 0) > Number(best.rank || 0))){
+        best = current;
+      }
+    }
+    group.forEach(entry=>{
+      if (entry === best) return;
+      const id = String(entry.ability_id || entry.ability || entry.id || '').trim();
+      if (id) replaced.add(id);
+    });
+  });
+}
+
 async function computeArchetypeUnlockedIds(archetype, lvl){
   if (!archetype) return [];
   const effRank = _archetypeRankForLevel(Math.max(1, Number(lvl)||1));
@@ -10183,7 +10212,35 @@ async function computeArchetypeUnlockedIds(archetype, lvl){
     const rep = r.replaces_id || r.replaces || '';
     if (rep && byId[rep]) replaced.add(rep);
   });
+  markReplacedViaOriginalRank(unlocked, replaced);
   const ids = Object.keys(byId);
+  if (ids.length){
+    const versionFor = (entry)=> Math.max(1, Math.floor(Number(entry?.version ?? entry?.archetype_version ?? 1)));
+    const grouped = new Map();
+    unlocked.forEach(entry=>{
+      const original = Number(entry.original_rank ?? entry.rank);
+      if (!Number.isFinite(original) || original < 1) return;
+      const key = String(original);
+      const list = grouped.get(key) || [];
+      list.push(entry);
+      grouped.set(key, list);
+    });
+    grouped.forEach(group=>{
+      if (group.length < 2) return;
+      let best = group[0];
+      for (let i=1;i<group.length;i++){
+        const current = group[i];
+        if (versionFor(current) > versionFor(best) || (versionFor(current) === versionFor(best) && Number(current.rank || 0) > Number(best.rank || 0))){
+          best = current;
+        }
+      }
+      group.forEach(entry=>{
+        if (entry === best) return;
+        const id = String(entry.ability_id || entry.ability || entry.id || '').trim();
+        if (id) replaced.add(id);
+      });
+    });
+  }
   if (ids.length){
     const docs = await fetchAbilitiesByIds(ids);
     docs.forEach(d=>{
@@ -10214,6 +10271,7 @@ async function computeRankedUnlockedIds(sourceDoc, effRank){
     const rep = r.replaces_id || r.replaces || '';
     if (rep && byId[rep]) replaced.add(rep);
   });
+  markReplacedViaOriginalRank(unlocked, replaced);
   const ids = Object.keys(byId);
   if (ids.length){
     const docs = await fetchAbilitiesByIds(ids);
