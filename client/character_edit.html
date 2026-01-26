@@ -7044,6 +7044,7 @@ async function invAddFunds(){
     if (j.status !== "success") throw new Error(j.message || "Update failed");
     invFundAmtEl.value = ""; invFundNoteEl.value = "";
     LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+    await loadInventoryById(sourceId);
     invFundStatus.textContent = "Saved.";
     invToggleModal(invFundModal, invFundBackdrop, false);
   }catch(e){
