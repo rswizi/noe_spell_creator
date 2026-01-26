@@ -4477,10 +4477,7 @@ def undo_inventory_transaction(request: Request, inv_id: str):
     if source == "deposit":
         if amount <= 0:
             raise HTTPException(400, "Invalid deposit transaction")
-        new_amount = int(cur_map.get(currency, 0)) - amount
-        if new_amount < 0:
-            raise HTTPException(400, "Cannot undo deposit: insufficient balance")
-        cur_map[currency] = new_amount
+        cur_map[currency] = int(cur_map.get(currency, 0)) - amount
         set_fields["currencies"] = cur_map
     elif source == "purchase":
         item_id = tx.get("item_id")
