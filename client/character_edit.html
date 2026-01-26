@@ -2338,17 +2338,13 @@ const LEVEL_REWARD_PROFILES = [
   { level:16, skillPoints:230, skillCap:8, charPoints:56, charCap:20, archetypeRank:11, abilityPoints:8, tensionCap:18, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, awakeningStage:3, boonStage:9 },
   { level:17, skillPoints:240, skillCap:8, charPoints:56, charCap:20, archetypeRank:12, abilityPoints:8, tensionCap:18, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, awakeningStage:3, boonStage:9 },
   { level:18, skillPoints:250, skillCap:8, charPoints:60, charCap:20, archetypeRank:12, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3, boonStage:10 },
-  { level:19, skillPoints:260, skillCap:8, charPoints:60, charCap:20, archetypeRank:13, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3, boonStage:10 },
-  { level:20, skillPoints:270, skillCap:8, charPoints:64, charCap:20, archetypeRank:13, abilityPoints:10, tensionCap:18, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, awakeningStage:3, boonStage:11 },
+  { level:19, skillPoints:260, skillCap:8, charPoints:60, charCap:20, archetypeRank:12, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3, boonStage:10 },
+  { level:20, skillPoints:270, skillCap:8, charPoints:64, charCap:20, archetypeRank:12, abilityPoints:10, tensionCap:18, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, awakeningStage:3, boonStage:11 },
 ];
 const MAX_ARCHETYPE_RANK = 12;
 function computeArchetypeRank(lvl){
   const target = Math.max(1, Math.floor(Number(lvl) || 1));
-  return Math.min(MAX_ARCHETYPE_RANK, 4 + Math.floor(target / 2));
-}
-function computeArchetypeRank(lvl){
-  const target = Math.max(1, Math.floor(Number(lvl) || 1));
-  return 3 + Math.ceil((target + 1) / 2);
+  return Math.min(MAX_ARCHETYPE_RANK, 3 + Math.ceil(target / 2));
 }
 function levelProfile(lvl){
   const target = Math.max(1, Math.floor(Number(lvl) || 1));
