@@ -36,10 +36,11 @@
     .price-choice-card{ max-width:520px; width:min(520px, 96vw); }
     .price-choice-title{ font-weight:700; line-height:1.2; word-break:break-word; }
     .price-choice-grid{ display:grid; gap:8px; }
-    .price-choice-option{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    .price-choice-option input{ margin:0; }
+    .price-choice-option{ display:flex; flex-direction:column; gap:4px; }
+    .price-choice-option select{ width:100%; padding:10px 12px; border-radius:12px; border:1px solid #2a2f3a; background:#0d0f16; color:#f6f6f8; }
     .price-choice-custom{ display:grid; gap:8px; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
     .price-choice-field{ display:flex; gap:6px; align-items:center; min-width:0; }
+    .price-choice-field input{ flex:1; min-width:0; padding:8px 10px; border-radius:10px; border:1px solid #2a2f3a; background:#0d0f16; color:#f3f3f5; }
     .price-choice-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
     .choice-table{ display:grid; gap:8px; margin-top:8px; }
     .choice-row{ display:grid; grid-template-columns: minmax(0,1fr) auto; gap:8px; align-items:center; }
@@ -1661,14 +1662,23 @@ async function invPromptPricingChoice(row){
       </div>
       <div class="price-choice-grid">
         <label class="price-choice-option">
-          <input type="radio" name="price-mode" value="market" checked> <span>Buy at market price</span>
+          <span>Action</span>
+          <select id="price-mode-select">
+            <option value="market">Buy at market price</option>
+            <option value="custom">Custom</option>
+            <option value="take">Take (price 0)</option>
+          </select>
         </label>
-        <label class="price-choice-option">
-          <input type="radio" name="price-mode" value="custom"> <span>Custom</span>
-        </label>
-        <label class="price-choice-option">
-          <input type="radio" name="price-mode" value="take"> <span>Take (price 0)</span>
-        </label>
+        <div class="price-choice-custom hidden" id="price-choice-custom">
+          <div class="price-choice-field">
+            <label class="muted">Price per unit</label>
+            <input id="price-custom-value" type="number" min="0" step="1" placeholder="Enter amount">
+          </div>
+          <div class="price-choice-field">
+            <label class="muted">Percent change</label>
+            <input id="price-custom-percent" type="number" min="0" step="0.1" placeholder="% of base (e.g. 120)">
+          </div>
+        </div>
         <div class="price-choice-actions">
           <button id="price-cancel" class="btn small btn-secondary">Cancel</button>
           <button id="price-apply" class="btn small">Apply</button>
@@ -1683,10 +1693,41 @@ async function invPromptPricingChoice(row){
     card.querySelector("#price-cancel").addEventListener("click", ()=>cleanup(null));
     overlay.addEventListener("click", (e)=>{ if (e.target === overlay) cleanup(null); });
 
+    const modeSelect = card.querySelector("#price-mode-select");
+    const customArea = card.querySelector("#price-choice-custom");
+    const customValueInput = card.querySelector("#price-custom-value");
+    const customPercentInput = card.querySelector("#price-custom-percent");
+    const updateCustomArea = ()=>{
+      const showCustom = modeSelect?.value === "custom";
+      if (customArea){
+        customArea.classList.toggle("hidden", !showCustom);
+      }
+    };
+    modeSelect?.addEventListener("change", updateCustomArea);
+    updateCustomArea();
     card.querySelector("#price-apply").addEventListener("click", ()=>{
-      const mode = card.querySelector("input[name=\"price-mode\"]:checked")?.value || "market";
+      const mode = modeSelect?.value || "market";
       if (mode === "take"){ cleanup({ pricingMode:"take", customPrice:0 }); return; }
       if (mode === "market"){ cleanup({ pricingMode:"market" }); return; }
+      const parseInline = ()=>{
+        const val = customValueInput?.value?.trim();
+        if (val){
+          const parsed = invParseCustomPriceInput(val);
+          if (parsed) return parsed;
+        }
+        const pct = customPercentInput?.value?.trim();
+        if (pct){
+          const suffix = pct.endsWith("%") ? pct : `${pct}%`;
+          const parsed = invParseCustomPriceInput(suffix);
+          if (parsed) return parsed;
+        }
+        return null;
+      };
+      const inlineChoice = parseInline();
+      if (inlineChoice){
+        cleanup({ pricingMode:"custom", ...inlineChoice });
+        return;
+      }
       openCustomPriceModal(basePrice).then(choice=>{
         if (!choice) return;
         cleanup({ pricingMode:"custom", ...choice });

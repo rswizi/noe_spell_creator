@@ -452,6 +452,7 @@
     .price-choice-option select{ width:100%; padding:10px 12px; border-radius:12px; border:1px solid #2a2f3a; background:#0d0f16; color:var(--ink); }
     .price-choice-custom{ display:grid; gap:8px; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
     .price-choice-field{ display:flex; gap:6px; align-items:center; min-width:0; }
+    .price-choice-field input{ flex:1; min-width:0; padding:8px 10px; border-radius:10px; border:1px solid #2a2f3a; background:#0d0f16; color:var(--ink); }
     .price-choice-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
     /* Personal tab */
     .personal-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items:start; margin-bottom:10px; }
@@ -672,12 +673,26 @@
 
         <!-- Item modal -->
         <div id="inv-item-backdrop" class="modal-backdrop" aria-hidden="true"></div>
-        <div id="inv-item-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-item-title">
+<div id="inv-item-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-item-title">
+  <div class="modal-card">
+    <button class="modal-close" id="inv-item-close" aria-label="Close">&times;</button>
+    <h2 id="inv-item-title">Item</h2>
+    <div id="inv-item-body" class="list" style="margin-top:10px;"></div>
+    <div id="inv-item-actions" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+        <!-- Quality Upgrade Modal -->
+        <div id="inv-quality-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
+        <div id="inv-quality-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-quality-title">
           <div class="modal-card">
-            <button class="modal-close" id="inv-item-close" aria-label="Close">&times;</button>
-            <h2 id="inv-item-title">Item</h2>
-            <div id="inv-item-body" class="list" style="margin-top:10px;"></div>
-            <div id="inv-item-actions" style="margin-top:12px;"></div>
+            <button class="modal-close" id="inv-quality-close" aria-label="Close">&times;</button>
+            <h2 id="inv-quality-title">Upgrade Quality</h2>
+            <div id="inv-quality-body" class="list" style="margin-top:10px;"></div>
+            <div class="btn-row">
+              <button class="btn small" id="inv-quality-confirm">Buy upgrade</button>
+              <button class="btn small btn-secondary" id="inv-quality-cancel">Cancel</button>
+            </div>
           </div>
         </div>
 
@@ -1944,6 +1959,11 @@ const SUB_TYPES = [
   { key:'endurance', label:'Endurance' },
 ];
 const QUALITY_ORDER = ['Very Mediocre','Mediocre','Adequate','Good','Very Good','Excellent','Legendary','Mythical','Epic','Divine','Unreal'];
+const QUALITY_DIFFS = {
+  "Mediocre": -100, "Adequate": 0, "Good": 167, "Very Good": 1390,
+  "Excellent": 5280, "Legendary": 15300, "Mythical": 38760,
+  "Epic": 128000, "Divine": 614400, "Unreal": 921600,
+};
 const CRAFT_CATEGORY_ORDER = ['Novice','Apprentice','Disciple','Adept','Mage','Magister','High Mage','Master','Grand Master','Archmage','Supreme Archmage','Avant-Garde'];
 const CRAFTOMANCY_TABLE = {
   'Very Mediocre': { category:'Novice', skill:5, die:'d4', dc:3, price:200, hours:10 },
@@ -2743,6 +2763,18 @@ const invItemBackdrop = document.getElementById('inv-item-backdrop');
 const invItemTitle = document.getElementById('inv-item-title');
 const invItemBody = document.getElementById('inv-item-body');
 const invItemActions = document.getElementById('inv-item-actions');
+const invQualityModal = document.getElementById('inv-quality-modal');
+const invQualityBackdrop = document.getElementById('inv-quality-backdrop');
+const invQualityTitle = document.getElementById('inv-quality-title');
+const invQualityBody = document.getElementById('inv-quality-body');
+const invQualityConfirm = document.getElementById('inv-quality-confirm');
+const invQualityCancel = document.getElementById('inv-quality-cancel');
+const invQualityClose = document.getElementById('inv-quality-close');
+let INV_QUALITY_CTX = null;
+let invQualityTargetSelect = null;
+let invQualityPriceInput = null;
+let invQualityCurrencySelect = null;
+let invQualityCostDisplay = null;
 const craftAddModal = document.getElementById('craft-add-modal');
 const craftAddBackdrop = document.getElementById('craft-add-backdrop');
 const craftAddTitle = document.getElementById('craft-add-title');
@@ -7124,6 +7156,16 @@ async function invPromptPricingChoice(row){
             <option value="take">Take (price 0)</option>
           </select>
         </label>
+        <div class="price-choice-custom hidden" id="price-choice-custom">
+          <div class="price-choice-field">
+            <label class="muted">Price per unit</label>
+            <input id="price-custom-value" type="number" min="0" step="1" placeholder="Enter amount">
+          </div>
+          <div class="price-choice-field">
+            <label class="muted">Percent change</label>
+            <input id="price-custom-percent" type="number" min="0" step="0.1" placeholder="% of base (e.g. 120)">
+          </div>
+        </div>
         <div class="price-choice-actions">
           <button id="price-cancel" class="btn small btn-secondary">Cancel</button>
           <button id="price-apply" class="btn small">Apply</button>
@@ -7138,11 +7180,42 @@ async function invPromptPricingChoice(row){
     card.querySelector('#price-cancel').addEventListener('click', ()=>cleanup(null));
     overlay.addEventListener('click', (e)=>{ if (e.target === overlay) cleanup(null); });
 
+    const modeSelect = card.querySelector('#price-mode-select');
+    const customArea = card.querySelector('#price-choice-custom');
+    const customValueInput = card.querySelector('#price-custom-value');
+    const customPercentInput = card.querySelector('#price-custom-percent');
+    const updateCustomArea = ()=>{
+      const showCustom = modeSelect?.value === 'custom';
+      if (customArea){
+        customArea.classList.toggle('hidden', !showCustom);
+      }
+    };
+    modeSelect?.addEventListener('change', updateCustomArea);
+    updateCustomArea();
     const applyBtn = card.querySelector('#price-apply');
     applyBtn.addEventListener('click', ()=>{
       const mode = card.querySelector('#price-mode-select')?.value || 'market';
       if (mode === 'take'){ cleanup({ pricingMode:'take', customPrice:0 }); return; }
       if (mode === 'market'){ cleanup({ pricingMode:'market' }); return; }
+      const parseInline = ()=>{
+        const val = customValueInput?.value?.trim();
+        if (val){
+          const parsed = invParseCustomPriceInput(val);
+          if (parsed) return parsed;
+        }
+        const pct = customPercentInput?.value?.trim();
+        if (pct){
+          const suffix = pct.endsWith('%') ? pct : `${pct}%`;
+          const parsed = invParseCustomPriceInput(suffix);
+          if (parsed) return parsed;
+        }
+        return null;
+      };
+      const inlineChoice = parseInline();
+      if (inlineChoice){
+        cleanup({ pricingMode:'custom', ...inlineChoice });
+        return;
+      }
       openCustomPriceModal(basePrice).then(choice=>{
         if (!choice) return;
         cleanup({ pricingMode:'custom', ...choice });
@@ -7285,13 +7358,13 @@ async function saveInvLinkedNature(item_id, linked_nature){
   return j.inventory;
 }
 
-  async function upgradeQuality(item_id, to){
+async function upgradeQuality(item_id, to, currency){
   const sourceId = getInventorySourceId();
   if (!sourceId) throw new Error("Link an inventory first.");
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/upgrade_quality`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ to })
+    body: JSON.stringify(Object.assign({ to }, currency ? { currency } : {}))
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ throw new Error(j.message || "Upgrade failed"); }
@@ -7984,44 +8057,11 @@ function openInvItemModal(it){
   btnRow.appendChild(disposeBtn);
 
   if (it.kind === "weapon" || it.kind === "equipment"){
-    const qWrap = document.createElement("div");
-    qWrap.className = "row";
-    qWrap.style.gap = "6px";
-    qWrap.style.alignItems = "center";
-    qWrap.style.flexWrap = "nowrap";
-    const qSelect = document.createElement("select");
-    const currentQuality = String(it.quality || "Adequate");
-    QUALITY_ORDER.forEach(q=>{
-      const opt = document.createElement("option");
-      opt.value = q;
-      opt.textContent = q;
-      qSelect.appendChild(opt);
-    });
-    qSelect.value = QUALITY_ORDER.find(q=> lc(q) === lc(currentQuality)) || "Adequate";
     const qBtn = document.createElement("button");
     qBtn.className = "btn small";
     qBtn.textContent = "Change quality";
-    qBtn.style.whiteSpace = "nowrap";
-    qBtn.addEventListener("click", async ()=>{
-      const target = qSelect.value;
-      if (!target) return;
-      const curIdx = QUALITY_ORDER.findIndex(q=> lc(q) === lc(currentQuality));
-      const targetIdx = QUALITY_ORDER.findIndex(q=> lc(q) === lc(target));
-      if (curIdx < 0 || targetIdx < 0) return;
-      if (targetIdx === curIdx) return;
-      try{
-        const inv = targetIdx > curIdx
-          ? await upgradeQuality(it.item_id, target)
-          : await downgradeQuality(it.item_id, target);
-        LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
-        closeInvItemModal();
-      }catch(e){
-        alert(e.message);
-      }
-    });
-    qWrap.appendChild(qSelect);
-    qWrap.appendChild(qBtn);
-    btnRow.appendChild(qWrap);
+    qBtn.addEventListener("click", ()=> openInvQualityModal(it));
+    btnRow.appendChild(qBtn);
   }
 
   if (hasChoice){
@@ -8066,6 +8106,137 @@ function closeInvItemModal(){
   invItemModal.classList.add('hidden');
   invItemModal.classList.remove('open');
   invItemBackdrop.classList.remove('open');
+}
+
+function invQualityPrice(base, target){
+  const raw = Math.round(Number(base || 0));
+  const diff = QUALITY_DIFFS[target] ?? 0;
+  return Math.max(0, raw + diff);
+}
+
+function openInvQualityModal(it){
+  if (!invQualityModal || !invQualityBody || !invQualityConfirm || !invQualityBackdrop) return;
+  const title = it.alt_name ? `${it.alt_name} (${it.name || 'Item'})` : (it.name || 'Item');
+  invQualityTitle.textContent = `Upgrade: ${title}`;
+  const basePrice = Number(it.base_price ?? it.paid_unit ?? 0);
+  const qty = Number(it.quantity || 1);
+  const currentQuality = String(it.quality || 'Adequate');
+  const currentIdx = QUALITY_ORDER.findIndex(q=> lc(q) === lc(currentQuality));
+  const targetQualities = currentIdx >= 0 ? QUALITY_ORDER.slice(currentIdx + 1) : QUALITY_ORDER.slice(1);
+  INV_QUALITY_CTX = {
+    item_id: it.item_id,
+    base_price: basePrice,
+    quantity: qty,
+    current_quality: currentQuality
+  };
+  if (!targetQualities.length){
+    invQualityBody.innerHTML = `<div class="muted">This item is already at ${currentQuality} quality.</div>`;
+    invQualityConfirm.disabled = true;
+  }else{
+    invQualityBody.innerHTML = `
+      <div class="row" style="gap:10px;">
+        <div class="muted">Current quality: <strong>${currentQuality}</strong></div>
+        <div class="muted">Quantity: <strong>${qty}</strong></div>
+      </div>
+      <div class="row" style="gap:10px; align-items:flex-end; flex-wrap:wrap;">
+        <div style="flex:1; min-width:200px;">
+          <label class="muted">Target quality</label>
+          <select id="inv-quality-target">
+            ${targetQualities.map(q=>`<option value="${q}">${q}</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:1; min-width:200px;">
+          <label class="muted">Price modifier</label>
+          <input id="inv-quality-price-mod" type="number" min="0" step="0.01" value="1">
+        </div>
+      </div>
+      <div class="row" style="gap:10px; align-items:flex-end; flex-wrap:wrap;">
+        <div style="flex:1; min-width:200px;">
+          <label class="muted">Currency</label>
+          <select id="inv-quality-currency"></select>
+        </div>
+        <div style="flex:1; min-width:200px;">
+          <div id="inv-quality-cost" class="muted" style="margin-top:20px;"></div>
+        </div>
+      </div>
+    `;
+    invQualityTargetSelect = invQualityBody.querySelector('#inv-quality-target');
+    invQualityPriceInput = invQualityBody.querySelector('#inv-quality-price-mod');
+    invQualityCurrencySelect = invQualityBody.querySelector('#inv-quality-currency');
+    invQualityCostDisplay = invQualityBody.querySelector('#inv-quality-cost');
+    const updatePreview = ()=>{
+      if (!INV_QUALITY_CTX || !invQualityTargetSelect || !invQualityCostDisplay) return;
+      const target = invQualityTargetSelect.value;
+      if (!target){
+        invQualityCostDisplay.textContent = 'Pick a target quality to preview cost.';
+        return;
+      }
+      const oldUnit = invQualityPrice(INV_QUALITY_CTX.base_price, INV_QUALITY_CTX.current_quality);
+      const newUnit = invQualityPrice(INV_QUALITY_CTX.base_price, target);
+      const perUnitDelta = Math.max(0, newUnit - oldUnit);
+      const totalDelta = perUnitDelta * INV_QUALITY_CTX.quantity;
+      const modifier = Math.max(0, parseFloat(invQualityPriceInput?.value || '1') || 1);
+      const adjusted = Math.round(totalDelta * modifier);
+      invQualityCostDisplay.textContent = `Delta: ${perUnitDelta} each (${totalDelta} total) ×${modifier.toFixed(2)} → ${adjusted}.`;
+    };
+    invQualityTargetSelect.addEventListener('change', updatePreview);
+    invQualityPriceInput?.addEventListener('input', updatePreview);
+    populateInvQualityCurrencyOptions();
+    updatePreview();
+    invQualityConfirm.disabled = false;
+  }
+  invQualityModal.classList.remove('hidden');
+  invQualityModal.classList.add('open');
+  invQualityBackdrop.classList.remove('hidden');
+  invQualityBackdrop.classList.add('open');
+}
+
+function closeInvQualityModal(){
+  INV_QUALITY_CTX = null;
+  invQualityTargetSelect = null;
+  invQualityPriceInput = null;
+  invQualityCurrencySelect = null;
+  invQualityCostDisplay = null;
+  if (invQualityModal){
+    invQualityModal.classList.add('hidden');
+    invQualityModal.classList.remove('open');
+  }
+  if (invQualityBackdrop){
+    invQualityBackdrop.classList.remove('open');
+    invQualityBackdrop.classList.add('hidden');
+  }
+}
+
+function populateInvQualityCurrencyOptions(){
+  if (!invQualityCurrencySelect) return;
+  const currencies = Object.keys(LINKED_INV?.currencies || {});
+  const keys = currencies.length ? currencies : ['Jelly'];
+  invQualityCurrencySelect.innerHTML = '';
+  keys.forEach(k=>{
+    const opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = k;
+    invQualityCurrencySelect.appendChild(opt);
+  });
+  const preferred = invGlobalCurEl?.value;
+  if (preferred && keys.includes(preferred)){
+    invQualityCurrencySelect.value = preferred;
+  }
+}
+
+async function confirmInvQualityUpgrade(){
+  if (!INV_QUALITY_CTX || !invQualityTargetSelect) return;
+  const target = invQualityTargetSelect.value;
+  if (!target) return;
+  const currency = invQualityCurrencySelect?.value || invGlobalCurEl?.value || 'Jelly';
+  try{
+    const inv = await upgradeQuality(INV_QUALITY_CTX.item_id, target, currency);
+    LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+    closeInvQualityModal();
+    closeInvItemModal();
+  }catch(e){
+    alert(e.message);
+  }
 }
 
 function deriveSpellListInitialValuesFromChar(){
@@ -13952,6 +14123,10 @@ invCatEl.addEventListener('change', ()=>{
 invKindEl.addEventListener('change', invClearSearch);
 document.getElementById('inv-item-close').addEventListener('click', closeInvItemModal);
 invItemBackdrop.addEventListener('click', (e)=>{ if (e.target===invItemBackdrop) closeInvItemModal(); });
+invQualityClose?.addEventListener('click', closeInvQualityModal);
+invQualityCancel?.addEventListener('click', closeInvQualityModal);
+invQualityConfirm?.addEventListener('click', confirmInvQualityUpgrade);
+invQualityBackdrop?.addEventListener('click', (e)=>{ if (e.target===invQualityBackdrop) closeInvQualityModal(); });
 
 arcApplyBtn.addEventListener('click', async ()=>{
   const arcId = arcSelectEl.value || '';
