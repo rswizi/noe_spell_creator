@@ -816,6 +816,7 @@
               <div id="arc-summary" class="muted"></div>
               <div id="arc-description" class="arc-desc" style="display:none;"></div>
               <div class="abi-list" id="arc-abilities"></div>
+              <div id="arc-rank-debug" class="arc-rank-debug" style="display:none; margin-top:12px;"></div>
             </div>
           </details>
         </div>
@@ -2346,6 +2347,59 @@ function computeArchetypeRank(lvl){
   const target = Math.max(1, Math.floor(Number(lvl) || 1));
   return Math.min(MAX_ARCHETYPE_RANK, 3 + Math.ceil(target / 2));
 }
+function rankLevelRange(rank){
+  const value = Number(rank);
+  if (!Number.isFinite(value) || value < 1) return '—';
+  const min = Math.max(1, 2 * value - 7);
+  const max = value >= MAX_ARCHETYPE_RANK ? MAX_LEVEL : Math.min(MAX_LEVEL, 2 * value - 6);
+  return min >= max ? `${min}` : `${min}–${max}`;
+}
+function renderArchetypeRankDebug(arc){
+  if (!arcRankDebugEl) return;
+  const ranks = Array.isArray(arc?.ranks) ? arc.ranks.slice() : [];
+  if (!ranks.length){
+    arcRankDebugEl.style.display = 'none';
+    arcRankDebugEl.innerHTML = '';
+    return;
+  }
+  const rows = ranks.map((entry, idx)=>{
+    const rankValue = Number(entry.rank || idx + 1);
+    const abilityId = String(entry.ability_id || entry.ability || '').trim() || '—';
+    const replacesId = String(entry.replaces_id || entry.replaces || '').trim();
+    const version = entry.version != null ? String(entry.version) : '';
+    return `
+      <tr>
+        <td style="padding:2px 6px; border-bottom:1px solid rgba(255,255,255,0.08);">${rankValue}</td>
+        <td style="padding:2px 6px; border-bottom:1px solid rgba(255,255,255,0.08);">${rankLevelRange(rankValue)}</td>
+        <td style="padding:2px 6px; border-bottom:1px solid rgba(255,255,255,0.08);">${invEscapeHtml(abilityId)}</td>
+        <td style="padding:2px 6px; border-bottom:1px solid rgba(255,255,255,0.08);">${replacesId ? invEscapeHtml(replacesId) : '—'}</td>
+        <td style="padding:2px 6px; border-bottom:1px solid rgba(255,255,255,0.08);">${version || '—'}</td>
+      </tr>
+    `;
+  });
+  arcRankDebugEl.style.display = '';
+  arcRankDebugEl.innerHTML = `
+    <details open style="border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:8px;">
+      <summary style="cursor:pointer; font-size:0.95rem; font-weight:600;">Rank → Level mapping (debug)</summary>
+      <div style="margin-top:8px; overflow:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:2px 6px;">Rank</th>
+              <th style="text-align:left; padding:2px 6px;">Level</th>
+              <th style="text-align:left; padding:2px 6px;">Ability ID</th>
+              <th style="text-align:left; padding:2px 6px;">Replaces</th>
+              <th style="text-align:left; padding:2px 6px;">Version</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.join('')}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  `;
+}
 function levelProfile(lvl){
   const target = Math.max(1, Math.floor(Number(lvl) || 1));
   if (target <= LEVEL_REWARD_PROFILES.length){
@@ -2950,6 +3004,7 @@ const arcStatusEl     = document.getElementById('arc-status');
 const arcSummaryEl    = document.getElementById('arc-summary');
 const arcDescEl       = document.getElementById('arc-description');
 const arcAbilitiesEl  = document.getElementById('arc-abilities');
+const arcRankDebugEl  = document.getElementById('arc-rank-debug');
 const expSummaryEl    = document.getElementById('exp-summary');
 const expAbilitiesEl  = document.getElementById('exp-abilities');
 const dimaSummaryEl   = document.getElementById('dima-summary');
@@ -10304,65 +10359,77 @@ async function refreshArchetypeAbilities(){
   await refreshAwakeningAbilities();
 }
 
-  async function renderArchetypePanel(){
-    if (!CHAR?.archetype_id){
-      ARC_ASSIGNED = [];
-      recomputePassiveAgg();
-      renderAbilitiesTab();
-      renderStatistics();
-      updateDerived();
-      renderSublimations();
-      arcSummaryEl.textContent = 'No archetype linked.';
-      if (arcStatusEl){
-        arcStatusEl.textContent = '';
-        arcStatusEl.style.color = '';
-      }
-      if (arcDescEl){
-        arcDescEl.innerHTML = '';
-        arcDescEl.style.display = 'none';
-      }
-      arcAbilitiesEl.innerHTML = '<div class="muted">Select an archetype.</div>';
-      return;
-    }
-    const arc = ARCHETYPES.find(a=>a.id===CHAR.archetype_id);
-    const rank = CHAR.archetype_rank || _archetype_rank_for_level(Number(CHAR.level||1));
-    arcSummaryEl.textContent = `${arc?.name || CHAR.archetype_id} - Rank: ${rank}`;
-    if (arcStatusEl){
-      const errs = prereqErrorsForRules(arc?.prereq_rules || {}, CHAR?.stats || {});
-      if (errs.length){
-        arcStatusEl.textContent = `Prereq not met: ${errs.join(' ')}`;
-        arcStatusEl.style.color = '#f66';
-      }else{
-        arcStatusEl.textContent = '';
-        arcStatusEl.style.color = '';
-      }
-    }
-    if (arcDescEl){
-      const arcDesc = (arc?.description_html || arc?.description || "").toString().trim();
-      arcDescEl.innerHTML = arcDesc;
-      arcDescEl.style.display = arcDesc ? '' : 'none';
-    }
-    COMPUTED_ARC_ABILITIES = (CHAR.computed_archetype_abilities || []).slice();
-    if (!COMPUTED_ARC_ABILITIES.length){
-      ARC_ASSIGNED = [];
-      recomputePassiveAgg();
-      renderAbilitiesTab();
-      renderStatistics();
-      updateDerived();
-      renderSublimations();
-      arcAbilitiesEl.innerHTML = '<div class="muted">No unlocked abilities yet.</div>';
-      return;
-    }
-    const docs = await fetchAbilitiesByIds(COMPUTED_ARC_ABILITIES);
-    ARC_ASSIGNED = docs.slice();
-    const count = COMPUTED_ARC_ABILITIES.length;
-    arcAbilitiesEl.innerHTML = `<div class="muted">${count} ${count === 1 ? 'ability' : 'abilities'} shown under Passive / Active.</div>`;
-    renderAbilitiesTab();
+async function renderArchetypePanel(){
+  if (!CHAR?.archetype_id){
+    ARC_ASSIGNED = [];
     recomputePassiveAgg();
+    renderAbilitiesTab();
     renderStatistics();
     updateDerived();
     renderSublimations();
+    arcSummaryEl.textContent = 'No archetype linked.';
+    if (arcStatusEl){
+      arcStatusEl.textContent = '';
+      arcStatusEl.style.color = '';
+    }
+    if (arcDescEl){
+      arcDescEl.innerHTML = '';
+      arcDescEl.style.display = 'none';
+    }
+    arcAbilitiesEl.innerHTML = '<div class="muted">Select an archetype.</div>';
+    renderArchetypeRankDebug(null);
+    return;
   }
+  const arc = ARCHETYPES.find(a=>a.id===CHAR.archetype_id);
+  if (!arc){
+    CHAR.computed_archetype_abilities = [];
+    COMPUTED_ARC_ABILITIES = [];
+    renderArchetypeRankDebug(null);
+    await renderArchetypePanel();
+    await refreshExpertiseAbilities();
+    await refreshDivineManifestationAbilities();
+    await refreshAwakeningAbilities();
+    return;
+  }
+  renderArchetypeRankDebug(arc);
+  const rank = CHAR.archetype_rank || _archetypeRankForLevel(Number(CHAR.level||1));
+  arcSummaryEl.textContent = `${arc?.name || CHAR.archetype_id} - Rank: ${rank}`;
+  if (arcStatusEl){
+    const errs = prereqErrorsForRules(arc?.prereq_rules || {}, CHAR?.stats || {});
+    if (errs.length){
+      arcStatusEl.textContent = `Prereq not met: ${errs.join(' ')}`;
+      arcStatusEl.style.color = '#f66';
+    }else{
+      arcStatusEl.textContent = '';
+      arcStatusEl.style.color = '';
+    }
+  }
+  if (arcDescEl){
+    const arcDesc = (arc?.description_html || arc?.description || "").toString().trim();
+    arcDescEl.innerHTML = arcDesc;
+    arcDescEl.style.display = arcDesc ? '' : 'none';
+  }
+  COMPUTED_ARC_ABILITIES = (CHAR.computed_archetype_abilities || []).slice();
+  if (!COMPUTED_ARC_ABILITIES.length){
+    ARC_ASSIGNED = [];
+    recomputePassiveAgg();
+    renderAbilitiesTab();
+    renderStatistics();
+    updateDerived();
+    renderSublimations();
+    arcAbilitiesEl.innerHTML = '<div class="muted">No unlocked abilities yet.</div>';
+    return;
+  }
+  const docs = await fetchAbilitiesByIds(COMPUTED_ARC_ABILITIES);
+  ARC_ASSIGNED = docs.slice();
+  const count = COMPUTED_ARC_ABILITIES.length;
+  arcAbilitiesEl.innerHTML = `<div class="muted">${count} ${count === 1 ? 'ability' : 'abilities'} shown under Passive / Active.</div>`;
+  renderAbilitiesTab();
+  recomputePassiveAgg();
+  renderStatistics();
+  updateDerived();
+  renderSublimations();
+}
 
 async function refreshExpertiseAbilities(){
   const ids = (CHAR?.expertise_ids || []).map(x=> String(x||'').trim()).filter(Boolean);
