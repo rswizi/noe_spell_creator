@@ -7275,12 +7275,7 @@ async function invUndoLastTransaction(){
   if (!sourceId){ invStatusEl.textContent = "Link an inventory first."; return; }
   invStatusEl.textContent = "Undoing last transaction...";
   try{
-    const resp = await fetch(`/inventories/${encodeURIComponent(sourceId)}/transactions/undo`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json", ...authHeaders() }
-    });
-    const data = await resp.json().catch(()=>({}));
-    if (!resp.ok || data.status !== "success") throw new Error(data.message || "Undo failed");
+    const data = await api(`/inventories/${encodeURIComponent(sourceId)}/transactions/undo`, { method:"POST" });
     LINKED_INV = data.inventory;
     renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
     invStatusEl.textContent = "Last transaction reverted.";
@@ -7645,6 +7640,19 @@ async function upgradeQuality(item_id, to, currency){
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ throw new Error(j.message || "Upgrade failed"); }
+  return j.inventory;
+}
+
+async function downgradeQuality(item_id, to, currency){
+  const sourceId = getInventorySourceId();
+  if (!sourceId) throw new Error("Link an inventory first.");
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/downgrade_quality`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(Object.assign({ to }, currency ? { currency } : {}))
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ throw new Error(j.message || "Downgrade failed"); }
   return j.inventory;
 }
 
@@ -8541,9 +8549,21 @@ async function confirmInvQualityUpgrade(){
   if (!INV_QUALITY_CTX || !invQualityTargetSelect) return;
   const target = invQualityTargetSelect.value;
   if (!target) return;
+  const currentIdx = QUALITY_ORDER.findIndex(q=> lc(q) === lc(INV_QUALITY_CTX.current_quality));
+  const targetIdx = QUALITY_ORDER.findIndex(q=> lc(q) === lc(target));
+  if (targetIdx < 0){
+    alert('Invalid quality target.');
+    return;
+  }
+  if (targetIdx === currentIdx){
+    alert('Item already at that quality.');
+    return;
+  }
   const currency = invGlobalCurEl?.value || 'Jelly';
   try{
-    const inv = await upgradeQuality(INV_QUALITY_CTX.item_id, target, currency);
+    const inv = targetIdx >= 0 && currentIdx >= 0 && targetIdx < currentIdx
+      ? await downgradeQuality(INV_QUALITY_CTX.item_id, target, currency)
+      : await upgradeQuality(INV_QUALITY_CTX.item_id, target, currency);
     LINKED_INV = inv; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
     closeInvQualityModal();
     closeInvItemModal();
