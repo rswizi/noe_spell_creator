@@ -8210,6 +8210,31 @@ function parseInvQualityCustom(){
   return null;
 }
 
+function computeQualityCost(deltaPerUnit, qty, mode, customChoice, isDowngrade){
+  const delta = Math.max(0, Number(deltaPerUnit) || 0);
+  const count = Math.max(0, Number(qty) || 0);
+  if (isDowngrade){
+    return { eachCost: 0, totalCost: 0 };
+  }
+  let eachCost = 0;
+  if (mode === 'take'){
+    eachCost = 0;
+  }else if (mode === 'custom' && customChoice){
+    if (customChoice.customPrice != null){
+      eachCost = Number(customChoice.customPrice);
+    }else if (customChoice.priceModifier != null){
+      eachCost = Math.round(delta * Number(customChoice.priceModifier));
+    }
+  }
+  if (eachCost <= 0){
+    eachCost = (mode === 'custom' && customChoice && customChoice.priceModifier != null)
+      ? Math.round(delta * Number(customChoice.priceModifier))
+      : delta;
+  }
+  const totalCost = eachCost * count;
+  return { eachCost, totalCost };
+}
+
 function openInvQualityModal(it){
   if (!invQualityModal || !invQualityBody || !invQualityConfirm || !invQualityBackdrop) return;
   const title = it.alt_name ? `${it.alt_name} (${it.name || 'Item'})` : (it.name || 'Item');
