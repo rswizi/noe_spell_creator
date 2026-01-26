@@ -8194,6 +8194,22 @@ function invQualityPrice(base, target){
   return Math.max(0, raw + diff);
 }
 
+function parseInvQualityCustom(){
+  if (!invQualityCustomArea) return null;
+  const priceRaw = invQualityPriceInput?.value?.trim();
+  if (priceRaw){
+    const parsed = invParseCustomPriceInput(priceRaw);
+    if (parsed) return parsed;
+  }
+  const percRaw = invQualityPercentInput?.value?.trim();
+  if (percRaw){
+    const suffix = percRaw.endsWith('%') ? percRaw : `${percRaw}%`;
+    const parsed = invParseCustomPriceInput(suffix);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
 function openInvQualityModal(it){
   if (!invQualityModal || !invQualityBody || !invQualityConfirm || !invQualityBackdrop) return;
   const title = it.alt_name ? `${it.alt_name} (${it.name || 'Item'})` : (it.name || 'Item');
@@ -8261,7 +8277,7 @@ function openInvQualityModal(it){
     const deltaPerUnit = Math.max(0, newUnit - oldUnit);
     const qtyLocal = INV_QUALITY_CTX.quantity;
     const mode = targetIdx >= 0 && targetIdx < currentIdxLocal ? 'take' : (invQualityActionSelect?.value || 'market');
-    const customChoice = parseInvQualityCustom();
+    const customChoice = (mode === 'custom') ? parseInvQualityCustom() : null;
     const { eachCost, totalCost } = computeQualityCost(deltaPerUnit, qtyLocal, mode, customChoice, targetIdx < currentIdxLocal);
     invQualityCostDisplay.textContent = `Potential cost: ${totalCost} total${targetIdx < currentIdxLocal ? ' (downgrade)' : ''}.`;
   };
