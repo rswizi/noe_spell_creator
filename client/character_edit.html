@@ -2391,6 +2391,85 @@ let COMPUTED_DIMA_ABILITIES = [];
 let COMPUTED_AWAK_ABILITIES = [];
 let ABILITY_CHOICES = {}; // per-ability user selections for configurable modifiers (choices or groups)
 let ITEM_CHOICES = {}; // per-item (inventory) user selections for choice-based modifiers
+let ABILITY_CHOICE_KEYS = []; // parallel array matching CHAR.abilities order with unique instance keys
+
+function generateAbilityInstanceKey(base){
+  const clean = String(base || 'ability').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'') || 'ability';
+  const suffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 46656).toString(36)}`;
+  return `${clean}::inst:${suffix}`;
+}
+function ensureAbilityChoiceKeysLength(target){
+  if (!Array.isArray(ABILITY_CHOICE_KEYS)) ABILITY_CHOICE_KEYS = [];
+  while(ABILITY_CHOICE_KEYS.length < target){
+    ABILITY_CHOICE_KEYS.push('');
+  }
+}
+function alignAbilityChoiceKeys(newIds, prevIds){
+  const previous = Array.isArray(prevIds) ? prevIds.map(id=> String(id||'').trim()) : [];
+  const entries = previous.map((id, idx)=> ({ id, key: ABILITY_CHOICE_KEYS[idx] || '' }));
+  const used = new Array(entries.length).fill(false);
+  const nextKeys = [];
+  (newIds || []).forEach(target=>{
+    const normalized = String(target||'').trim();
+    let idx = entries.findIndex((entry, i)=> !used[i] && entry.id === normalized);
+    if (idx < 0){
+      idx = entries.findIndex((entry, i)=> !used[i]);
+    }
+    if (idx >= 0){
+      used[idx] = true;
+      nextKeys.push(entries[idx].key || generateAbilityInstanceKey(normalized || 'ability'));
+      return;
+    }
+    nextKeys.push(generateAbilityInstanceKey(normalized || 'ability'));
+  });
+  ABILITY_CHOICE_KEYS = nextKeys;
+  if (CHAR) CHAR.ability_choice_keys = ABILITY_CHOICE_KEYS.slice();
+}
+function abilityChoiceInstanceKeyForIdx(idx, baseId){
+  if (!Array.isArray(CHAR?.abilities)) return '';
+  if (idx < 0) return '';
+  ensureAbilityChoiceKeysLength(idx + 1);
+  if (!ABILITY_CHOICE_KEYS[idx]){
+    ABILITY_CHOICE_KEYS[idx] = generateAbilityInstanceKey(baseId || CHAR.abilities[idx]);
+  }
+  if (CHAR) CHAR.ability_choice_keys = ABILITY_CHOICE_KEYS.slice();
+  return ABILITY_CHOICE_KEYS[idx];
+}
+function abilityChoiceKeyForAbility(ab){
+  if (!ab) return '';
+  if (typeof ab === 'string'){
+    return String(ab).trim();
+  }
+  if (ab.__choice_key) return ab.__choice_key;
+  if (typeof ab.__choice_idx === 'number' && ab.__choice_idx >= 0){
+    return abilityChoiceInstanceKeyForIdx(ab.__choice_idx, ab.id);
+  }
+  return String(ab.id || '').trim();
+}
+function ensureAbilityChoiceEntry(key, fallback){
+  if (!key) return '';
+  if (ABILITY_CHOICES[key]) return key;
+  const fallbackKey = String(fallback || '').trim();
+  if (fallbackKey && ABILITY_CHOICES[fallbackKey]){
+    ABILITY_CHOICES[key] = { ...ABILITY_CHOICES[fallbackKey] };
+  }else{
+    ABILITY_CHOICES[key] = {};
+  }
+  return key;
+}
+function abilityChoiceContainer(ab){
+  const key = abilityChoiceKeyForAbility(ab);
+  if (!key) return null;
+  if (!ABILITY_CHOICES[key]){
+    const fallback = String(ab?.id || '').trim();
+    if (fallback && ABILITY_CHOICES[fallback]){
+      ABILITY_CHOICES[key] = { ...ABILITY_CHOICES[fallback] };
+    }else{
+      ABILITY_CHOICES[key] = {};
+    }
+  }
+  return ABILITY_CHOICES[key];
+}
 let TITLE_COLOR_MAP = {};
 let INVENTORIES = [];
 let LINKED_INV = null;
@@ -3958,6 +4037,13 @@ function choiceMaxForMod(mod){
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 1;
 }
+function choiceKindDisplayName(kind){
+  const raw = String(kind || '').replace(/^choice:/i, '').trim();
+  if (!raw) return 'Choice';
+  const normalized = raw.replace(/\s+/g, '_');
+  const alias = prettyTargetLabel(normalized);
+  return alias || raw;
+}
 function collectModifierGroups(mods){
   const map = new Map();
   (mods || []).forEach((m, idx)=>{
@@ -4019,24 +4105,25 @@ function normalizeChoiceAllowed(choice){
   return [];
 }
 function abilityChoiceSelections(ab, kind){
-  const byAb = ABILITY_CHOICES[ab.id] || {};
-  return normalizeChoiceEntry(byAb[kind]).picks;
+  const container = abilityChoiceContainer(ab);
+  return normalizeChoiceEntry(container?.[kind]).picks;
 }
 function abilityChoiceState(ab, kind){
-  const byAb = ABILITY_CHOICES[ab.id] || {};
-  return normalizeChoiceEntry(byAb[kind]);
+  const container = abilityChoiceContainer(ab);
+  return normalizeChoiceEntry(container?.[kind]);
 }
 function itemChoiceState(itemId, kind){
   const byItem = ITEM_CHOICES[itemId] || {};
   return normalizeChoiceEntry(byItem[kind]);
 }
 function abilityGroupSelections(ab){
-  const byAb = ABILITY_CHOICES[ab.id] || {};
-  return byAb._groups || {};
+  const container = abilityChoiceContainer(ab);
+  return container?._groups || {};
 }
-function setAbilityGroupSelections(abId, data){
-  if (!ABILITY_CHOICES[abId]) ABILITY_CHOICES[abId] = {};
-  ABILITY_CHOICES[abId]._groups = data || {};
+function setAbilityGroupSelections(ab, data){
+  const container = abilityChoiceContainer(ab);
+  if (!container) return;
+  container._groups = data || {};
 }
 
 function collapseAbilityReplacements(assigned){
@@ -4051,7 +4138,10 @@ function collapseAbilityReplacements(assigned){
   });
   if (!toRemove.size) return assigned;
   // prune character ability ids and stale choices
-  CHAR.abilities = (CHAR.abilities || []).map(id=> String(id||'').trim()).filter(id=> id && !toRemove.has(id));
+  const prev = (CHAR.abilities || []).slice();
+  const nextIds = (CHAR.abilities || []).map(id=> String(id||'').trim()).filter(id=> id && !toRemove.has(id));
+  alignAbilityChoiceKeys(nextIds, prev);
+  CHAR.abilities = nextIds;
   toRemove.forEach(id=>{ if (ABILITY_CHOICES[id]) delete ABILITY_CHOICES[id]; });
   queueSave();
   return (assigned || []).filter(ab=> !toRemove.has(String(ab.id||'').trim()));
@@ -6584,7 +6674,7 @@ async function openCombatAbilityRoll(a, sourceLabel){
   const needsNature = abilityNeedsNatureSelection(rolls);
   let selectedNatures = [];
   if (needsNature){
-    selectedNatures = getAbilityRollDefaults(a?.id);
+    selectedNatures = getAbilityRollDefaults(a);
     if (!selectedNatures.length){
       const picked = await openNatureSelectModal({
         titleText: `${titleText} natures`,
@@ -11740,17 +11830,17 @@ function abilityNeedsNatureSelection(rolls){
     return r.kind === 'damage' && (dmg === 'magic' || dmg === 'magical');
   });
 }
-function getAbilityRollDefaults(abId){
-  const byAb = ABILITY_CHOICES?.[abId] || {};
-  const raw = Array.isArray(byAb._roll_natures) ? byAb._roll_natures : [];
+function getAbilityRollDefaults(ab){
+  const container = abilityChoiceContainer(ab);
+  const raw = Array.isArray(container?._roll_natures) ? container._roll_natures : [];
   const allowed = new Set(INTENSITIES.map(n=> n.toLowerCase()));
   const cleaned = raw.map(n=> String(n || '').trim()).filter(Boolean).filter(n=> allowed.has(n.toLowerCase()));
   return cleaned.slice(0, 2).map(n=> INTENSITIES.find(x=> x.toLowerCase() === n.toLowerCase()) || n);
 }
-function setAbilityRollDefaults(abId, natures){
-  if (!abId) return;
-  if (!ABILITY_CHOICES[abId]) ABILITY_CHOICES[abId] = {};
-  ABILITY_CHOICES[abId]._roll_natures = (natures || []).slice(0, 2);
+function setAbilityRollDefaults(ab, natures){
+  const container = abilityChoiceContainer(ab);
+  if (!container) return;
+  container._roll_natures = (natures || []).slice(0, 2);
 }
 function formatNatureList(natures){
   const parts = (natures || []).map(n=> formatNatureLabel(n)).filter(Boolean);
@@ -12202,7 +12292,7 @@ async function configureAbilityRollDefaults(ab){
     openRollModal({ title:'Ability Natures', infoOnly:true, descText:'This ability has no rolls that use ID or magic damage.' });
     return;
   }
-  const current = getAbilityRollDefaults(ab.id);
+  const current = getAbilityRollDefaults(ab);
   const picked = await openNatureSelectModal({
     titleText: `${ab.name || 'Ability'} defaults`,
     subtitleText: 'Select up to 2 default natures for ID or magic damage.',
@@ -12210,7 +12300,7 @@ async function configureAbilityRollDefaults(ab){
     max: 2
   });
   if (!picked) return;
-  setAbilityRollDefaults(ab.id, picked);
+    setAbilityRollDefaults(ab, picked);
   queueSave();
 }
 
@@ -14120,6 +14210,8 @@ async function loadCharacter(){
   ensureBoonAbilityLinked();
   ABILITY_CHOICES = CHAR.ability_choices || {};
   ITEM_CHOICES = CHAR.item_choices || {};
+  ABILITY_CHOICE_KEYS = Array.isArray(CHAR.ability_choice_keys) ? CHAR.ability_choice_keys.slice() : [];
+  alignAbilityChoiceKeys(CHAR.abilities || [], CHAR.abilities || []);
   SUBLIMATIONS = normalizeSublimations(CHAR.sublimations || []);
   if (!CHAR.archetype_id) CHAR.archetype_id = '';
   SELECTED_SPELL_LIST_ID = CHAR.spell_list_id || '';
@@ -14270,6 +14362,7 @@ async function saveNow(){
       divine_manifestation_ids: CHAR.divine_manifestation_ids || [],
       awakening_ids: CHAR.awakening_ids || [],
       ability_choices: ABILITY_CHOICES || {},
+      ability_choice_keys: ABILITY_CHOICE_KEYS || [],
       item_choices: ITEM_CHOICES || {},
       level_reward_allocations: LEVEL_REWARD_ALLOCATIONS,
       xp_ledger: XP_LEDGER || [],
@@ -14590,8 +14683,13 @@ function renderSearchResults(arr){
 async function resolveAssignedAbilities(){
   // Normalize ability ids and drop empties so we don't hit the bulk endpoint with invalid ids.
   const ids = (CHAR.abilities||[]).map(id=> String(id||'').trim()).filter(Boolean);
+  const prevIds = (CHAR.abilities || []).slice();
+  alignAbilityChoiceKeys(ids, prevIds);
   CHAR.abilities = ids;
   const keepIds = new Set(ids.concat(COMPUTED_ARC_ABILITIES || [], COMPUTED_EXP_ABILITIES || [], COMPUTED_DIMA_ABILITIES || [], COMPUTED_AWAK_ABILITIES || []).map(String));
+  ABILITY_CHOICE_KEYS.forEach(key=>{
+    if (key) keepIds.add(String(key));
+  });
   Object.keys(ABILITY_CHOICES).forEach(id=>{ if (!keepIds.has(String(id))) delete ABILITY_CHOICES[id]; });
   if (!ids.length){ ASSIGNED = []; return; }
   const uniqueIds = Array.from(new Set(ids));
@@ -14599,7 +14697,15 @@ async function resolveAssignedAbilities(){
   const bulk = await api('/abilities/bulk'+qs);
   const byId = {};
   (bulk.abilities||[]).forEach(a=>{ if (a && a.id) byId[a.id] = a; });
-  let assigned = ids.map(id=> byId[id]).filter(Boolean); // preserve order and duplicates
+  let assigned = ids.map((id, idx)=> {
+    const source = byId[id];
+    if (!source) return null;
+    const ability = { ...source };
+    const choiceKey = abilityChoiceInstanceKeyForIdx(idx, id);
+    ability.__choice_idx = idx;
+    ability.__choice_key = ensureAbilityChoiceEntry(choiceKey, id);
+    return ability;
+  }).filter(Boolean);
   assigned = collapseAbilityReplacements(assigned);
   ASSIGNED = assigned;
   trackUpdatedAt("abilities", ASSIGNED, "Abilities");
@@ -14743,13 +14849,10 @@ async function choiceItemsForKind(kind, restrict, allowed){
   return [];
 }
 
-async function openGroupModal(ab){
-  const groups = abilityGroups(ab);
+async function openModifierGroupModal({ groups, stored = {}, titleText = 'Configure choices', onSave = ()=>{} } = {}){
   if (!groups.length) return false;
   try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
-  const stored = abilityGroupSelections(ab);
-
-  choiceTitle.textContent = `Configure: ${ab.name || 'Ability'}`;
+  choiceTitle.textContent = titleText;
   choiceBody.innerHTML = '';
   choiceModal.classList.remove('hidden'); choiceModal.classList.add('open'); choiceBackdrop.classList.add('open');
 
@@ -14760,7 +14863,7 @@ async function openGroupModal(ab){
     const block = document.createElement('div');
     block.className = 'panel';
     const maxLabel = max > 0 ? `max ${max}` : 'no limit';
-    block.innerHTML = `<strong>${g.name}</strong> <span class=\"muted\">(${maxLabel})</span>`;
+    block.innerHTML = `<strong>${g.name}</strong> <span class="muted">(${maxLabel})</span>`;
     const list = document.createElement('div');
     list.style.display = 'grid';
     list.style.gridTemplateColumns = 'repeat(auto-fit,minmax(240px,1fr))';
@@ -14803,8 +14906,12 @@ async function openGroupModal(ab){
         updateCounter();
       });
       row.appendChild(input);
+      const mod = opt.mod || {};
+      const value = Number(mod.value ?? 0);
+      const mode = mod.mode || 'add';
+      const sign = value >= 0 ? '+' : '';
       const span = document.createElement('span');
-      span.textContent = `${prettyTargetLabel(opt.mod.target)} (${(opt.mod.mode||'add')} ${opt.mod.value>=0?'+':''}${opt.mod.value})`;
+      span.textContent = `${prettyTargetLabel(mod.target)} (${mode} ${sign}${value})`;
       row.appendChild(span);
       list.appendChild(row);
     });
@@ -14812,7 +14919,7 @@ async function openGroupModal(ab){
     block.appendChild(list);
     block.appendChild(counter);
     updateCounter();
-    blocks.push({ group:g.name, max, node:list, counter });
+    blocks.push({ group:g.name, max, node:list });
     choiceBody.appendChild(block);
   });
 
@@ -14823,21 +14930,19 @@ async function openGroupModal(ab){
     };
     const save = ()=>{
       const selections = {};
-      for (const b of blocks){
-        const picks = Array.from(b.node.querySelectorAll('input[data-group]')).filter(cb=> cb.checked).map(cb=> Number(cb.value));
+      for (const block of blocks){
+        const picks = Array.from(block.node.querySelectorAll('input[data-group]')).filter(cb=> cb.checked).map(cb=> Number(cb.value));
         if (!picks.length){
-          alert(`Select at least one option for ${b.group}.`);
+          alert(`Select at least one option for ${block.group}.`);
           return;
         }
-        if (b.max > 0 && picks.length > b.max){
-          alert(`Select at most ${b.max} option(s) for ${b.group}.`);
+        if (block.max > 0 && picks.length > block.max){
+          alert(`Select at most ${block.max} option(s) for ${block.group}.`);
           return;
         }
-        selections[b.group] = picks;
+        selections[block.group] = picks;
       }
-      setAbilityGroupSelections(ab.id, selections);
-      queueSave();
-      recomputePassiveAgg(); renderStatistics(); updateDerived();
+      onSave(selections);
       choiceModal.classList.add('hidden'); choiceModal.classList.remove('open'); choiceBackdrop.classList.remove('open');
       resolve(true);
     };
@@ -14845,6 +14950,22 @@ async function openGroupModal(ab){
     choiceCancel.onclick = close;
     choiceBackdrop.onclick = (e)=>{ if (e.target===choiceBackdrop) close(); };
     choiceSave.onclick = save;
+  });
+}
+
+async function openGroupModal(ab){
+  const groups = abilityGroups(ab);
+  if (!groups.length) return false;
+  const stored = abilityGroupSelections(ab);
+  return openModifierGroupModal({
+    groups,
+    stored,
+    titleText: `Configure: ${ab.name || 'Ability'}`,
+    onSave: (selections)=>{
+      setAbilityGroupSelections(ab, selections);
+      queueSave();
+      recomputePassiveAgg(); renderStatistics(); updateDerived();
+    }
   });
 }
 
@@ -15027,7 +15148,8 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
     };
     const title = document.createElement('div');
     const srcNote = m.__source ? `<div class="muted" style="font-size:0.85rem;">${m.__source}</div>` : '';
-    title.innerHTML = `<strong>${kind.replace(/_/g,' ')}</strong> <span class="muted">(max ${max||'no limit'})</span>${srcNote}`;
+    const kindLabel = choiceKindDisplayName(kind);
+    title.innerHTML = `<strong>${kindLabel}</strong> <span class="muted">(max ${max||'no limit'})</span>${srcNote}`;
     block.appendChild(title);
 
     if (kind === 'skill_ms' || kind === 'nature_ms'){
@@ -15107,6 +15229,7 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
 
       blocks.push({
         kind,
+        displayKind: kindLabel,
         type:'ms',
         groupName,
         modIdx,
@@ -15120,11 +15243,11 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
           const checks = Array.from(schoolsWrap.querySelectorAll('input[data-kind]'));
           const selected = checks.filter(cb=>cb.checked).map(cb=>cb.value);
           if (!selected.length){
-            alert('Select at least one school.');
-            return { ok:false };
+        alert(`Select at least one school for ${kindLabel}.`);
+        return { ok:false };
           }
           if (max > 0 && selected.length > max){
-            alert(`Select at most ${max} option(s) for ${kind.replace(/_/g,' ')}.`);
+        alert(`Select at most ${max} option(s) for ${kindLabel}.`);
             return { ok:false };
           }
           return { ok:true, value:{ base: baseVal, picks: selected } };
@@ -15253,6 +15376,7 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
     }
     blocks.push({
       kind,
+      displayKind: choiceKindDisplayName(kind),
       type:'simple',
       max,
       groupName,
@@ -15279,7 +15403,8 @@ async function openChoiceModalGeneric(mods, existingMap = {}, saveHandler = ()=>
         }
         const arr = b.getPicks ? b.getPicks() : [];
         if (b.max > 0 && arr.length > b.max){
-          alert(`Select at most ${b.max} option(s) for ${b.kind.replace(/_/g,' ')}.`);
+          const displayKind = b.displayKind || choiceKindDisplayName(b.kind);
+          alert(`Select at most ${b.max} option(s) for ${displayKind}.`);
           return;
         }
         selections[b.kind] = arr;
@@ -15315,9 +15440,12 @@ async function openChoiceModal(ab){
       return activeGroups.has(m.__idx);
     });
   if (choiceMods.length){
-    const res = await openChoiceModalGeneric(choiceMods, ABILITY_CHOICES[ab.id] || {}, (selections)=>{
-      const existing = ABILITY_CHOICES[ab.id] || {};
-      ABILITY_CHOICES[ab.id] = { ...existing, ...selections, _groups: existing._groups || {} };
+    const container = abilityChoiceContainer(ab);
+    const existingMap = container || {};
+    const res = await openChoiceModalGeneric(choiceMods, existingMap, (selections)=>{
+      if (!container) return;
+      Object.keys(container).forEach(key=> delete container[key]);
+      Object.assign(container, selections);
       queueSave();
       recomputePassiveAgg(); renderStatistics(); updateDerived();
     }, { titleText: `Configure: ${ab.name || 'Ability'}` });
@@ -15347,19 +15475,65 @@ async function openItemChoiceModal(it){
     const mods = upgradeChoiceMods(upgrade, meta, choiceKey);
     if (!mods.length) return false;
     if (!choiceKey) return false;
-    const existing = ITEM_CHOICES[choiceKey] || (legacyKey ? ITEM_CHOICES[legacyKey] : {}) || {};
-    return openChoiceModalGeneric(mods, existing, (selections)=>{
+    const readChoiceState = ()=> ITEM_CHOICES[choiceKey] || (legacyKey ? ITEM_CHOICES[legacyKey] : {}) || {};
+    const writeChoiceState = (payload)=> {
+      const base = readChoiceState();
+      const next = { ...base, ...payload };
+      ITEM_CHOICES[choiceKey] = next;
+      if (legacyKey && legacyKey !== choiceKey){
+        ITEM_CHOICES[legacyKey] = next;
+      }
+      return next;
+    };
+    const pool = resolveUpgradeModifiers(upgrade, meta);
+    const storedState = readChoiceState();
+    const groupInfo = resolveModifierGroupSelections(pool, storedState._groups || {});
+    let opened = false;
+    if (groupInfo.groups.length){
+      const res = await openModifierGroupModal({
+        groups: groupInfo.groups,
+        stored: storedState._groups || {},
+        titleText: `Configure: ${meta.name || upgrade?.name || 'Upgrade'}`,
+        onSave: (selections)=>{
+          writeChoiceState({ _groups: selections });
+          queueSave();
+          recomputePassiveAgg(); renderStatistics(); updateDerived();
+        }
+      });
+      opened = opened || res;
+    }
+    const finalState = readChoiceState();
+    const finalGroupState = finalState._groups || storedState._groups || {};
+    const finalGroupInfo = resolveModifierGroupSelections(pool, finalGroupState);
+    const activeGroups = new Set(finalGroupInfo.active || []);
+    const filteredMods = mods.filter(m=>{
+      const grouped = String(m.group || '').trim();
+      if (!grouped) return true;
+      const modIdx = Number.isFinite(Number(m.__mod_idx))
+        ? Number(m.__mod_idx)
+        : Number.isFinite(Number(m.__idx))
+          ? Number(m.__idx)
+          : -1;
+      return activeGroups.has(modIdx);
+    });
+    if (!filteredMods.length) return opened;
+    const existing = readChoiceState();
+    const res = await openChoiceModalGeneric(filteredMods, existing, (selections)=>{
       ITEM_CHOICES[choiceKey] = selections;
       if (legacyKey && legacyKey !== choiceKey) ITEM_CHOICES[legacyKey] = selections;
       queueSave();
       recomputePassiveAgg(); renderStatistics(); updateDerived();
-    }, { titleText: `Configure: ${meta.name || upgrade?.name || 'Upgrade'}`, enableGroups: true });
+    }, { titleText: `Configure: ${meta.name || upgrade?.name || 'Upgrade'}` });
+    opened = opened || res;
+    return opened;
   }
 
 async function addAbilityToChar(aid){
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   const key = String(aid);
+  const prev = CHAR.abilities.slice();
   CHAR.abilities.push(key);
+  alignAbilityChoiceKeys(CHAR.abilities, prev);
   queueSave();
   await resolveAssignedAbilities();
   const ab = ASSIGNED.find(x=> String(x.id) === key);
@@ -15376,7 +15550,9 @@ async function removeAbilityFromChar(aid){
   const target = String(aid||'').trim();
   const arr = (CHAR.abilities || []).map(id=> String(id||'').trim()).filter(Boolean);
   const idx = arr.indexOf(target);
+  const prev = (CHAR.abilities || []).slice();
   if (idx >= 0) arr.splice(idx, 1);
+  alignAbilityChoiceKeys(arr, prev);
   CHAR.abilities = arr;
   if (getSpeciesAbilityId() === target){
     setSpeciesAbilityId('');
@@ -15512,11 +15688,13 @@ function updateAssignedOrderFromBucket(bucketType, orderedIds){
   const orderedSubset = (orderedIds || []).filter(id => typeMap[id] === bucketType);
   if (!orderedSubset.length) return;
   let cursor = 0;
+  const prev = current.slice();
   const updated = current.map(id=>{
     if (typeMap[id] !== bucketType) return id;
     const next = orderedSubset[cursor++];
     return next || id;
   });
+  alignAbilityChoiceKeys(updated, prev);
   CHAR.abilities = updated;
   queueSave();
 }
