@@ -2095,6 +2095,33 @@ const TARGET_GROUPS = [
   { label:'Custom', options:[{ value:'__custom__', label:'Custom path...' }]}
 ];
 
+const COMBAT_SPECIAL_WEAPON_DEFS = {
+  unarmed_brutality: {
+    name: 'Unarmed (Brutality)',
+    skill: 'Brutality',
+    damage: '1d6 + M(BOD)',
+    attributes: ['Unarmed'],
+  },
+  unarmed_accuracy: {
+    name: 'Unarmed (Accuracy)',
+    skill: 'Accuracy',
+    damage: '1d6 + M(DEX)',
+    attributes: ['Unarmed'],
+  },
+  unarmed_technicity: {
+    name: 'Unarmed (Technicity)',
+    skill: 'Technicity',
+    damage: '1d6 + M(REF)',
+    attributes: ['Unarmed'],
+  },
+  improvised_brutality: {
+    name: 'Improvised Weapon',
+    skill: 'Brutality',
+    damage: '2d6 + M(BOD)',
+    attributes: ['Improvised'],
+  },
+};
+
 const SPECIAL_ATTACKS = [
   { name:'Repelling Attack', prereq:'No projectile', effect:'Push the opponent in a straight line. Target is pushed 1 unit for every 2 damage that would have been inflicted.' },
   { name:'Debilitating Attack', prereq:'No projectile', effect:'For every 5 damage you would deal, reduce target EN by 1 (max 5 EN).' },
@@ -2701,6 +2728,8 @@ const initBaseEl = document.getElementById('init-base');
 const initRollBtn = document.getElementById('init-roll');
 const initLastEl = document.getElementById('init-last');
 const combatWeaponsEl = document.getElementById('combat-weapon-list');
+const combatSpecialWeaponSelect = document.getElementById('combat-special-weapon');
+const combatSpecialWeaponAddBtn = document.getElementById('combat-special-weapon-add');
 const combatAbilityListEl = document.getElementById('combat-ability-list');
 const combatAbilitySearchEl = document.getElementById('combat-ability-search');
 const combatSpellListEl = document.getElementById('combat-spell-list');
@@ -3432,6 +3461,23 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   combatTakeDmgBtn?.addEventListener('click', ()=> openCombatDamageModal('damage'));
   combatTakeTrueBtn?.addEventListener('click', ()=> openCombatDamageModal('true'));
   combatHealBtn?.addEventListener('click', ()=> openCombatDamageModal('heal'));
+  combatSpecialWeaponAddBtn?.addEventListener('click', ()=>{
+    const key = String(combatSpecialWeaponSelect?.value || '').trim();
+    if (!key) return;
+    const def = COMBAT_SPECIAL_WEAPON_DEFS[key];
+    if (!def) return;
+    const st = combatState();
+    if (!Array.isArray(st.special_weapons)) st.special_weapons = [];
+    st.special_weapons.push({
+      ...def,
+      id: `combat-special-${key}-${Date.now()}`,
+      special: true,
+      special_key: key,
+    });
+    if (combatSpecialWeaponSelect) combatSpecialWeaponSelect.value = '';
+    renderCombatWeapons();
+    queueSave();
+  });
   combatDmgApplyBtn?.addEventListener('click', ()=>{
     const amount = Number(combatDmgInputEl?.value || 0);
     if (!amount) return;
@@ -3671,6 +3717,7 @@ function makeDefaultStats(){
     active_spells: [],
     active_awakenings: [],
     duration_spells: [],
+    special_weapons: [],
     weapon_states: {}
   };
   stats.species_ability_id = "";
@@ -3701,6 +3748,7 @@ function normalizeStats(stats){
   if (!Array.isArray(out.combat.active_spells)) out.combat.active_spells = [];
   if (!Array.isArray(out.combat.active_awakenings)) out.combat.active_awakenings = [];
   if (!Array.isArray(out.combat.duration_spells)) out.combat.duration_spells = [];
+  if (!Array.isArray(out.combat.special_weapons)) out.combat.special_weapons = [];
   if (!out.combat.death_saves || typeof out.combat.death_saves !== 'object'){
     out.combat.death_saves = { ko: false, successes: 0, failures: 0, dead: false, stabilized: false };
   }else{
@@ -11761,7 +11809,28 @@ function getWeaponState(it){
   if (!st.weapon_states[key]){
     st.weapon_states[key] = { type: 'simple', special: SPECIAL_ATTACKS[0]?.name || '', offhand: false };
   }
-  return st.weapon_states[key];
+  const state = st.weapon_states[key];
+  ensureWeaponMagazineState(it, state);
+  return state;
+}
+function weaponMagazineCapacity(it){
+  const cap = Number(it?.magazine_size ?? it?.magazine ?? 0);
+  return Number.isFinite(cap) && cap > 0 ? Math.max(0, Math.trunc(cap)) : 0;
+}
+function ensureWeaponMagazineState(it, state){
+  if (!state) return;
+  const cap = weaponMagazineCapacity(it);
+  state.magazine_capacity = cap;
+  if (cap){
+    const loaded = Number(state.ammo_loaded);
+    if (!Number.isFinite(loaded) || loaded > cap){
+      state.ammo_loaded = cap;
+    }else{
+      state.ammo_loaded = Math.max(0, loaded);
+    }
+  }else{
+    state.ammo_loaded = 0;
+  }
 }
 function weaponDamageParts(it){
   const raw = String(weaponDamageValue(it) || '').trim();
@@ -12541,6 +12610,15 @@ function rollCombatAttack(){
   state.type = attackType;
   state.special = specialName || state.special;
   state.offhand = isOffhand;
+  const magCapacity = weaponMagazineCapacity(it);
+  if (magCapacity){
+    if (!state.ammo_loaded){
+      closeCombatAttackModal();
+      alert('Reload this weapon before attacking again.');
+      return;
+    }
+    state.ammo_loaded = Math.max(0, Number(state.ammo_loaded) - 1);
+  }
   queueSave();
   const skill = weaponSkillValue(it);
   const charKey = charKeyForSkillName(skill);
@@ -12586,16 +12664,19 @@ function rollCombatAttack(){
     rollKind: 'skill'
   });
   closeCombatAttackModal();
+  renderCombatWeapons();
 }
 function renderCombatWeapons(){
   if (!combatWeaponsEl) return;
   combatWeaponsEl.innerHTML = '';
-  const items = (LINKED_INV?.items || []).filter(it=> String(it?.kind || it?.type || '').toLowerCase() === 'weapon' && it?.equipped !== false);
-  if (!items.length){
+  const inventoryWeapons = (LINKED_INV?.items || []).filter(it=> String(it?.kind || it?.type || '').toLowerCase() === 'weapon' && it?.equipped !== false);
+  const st = combatState();
+  const specialWeapons = Array.isArray(st.special_weapons) ? st.special_weapons : [];
+  if (!inventoryWeapons.length && !specialWeapons.length){
     combatWeaponsEl.innerHTML = '<div class="muted">No equipped weapons.</div>';
     return;
   }
-  const needsCatalog = items.some(it=>{
+  const needsCatalog = inventoryWeapons.some(it=>{
     const missingDamage = !weaponDamageValue(it);
     const hasAttrs = normalizeWeaponAttributeList(it?.attributes).length || normalizeWeaponAttributeList(it?.effects).length;
     return missingDamage || !hasAttrs;
@@ -12605,7 +12686,9 @@ function renderCombatWeapons(){
   }else if (needsCatalog && WEAPON_CATALOG_PROMISE && !WEAPON_CATALOG_READY){
     WEAPON_CATALOG_PROMISE.then(()=> renderCombatWeapons());
   }
-  items.forEach(it=>{
+  const weapons = [...specialWeapons, ...inventoryWeapons];
+  weapons.forEach(it=>{
+    const state = getWeaponState(it);
     const name = it.alt_name || it.name || 'Weapon';
     const skill = weaponSkillValue(it);
     const dmg = weaponDamageValue(it) || '--';
@@ -12637,6 +12720,11 @@ function renderCombatWeapons(){
     if (mainMagicBonus) extra.push(`${magicLabel} ${mainMagicBonus}`);
     if (extraMagicBonus && subMagicNatureLabel) extra.push(`${subMagicNatureLabel} ${extraMagicBonus}`);
     const dmgDisplay = extra.length ? `${dmg} + ${extra.join(' + ')}` : dmg;
+    const magCapacity = weaponMagazineCapacity(it);
+    const ammoLoaded = magCapacity ? Number(state?.ammo_loaded || 0) : 0;
+    const hasMagazine = magCapacity > 0;
+    const outOfAmmo = hasMagazine && ammoLoaded <= 0;
+    const ammoMeta = hasMagazine ? ` | Ammo: ${ammoLoaded}/${magCapacity}` : '';
     const row = document.createElement('div');
     row.className = 'combat-entry';
     const range = it.range != null ? String(it.range) : '';
@@ -12644,12 +12732,14 @@ function renderCombatWeapons(){
     row.innerHTML = `
       <div class="grow">
         <div><strong>${invEscapeHtml(name)}</strong></div>
-        <div class="meta">Skill: ${invEscapeHtml(skill)} | Damage: ${invEscapeHtml(dmgDisplay)}${range ? ` | Range: ${invEscapeHtml(range)}` : ''}${hands ? ` | Hands: ${invEscapeHtml(hands)}` : ''}</div>
+        <div class="meta">Skill: ${invEscapeHtml(skill)} | Damage: ${invEscapeHtml(dmgDisplay)}${range ? ` | Range: ${invEscapeHtml(range)}` : ''}${hands ? ` | Hands: ${invEscapeHtml(hands)}` : ''}${ammoMeta}</div>
         <div class="muted">${invEscapeHtml(attrs)}</div>
       </div>
       <div class="combat-actions-row">
-        <button class="btn small atk-roll">Attack Roll</button>
-        <button class="btn small dmg-roll">Deal Damage</button>
+        <button class="btn small atk-roll" ${outOfAmmo ? 'disabled title="Reload before attacking"' : ''}>Attack Roll</button>
+        <button class="btn small dmg-roll" ${outOfAmmo ? 'disabled title="Reload before attacking"' : ''}>Deal Damage</button>
+        ${hasMagazine ? '<button class="btn small reload" title="Reload"><i class="fa-solid fa-arrows-rotate"></i></button>' : ''}
+        ${it.special ? '<button class="btn small btn-secondary special-remove">Remove</button>' : ''}
       </div>
     `;
     row.querySelector('.atk-roll')?.addEventListener('click', ()=>{
@@ -12759,8 +12849,37 @@ function renderCombatWeapons(){
       entry.appendChild(line);
       appendRollLog(entry);
     });
+    row.querySelector('.special-remove')?.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      removeCombatSpecialWeapon(it.id);
+    });
+    row.querySelector('.reload')?.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      reloadWeaponAmmo(it);
+    });
     combatWeaponsEl.appendChild(row);
   });
+}
+
+function removeCombatSpecialWeapon(id){
+  if (!id) return;
+  const st = combatState();
+  const existing = Array.isArray(st.special_weapons) ? st.special_weapons : [];
+  const next = existing.filter(entry=> entry?.id !== id);
+  if (next.length === existing.length) return;
+  st.special_weapons = next;
+  renderCombatWeapons();
+  queueSave();
+}
+
+function reloadWeaponAmmo(it){
+  if (!it) return;
+  const cap = weaponMagazineCapacity(it);
+  if (!cap) return;
+  const state = getWeaponState(it);
+  state.ammo_loaded = cap;
+  queueSave();
+  renderCombatWeapons();
 }
 
 function renderCombatAbilityList(){
