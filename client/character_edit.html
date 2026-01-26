@@ -476,8 +476,12 @@
     }
     .level-reward-summary{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; font-size:.95rem; }
     .level-reward-line{ background:rgba(255,255,255,.04); padding:6px 10px; border-radius:6px; }
-    .level-reward-attribute-grid{ display:grid; gap:8px; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); margin-top:8px; }
-    .level-reward-attribute-grid .attribute-row{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
+    .level-reward-options{ display:flex; flex-direction:column; gap:10px; margin-top:8px; }
+    .level-reward-option{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border-radius:10px; background:rgba(255,255,255,0.02); }
+    .level-reward-option-desc{ display:flex; flex-direction:column; gap:4px; }
+    .level-reward-option-controls{ display:flex; align-items:center; gap:6px; }
+    .level-reward-option-controls button{ padding:4px 10px; min-width:32px; }
+    .level-reward-option-count{ min-width:36px; text-align:center; font-weight:600; }
     .level-reward-available{ font-weight:600; margin-top:6px; display:inline-block; }
     .level-reward-available.warn{ color:#f66; }
   </style>
@@ -696,9 +700,9 @@
               <button class="modal-close" id="level-reward-close" aria-label="Close">&times;</button>
             </div>
             <div id="level-reward-summary" class="level-reward-summary"></div>
-            <div class="muted">Use the inputs below to allocate attribute points.</div>
-            <div class="muted" style="margin-top:6px;">Remaining attribute points: <span id="level-reward-available">0</span></div>
-            <div id="level-reward-attribute-grid" class="level-reward-attribute-grid"></div>
+            <div class="muted" id="level-reward-options-subtitle">Spend ability points to unlock bonuses.</div>
+            <div class="muted" style="margin-top:6px;">Remaining ability points: <span id="level-reward-available">0</span></div>
+            <div id="level-reward-options" class="level-reward-options"></div>
             <div class="btn-row" style="margin-top:10px;">
               <button class="btn small" id="level-reward-apply">Apply</button>
               <button class="btn small btn-secondary" id="level-reward-cancel">Close</button>
@@ -2285,7 +2289,7 @@ function craftSpellIsComplex(sp){
     return st === 'complex';
   });
 }
-const MAX_LEVEL = 100;
+const MAX_LEVEL = 20;
 const LEVEL_REWARD_PROFILES = [
   { level:1, skillPoints:80, skillCap:3, charPoints:24, charCap:10, archetypeRank:4, abilityPoints:0, tensionCap:3, subSlots:0, maxSublimationTier:1, maxCraftomancy:0, awakeningStage:0 },
   { level:2, skillPoints:90, skillCap:4, charPoints:28, charCap:10, archetypeRank:4, abilityPoints:1, tensionCap:6, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, awakeningStage:0 },
@@ -2432,7 +2436,24 @@ let UPGRADE_META = {};
 let TALENT_MAX = 1;
 let INITIAL_LOAD = true;
 let LEVEL_REWARD_CONTEXT = null;
-let LEVEL_REWARD_BASE_AVAILABLE = 0;
+const LEVEL_REWARD_OPTION_DEFS = [
+  { key:'talent', title:'Talent slot', desc:'Gain access to another talent.', effect:'+1 talent slot' },
+  { key:'char', title:'Characteristic point', desc:'Add one point to characteristics pool.', effect:'+1 characteristic point' },
+  { key:'skill', title:'Skill points', desc:'Receive six extra skill points.', effect:'+6 skill points' },
+  { key:'sublimation', title:'Sublimation slots', desc:'Unlock two additional slots.', effect:'+2 sublimation slots' },
+];
+let LEVEL_REWARD_ALLOCATIONS = { talent:0, char:0, skill:0, sublimation:0 };
+
+function normalizeLevelRewardAllocations(raw){
+  const base = { talent:0, char:0, skill:0, sublimation:0 };
+  if (!raw || typeof raw !== 'object') return { ...base };
+  const out = {};
+  Object.keys(base).forEach(key=>{
+    const value = Number(raw[key] ?? 0);
+    out[key] = Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
+  });
+  return out;
+}
 
 let REFRESH_NOTICE_QUEUE = [];
 let REFRESH_NOTICE_TIMER = null;
@@ -2526,7 +2547,7 @@ const configureAttributesBtn = document.getElementById('configure-attributes-btn
 const levelRewardModal = document.getElementById('level-reward-modal');
 const levelRewardBackdrop = document.getElementById('level-reward-backdrop');
 const levelRewardSummary = document.getElementById('level-reward-summary');
-const levelRewardAttributeGrid = document.getElementById('level-reward-attribute-grid');
+const levelRewardOptionsGrid = document.getElementById('level-reward-options');
 const levelRewardAvailableEl = document.getElementById('level-reward-available');
 const levelRewardSubtitle = document.getElementById('level-reward-subtitle');
 const levelRewardApplyBtn = document.getElementById('level-reward-apply');
@@ -3617,10 +3638,14 @@ function skillMaxForLevel(lvl){
   return levelProfile(lvl).skillCap;
 }
 function skillPointPool(lvl){
-  return levelProfile(lvl).skillPoints;
+  const base = levelProfile(lvl).skillPoints;
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.skill || 0)) * 6;
+  return base + bonus;
 }
 function statPointPool(lvl){
-  return levelProfile(lvl).charPoints;
+  const base = levelProfile(lvl).charPoints;
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.char || 0));
+  return base + bonus;
 }
 function effectiveSkillPointPool(lvl){
   return numOr(DERIVED_CACHE?.skill_points, skillPointPool(lvl));
@@ -3708,7 +3733,9 @@ function normalizeSublimations(arr){
   return out;
 }
 function slotsForLevel(lvl){
-  return levelProfile(lvl).subSlots;
+  const base = levelProfile(lvl).subSlots;
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.sublimation || 0)) * 2;
+  return base + bonus;
 }
 function effectiveSublimationSlots(lvl){
   return numOr(DERIVED_CACHE?.sublimation_slots, slotsForLevel(lvl));
@@ -9126,17 +9153,14 @@ function setLevelManual(lvl){
 }
 
 function showLevelRewardModal(newLvl, prevLvl, mode='level'){
-  if (!levelRewardModal || !levelRewardSummary || !levelRewardAttributeGrid || !levelRewardAvailableEl) return;
-  const target = Math.max(1, Math.floor(Number(newLvl) || Number(levelEl.value) || 1));
-  const pool = effectiveStatPointPool(target);
-  const used = totalStatInvest();
-  const available = Math.max(0, pool - used);
-  LEVEL_REWARD_CONTEXT = { mode, newLvl: target, oldLvl: Math.max(1, Math.floor(Number(prevLvl) || target)) };
-  LEVEL_REWARD_BASE_AVAILABLE = available;
+  if (!levelRewardModal || !levelRewardSummary || !levelRewardOptionsGrid || !levelRewardAvailableEl) return;
+  const target = Math.max(1, Math.floor(Number(newLvl) || Number(levelEl.value) || CHAR?.level || 1));
+  const oldLvl = Math.max(1, Math.floor(Number(prevLvl) || target));
+  LEVEL_REWARD_CONTEXT = { mode, newLvl: target, oldLvl };
   const summaryParts = [];
   if (mode === 'level' && prevLvl){
     const newProfile = levelProfile(target);
-    const oldProfile = levelProfile(Math.max(1, Math.floor(Number(prevLvl) || 1)));
+    const oldProfile = levelProfile(oldLvl);
     const delta = {
       skillPoints: newProfile.skillPoints - oldProfile.skillPoints,
       skillCap: newProfile.skillCap - oldProfile.skillCap,
@@ -9161,24 +9185,13 @@ function showLevelRewardModal(newLvl, prevLvl, mode='level'){
     summaryParts.push(`<div class="level-reward-line">Craftomancy cap: ${newProfile.maxCraftomancy}</div>`);
     summaryParts.push(`<div class="level-reward-line">Archetype rank: ${newProfile.archetypeRank}</div>`);
     summaryParts.push(`<div class="level-reward-line">Awakening stage: ${newProfile.awakeningStage}</div>`);
-    levelRewardSubtitle.textContent = 'New rewards unlocked!';
+    levelRewardSubtitle.textContent = 'New rewards unlocked! Configure ability points below.';
   }else{
-    summaryParts.push(`<div class="level-reward-line">Adjust your attribute investments below.</div>`);
-    levelRewardSubtitle.textContent = 'Configure attribute points';
+    summaryParts.push(`<div class="level-reward-line">Configure ability point bonuses below.</div>`);
+    levelRewardSubtitle.textContent = 'Configure ability points';
   }
   levelRewardSummary.innerHTML = summaryParts.join('');
-  levelRewardAttributeGrid.innerHTML = '';
-  (CHARACS || []).forEach(c=>{
-    const row = document.createElement('div');
-    row.className = 'attribute-row';
-    row.innerHTML = `
-      <span>${invEscapeHtml(c.name)}</span>
-      <input type="number" min="0" value="0" data-attr="${invEscapeHtml(c.key)}" style="flex:1; text-align:right;">
-    `;
-    levelRewardAttributeGrid.appendChild(row);
-  });
-  levelRewardAttributeGrid.querySelectorAll('input[data-attr]').forEach(input=> input.addEventListener('input', updateLevelRewardAvailable));
-  updateLevelRewardAvailable();
+  renderLevelRewardOptions(target);
   levelRewardBackdrop.classList.remove('hidden');
   levelRewardBackdrop.classList.add('open');
   levelRewardModal.classList.remove('hidden');
@@ -9194,44 +9207,67 @@ function closeLevelRewardModal(){
   levelRewardBackdrop.classList.remove('open');
 }
 
-function updateLevelRewardAvailable(){
-  if (!levelRewardAvailableEl || !levelRewardAttributeGrid) return;
-  const inputs = Array.from(levelRewardAttributeGrid.querySelectorAll('input[data-attr]'));
-  const total = inputs.reduce((sum,input)=> sum + Math.max(0, Math.floor(Number(input.value)||0)), 0);
-  const remaining = Math.max(0, LEVEL_REWARD_BASE_AVAILABLE - total);
-  levelRewardAvailableEl.textContent = `${remaining} / ${LEVEL_REWARD_BASE_AVAILABLE}`;
-  levelRewardAvailableEl.classList.toggle('warn', total > LEVEL_REWARD_BASE_AVAILABLE);
+function abilityPointsForLevel(lvl){
+  return levelProfile(lvl).abilityPoints;
 }
 
-function applyLevelRewardAllocations(){
-  if (!levelRewardAttributeGrid) return;
-  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const pool = effectiveStatPointPool(lvl);
-  const used = totalStatInvest();
-  const available = Math.max(0, pool - used);
-  const inputs = Array.from(levelRewardAttributeGrid.querySelectorAll('input[data-attr]'));
-  const increments = inputs.map(input=>({ key: input.dataset.attr, val: Math.max(0, Math.floor(Number(input.value)||0)) }));
-  const totalAllocated = increments.reduce((sum,it)=> sum + it.val, 0);
-  if (totalAllocated > available){
-    alert('You allocated more attribute points than available.');
-    return;
-  }
-  let changed = false;
-  const capInvest = statInvestCap(lvl);
-  increments.forEach(({key,val})=>{
-    if (!val) return;
-    if (!CHAR.stats) CHAR.stats = {};
-    if (!CHAR.stats[key]) CHAR.stats[key] = {};
-    const current = investVal(CHAR.stats[key].invest, 0);
-    const target = Math.min(current + val, capInvest);
-    if (target === current) return;
-    CHAR.stats[key].invest = target;
-    changed = true;
+function totalAbilityPointsSpent(){
+  return LEVEL_REWARD_OPTION_DEFS.reduce((sum,opt)=> sum + Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS[opt.key] || 0)), 0);
+}
+
+function abilityPointsAvailable(lvl){
+  return Math.max(0, abilityPointsForLevel(lvl) - totalAbilityPointsSpent());
+}
+
+function updateLevelRewardAvailableDisplay(lvl){
+  if (!levelRewardAvailableEl) return;
+  const points = abilityPointsForLevel(lvl);
+  const avail = abilityPointsAvailable(lvl);
+  levelRewardAvailableEl.textContent = `${avail} / ${points}`;
+  levelRewardAvailableEl.classList.toggle('warn', totalAbilityPointsSpent() > points);
+}
+
+function renderLevelRewardOptions(lvl){
+  if (!levelRewardOptionsGrid) return;
+  levelRewardOptionsGrid.innerHTML = '';
+  const available = abilityPointsAvailable(lvl);
+  LEVEL_REWARD_OPTION_DEFS.forEach(opt=>{
+    const count = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS[opt.key] || 0));
+    const row = document.createElement('div');
+    row.className = 'level-reward-option';
+    row.innerHTML = `
+      <div class="level-reward-option-desc">
+        <strong>${opt.title}</strong>
+        <div class="muted" style="font-size:.85rem;">${opt.desc}</div>
+        <div class="muted" style="font-size:.8rem;">${opt.effect}</div>
+      </div>
+      <div class="level-reward-option-controls">
+        <button type="button" class="btn small option-dec" data-key="${opt.key}" aria-label="Decrease">-</button>
+        <span class="level-reward-option-count" data-key="${opt.key}-count">${count}</span>
+        <button type="button" class="btn small option-inc" data-key="${opt.key}" aria-label="Increase">+</button>
+      </div>
+    `;
+    levelRewardOptionsGrid.appendChild(row);
+    const decBtn = row.querySelector('.option-dec');
+    const incBtn = row.querySelector('.option-inc');
+    decBtn.disabled = count <= 0;
+    incBtn.disabled = available <= 0;
+    decBtn?.addEventListener('click', ()=> adjustLevelRewardAllocation(opt.key, -1, lvl));
+    incBtn?.addEventListener('click', ()=> adjustLevelRewardAllocation(opt.key, 1, lvl));
   });
-  if (!changed){
-    closeLevelRewardModal();
-    return;
-  }
+  updateLevelRewardAvailableDisplay(lvl);
+}
+
+function adjustLevelRewardAllocation(key, delta, lvl){
+  if (!key || delta === 0) return;
+  const points = abilityPointsForLevel(lvl);
+  const spent = totalAbilityPointsSpent();
+  const current = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS[key] || 0));
+  if (delta > 0 && spent >= points) return;
+  const next = Math.max(0, current + delta);
+  if (next === current) return;
+  LEVEL_REWARD_ALLOCATIONS[key] = next;
+  if (CHAR) CHAR.level_reward_allocations = { ...LEVEL_REWARD_ALLOCATIONS };
   renderStatistics();
   updatePointCounters();
   updateDerived();
@@ -9239,6 +9275,10 @@ function applyLevelRewardAllocations(){
   updateSubTierOptions();
   refreshArchetypeAbilities();
   queueSave();
+  renderLevelRewardOptions(lvl);
+}
+
+function applyLevelRewardAllocations(){
   closeLevelRewardModal();
 }
 
@@ -13810,7 +13850,10 @@ function baseTalentMax(lvl){
   return levelVal + milestone('tech') + milestone('wisdom');
 }
 function talentMax(){
-  return TALENT_MAX || baseTalentMax(Math.max(1, Math.floor(Number(levelEl.value)||1)));
+  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const base = TALENT_MAX || baseTalentMax(lvl);
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.talent || 0));
+  return base + bonus;
 }
 function talentCount(){
   return (ASSIGNED || []).filter(a=> (a.source_category || '').toLowerCase() === 'talent').length;
@@ -14050,10 +14093,14 @@ async function loadCharacter(){
   XP = numOr(CHAR.xp, 0);
   XP_LEDGER = Array.isArray(CHAR.xp_ledger) ? CHAR.xp_ledger.slice() : [];
   const storedLevel = numOr(CHAR.level ?? CHAR.stats?.level, 0);
-  const levelFromData = storedLevel || levelFromXp(XP) || 1;
+  const legacyLevel = storedLevel > MAX_LEVEL ? Math.max(1, Math.min(MAX_LEVEL, Math.floor(storedLevel / 5))) : storedLevel;
+  const levelFromData = legacyLevel || levelFromXp(XP) || 1;
   CHAR.level = Math.max(1, Math.min(MAX_LEVEL, Math.floor(levelFromData)));
+  if (XP < xpForLevel(CHAR.level)) XP = xpForLevel(CHAR.level);
   CHAR.xp = XP;
   CHAR.stats.level = CHAR.level;
+  LEVEL_REWARD_ALLOCATIONS = normalizeLevelRewardAllocations(CHAR.level_reward_allocations);
+  CHAR.level_reward_allocations = { ...LEVEL_REWARD_ALLOCATIONS };
   if (!Array.isArray(CHAR.abilities)) CHAR.abilities = [];
   if (!Array.isArray(CHAR.expertise_ids)) CHAR.expertise_ids = [];
   if (!Array.isArray(CHAR.divine_manifestation_ids)) CHAR.divine_manifestation_ids = [];
@@ -14213,6 +14260,7 @@ async function saveNow(){
       awakening_ids: CHAR.awakening_ids || [],
       ability_choices: ABILITY_CHOICES || {},
       item_choices: ITEM_CHOICES || {},
+      level_reward_allocations: LEVEL_REWARD_ALLOCATIONS,
       xp_ledger: XP_LEDGER || [],
       inventory_id: SELECTED_INV_ID || '',
       spell_list_id: SELECTED_SPELL_LIST_ID || '',
