@@ -224,11 +224,25 @@
               <label for="fld-animarma" style="margin:0;">Animarma variant (+100 Jelly)</label>
             </div>
           </div>
-          <div class="split" id="magazine-wrap" style="margin-top:8px; display:none;">
+          <div class="split" id="magazine-wrap" style="margin-top:8px; display:none; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px;">
             <div>
               <label>Magazine Size</label>
               <input id="fld-magazine" type="number" min="0" value="0" />
               <div class="muted" style="font-size:.85rem;">Shown when the Magazine attribute is selected.</div>
+            </div>
+            <div id="ammo-wrap" style="display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px;">
+              <div>
+                <label>Ammo name</label>
+                <input id="fld-ammo-name" type="text" placeholder="e.g. Lethality Rounds" />
+              </div>
+              <div>
+                <label>Price (per 10)</label>
+                <input id="fld-ammo-price" type="number" min="0" value="0" placeholder="0" />
+              </div>
+              <div>
+                <label>Enc (per 10)</label>
+                <input id="fld-ammo-enc" type="number" min="0" step="0.1" value="0" placeholder="0" />
+              </div>
             </div>
           </div>
         </div>
@@ -515,6 +529,7 @@ let STATE = {
   craftSpell: null,
   upgrades: [],
   attributes: new Set(),
+  ammo: { name: "", price: 0, enc: 0 },
 };
 let CACHE = { weapon:[], equipment:[], tool:[], object:[] };
 let UPGRADE_CACHE = [];
@@ -597,6 +612,9 @@ function updateMagazineVisibility(){
   wrap.style.display = show ? "grid" : "none";
   if (!show){
     input.value = 0;
+    document.querySelector("#fld-ammo-name").value = "";
+    document.querySelector("#fld-ammo-price").value = 0;
+    document.querySelector("#fld-ammo-enc").value = 0;
   }
 }
 
@@ -1041,6 +1059,9 @@ function buildPayload(){
   const mods = collectModifiers();
   const upgrades = STATE.upgrades.slice();
   const tags = parseTagsInput(document.querySelector("#fld-tags").value);
+  const ammoName = (document.querySelector("#fld-ammo-name")?.value || "").trim();
+  const ammoPrice = Math.max(0, Number(document.querySelector("#fld-ammo-price")?.value || 0));
+  const ammoEnc = Math.max(0, Number(document.querySelector("#fld-ammo-enc")?.value || 0));
 
   if (type === "weapon"){
     const magSize = hasMagazineAttribute() ? Number(document.querySelector("#fld-magazine").value || 0) : 0;
@@ -1066,6 +1087,11 @@ function buildPayload(){
       is_animarma: document.querySelector("#fld-animarma").checked,
       magazine_size: magSize,
     };
+    if (magSize){
+      payload.ammo_name = ammoName;
+      payload.ammo_price = ammoPrice;
+      payload.ammo_enc = ammoEnc;
+    }
     return payload;
   }
 
@@ -1142,6 +1168,9 @@ function fillFromPayload(item){
   setRichText(item.description || "");
   STATE.upgrades = (item.upgrades || []).slice();
   STATE.attributes = new Set(item.effects || []);
+  if ((item.magazine_size || item.magazine) > 0 && !STATE.attributes.has(MAG_ATTR)){
+    STATE.attributes.add(MAG_ATTR);
+  }
   renderAttrList();
   renderUpgradeSummary();
   const type = document.querySelector("#library-type").value;
@@ -1155,6 +1184,9 @@ function fillFromPayload(item){
     document.querySelector("#fld-nature").value = item.nature || "";
     document.querySelector("#fld-animarma").checked = !!item.is_animarma;
     document.querySelector("#fld-magazine").value = item.magazine_size ?? item.magazine ?? 0;
+    document.querySelector("#fld-ammo-name").value = item.ammo_name || "";
+    document.querySelector("#fld-ammo-price").value = item.ammo_price ?? 0;
+    document.querySelector("#fld-ammo-enc").value = item.ammo_enc ?? 0;
     const dmg = item.damage || "2d6+2+M(REF)";
     const diceMatch = dmg.match(/^(\d+)/); document.querySelector("#fld-dice").value = diceMatch ? diceMatch[1] : 2;
     const flatMatch = dmg.match(/\+(\d+)/); document.querySelector("#fld-flat").value = flatMatch ? flatMatch[1] : 2;
@@ -1261,7 +1293,7 @@ async function loadLibrary(type){
 }
 
 function resetForm(){
-  STATE = { id:null, type: document.querySelector("#fld-type").value, craftSpell:null, upgrades:[], attributes:new Set() };
+  STATE = { id:null, type: document.querySelector("#fld-type").value, craftSpell:null, upgrades:[], attributes:new Set(), ammo:{ name:"", price:0, enc:0 } };
   document.querySelector("#fld-name").value = "";
   document.querySelector("#fld-enc").value = 0;
   document.querySelector("#fld-price").value = 0;
@@ -1279,6 +1311,9 @@ function resetForm(){
   document.querySelector("#fld-nature").value = "";
   document.querySelector("#fld-animarma").checked = false;
   document.querySelector("#fld-magazine").value = 0;
+  document.querySelector("#fld-ammo-name").value = "";
+  document.querySelector("#fld-ammo-price").value = 0;
+  document.querySelector("#fld-ammo-enc").value = 0;
   setRichText("");
   document.querySelector("#mod-list").innerHTML = "";
   addModRow({});
@@ -1310,6 +1345,7 @@ function onReady(){
   document.querySelector("#btn-add-upgrade").addEventListener("click", addUpgrade);
   document.querySelector("#btn-add-mod").addEventListener("click", ()=> addModRow({}));
   document.querySelector("#btn-add-attr").addEventListener("click", addAttribute);
+  document.querySelector("#fld-magazine")?.addEventListener("input", updateMagazineVisibility);
   document.querySelector("#btn-save").addEventListener("click", saveItem);
   document.querySelector("#btn-new").addEventListener("click", resetForm);
   document.querySelector("#btn-refresh").addEventListener("click", ()=>{ loadLibrary(document.querySelector("#library-type").value); loadPendingSubmissions(); });

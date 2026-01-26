@@ -2553,6 +2553,7 @@ let COMPUTED_ARC_ABILITIES = [];
 let UPGRADE_META = {};
 let TALENT_MAX = 1;
 let INITIAL_LOAD = true;
+let PRESERVE_INITIAL_CURRENT = true;
 let LEVEL_REWARD_CONTEXT = null;
 const LEVEL_REWARD_OPTION_DEFS = [
   { key:'talent', title:'Talent slot', desc:'Gain access to another talent.', effect:'+1 talent slot' },
@@ -12743,7 +12744,12 @@ function renderCombatWeapons(){
     const ammoLoaded = magCapacity ? Number(state?.ammo_loaded || 0) : 0;
     const hasMagazine = magCapacity > 0;
     const outOfAmmo = hasMagazine && ammoLoaded <= 0;
-    const ammoMeta = hasMagazine ? ` | Ammo: ${ammoLoaded}/${magCapacity}` : '';
+    const ammoDetails = [];
+    if (it?.ammo_name) ammoDetails.push(it.ammo_name);
+    if (hasMagazine) ammoDetails.push(`${ammoLoaded}/${magCapacity}`);
+    const ammoPriceVal = Number(it?.ammo_price ?? 0);
+    if (Number.isFinite(ammoPriceVal) && ammoPriceVal > 0) ammoDetails.push(`${ammoPriceVal} Jelly/10`);
+    const ammoMeta = ammoDetails.length ? ` | Ammo: ${ammoDetails.join(' | ')}` : '';
     const row = document.createElement('div');
     row.className = 'combat-entry';
     const range = it.range != null ? String(it.range) : '';
@@ -12757,7 +12763,7 @@ function renderCombatWeapons(){
       <div class="combat-actions-row">
         <button class="btn small atk-roll" ${outOfAmmo ? 'disabled title="Reload before attacking"' : ''}>Attack Roll</button>
         <button class="btn small dmg-roll" ${outOfAmmo ? 'disabled title="Reload before attacking"' : ''}>Deal Damage</button>
-        ${hasMagazine ? '<button class="btn small reload" title="Reload"><i class="fa-solid fa-arrows-rotate"></i></button>' : ''}
+        ${hasMagazine ? '<button class="btn small reload" title="Reload"><i class="fa-solid fa-arrow-rotate-right"></i></button>' : ''}
         ${it.special ? '<button class="btn small btn-secondary special-remove">Remove</button>' : ''}
       </div>
     `;
@@ -14273,7 +14279,7 @@ function updateDerived(){
     if (prevMax >= safeMax) return safeMax;
     return Math.max(0, val);
   };
-  const cur = OVERRIDE_ENABLED ? {
+  const computedCurrent = OVERRIDE_ENABLED ? {
     hp: Math.max(0, numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp)),
     en: Math.max(0, numOr(CURRENT.en ?? maxVals.en, maxVals.en)),
     fo: Math.max(0, numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo)),
@@ -14286,21 +14292,21 @@ function updateDerived(){
     sp: Math.max(0, clampCurrentValue('sp', CURRENT.sp, maxVals.spcap)),
     tx: Math.max(0, Math.min(curTxRaw, maxVals.tx)),
   };
-  if (INITIAL_LOAD && INITIAL_CURRENT_PRESET){
-    const preservePreset = (key, maxVal) => {
-      const preset = Number(INITIAL_CURRENT_PRESET[key]);
-      if (!Number.isFinite(preset)) return;
-      const safeMax = numOr(maxVal, 0);
-      if (preset > safeMax) return;
-      if (cur[key] < preset) cur[key] = preset;
-    };
-    preservePreset('hp', maxVals.hp);
-    preservePreset('en', maxVals.en);
-    preservePreset('fo', maxVals.fo);
-    preservePreset('sp', maxVals.spcap);
-    preservePreset('tx', maxVals.tx);
-  }
-  CURRENT = cur;
+  const shouldPreserveInitialCurrent = INITIAL_LOAD && PRESERVE_INITIAL_CURRENT && INITIAL_CURRENT_PRESET;
+  const displayCurrent = shouldPreserveInitialCurrent ? {
+    hp: numOr(INITIAL_CURRENT_PRESET.hp, computedCurrent.hp),
+    en: numOr(INITIAL_CURRENT_PRESET.en, computedCurrent.en),
+    fo: numOr(INITIAL_CURRENT_PRESET.fo, computedCurrent.fo),
+    sp: numOr(INITIAL_CURRENT_PRESET.sp, computedCurrent.sp),
+    tx: numOr(INITIAL_CURRENT_PRESET.tx, computedCurrent.tx),
+  } : computedCurrent;
+  CURRENT = shouldPreserveInitialCurrent ? {
+    hp: numOr(INITIAL_CURRENT_PRESET.hp, displayCurrent.hp),
+    en: numOr(INITIAL_CURRENT_PRESET.en, displayCurrent.en),
+    fo: numOr(INITIAL_CURRENT_PRESET.fo, displayCurrent.fo),
+    sp: numOr(INITIAL_CURRENT_PRESET.sp, displayCurrent.sp),
+    tx: numOr(INITIAL_CURRENT_PRESET.tx, displayCurrent.tx),
+  } : { ...displayCurrent };
   CURRENT_MAX_RECORD = {
     hp: numOr(maxVals.hp, 0),
     en: numOr(maxVals.en, 0),
@@ -14308,12 +14314,12 @@ function updateDerived(){
     sp: numOr(maxVals.spcap, 0),
     tx: numOr(maxVals.tx, 0),
   };
-  if (curHpEl) curHpEl.value = cur.hp;
-  if (curEnEl) curEnEl.value = cur.en;
+  if (curHpEl) curHpEl.value = displayCurrent.hp;
+  if (curEnEl) curEnEl.value = displayCurrent.en;
   if (curNenEl) curNenEl.value = Math.max(0, Number(combatState().nen || 0));
-  if (curFoEl) curFoEl.value = cur.fo;
-  if (curSpEl) curSpEl.value = cur.sp;
-  if (curTxEl) curTxEl.value = cur.tx;
+  if (curFoEl) curFoEl.value = displayCurrent.fo;
+  if (curSpEl) curSpEl.value = displayCurrent.sp;
+  if (curTxEl) curTxEl.value = displayCurrent.tx;
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
     if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
     [
@@ -14329,12 +14335,12 @@ function updateDerived(){
     });
 
   // Display
-    hpEl.textContent = `${cur.hp} / ${maxVals.hp}`;
-    enEl.textContent = `${cur.en} / ${maxVals.en}`;
-    foEl.textContent = `${cur.fo} / ${maxVals.fo}`;
+    hpEl.textContent = `${displayCurrent.hp} / ${maxVals.hp}`;
+    enEl.textContent = `${displayCurrent.en} / ${maxVals.en}`;
+    foEl.textContent = `${displayCurrent.fo} / ${maxVals.fo}`;
     moEl.textContent = maxVals.mo;
     initEl.textContent = maxVals.initiative ?? final.initiative;
-    spcapEl.textContent = `${cur.sp} / ${maxVals.spcap}`;
+    spcapEl.textContent = `${displayCurrent.sp} / ${maxVals.spcap}`;
   encEl.textContent = `${Number(final.current_enc || 0).toFixed(1)} / ${maxVals.enc ?? final.enc}`;
   const etDisplay = (()=> {
     const etVal = maxVals.et ?? final.et;

@@ -3035,6 +3035,9 @@ def _weapon_from_body(b: dict) -> dict:
         tags = [str(t).strip() for t in tags if str(t).strip()]
 
     ups = _as_list(b.get("upgrades"))
+    ammo_name = (b.get("ammo_name") or b.get("ammo") or "").strip()
+    ammo_price = _safe_int(b.get("ammo_price"), 0)
+    ammo_enc = _safe_float(b.get("ammo_enc"), 0.0)
     doc = {
         "name": name,
         "name_key": norm_key(name),
@@ -3052,6 +3055,9 @@ def _weapon_from_body(b: dict) -> dict:
         "modifiers": _modifiers_from_body(b),
         "upgrades": ups,
         "tags": tags,
+        "ammo_name": ammo_name,
+        "ammo_price": ammo_price,
+        "ammo_enc": ammo_enc,
     }
     return doc
 
