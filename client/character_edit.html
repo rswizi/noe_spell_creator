@@ -663,7 +663,12 @@
                 </div>
 
                 <div class="home-card">
-                  <h3>Recent Transactions</h3>
+                  <div class="row" style="align-items:center; justify-content:space-between;">
+                    <h3 style="margin:0;">Recent Transactions</h3>
+                    <button class="btn small" id="inv-tx-undo" title="Undo last transaction" aria-label="Undo last transaction">
+                      <i class="fa-solid fa-arrow-rotate-left"></i>
+                    </button>
+                  </div>
                   <div id="inv-tx" class="list"></div>
                 </div>
               </div>
@@ -2746,6 +2751,7 @@ const invContainersEl = document.getElementById('inv-containers');
 const invNewContNameEl = document.getElementById('inv-new-cont-name');
 const invAddContBtn = document.getElementById('inv-add-cont');
 const invTxEl = document.getElementById('inv-tx');
+const invTxUndoBtn = document.getElementById('inv-tx-undo');
 const invQEl = document.getElementById('inv-q');
 const invTagEl = document.getElementById('inv-tag');
 const invKindEl = document.getElementById('inv-kind');
@@ -4770,6 +4776,9 @@ function renderInventoryUI(){
   // Transactions
   const txs = (LINKED_INV.transactions || []).slice(-12).reverse();
   invTxEl.innerHTML = txs.length ? txs.map(t=>`<div class="row"><span class="pill">${t.currency||''} ${t.amount||0}</span><span class="muted">${invEscapeHtml(t.note||'')}</span><span class="muted">${t.ts||''}</span></div>`).join('') : '<div class="muted">No transactions.</div>';
+  if (invTxUndoBtn){
+    invTxUndoBtn.disabled = txs.length === 0;
+  }
   renderCombatWeapons();
 }
 
@@ -7061,6 +7070,25 @@ async function invAddFunds(){
     invToggleModal(invFundModal, invFundBackdrop, false);
   }catch(e){
     invFundStatus.textContent = "Failed: " + e.message;
+  }
+}
+
+async function invUndoLastTransaction(){
+  const sourceId = getInventorySourceId();
+  if (!sourceId){ invStatusEl.textContent = "Link an inventory first."; return; }
+  invStatusEl.textContent = "Undoing last transaction...";
+  try{
+    const resp = await fetch(`/inventories/${encodeURIComponent(sourceId)}/transactions/undo`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", ...authHeaders() }
+    });
+    const data = await resp.json().catch(()=>({}));
+    if (!resp.ok || data.status !== "success") throw new Error(data.message || "Undo failed");
+    LINKED_INV = data.inventory;
+    renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+    invStatusEl.textContent = "Last transaction reverted.";
+  }catch(e){
+    invStatusEl.textContent = `Undo failed: ${e?.message || e}`;
   }
 }
 
@@ -14156,6 +14184,7 @@ invFundOpenBtn?.addEventListener('click', ()=>{ invFundStatus.textContent=''; in
 invFundClose?.addEventListener('click', ()=> invToggleModal(invFundModal, invFundBackdrop, false));
 invFundCancel?.addEventListener('click', ()=> invToggleModal(invFundModal, invFundBackdrop, false));
 invFundBackdrop?.addEventListener('click', (e)=>{ if (e.target===invFundBackdrop) invToggleModal(invFundModal, invFundBackdrop, false); });
+invTxUndoBtn?.addEventListener('click', invUndoLastTransaction);
 invFundSave?.addEventListener('click', invAddFunds);
 invCatalogOpenBtn?.addEventListener('click', ()=> invToggleModal(invCatalogModal, invCatalogBackdrop, true));
 invCatalogClose?.addEventListener('click', ()=> invToggleModal(invCatalogModal, invCatalogBackdrop, false));

@@ -4348,7 +4348,8 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "currency": currency,
         "amount": -total,
         "note": f"{'Take' if pricing_mode == 'take' else 'Purchase'} {name} x{qty} ({note_tag})",
-        "source": "purchase"
+        "source": "purchase",
+        "item_id": item["item_id"]
     }
 
     items = inv.get("items") or []
@@ -4454,6 +4455,59 @@ def deposit_funds(request: Request, inv_id: str, payload: dict = Body(...)):
         "$set": {"currencies": cur},
         "$push": {"transactions": tx}
     })
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    return {"status": "success", "inventory": inv2, "transaction": tx}
+
+@app.post("/inventories/{inv_id}/transactions/undo")
+def undo_inventory_transaction(request: Request, inv_id: str):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+    transactions = inv.get("transactions") or []
+    if not transactions:
+        raise HTTPException(400, "No transactions to undo")
+    tx = transactions[-1]
+    source = (tx.get("source") or "").strip()
+    currency = (tx.get("currency") or _pick_currency(inv)).strip()
+    amount = int(tx.get("amount") or 0)
+    cur_map = dict(inv.get("currencies") or {})
+    set_fields: dict[str, object] = {}
+    if source == "deposit":
+        if amount <= 0:
+            raise HTTPException(400, "Invalid deposit transaction")
+        new_amount = int(cur_map.get(currency, 0)) - amount
+        if new_amount < 0:
+            raise HTTPException(400, "Cannot undo deposit: insufficient balance")
+        cur_map[currency] = new_amount
+        set_fields["currencies"] = cur_map
+    elif source == "purchase":
+        item_id = tx.get("item_id")
+        if not item_id:
+            raise HTTPException(400, "Purchase transaction missing item reference")
+        items = inv.get("items") or []
+        idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
+        if idx < 0:
+            raise HTTPException(400, "Item already removed")
+        items = items[:idx] + items[idx + 1:]
+        containers = inv.get("containers") or []
+        containers, inv_enc_total = _recompute_encumbrance(items, containers)
+        cur_map[currency] = int(cur_map.get(currency, 0)) - amount
+        if cur_map[currency] < 0:
+            raise HTTPException(400, "Cannot undo purchase: insufficient balance")
+        set_fields.update({
+            "items": items,
+            "containers": containers,
+            "enc_total": inv_enc_total,
+            "currencies": cur_map
+        })
+    else:
+        raise HTTPException(400, f"Undo not supported for {source or 'unknown'} transactions")
+    update_op = {"$pop": {"transactions": 1}}
+    if set_fields:
+        update_op["$set"] = set_fields
+    db.inventories.update_one({"id": inv_id, "owner": user}, update_op)
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
     return {"status": "success", "inventory": inv2, "transaction": tx}
 
