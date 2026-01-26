@@ -1313,8 +1313,6 @@
         </div>
       </div>
     </div>
-
-    </div>
     <aside class="roll-chat" id="roll-chat">
       <div class="roll-chat-panel" id="roll-log-panel">
         <div class="roll-chat-header">
@@ -1989,7 +1987,7 @@ const CHARACS = [
 const NATURES = ['Fire','Lightning','Water','Earth','Wind','Sun','Moon','Ki'];
 const INTENSITIES = ['Fire','Water','Earth','Wind','Lightning','Sun','Moon','Ki'];
 const SUB_TIER_SLOTS = {1:1, 2:3, 3:5, 4:7};
-const SUB_TIER_MIN_LEVELS = {1:1, 2:25, 3:50, 4:75};
+const SUB_TIER_MIN_LEVELS = {1:1, 2:5, 3:10, 4:15};
 const SUB_TYPES = [
   { key:'lethality', label:'Lethality' },
   { key:'blessing', label:'Blessing' },
@@ -2534,6 +2532,7 @@ let SUB_HIDDEN = {};
 let PERSONAL = {};
 let CURRENT = { hp:null, en:null, fo:null, sp:null, tx:null };
 let CURRENT_MAX_RECORD = null;
+let INITIAL_CURRENT_PRESET = null;
 let OVERRIDE_ENABLED = false;
 let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, initiative:null, spcap:null, enc:null, et:null, tx:null, talent_max:null, skill_points:null, stat_points:null, sublimation_slots:null, complex_schools:null };
 let ARCHETYPES = [];
@@ -14268,6 +14267,20 @@ function updateDerived(){
     sp: Math.max(0, clampCurrentValue('sp', CURRENT.sp, maxVals.spcap)),
     tx: Math.max(0, Math.min(curTxRaw, maxVals.tx)),
   };
+  if (INITIAL_LOAD && INITIAL_CURRENT_PRESET){
+    const preservePreset = (key, maxVal) => {
+      const preset = Number(INITIAL_CURRENT_PRESET[key]);
+      if (!Number.isFinite(preset)) return;
+      const safeMax = numOr(maxVal, 0);
+      if (preset > safeMax) return;
+      if (cur[key] < preset) cur[key] = preset;
+    };
+    preservePreset('hp', maxVals.hp);
+    preservePreset('en', maxVals.en);
+    preservePreset('fo', maxVals.fo);
+    preservePreset('sp', maxVals.spcap);
+    preservePreset('tx', maxVals.tx);
+  }
   CURRENT = cur;
   CURRENT_MAX_RECORD = {
     hp: numOr(maxVals.hp, 0),
@@ -14372,6 +14385,7 @@ async function loadCharacter(){
   SELECTED_INV_ID = CHAR.inventory_id || '';
    COMPUTED_ARC_ABILITIES = CHAR.computed_archetype_abilities || [];
   CURRENT = Object.assign({hp:null,en:null,fo:null,sp:null,tx:null}, CHAR.current || {});
+  INITIAL_CURRENT_PRESET = { ...CURRENT };
   CURRENT_MAX_RECORD = null;
   OVERRIDE_ENABLED = !!CHAR.override_stats?.enabled;
   OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,initiative:null,spcap:null,enc:null,et:null,tx:null,talent_max:null,skill_points:null,stat_points:null,sublimation_slots:null,complex_schools:null}, CHAR.override_stats?.values || {});
@@ -14456,6 +14470,7 @@ async function loadCharacter(){
   renderCombatTab();
   INITIAL_LOAD = false;
   applyReadOnlyState();
+  INITIAL_CURRENT_PRESET = null;
 }
 
 function queueSave(){
