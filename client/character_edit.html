@@ -2341,6 +2341,11 @@ const LEVEL_REWARD_PROFILES = [
   { level:19, skillPoints:260, skillCap:8, charPoints:60, charCap:20, archetypeRank:13, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3, boonStage:10 },
   { level:20, skillPoints:270, skillCap:8, charPoints:64, charCap:20, archetypeRank:13, abilityPoints:10, tensionCap:18, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, awakeningStage:3, boonStage:11 },
 ];
+const MAX_ARCHETYPE_RANK = 12;
+function computeArchetypeRank(lvl){
+  const target = Math.max(1, Math.floor(Number(lvl) || 1));
+  return Math.min(MAX_ARCHETYPE_RANK, 4 + Math.floor(target / 2));
+}
 function computeArchetypeRank(lvl){
   const target = Math.max(1, Math.floor(Number(lvl) || 1));
   return 3 + Math.ceil((target + 1) / 2);
@@ -14431,7 +14436,7 @@ async function loadCharacter(){
   OVERRIDE_ENABLED = !!CHAR.override_stats?.enabled;
   OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,initiative:null,spcap:null,enc:null,et:null,tx:null,talent_max:null,skill_points:null,stat_points:null,sublimation_slots:null,complex_schools:null}, CHAR.override_stats?.values || {});
   if (overrideToggle) overrideToggle.checked = OVERRIDE_ENABLED;
-  if (!CHAR.archetype_rank) CHAR.archetype_rank = _archetypeRankForLevel(CHAR.level);
+  CHAR.archetype_rank = _archetypeRankForLevel(CHAR.level);
   LINKED_SPELL_LIST = null;
   renderSpellListSummary();
   PERSONAL = CHAR.stats?.personal || {};
