@@ -2533,6 +2533,7 @@ let SUBLIMATIONS = [];
 let SUB_HIDDEN = {};
 let PERSONAL = {};
 let CURRENT = { hp:null, en:null, fo:null, sp:null, tx:null };
+let CURRENT_MAX_RECORD = null;
 let OVERRIDE_ENABLED = false;
 let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, initiative:null, spcap:null, enc:null, et:null, tx:null, talent_max:null, skill_points:null, stat_points:null, sublimation_slots:null, complex_schools:null };
 let ARCHETYPES = [];
@@ -14241,26 +14242,40 @@ function updateDerived(){
       });
     }
     DERIVED_CACHE = { ...final, ...maxVals };
-    const curTxRaw = numOr(CURRENT.tx ?? 0, 0);
-    const cur = OVERRIDE_ENABLED ? {
-      hp: numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp),
-      en: numOr(CURRENT.en ?? maxVals.en, maxVals.en),
-      fo: numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo),
-      sp: numOr(CURRENT.sp ?? maxVals.spcap, maxVals.spcap),
-      tx: curTxRaw,
-    } : {
-      hp: Math.max(0, Math.min(numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp), maxVals.hp)),
-      en: Math.max(0, Math.min(numOr(CURRENT.en ?? maxVals.en, maxVals.en), maxVals.en)),
-      fo: Math.max(0, Math.min(numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo), maxVals.fo)),
-      sp: Math.max(0, Math.min(numOr(CURRENT.sp ?? maxVals.spcap, maxVals.spcap), maxVals.spcap)),
-      tx: Math.max(0, Math.min(curTxRaw, maxVals.tx)),
-    };
-  if (CURRENT.hp == null) cur.hp = maxVals.hp;
-  if (CURRENT.en == null) cur.en = maxVals.en;
-  if (CURRENT.fo == null) cur.fo = maxVals.fo;
-  if (CURRENT.sp == null) cur.sp = maxVals.spcap;
-  if (CURRENT.tx == null) cur.tx = 0;
+  const curTxRaw = numOr(CURRENT.tx ?? 0, 0);
+  const prevMaxRecord = CURRENT_MAX_RECORD || {};
+  const clampCurrentValue = (key, stored, maxVal) => {
+    const safeMax = numOr(maxVal, 0);
+    if (stored == null) return safeMax;
+    const val = Number(stored);
+    if (!Number.isFinite(val)) return safeMax;
+    if (OVERRIDE_ENABLED) return val;
+    if (val <= safeMax) return Math.max(0, val);
+    const prevMax = Number(prevMaxRecord[key] ?? 0);
+    if (prevMax >= safeMax) return safeMax;
+    return Math.max(0, val);
+  };
+  const cur = OVERRIDE_ENABLED ? {
+    hp: Math.max(0, numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp)),
+    en: Math.max(0, numOr(CURRENT.en ?? maxVals.en, maxVals.en)),
+    fo: Math.max(0, numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo)),
+    sp: Math.max(0, numOr(CURRENT.sp ?? maxVals.spcap, maxVals.spcap)),
+    tx: Math.max(0, curTxRaw),
+  } : {
+    hp: Math.max(0, clampCurrentValue('hp', CURRENT.hp, maxVals.hp)),
+    en: Math.max(0, clampCurrentValue('en', CURRENT.en, maxVals.en)),
+    fo: Math.max(0, clampCurrentValue('fo', CURRENT.fo, maxVals.fo)),
+    sp: Math.max(0, clampCurrentValue('sp', CURRENT.sp, maxVals.spcap)),
+    tx: Math.max(0, Math.min(curTxRaw, maxVals.tx)),
+  };
   CURRENT = cur;
+  CURRENT_MAX_RECORD = {
+    hp: numOr(maxVals.hp, 0),
+    en: numOr(maxVals.en, 0),
+    fo: numOr(maxVals.fo, 0),
+    sp: numOr(maxVals.spcap, 0),
+    tx: numOr(maxVals.tx, 0),
+  };
   if (curHpEl) curHpEl.value = cur.hp;
   if (curEnEl) curEnEl.value = cur.en;
   if (curNenEl) curNenEl.value = Math.max(0, Number(combatState().nen || 0));
@@ -14357,6 +14372,7 @@ async function loadCharacter(){
   SELECTED_INV_ID = CHAR.inventory_id || '';
    COMPUTED_ARC_ABILITIES = CHAR.computed_archetype_abilities || [];
   CURRENT = Object.assign({hp:null,en:null,fo:null,sp:null,tx:null}, CHAR.current || {});
+  CURRENT_MAX_RECORD = null;
   OVERRIDE_ENABLED = !!CHAR.override_stats?.enabled;
   OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,initiative:null,spcap:null,enc:null,et:null,tx:null,talent_max:null,skill_points:null,stat_points:null,sublimation_slots:null,complex_schools:null}, CHAR.override_stats?.values || {});
   if (overrideToggle) overrideToggle.checked = OVERRIDE_ENABLED;
