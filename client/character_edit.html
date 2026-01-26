@@ -474,6 +474,12 @@
       pointer-events:none;
       font-style: italic;
     }
+    .level-reward-summary{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; font-size:.95rem; }
+    .level-reward-line{ background:rgba(255,255,255,.04); padding:6px 10px; border-radius:6px; }
+    .level-reward-attribute-grid{ display:grid; gap:8px; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); margin-top:8px; }
+    .level-reward-attribute-grid .attribute-row{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
+    .level-reward-available{ font-weight:600; margin-top:6px; display:inline-block; }
+    .level-reward-available.warn{ color:#f66; }
   </style>
 </head>
 <body>
@@ -505,12 +511,15 @@
           <div class="avatar-tools">
             <input id="name" placeholder="Enter a name..." class="grow name-input" maxlength="22" />
             <div class="xp-card">
-              <div class="xp-top">
-                <span class="k">Level</span>
+            <div class="xp-top">
+              <span class="k">Level</span>
                 <input id="level" type="text" class="num" value="1" readonly />
                 <button class="btn small" id="xp-add-btn" title="Add XP">+ XP</button>
                 <button class="btn small" id="level-set-btn" title="Set level">Set</button>
                 <button class="btn small" id="xp-ledger-btn" title="Open XP ledger">Ledger</button>
+                <button class="btn small" id="configure-attributes-btn" title="Configure attributes">
+                  <i class="fa-solid fa-sliders"></i> Configure Attributes
+                </button>
               </div>
               <div class="xp-bar" aria-label="XP progress">
                 <div class="xp-bar-fill" id="xp-bar-fill"><span id="xp-bar-text">--</span></div>
@@ -676,6 +685,26 @@
           </details>
         </div>
 
+        <div id="level-reward-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
+        <div id="level-reward-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="level-reward-title">
+          <div class="modal-card" style="max-width:520px;">
+            <div class="row" style="justify-content:space-between; align-items:flex-start;">
+              <div>
+                <div class="modal-title" id="level-reward-title">Level Reward</div>
+                <div class="muted" id="level-reward-subtitle"></div>
+              </div>
+              <button class="modal-close" id="level-reward-close" aria-label="Close">&times;</button>
+            </div>
+            <div id="level-reward-summary" class="level-reward-summary"></div>
+            <div class="muted">Use the inputs below to allocate attribute points.</div>
+            <div class="muted" style="margin-top:6px;">Remaining attribute points: <span id="level-reward-available">0</span></div>
+            <div id="level-reward-attribute-grid" class="level-reward-attribute-grid"></div>
+            <div class="btn-row" style="margin-top:10px;">
+              <button class="btn small" id="level-reward-apply">Apply</button>
+              <button class="btn small btn-secondary" id="level-reward-cancel">Close</button>
+            </div>
+          </div>
+        </div>
         <!-- Item modal -->
         <div id="inv-item-backdrop" class="modal-backdrop" aria-hidden="true"></div>
 <div id="inv-item-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-item-title">
@@ -1985,12 +2014,7 @@ const CRAFTOMANCY_TABLE = {
 };
 
 function _archetypeRankForLevel(lvl){
-  const thresholds = [[80,12],[70,11],[60,10],[50,9],[40,8],[30,7],[20,6],[10,5],[1,4]];
-  const v = Math.max(1, Number(lvl)||1);
-  for (const [lv,r] of thresholds){
-    if (v >= lv) return r;
-  }
-  return 1;
+  return levelProfile(lvl).archetypeRank;
 }
 const TARGET_GROUPS = [
   { label:'Characteristics', options:[
@@ -2262,6 +2286,50 @@ function craftSpellIsComplex(sp){
   });
 }
 const MAX_LEVEL = 100;
+const LEVEL_REWARD_PROFILES = [
+  { level:1, skillPoints:80, skillCap:3, charPoints:24, charCap:10, archetypeRank:4, abilityPoints:0, tensionCap:3, subSlots:0, maxSublimationTier:1, maxCraftomancy:0, awakeningStage:0 },
+  { level:2, skillPoints:90, skillCap:4, charPoints:28, charCap:10, archetypeRank:4, abilityPoints:1, tensionCap:6, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, awakeningStage:0 },
+  { level:3, skillPoints:100, skillCap:4, charPoints:28, charCap:12, archetypeRank:5, abilityPoints:1, tensionCap:6, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, awakeningStage:0 },
+  { level:4, skillPoints:110, skillCap:5, charPoints:32, charCap:12, archetypeRank:5, abilityPoints:2, tensionCap:9, subSlots:2, maxSublimationTier:1, maxCraftomancy:2, awakeningStage:0 },
+  { level:5, skillPoints:120, skillCap:5, charPoints:32, charCap:12, archetypeRank:6, abilityPoints:2, tensionCap:9, subSlots:4, maxSublimationTier:2, maxCraftomancy:2, awakeningStage:1 },
+  { level:6, skillPoints:130, skillCap:6, charPoints:36, charCap:14, archetypeRank:6, abilityPoints:3, tensionCap:12, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, awakeningStage:1 },
+  { level:7, skillPoints:140, skillCap:6, charPoints:36, charCap:14, archetypeRank:7, abilityPoints:3, tensionCap:12, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, awakeningStage:1 },
+  { level:8, skillPoints:150, skillCap:7, charPoints:40, charCap:14, archetypeRank:7, abilityPoints:4, tensionCap:15, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, awakeningStage:1 },
+  { level:9, skillPoints:160, skillCap:7, charPoints:40, charCap:16, archetypeRank:8, abilityPoints:4, tensionCap:15, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, awakeningStage:1 },
+  { level:10, skillPoints:170, skillCap:8, charPoints:44, charCap:16, archetypeRank:8, abilityPoints:5, tensionCap:18, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, awakeningStage:2 },
+  { level:11, skillPoints:180, skillCap:8, charPoints:44, charCap:16, archetypeRank:9, abilityPoints:5, tensionCap:18, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, awakeningStage:2 },
+  { level:12, skillPoints:190, skillCap:8, charPoints:48, charCap:18, archetypeRank:9, abilityPoints:6, tensionCap:18, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, awakeningStage:2 },
+  { level:13, skillPoints:200, skillCap:8, charPoints:48, charCap:18, archetypeRank:10, abilityPoints:6, tensionCap:18, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, awakeningStage:2 },
+  { level:14, skillPoints:210, skillCap:8, charPoints:52, charCap:18, archetypeRank:10, abilityPoints:7, tensionCap:18, subSlots:14, maxSublimationTier:3, maxCraftomancy:7, awakeningStage:2 },
+  { level:15, skillPoints:220, skillCap:8, charPoints:52, charCap:20, archetypeRank:11, abilityPoints:7, tensionCap:18, subSlots:14, maxSublimationTier:4, maxCraftomancy:7, awakeningStage:3 },
+  { level:16, skillPoints:230, skillCap:8, charPoints:56, charCap:20, archetypeRank:11, abilityPoints:8, tensionCap:18, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, awakeningStage:3 },
+  { level:17, skillPoints:240, skillCap:8, charPoints:56, charCap:20, archetypeRank:12, abilityPoints:8, tensionCap:18, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, awakeningStage:3 },
+  { level:18, skillPoints:250, skillCap:8, charPoints:60, charCap:20, archetypeRank:12, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3 },
+  { level:19, skillPoints:260, skillCap:8, charPoints:60, charCap:20, archetypeRank:12, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3 },
+  { level:20, skillPoints:270, skillCap:8, charPoints:64, charCap:20, archetypeRank:12, abilityPoints:10, tensionCap:18, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, awakeningStage:3 },
+];
+function levelProfile(lvl){
+  const target = Math.max(1, Math.floor(Number(lvl) || 1));
+  if (target <= LEVEL_REWARD_PROFILES.length){
+    return LEVEL_REWARD_PROFILES[target - 1];
+  }
+  const base = LEVEL_REWARD_PROFILES[LEVEL_REWARD_PROFILES.length - 1];
+  const extra = target - base.level;
+  return {
+    level: target,
+    skillPoints: base.skillPoints + extra * 10,
+    skillCap: base.skillCap,
+    charPoints: base.charPoints,
+    charCap: base.charCap,
+    archetypeRank: 12,
+    abilityPoints: Math.floor(target / 2),
+    tensionCap: base.tensionCap,
+    subSlots: base.subSlots + extra,
+    maxSublimationTier: base.maxSublimationTier,
+    maxCraftomancy: base.maxCraftomancy + Math.floor((extra + 1) / 2),
+    awakeningStage: 3,
+  };
+}
 function xpForLevel(level){
   const lvl = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level||1)));
   return 100 * ((lvl-1) * lvl / 2);
@@ -2363,6 +2431,8 @@ let COMPUTED_ARC_ABILITIES = [];
 let UPGRADE_META = {};
 let TALENT_MAX = 1;
 let INITIAL_LOAD = true;
+let LEVEL_REWARD_CONTEXT = null;
+let LEVEL_REWARD_BASE_AVAILABLE = 0;
 
 let REFRESH_NOTICE_QUEUE = [];
 let REFRESH_NOTICE_TIMER = null;
@@ -2452,6 +2522,16 @@ const skillCounterEl = document.getElementById('skill-counter');
 const statCounterEl = document.getElementById('stat-counter');
 const skillCapEl = document.getElementById('skill-cap');
 const statCapEl = document.getElementById('stat-cap');
+const configureAttributesBtn = document.getElementById('configure-attributes-btn');
+const levelRewardModal = document.getElementById('level-reward-modal');
+const levelRewardBackdrop = document.getElementById('level-reward-backdrop');
+const levelRewardSummary = document.getElementById('level-reward-summary');
+const levelRewardAttributeGrid = document.getElementById('level-reward-attribute-grid');
+const levelRewardAvailableEl = document.getElementById('level-reward-available');
+const levelRewardSubtitle = document.getElementById('level-reward-subtitle');
+const levelRewardApplyBtn = document.getElementById('level-reward-apply');
+const levelRewardCancelBtn = document.getElementById('level-reward-cancel');
+const levelRewardCloseBtn = document.getElementById('level-reward-close');
 const overrideToggle = document.getElementById('override-derived');
 const overrideInputsWrap = document.getElementById('override-inputs');
 const ovHpEl = document.getElementById('ov-hp');
@@ -3534,21 +3614,13 @@ function combatState(){
 }
 
 function skillMaxForLevel(lvl){
-  const lv = Math.max(1, Math.floor(Number(lvl) || 1));
-  if (lv < 10) return 3;
-  if (lv < 20) return 4;
-  if (lv < 30) return 5;
-  if (lv < 40) return 6;
-  if (lv < 50) return 7;
-  return 8;
+  return levelProfile(lvl).skillCap;
 }
 function skillPointPool(lvl){
-  // 80 at level 1, +2 per level-up
-  return 80 + Math.max(0, (Math.max(1, lvl) - 1) * 2);
+  return levelProfile(lvl).skillPoints;
 }
 function statPointPool(lvl){
-  // 24 at level 1, +3 every 9 levels (per KP rule)
-  return 24 + Math.floor((Math.max(1, lvl) - 1) / 9) * 3;
+  return levelProfile(lvl).charPoints;
 }
 function effectiveSkillPointPool(lvl){
   return numOr(DERIVED_CACHE?.skill_points, skillPointPool(lvl));
@@ -3557,10 +3629,8 @@ function effectiveStatPointPool(lvl){
   return numOr(DERIVED_CACHE?.stat_points, statPointPool(lvl));
 }
 function statInvestCap(lvl){
-  const lv = Math.max(1, Math.floor(Number(lvl) || 1));
-  // Base total cap 10, +2 every 15 levels, max 20
-  const maxTotal = Math.min(20, 10 + (Math.floor(lv / 15) * 2));
-  return Math.max(0, maxTotal - 4); // convert back to invest (base is 4)
+  const maxTotal = levelProfile(lvl).charCap;
+  return Math.max(0, maxTotal - 4);
 }
 function statTotalCap(lvl){
   return totalFromInvest(statInvestCap(lvl));
@@ -3638,8 +3708,7 @@ function normalizeSublimations(arr){
   return out;
 }
 function slotsForLevel(lvl){
-  const base = 2; // unlocked immediately, +2 every 10 levels
-  return base + (Math.floor(Math.max(1, lvl) / 10) * 2);
+  return levelProfile(lvl).subSlots;
 }
 function effectiveSublimationSlots(lvl){
   return numOr(DERIVED_CACHE?.sublimation_slots, slotsForLevel(lvl));
@@ -9016,6 +9085,7 @@ function addXp(amount){
   const inc = Math.max(0, Math.floor(Number(amount)||0));
   if (!inc) return;
   const prevXp = XP;
+  const prevLvl = Math.max(1, Math.floor(Number(CHAR.level) || levelFromXp(prevXp)));
   XP = Math.max(0, XP + inc);
   CHAR.xp = XP;
   const lvl = levelFromXp(XP);
@@ -9029,11 +9099,15 @@ function addXp(amount){
   refreshArchetypeAbilities();
   logXpChange('Add XP', XP - prevXp, `Added ${inc} XP`);
   queueSave();
+  if (lvl > prevLvl){
+    showLevelRewardModal(lvl, prevLvl, 'level');
+  }
 }
 
 function setLevelManual(lvl){
   const val = Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(lvl)||1)));
   const prevXp = XP;
+  const prevLvl = Math.max(1, Math.floor(Number(CHAR.level) || levelFromXp(prevXp) || 1));
   CHAR.level = val;
   CHAR.stats.level = CHAR.level;
   levelEl.value = val;
@@ -9046,6 +9120,126 @@ function setLevelManual(lvl){
   refreshArchetypeAbilities();
   logXpChange('Set level', XP - prevXp, `Set level to ${val}`);
   queueSave();
+  if (val > prevLvl){
+    showLevelRewardModal(val, prevLvl, 'level');
+  }
+}
+
+function showLevelRewardModal(newLvl, prevLvl, mode='level'){
+  if (!levelRewardModal || !levelRewardSummary || !levelRewardAttributeGrid || !levelRewardAvailableEl) return;
+  const target = Math.max(1, Math.floor(Number(newLvl) || Number(levelEl.value) || 1));
+  const pool = effectiveStatPointPool(target);
+  const used = totalStatInvest();
+  const available = Math.max(0, pool - used);
+  LEVEL_REWARD_CONTEXT = { mode, newLvl: target, oldLvl: Math.max(1, Math.floor(Number(prevLvl) || target)) };
+  LEVEL_REWARD_BASE_AVAILABLE = available;
+  const summaryParts = [];
+  if (mode === 'level' && prevLvl){
+    const newProfile = levelProfile(target);
+    const oldProfile = levelProfile(Math.max(1, Math.floor(Number(prevLvl) || 1)));
+    const delta = {
+      skillPoints: newProfile.skillPoints - oldProfile.skillPoints,
+      skillCap: newProfile.skillCap - oldProfile.skillCap,
+      charPoints: newProfile.charPoints - oldProfile.charPoints,
+      charCap: newProfile.charCap - oldProfile.charCap,
+      abilityPoints: newProfile.abilityPoints - oldProfile.abilityPoints,
+      tensionCap: newProfile.tensionCap - oldProfile.tensionCap,
+      subSlots: newProfile.subSlots - oldProfile.subSlots,
+      maxSublimationTier: newProfile.maxSublimationTier - oldProfile.maxSublimationTier,
+      maxCraftomancy: newProfile.maxCraftomancy - oldProfile.maxCraftomancy,
+      awakeningStage: newProfile.awakeningStage - oldProfile.awakeningStage,
+    };
+    summaryParts.push(`<div class="level-reward-line"><strong>Level ${target}</strong> reached!</div>`);
+    summaryParts.push(`<div class="level-reward-line">Skill points pool: ${newProfile.skillPoints}${delta.skillPoints>0?` (+${delta.skillPoints})`:''}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Maximum per skill: ${newProfile.skillCap}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Characteristic cap: ${newProfile.charCap}${delta.charCap>0?` (+${delta.charCap})`:''}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Attribute points gained: +${delta.charPoints}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Ability points: ${newProfile.abilityPoints}${delta.abilityPoints>0?` (+${delta.abilityPoints})`:''}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Tension cap: ${newProfile.tensionCap}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Sublimation slots: ${newProfile.subSlots}${delta.subSlots>0?` (+${delta.subSlots})`:''}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Max sublimation tier: ${newProfile.maxSublimationTier}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Craftomancy cap: ${newProfile.maxCraftomancy}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Archetype rank: ${newProfile.archetypeRank}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Awakening stage: ${newProfile.awakeningStage}</div>`);
+    levelRewardSubtitle.textContent = 'New rewards unlocked!';
+  }else{
+    summaryParts.push(`<div class="level-reward-line">Adjust your attribute investments below.</div>`);
+    levelRewardSubtitle.textContent = 'Configure attribute points';
+  }
+  levelRewardSummary.innerHTML = summaryParts.join('');
+  levelRewardAttributeGrid.innerHTML = '';
+  (CHARACS || []).forEach(c=>{
+    const row = document.createElement('div');
+    row.className = 'attribute-row';
+    row.innerHTML = `
+      <span>${invEscapeHtml(c.name)}</span>
+      <input type="number" min="0" value="0" data-attr="${invEscapeHtml(c.key)}" style="flex:1; text-align:right;">
+    `;
+    levelRewardAttributeGrid.appendChild(row);
+  });
+  levelRewardAttributeGrid.querySelectorAll('input[data-attr]').forEach(input=> input.addEventListener('input', updateLevelRewardAvailable));
+  updateLevelRewardAvailable();
+  levelRewardBackdrop.classList.remove('hidden');
+  levelRewardBackdrop.classList.add('open');
+  levelRewardModal.classList.remove('hidden');
+  levelRewardModal.classList.add('open');
+}
+
+function closeLevelRewardModal(){
+  if (!levelRewardModal || !levelRewardBackdrop) return;
+  LEVEL_REWARD_CONTEXT = null;
+  levelRewardModal.classList.add('hidden');
+  levelRewardModal.classList.remove('open');
+  levelRewardBackdrop.classList.add('hidden');
+  levelRewardBackdrop.classList.remove('open');
+}
+
+function updateLevelRewardAvailable(){
+  if (!levelRewardAvailableEl || !levelRewardAttributeGrid) return;
+  const inputs = Array.from(levelRewardAttributeGrid.querySelectorAll('input[data-attr]'));
+  const total = inputs.reduce((sum,input)=> sum + Math.max(0, Math.floor(Number(input.value)||0)), 0);
+  const remaining = Math.max(0, LEVEL_REWARD_BASE_AVAILABLE - total);
+  levelRewardAvailableEl.textContent = `${remaining} / ${LEVEL_REWARD_BASE_AVAILABLE}`;
+  levelRewardAvailableEl.classList.toggle('warn', total > LEVEL_REWARD_BASE_AVAILABLE);
+}
+
+function applyLevelRewardAllocations(){
+  if (!levelRewardAttributeGrid) return;
+  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const pool = effectiveStatPointPool(lvl);
+  const used = totalStatInvest();
+  const available = Math.max(0, pool - used);
+  const inputs = Array.from(levelRewardAttributeGrid.querySelectorAll('input[data-attr]'));
+  const increments = inputs.map(input=>({ key: input.dataset.attr, val: Math.max(0, Math.floor(Number(input.value)||0)) }));
+  const totalAllocated = increments.reduce((sum,it)=> sum + it.val, 0);
+  if (totalAllocated > available){
+    alert('You allocated more attribute points than available.');
+    return;
+  }
+  let changed = false;
+  const capInvest = statInvestCap(lvl);
+  increments.forEach(({key,val})=>{
+    if (!val) return;
+    if (!CHAR.stats) CHAR.stats = {};
+    if (!CHAR.stats[key]) CHAR.stats[key] = {};
+    const current = investVal(CHAR.stats[key].invest, 0);
+    const target = Math.min(current + val, capInvest);
+    if (target === current) return;
+    CHAR.stats[key].invest = target;
+    changed = true;
+  });
+  if (!changed){
+    closeLevelRewardModal();
+    return;
+  }
+  renderStatistics();
+  updatePointCounters();
+  updateDerived();
+  renderSublimations();
+  updateSubTierOptions();
+  refreshArchetypeAbilities();
+  queueSave();
+  closeLevelRewardModal();
 }
 
 function renderSpellRows(){
@@ -9732,11 +9926,7 @@ async function computeRankedUnlockedIds(sourceDoc, effRank){
 }
 
 function awakeningRankForLevel(lvl){
-  const lv = Math.max(1, Math.floor(Number(lvl) || 1));
-  if (lv >= 75) return 3;
-  if (lv >= 50) return 2;
-  if (lv >= 25) return 1;
-  return 0;
+  return levelProfile(lvl).awakeningStage;
 }
 
 function awakeningTensionForRank(rank){
@@ -10829,13 +11019,7 @@ function getCombatRollModifiers(kind, skillName){
 }
 
 function tensionCapForLevel(lvl){
-  const v = Math.max(1, Math.floor(Number(lvl)||1));
-  if (v <= 10) return 3;
-  if (v <= 20) return 6;
-  if (v <= 30) return 9;
-  if (v <= 40) return 12;
-  if (v <= 50) return 15;
-  return 18;
+  return levelProfile(lvl).tensionCap;
 }
 function allSkillNames(){
   const set = new Set();
@@ -14226,6 +14410,11 @@ invFundClose?.addEventListener('click', ()=> invToggleModal(invFundModal, invFun
 invFundCancel?.addEventListener('click', ()=> invToggleModal(invFundModal, invFundBackdrop, false));
 invFundBackdrop?.addEventListener('click', (e)=>{ if (e.target===invFundBackdrop) invToggleModal(invFundModal, invFundBackdrop, false); });
 invTxUndoBtn?.addEventListener('click', invUndoLastTransaction);
+configureAttributesBtn?.addEventListener('click', ()=> showLevelRewardModal(null, null, 'configure'));
+levelRewardApplyBtn?.addEventListener('click', applyLevelRewardAllocations);
+levelRewardCloseBtn?.addEventListener('click', closeLevelRewardModal);
+levelRewardCancelBtn?.addEventListener('click', closeLevelRewardModal);
+levelRewardBackdrop?.addEventListener('click', (e)=>{ if (e.target===levelRewardBackdrop) closeLevelRewardModal(); });
 invFundSave?.addEventListener('click', invAddFunds);
 invCatalogOpenBtn?.addEventListener('click', ()=> invToggleModal(invCatalogModal, invCatalogBackdrop, true));
 invCatalogClose?.addEventListener('click', ()=> invToggleModal(invCatalogModal, invCatalogBackdrop, false));
