@@ -521,7 +521,7 @@
                 <button class="btn small" id="xp-add-btn" title="Add XP">+ XP</button>
                 <button class="btn small" id="level-set-btn" title="Set level">Set</button>
                 <button class="btn small" id="xp-ledger-btn" title="Open XP ledger">Ledger</button>
-                <button class="btn small" id="configure-attributes-btn" title="Configure attributes">
+                <button class="btn small" id="configure-attributes-btn" title="Configure attributes" type="button">
                   <i class="fa-solid fa-sliders"></i> Configure Attributes
                 </button>
               </div>
@@ -2438,9 +2438,9 @@ let INITIAL_LOAD = true;
 let LEVEL_REWARD_CONTEXT = null;
 const LEVEL_REWARD_OPTION_DEFS = [
   { key:'talent', title:'Talent slot', desc:'Gain access to another talent.', effect:'+1 talent slot' },
-  { key:'char', title:'Characteristic point', desc:'Add one point to characteristics pool.', effect:'+1 characteristic point' },
-  { key:'skill', title:'Skill points', desc:'Receive six extra skill points.', effect:'+6 skill points' },
-  { key:'sublimation', title:'Sublimation slots', desc:'Unlock two additional slots.', effect:'+2 sublimation slots' },
+  { key:'char', title:'Characteristic points', desc:'Add two points to characteristics pool.', effect:'+2 characteristic points' },
+  { key:'skill', title:'Skill points', desc:'Receive ten extra skill points.', effect:'+10 skill points' },
+  { key:'sublimation', title:'Sublimation slots', desc:'Unlock four additional slots.', effect:'+4 sublimation slots' },
 ];
 let LEVEL_REWARD_ALLOCATIONS = { talent:0, char:0, skill:0, sublimation:0 };
 
@@ -3639,12 +3639,12 @@ function skillMaxForLevel(lvl){
 }
 function skillPointPool(lvl){
   const base = levelProfile(lvl).skillPoints;
-  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.skill || 0)) * 6;
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.skill || 0)) * 10;
   return base + bonus;
 }
 function statPointPool(lvl){
   const base = levelProfile(lvl).charPoints;
-  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.char || 0));
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.char || 0)) * 2;
   return base + bonus;
 }
 function effectiveSkillPointPool(lvl){
@@ -3734,7 +3734,7 @@ function normalizeSublimations(arr){
 }
 function slotsForLevel(lvl){
   const base = levelProfile(lvl).subSlots;
-  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.sublimation || 0)) * 2;
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.sublimation || 0)) * 4;
   return base + bonus;
 }
 function effectiveSublimationSlots(lvl){
@@ -14458,7 +14458,7 @@ invFundClose?.addEventListener('click', ()=> invToggleModal(invFundModal, invFun
 invFundCancel?.addEventListener('click', ()=> invToggleModal(invFundModal, invFundBackdrop, false));
 invFundBackdrop?.addEventListener('click', (e)=>{ if (e.target===invFundBackdrop) invToggleModal(invFundModal, invFundBackdrop, false); });
 invTxUndoBtn?.addEventListener('click', invUndoLastTransaction);
-configureAttributesBtn?.addEventListener('click', ()=> showLevelRewardModal(null, null, 'configure'));
+configureAttributesBtn?.addEventListener('click', (event)=>{ event.preventDefault(); event.stopPropagation(); showLevelRewardModal(null, null, 'configure'); });
 levelRewardApplyBtn?.addEventListener('click', applyLevelRewardAllocations);
 levelRewardCloseBtn?.addEventListener('click', closeLevelRewardModal);
 levelRewardCancelBtn?.addEventListener('click', closeLevelRewardModal);
