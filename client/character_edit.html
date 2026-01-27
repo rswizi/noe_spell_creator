@@ -13125,7 +13125,11 @@ function renderCombatWeapons(){
         segments.push(`${magicTypeLabel} ${mainMagicTotal}${magicDetail ? ` (${magicDetail})` : ''}`);
       }
       if (extraMagicTotal && subMagicNatureLabel){
-        const extraDetail = extraMagicBreak ? `${extraMagicBreak}${offhand ? '; halved' : ''}` : (offhand ? 'halved' : '');
+        const extraFormulaParts = [];
+        if (!mainMagicFormula && coreBreak) extraFormulaParts.push(coreBreak);
+        if (extraMagicBreak) extraFormulaParts.push(extraMagicBreak);
+        const extraDetailBody = extraFormulaParts.length ? extraFormulaParts.join(' + ') : '';
+        const extraDetail = extraDetailBody ? `${extraDetailBody}${offhand ? '; halved' : ''}` : (offhand ? 'halved' : '');
         segments.push(`${subMagicNatureLabel} ${extraMagicTotal}${extraDetail ? ` (${extraDetail})` : ''}`);
       }
       if (!segments.length){
