@@ -3757,7 +3757,7 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
     const rawValue = Math.max(0, Number(tensionValueEl.value || 0));
     const cap = tensionCapForLevel(CHAR?.level || 1);
     const desired = Math.min(cap, rawValue);
-    const current = Math.max(0, Number(CURRENT?.tension ?? combatState().tension || 0));
+    const current = Math.max(0, Number(CURRENT?.tension ?? (combatState().tension || 0)));
     const delta = desired - current;
     if (!delta) return;
     pushResourceLedgerEntries([{
@@ -9829,8 +9829,8 @@ function renderAbilitySpellsBucket(){
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           </div>
           <div class="abi-trash-stack">
-            <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
             <button class="btn small abi-pin ${pinClass}" data-pin="${pinKey}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon} pin-icon"></i></button>
+            <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
           </div>
         </div>
       </div>
@@ -9911,8 +9911,8 @@ function renderAbilitySpellsBucket(){
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast ? 'disabled' : ''}>&#8595;</button>
           </div>
           <div class="abi-trash-stack">
-            <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
             <button class="btn small abi-pin ${pinClass}" data-pin="${pinKey}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon} pin-icon"></i></button>
+            <button class="btn small abi-placeholder" disabled><i class="fa-solid fa-trash"></i></button>
           </div>
         </div>
       </div>
@@ -13713,7 +13713,7 @@ function renderCombatDeathSaves(){
 function renderCombatDerivedBadges(){
   if (combatDerMoEl) combatDerMoEl.textContent = numOr(DERIVED_CACHE?.mo, 0);
   if (combatDerInitEl) combatDerInitEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
-  const tensionCurrent = Math.max(0, Number(CURRENT?.tension ?? combatState().tension || 0));
+  const tensionCurrent = Math.max(0, Number(CURRENT?.tension ?? (combatState().tension || 0)));
   if (combatTensionCurrentEl){
     combatTensionCurrentEl.textContent = String(tensionCurrent);
   }
@@ -16638,8 +16638,8 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
             <button class="btn small" data-move="down" data-id="${id}" title="${manualMode ? 'Move down' : 'Switch order to Manual to move'}" ${disableMove || isLast || !canMove ? 'disabled' : ''}>&#8595;</button>
           </div>
           <div class="abi-trash-stack">
-            <button class="btn small mod-remove ${removeClass}" title="Remove" ${canRemove ? '' : 'disabled'}><i class="fa-solid fa-trash"></i></button>
             <button class="btn small abi-pin ${pinClass}" data-pin="${id}" title="${pinTitle}" aria-pressed="${pinned ? 'true' : 'false'}"><i class="fa-solid ${pinIcon} pin-icon"></i></button>
+            <button class="btn small mod-remove ${removeClass}" title="Remove" ${canRemove ? '' : 'disabled'}><i class="fa-solid fa-trash"></i></button>
           </div>
         </div>
       </div>
