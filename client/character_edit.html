@@ -217,6 +217,10 @@
       display:flex; align-items:center; gap:10px; padding:8px 10px;
       border:1px solid #2a2a38; border-radius:12px; background:#151520;
     }
+    .damage-mod-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
+    .damage-mod-row label { flex: 1 1 160px; }
+    .damage-mod-row .damage-mod-value { width: 100px; }
+    .damage-mod-row .damage-mod-remove { flex: 0 0 auto; }
     .combat-entry .meta { font-size:.82rem; opacity:.8; }
     .combat-entry .muted { font-size:.82rem; }
     .combat-entry .tag { border:1px solid #343446; border-radius:999px; padding:2px 8px; font-size:.75rem; }
@@ -1546,6 +1550,39 @@
     <div class="row" style="margin-top:12px; gap:8px;">
       <button class="btn" id="combat-dmg-apply">Apply</button>
       <button class="btn btn-secondary" id="combat-dmg-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Weapon damage modifiers modal -->
+<div id="weapon-damage-mod-backdrop" class="modal-backdrop" aria-hidden="true"></div>
+<div id="weapon-damage-mod-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="weapon-damage-mod-title">
+  <div class="modal-card" style="max-width:520px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="weapon-damage-mod-title">Damage Modifiers</div>
+      <button class="modal-close" id="weapon-damage-mod-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="combat-block" style="margin-top:8px;">
+      <div class="combat-header">
+        <strong>Base roll</strong>
+        <span class="muted">Review the computed damage before adjustments.</span>
+      </div>
+      <div id="weapon-damage-mod-base" class="muted" style="margin:6px 0;"></div>
+    </div>
+    <div class="combat-block" style="margin-top:10px;">
+      <div class="combat-header">
+        <strong>Modifiers</strong>
+        <span class="muted">Add as many type/value pairs as needed.</span>
+      </div>
+      <div id="weapon-damage-mod-list"></div>
+      <div class="row" style="margin-top:8px; gap:8px;">
+        <button class="btn small" id="weapon-damage-mod-add">Add modifier</button>
+        <button class="btn small btn-secondary" id="weapon-damage-mod-reset">Clear all</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px; gap:8px;">
+      <button class="btn" id="weapon-damage-mod-confirm">Log damage</button>
+      <button class="btn btn-secondary" id="weapon-damage-mod-cancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -2895,6 +2932,15 @@ const combatDmgInputEl = document.getElementById('combat-dmg-input');
 const combatDmgApplyBtn = document.getElementById('combat-dmg-apply');
 const combatDmgClose = document.getElementById('combat-dmg-close');
 const combatDmgCancel = document.getElementById('combat-dmg-cancel');
+const damageModModal = document.getElementById('weapon-damage-mod-modal');
+const damageModBackdrop = document.getElementById('weapon-damage-mod-backdrop');
+const damageModBaseEl = document.getElementById('weapon-damage-mod-base');
+const damageModListEl = document.getElementById('weapon-damage-mod-list');
+const damageModAddBtn = document.getElementById('weapon-damage-mod-add');
+const damageModResetBtn = document.getElementById('weapon-damage-mod-reset');
+const damageModConfirmBtn = document.getElementById('weapon-damage-mod-confirm');
+const damageModCancelBtn = document.getElementById('weapon-damage-mod-cancel');
+const damageModCloseBtn = document.getElementById('weapon-damage-mod-close');
 const defSkillSelectEl = document.getElementById('def-skill');
 const defModEl = document.getElementById('def-mod');
 const defRollBtn = document.getElementById('def-roll');
@@ -3679,6 +3725,15 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   combatDmgClose?.addEventListener('click', closeCombatDamageModal);
   combatDmgCancel?.addEventListener('click', closeCombatDamageModal);
   combatDmgBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatDmgBackdrop) closeCombatDamageModal(); });
+  damageModAddBtn?.addEventListener('click', ()=> addDamageModifierRow());
+  damageModResetBtn?.addEventListener('click', clearDamageModifierRows);
+  damageModConfirmBtn?.addEventListener('click', ()=>{
+    finalizeWeaponDamageRoll(collectDamageModifiers());
+    closeWeaponDamageModifierModal();
+  });
+  damageModCancelBtn?.addEventListener('click', closeWeaponDamageModifierModal);
+  damageModCloseBtn?.addEventListener('click', closeWeaponDamageModifierModal);
+  damageModBackdrop?.addEventListener('click', (e)=>{ if (e.target === damageModBackdrop) closeWeaponDamageModifierModal(); });
   defAddBtn?.addEventListener('click', ()=>{
     const st = combatState();
     const picked = String(defAddSkillEl?.value || '').trim();
@@ -5446,6 +5501,7 @@ function openSkillSelectModal({ titleText = 'Choose Skill', subtitleText = 'Sele
 
 /* ---------- Rolling ---------- */
 let ROLL_CONTEXT = null;
+let DAMAGE_ROLL_CTX = null;
 let ROLL_LOG_COUNT = 0;
 let ROLL_CLICK_TIMER = null;
 const DAZZLING_SPARK_IMAGE = '/assets/dazzling_spark/dazzling_spark.png';
@@ -12169,6 +12225,110 @@ function rollDamageDice(count, die){
   return { rolls, total, sides, label: raw == 'id' ? 'ID' : `d${sides}` };
 }
 
+const DAMAGE_MODIFIER_TYPES = ['Neutral', 'Fire', 'Ki', 'Magic', 'True Damage', 'Lethality', 'Other'];
+
+function clearDamageModifierRows(){
+  if (!damageModListEl) return;
+  damageModListEl.innerHTML = '';
+}
+
+function addDamageModifierRow(data = {}){
+  if (!damageModListEl) return null;
+  const row = document.createElement('div');
+  row.className = 'damage-mod-row';
+  const typeLabel = document.createElement('label');
+  typeLabel.className = 'muted';
+  typeLabel.textContent = 'Type';
+  const select = document.createElement('select');
+  select.className = 'damage-mod-type';
+  DAMAGE_MODIFIER_TYPES.forEach(type=>{
+    const opt = document.createElement('option');
+    opt.value = type;
+    opt.textContent = type;
+    select.appendChild(opt);
+  });
+  if (data.type && DAMAGE_MODIFIER_TYPES.includes(data.type)){
+    select.value = data.type;
+  }
+  typeLabel.appendChild(select);
+  const valueLabel = document.createElement('label');
+  valueLabel.className = 'muted';
+  valueLabel.textContent = 'Amount';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = '1';
+  input.className = 'combat-num damage-mod-value';
+  if (data.value != null) input.value = data.value;
+  valueLabel.appendChild(input);
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'btn small damage-mod-remove';
+  removeBtn.textContent = 'Remove';
+  removeBtn.addEventListener('click', ()=> row.remove());
+  row.appendChild(typeLabel);
+  row.appendChild(valueLabel);
+  row.appendChild(removeBtn);
+  damageModListEl.appendChild(row);
+  return row;
+}
+
+function collectDamageModifiers(){
+  if (!damageModListEl) return [];
+  const rows = Array.from(damageModListEl.querySelectorAll('.damage-mod-row'));
+  return rows.map(row=>{
+    const type = row.querySelector('.damage-mod-type')?.value || '';
+    const valueRaw = row.querySelector('.damage-mod-value')?.value;
+    const value = Number(valueRaw);
+    if (!type || !Number.isFinite(value) || value === 0) return null;
+    return { type, value };
+  }).filter(Boolean);
+}
+
+function formatDamageModifierSegment(mod){
+  const valueText = mod.value >= 0 ? `+${mod.value}` : String(mod.value);
+  return `${mod.type} ${valueText}`;
+}
+
+function setDamageModifierPreview(text){
+  if (!damageModBaseEl) return;
+  damageModBaseEl.textContent = text ? `Base roll: ${text}` : '';
+}
+
+function openWeaponDamageModifierModal(){
+  if (!damageModModal || !damageModBackdrop || !DAMAGE_ROLL_CTX) return;
+  clearDamageModifierRows();
+  setDamageModifierPreview(DAMAGE_ROLL_CTX.basePreview || '');
+  invToggleModal(damageModModal, damageModBackdrop, true);
+}
+
+function closeWeaponDamageModifierModal(){
+  if (!damageModModal || !damageModBackdrop) return;
+  invToggleModal(damageModModal, damageModBackdrop, false);
+  clearDamageModifierRows();
+  DAMAGE_ROLL_CTX = null;
+}
+
+function finalizeWeaponDamageRoll(mods){
+  const ctx = DAMAGE_ROLL_CTX;
+  if (!ctx) return;
+  const modSegments = (mods || []).map(formatDamageModifierSegment);
+  const finalSegments = ctx.baseSegments.concat(modSegments);
+  const entry = document.createElement('div');
+  entry.className = 'roll-entry';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = ctx.title;
+  entry.appendChild(title);
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = new Date().toLocaleTimeString();
+  entry.appendChild(meta);
+  const line = document.createElement('div');
+  line.textContent = `Roll: ${finalSegments.join(' | ')}`;
+  entry.appendChild(line);
+  appendRollLog(entry);
+}
+
 function normalizeAbilityRolls(a){
   const active = a?.active || {};
   const raw = Array.isArray(active.rolls) ? active.rolls : (Array.isArray(a?.rolls) ? a.rolls : []);
@@ -13075,16 +13235,6 @@ function renderCombatWeapons(){
         mainMagicTotal = Math.floor(mainMagicTotal / 2);
         extraMagicTotal = Math.floor(extraMagicTotal / 2);
       }
-      const entry = document.createElement('div');
-      entry.className = 'roll-entry';
-      const title = document.createElement('div');
-      title.className = 'title';
-      title.textContent = `${name} Damage`;
-      entry.appendChild(title);
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      meta.textContent = new Date().toLocaleTimeString();
-      entry.appendChild(meta);
       const msBreak = msInfo.parts.length
         ? msInfo.parts.map(p=> `M(${p.code}) ${p.value >= 0 ? '+' : ''}${p.value}`).join(' + ')
         : '';
@@ -13135,10 +13285,12 @@ function renderCombatWeapons(){
       if (!segments.length){
         segments.push('Neutral 0');
       }
-      const line = document.createElement('div');
-      line.textContent = `Roll: ${segments.join(' | ')}`;
-      entry.appendChild(line);
-      appendRollLog(entry);
+      DAMAGE_ROLL_CTX = {
+        title: `${name} Damage`,
+        baseSegments: segments,
+        basePreview: segments.join(' | ')
+      };
+      openWeaponDamageModifierModal();
     });
     row.querySelector('.special-remove')?.addEventListener('click', (e)=>{
       e.stopPropagation();
