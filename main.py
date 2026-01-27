@@ -3988,7 +3988,7 @@ def add_transaction(request: Request, inv_id: str, payload: dict = Body(...)):
 
 def _fetch_catalog_item(kind: str, ref_id: str) -> dict | None:
     db = get_db()
-    col = {"weapon":"weapons","equipment":"equipment","tool":"tools","object":"objects"}.get(kind)
+    col = {"weapon":"weapons","equipment":"equipment","tool":"tools","object":"objects","ammo":"objects"}.get(kind)
     if not col: return None
     return db[col].find_one({"id": ref_id})
 
@@ -4038,6 +4038,10 @@ def _refresh_inventory_items_from_catalog(inv_id: str, inv: dict) -> tuple[dict,
         set_if_diff("consumable", consumable)
         set_if_diff("alchemy_tool", alchemy_tool)
         set_if_diff("is_animarma", bool(src.get("is_animarma")))
+        set_if_diff("magazine_size", _safe_int(src.get("magazine_size") or src.get("magazine"), 0))
+        set_if_diff("ammo_name", (src.get("ammo_name") or src.get("ammo") or "").strip())
+        set_if_diff("ammo_price", _safe_int(src.get("ammo_price"), 0))
+        set_if_diff("ammo_enc", _safe_float(src.get("ammo_enc"), 0.0))
 
         if updates:
             it.update(updates)
@@ -4256,6 +4260,10 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     subcat = src.get("category") if kind == "equipment" else None
     name = src.get("name") or (subcat == "armor" and f"Armor - {src.get('type')}") or src.get("style") or "Item"
     eq_slot = src.get("slot") if kind == "equipment" else None
+    magazine_size = _safe_int(src.get("magazine_size") or src.get("magazine"), 0)
+    ammo_name = (src.get("ammo_name") or src.get("ammo") or "").strip()
+    ammo_price = _safe_int(src.get("ammo_price"), 0)
+    ammo_enc = _safe_float(src.get("ammo_enc"), 0.0)
     pricing_mode = (payload.get("pricing_mode") or "market").strip().lower()
     raw_price_modifier = payload.get("price_modifier", None)
     raw_custom_price = payload.get("custom_price", None)
@@ -4344,6 +4352,10 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "consumable": bool(src.get("consumable")),
         "alchemy_tool": bool(src.get("alchemy_tool")),
         "craftomancies": [],
+        "magazine_size": magazine_size,
+        "ammo_name": ammo_name,
+        "ammo_price": ammo_price,
+        "ammo_enc": ammo_enc,
     }
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
@@ -4430,6 +4442,25 @@ def catalog_objects(request: Request, q: str = "", tags: str = "", limit: int = 
         filt.update(_tags_filter(tags))
     rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1}).limit(int(limit)))
     return {"status": "success", "objects": rows}
+
+
+@app.get("/catalog/ammo")
+def catalog_ammo(request: Request, q: str = "", tags: str = "", limit: int = 25):
+    require_auth(request)
+    col = get_col("objects")
+    base_cond = {"$or": [
+        {"category": "ammo"},
+        {"tags": {"$in": ["ammo"]}}
+    ]}
+    filters = [base_cond]
+    if q.strip():
+        filters.append({"name": {"$regex": re.escape(q.strip()), "$options": "i"}})
+    extra_tags = _tags_filter(tags)
+    if extra_tags:
+        filters.append(extra_tags)
+    filt = filters[0] if len(filters) == 1 else {"$and": filters}
+    rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1}).limit(int(limit)))
+    return {"status": "success", "ammo": rows}
 
 @app.post("/inventories/{inv_id}/deposit")
 def deposit_funds(request: Request, inv_id: str, payload: dict = Body(...)):

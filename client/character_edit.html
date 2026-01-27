@@ -204,6 +204,7 @@
       transition:border .15s ease, box-shadow .15s ease;
     }
     .resource-button:hover { border-color:#3b3b5b; box-shadow:0 0 0 2px rgba(59,59,91,0.45); }
+    .resource-button .resource-label { font-size:.85rem; opacity:.7; text-transform:uppercase; letter-spacing:.1em; }
     .resource-current { font-size:1.6rem; font-weight:600; }
     .resource-max { font-size:.75rem; opacity:.8; }
     .resource-controls { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
@@ -1119,25 +1120,31 @@
                 <div class="combat-vitals">
                   <div class="resource-grid">
                     <button type="button" class="combat-num resource-button" data-resource="hp">
+                      <span class="resource-label">HP</span>
                       <span class="resource-current" id="cur-hp">--</span>
                       <span class="resource-max" id="max-hp">Max --</span>
                     </button>
                     <button type="button" class="combat-num resource-button" data-resource="en">
+                      <span class="resource-label">EN</span>
                       <span class="resource-current" id="cur-en">--</span>
                       <span class="resource-max" id="max-en">Max --</span>
                     </button>
                     <button type="button" class="combat-num resource-button" data-resource="nen">
+                      <span class="resource-label">nEN</span>
                       <span class="resource-current" id="cur-nen">0</span>
                     </button>
                     <button type="button" class="combat-num resource-button" data-resource="fo">
+                      <span class="resource-label">FO</span>
                       <span class="resource-current" id="cur-fo">--</span>
                       <span class="resource-max" id="max-fo">Max --</span>
                     </button>
                     <button type="button" class="combat-num resource-button" data-resource="sp">
+                      <span class="resource-label">SP</span>
                       <span class="resource-current" id="cur-sp">--</span>
                       <span class="resource-max" id="max-sp">Max --</span>
                     </button>
                     <button type="button" class="combat-num resource-button" data-resource="tx">
+                      <span class="resource-label">TX</span>
                       <span class="resource-current" id="cur-tx">--</span>
                       <span class="resource-max" id="max-tx">Max --</span>
                     </button>
@@ -1449,6 +1456,7 @@
       <input id="inv-tag" placeholder="Filter tag" style="min-width:180px;">
       <select id="inv-kind">
         <option value="object">Objects</option>
+        <option value="ammo">Ammo</option>
         <option value="weapon">Weapons</option>
         <option value="equipment">Equipment</option>
         <option value="tool">Tools</option>
@@ -7539,6 +7547,7 @@ function invGetRowCategory(r){
   if (r.kind === "weapon" || r.__kind === "weapon") return "weapon";
   if (r.kind === "equipment" || r.__kind === "equipment") return r.category ? `equipment:${r.category}` : "equipment";
   if (r.kind === "tool" || r.__kind === "tool") return "tool";
+  if (r.kind === "ammo" || r.__kind === "ammo") return "ammo";
   return "object";
 }
 
@@ -7546,6 +7555,7 @@ async function invFetchCatalog(kind, q, limit, tags){
   const url = kind === "weapon" ? "/catalog/weapons"
             : kind === "equipment" ? "/catalog/equipment"
             : kind === "tool" ? "/catalog/tools"
+            : kind === "ammo" ? "/catalog/ammo"
             : "/catalog/objects";
   const params = new URLSearchParams();
   if (q) params.set("q", q);
