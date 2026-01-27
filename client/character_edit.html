@@ -211,7 +211,7 @@
     .resource-controls label { flex:1 1 210px; }
     .combat-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .combat-inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    .combat-actions-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .combat-actions-row { display:flex; gap:8px; flex-wrap:nowrap; align-items:center; }
     .combat-list { display:grid; gap:8px; }
     .combat-entry {
       display:flex; align-items:center; gap:10px; padding:8px 10px;
@@ -1122,7 +1122,6 @@
                     <button type="button" class="combat-num resource-button" data-resource="hp">
                       <span class="resource-label">HP</span>
                       <span class="resource-current" id="cur-hp">--</span>
-                      <span class="resource-max" id="max-hp">Max --</span>
                     </button>
                     <button type="button" class="combat-num resource-button" data-resource="en">
                       <span class="resource-label">EN</span>
@@ -1151,21 +1150,19 @@
                   </div>
                   <div class="resource-controls">
                     <label class="muted">Max HP Dmg <input id="max-hp-dmg" type="number" min="0" step="1" class="combat-num"></label>
-                    <label class="muted">Tension <input id="tension-value" type="number" min="0" step="1" class="combat-num"></label>
                   </div>
                 </div>
                 <div class="combat-row ledger-row">
-                  <button type="button" class="combat-num resource-button" data-resource="mo">
+                  <button type="button" class="combat-num resource-button" data-resource="hp" data-resource-label="Max HP">
+                    <span class="resource-label">Max HP</span>
+                    <span class="resource-current" id="max-hp">--</span>
+                  </button>
+                  <button type="button" class="combat-num resource-button" data-resource="mo" disabled aria-disabled="true">
                     <span class="resource-label">MO</span>
                     <span class="resource-current" id="combat-der-mo">--</span>
                   </button>
-                  <button type="button" class="combat-num resource-button" data-resource="tension">
-                    <span class="resource-label">Tension</span>
-                    <span class="resource-current" id="combat-tension-current">--</span>
-                    <span class="resource-max" id="combat-tension-cap">Cap --</span>
-                  </button>
                 </div>
-                <div class="combat-row">
+                <div class="combat-row combat-actions-row">
                   <button class="btn small" id="combat-take-dmg" title="Take Damage">
                     <i class="fa-solid fa-heart-circle-plus"></i>
                   </button>
@@ -3610,8 +3607,9 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   const resourceButtons = document.querySelectorAll('.resource-button');
   resourceButtons.forEach(btn=>{
     const resource = btn.getAttribute('data-resource');
-    if (!resource) return;
-    btn.addEventListener('click', ()=> openResourceActionModal(resource));
+    if (!resource || btn.disabled) return;
+    const labelOverride = btn.getAttribute('data-resource-label');
+    btn.addEventListener('click', ()=> openResourceActionModal(resource, labelOverride));
   });
 
   function bindOverrideInput(el, key){
@@ -7614,10 +7612,19 @@ function invRenderResults(){
       `;
       line.querySelector(".buy").addEventListener("click", async ()=>{
         const qty = Math.max(1, parseInt(line.querySelector(".qty").value||"1", 10));
-      const choice = await invPromptPricingChoice(r);
-      if (!choice) return;
-      await invBuyItem(r.__kind || "object", r.id, qty, container, currency, choice);
-    });
+        const choice = await invPromptPricingChoice(r);
+        if (!choice) return;
+        const unitPrice = invComputeUnitPrice(r, choice);
+        const quantity = qty;
+        const sanitizedUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
+        const totalCost = sanitizedUnitPrice * quantity;
+        const balance = Number(LINKED_INV?.currencies?.[currency] ?? 0) || 0;
+        if (totalCost > balance){
+          const proceed = await promptInsufficientFundsWarning(currency, totalCost, balance);
+          if (!proceed) return;
+        }
+        await invBuyItem(r.__kind || "object", r.id, qty, container, currency, choice);
+      });
     list.appendChild(line);
   });
 }
@@ -7634,6 +7641,25 @@ function invParseCustomPriceInput(inputStr){
     return { priceModifier: num / 100 };
   }
   return { customPrice: num };
+}
+
+function invComputeUnitPrice(row, choice){
+  const basePrice = Number(row?.price ?? 0);
+  const mode = String(choice?.pricingMode || 'market').toLowerCase();
+  if (mode === 'take') return 0;
+  if (mode === 'custom'){
+    const customPrice = Number(choice?.customPrice ?? NaN);
+    if (Number.isFinite(customPrice)) return customPrice;
+    const modifier = Number(choice?.priceModifier ?? NaN);
+    if (Number.isFinite(modifier)) return basePrice * modifier;
+  }
+  return basePrice;
+}
+
+function invFormatCurrencyAmount(value){
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '0';
+  return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 async function invPromptPricingChoice(row){
@@ -7745,10 +7771,10 @@ function promptInsufficientFundsWarning(currency, required, available){
         <button class="btn small" id="fund-warning-close" style="background:#222635; border-color:#2f3548;" aria-label="Close">&times;</button>
       </div>
       <div style="margin-bottom:10px;">
-        <strong>You fund are unsufficient!!</strong>
+        <strong>Your funds are insufficient.</strong>
       </div>
       <div class="muted" style="font-size:.85rem; margin-bottom:12px;">
-        Required: ${required}; Available: ${available}
+        Required: ${invFormatCurrencyAmount(required)}; Available: ${invFormatCurrencyAmount(available)}
       </div>
       <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; margin-top:8px;">
         <button id="fund-warning-cancel" class="btn small btn-secondary">Cancel</button>
@@ -14595,7 +14621,7 @@ function updateDerived(){
   if (curFoEl) curFoEl.textContent = String(displayCurrent.fo);
   if (curSpEl) curSpEl.textContent = String(displayCurrent.sp);
   if (curTxEl) curTxEl.textContent = String(displayCurrent.tx);
-  if (maxHpEl) maxHpEl.textContent = `Max ${numOr(maxVals.hp, 0)}`;
+  if (maxHpEl) maxHpEl.textContent = String(numOr(maxVals.hp, 0));
   if (maxEnEl) maxEnEl.textContent = `Max ${numOr(maxVals.en, 0)}`;
   if (maxFoEl) maxFoEl.textContent = `Max ${numOr(maxVals.fo, 0)}`;
   if (maxSpEl) maxSpEl.textContent = `Max ${numOr(maxVals.spcap, 0)}`;
@@ -14643,11 +14669,12 @@ function updateDerived(){
   if (subSlotPill) renderSublimations();
 }
 
-function openResourceActionModal(resource){
+function openResourceActionModal(resource, labelOverride){
   if (!resourceActionModal || !resourceActionBackdrop) return;
-  const label = RESOURCE_LABELS[resource] || resource;
+  const label = labelOverride || RESOURCE_LABELS[resource] || resource;
   resourceActionTitle.textContent = `Adjust ${label}`;
   resourceActionModal.dataset.resource = resource;
+  resourceActionModal.dataset.resourceLabel = labelOverride || '';
   if (resourceActionKind) resourceActionKind.value = 'set';
   if (resourceActionValue) resourceActionValue.value = '';
   if (resourceActionNote) resourceActionNote.value = '';
@@ -14659,6 +14686,7 @@ function openResourceActionModal(resource){
 function closeResourceActionModal(){
   if (!resourceActionModal || !resourceActionBackdrop) return;
   resourceActionModal.dataset.resource = '';
+  resourceActionModal.dataset.resourceLabel = '';
   resourceActionModal.classList.remove('open');
   resourceActionModal.classList.add('hidden');
   resourceActionBackdrop.classList.remove('open');
@@ -14672,7 +14700,7 @@ function applyResourceAction(){
   const rawValue = Number(resourceActionValue?.value || 0);
   if (!Number.isFinite(rawValue)) return;
   const note = (resourceActionNote?.value || '').trim();
-  const labelBase = RESOURCE_LABELS[resource] || resource;
+  const labelBase = resourceActionModal.dataset.resourceLabel || RESOURCE_LABELS[resource] || resource;
   const maxVals = {
     hp: numOr(DERIVED_CACHE?.hp, 0),
     en: numOr(DERIVED_CACHE?.en, 0),
