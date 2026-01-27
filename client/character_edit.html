@@ -926,10 +926,11 @@
                 <div class="abi-bucket">
                   <h3 class="abi-head">Passive</h3>
                   <div class="row abi-sort-row" style="gap:6px; align-items:center; margin-bottom:6px;">
-                    <select id="abi-passive-order" style="min-width:160px;">
+                  <select id="abi-passive-order" style="min-width:160px;">
                       <option value="manual">Manual</option>
                       <option value="az">A->Z</option>
                       <option value="za">Z->A</option>
+                      <option value="source">Source</option>
                     </select>
                     <button class="btn small" id="abi-passive-sort">Sort</button>
                     <button class="btn small abi-hide-toggle" type="button" data-bucket="passive" title="Hide unpinned" aria-pressed="false">
@@ -941,10 +942,11 @@
                 <div class="abi-bucket">
                   <h3 class="abi-head">Active</h3>
                   <div class="row abi-sort-row" style="gap:6px; align-items:center; margin-bottom:6px;">
-                    <select id="abi-active-order" style="min-width:160px;">
+                  <select id="abi-active-order" style="min-width:160px;">
                       <option value="manual">Manual</option>
                       <option value="az">A->Z</option>
                       <option value="za">Z->A</option>
+                      <option value="source">Source</option>
                     </select>
                     <button class="btn small" id="abi-active-sort">Sort</button>
                     <button class="btn small abi-hide-toggle" type="button" data-bucket="active" title="Hide unpinned" aria-pressed="false">
@@ -16793,8 +16795,52 @@ async function moveCraftomancyOrder(id, direction){
   renderAbilitySpellsBucket();
 }
 
+const ABILITY_SOURCE_ORDER = [
+  'archetype',
+  'expertise',
+  'divine manifestation',
+  'awakening',
+  'apotheosis',
+  'talent',
+  'boon',
+  'specie',
+  'other',
+];
+
+const ABILITY_SOURCE_ALIASES = {
+  'dm': 'divine manifestation',
+  'divine manifestation': 'divine manifestation',
+  'divine': 'divine manifestation',
+  'awaken': 'awakening',
+  'awakening': 'awakening',
+  'dima': 'divine manifestation',
+  'vita': 'talent',
+};
+
+function canonicalAbilitySource(src){
+  const raw = String(src || '').trim().toLowerCase();
+  if (!raw) return 'other';
+  const normalized = raw.replace(/[^a-z]+/g, ' ').trim();
+  if (ABILITY_SOURCE_ALIASES[normalized]) return ABILITY_SOURCE_ALIASES[normalized];
+  if (ABILITY_SOURCE_ORDER.includes(normalized)) return normalized;
+  return 'other';
+}
+
 function applyAbilitySort(list, mode){
   const sortMode = String(mode || '').toLowerCase();
+  if (sortMode === 'source'){
+    const orderMap = new Map(ABILITY_SOURCE_ORDER.map((key, idx)=> [key, idx]));
+    return list.slice().sort((a,b)=>{
+      const aSource = canonicalAbilitySource(a?.source_category);
+      const bSource = canonicalAbilitySource(b?.source_category);
+      const aRank = orderMap.has(aSource) ? orderMap.get(aSource) : orderMap.size;
+      const bRank = orderMap.has(bSource) ? orderMap.get(bSource) : orderMap.size;
+      if (aRank !== bRank) return aRank - bRank;
+      const aName = String(a?.name || a?.id || '');
+      const bName = String(b?.name || b?.id || '');
+      return aName.localeCompare(bName, undefined, { sensitivity: 'base' });
+    });
+  }
   if (sortMode !== 'az' && sortMode !== 'za') return list;
   const sorted = list.slice().sort((a,b)=>{
     const aName = String(a?.name || a?.id || '');
