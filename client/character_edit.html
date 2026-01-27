@@ -198,6 +198,22 @@
     }
     .combat-entry .meta { font-size:.82rem; opacity:.8; }
     .combat-entry .muted { font-size:.82rem; }
+    .resource-button {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:6px;
+      padding:8px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:#181821;
+      color:var(--text);
+      font-family:inherit;
+      cursor:pointer;
+      min-width:100px;
+    }
+    .resource-button .resource-label { opacity:.8; font-size:.9rem; }
+    .resource-button .resource-value { font-weight:600; font-size:1rem; }
     .combat-entry .tag { border:1px solid #343446; border-radius:999px; padding:2px 8px; font-size:.75rem; }
     .combat-entry .grow { min-width:0; }
     .combat-entry input[type="checkbox"],
@@ -1093,15 +1109,34 @@
               <summary class="hdr">
                 <strong>Vitals</strong>
                 <span class="muted">(resources and tension)</span>
+                <button class="btn small" id="resource-ledger-open" title="Resource ledger"><i class="fa-solid fa-book"></i></button>
               </summary>
               <div class="panel-body">
                 <div class="combat-vitals">
-                  <label class="muted">HP <input id="cur-hp" type="number" min="0" class="combat-num"></label>
-                  <label class="muted">EN <input id="cur-en" type="number" min="0" class="combat-num"></label>
-                  <label class="muted">nEN <input id="cur-nen" type="number" min="0" class="combat-num"></label>
-                  <label class="muted">FO <input id="cur-fo" type="number" min="0" class="combat-num"></label>
-                  <label class="muted">SP <input id="cur-sp" type="number" min="0" class="combat-num"></label>
-                  <label class="muted">TX <input id="cur-tx" type="number" min="0" class="combat-num"></label>
+                  <button type="button" class="combat-num resource-button" data-resource="hp">
+                    <span class="resource-label">HP</span>
+                    <span id="cur-hp" class="resource-value">--</span>
+                  </button>
+                  <button type="button" class="combat-num resource-button" data-resource="en">
+                    <span class="resource-label">EN</span>
+                    <span id="cur-en" class="resource-value">--</span>
+                  </button>
+                  <button type="button" class="combat-num resource-button" data-resource="nen">
+                    <span class="resource-label">nEN</span>
+                    <span id="cur-nen" class="resource-value">0</span>
+                  </button>
+                  <button type="button" class="combat-num resource-button" data-resource="fo">
+                    <span class="resource-label">FO</span>
+                    <span id="cur-fo" class="resource-value">--</span>
+                  </button>
+                  <button type="button" class="combat-num resource-button" data-resource="sp">
+                    <span class="resource-label">SP</span>
+                    <span id="cur-sp" class="resource-value">--</span>
+                  </button>
+                  <button type="button" class="combat-num resource-button" data-resource="tx">
+                    <span class="resource-label">TX</span>
+                    <span id="cur-tx" class="resource-value">--</span>
+                  </button>
                   <label class="muted">Max HP Dmg <input id="max-hp-dmg" type="number" min="0" step="1" class="combat-num"></label>
                   <label class="muted">Tension <input id="tension-value" type="number" min="0" step="1" class="combat-num"></label>
                   <span class="combat-badge">Cap <span id="tension-cap">--</span></span>
@@ -1965,6 +2000,51 @@
   </div>
 </div>
 
+<!-- Resource action modal -->
+<div id="resource-action-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
+<div id="resource-action-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="resource-action-title">
+  <div class="modal-card" style="max-width:360px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="resource-action-title">Adjust Resource</div>
+      <button class="modal-close" id="resource-action-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="row" style="gap:10px; margin-top:10px;">
+      <label class="muted">
+        Action
+        <select id="resource-action-kind">
+          <option value="set">Set value</option>
+          <option value="add">Add</option>
+          <option value="subtract">Subtract</option>
+        </select>
+      </label>
+      <label class="muted">
+        Amount
+        <input id="resource-action-value" type="number" step="1" min="0">
+      </label>
+    </div>
+    <label class="muted" style="display:block; margin-top:10px;">
+      Note
+      <input id="resource-action-note" type="text" placeholder="Optional comment">
+    </label>
+    <div class="row" style="justify-content:flex-end; gap:8px; margin-top:12px;">
+      <button class="btn btn-secondary" id="resource-action-cancel">Cancel</button>
+      <button class="btn" id="resource-action-apply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Resource ledger modal -->
+<div id="resource-ledger-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
+<div id="resource-ledger-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="resource-ledger-title">
+  <div class="modal-card" style="max-width:640px;">
+    <header class="row" style="justify-content:space-between; align-items:center;">
+      <div class="modal-title" id="resource-ledger-title">Resource Ledger</div>
+      <button class="modal-close" id="resource-ledger-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="list" id="resource-ledger-list" style="margin-top:10px; display:grid; gap:8px; font-size:.92rem;"></div>
+  </div>
+</div>
+
 <script>
 /* --- auth helper --- */
 function getToken(){ return localStorage.getItem('auth_token') || ''; }
@@ -2278,10 +2358,95 @@ function numOr(v, fb=0){
   const n = Number(v);
   return Number.isFinite(n) ? n : fb;
 }
-function presetOrFallback(preset, fallback){
-  if (preset == null) return fallback;
-  const n = Number(preset);
-  return Number.isFinite(n) ? n : fallback;
+const LEDGER_RESOURCES = ['hp','en','fo','sp','tx'];
+const LEDGER_ALLOWED = new Set([...LEDGER_RESOURCES, 'nen']);
+const RESOURCE_LABELS = { hp:'HP', en:'EN', fo:'FO', sp:'SP', tx:'TX', nen:'nEN' };
+function ledgerEntryId(){
+  return 'ledger-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+}
+function normalizeLedgerEntry(entry){
+  if (!entry || !entry.resource) return null;
+  const resource = String(entry.resource || '').toLowerCase();
+  if (!LEDGER_ALLOWED.has(resource)) return null;
+  const delta = Number(entry.delta || 0);
+  if (!Number.isFinite(delta) || delta === 0) return null;
+  return {
+    id: String(entry.id || ledgerEntryId()),
+    resource,
+    delta,
+    label: String(entry.label || '').trim(),
+    note: String(entry.note || '').trim(),
+    source: String(entry.source || '').trim(),
+    timestamp: Number(entry.timestamp || Date.now()),
+  };
+}
+function ledgerSum(resource){
+  return RESOURCE_LEDGER.reduce((sum, entry) => entry.resource === resource ? sum + entry.delta : sum, 0);
+}
+function resourceBaseMax(resource, maxVals){
+  if (!maxVals) return 0;
+  if (resource === 'hp') return numOr(maxVals.hp, 0);
+  if (resource === 'en') return numOr(maxVals.en, 0);
+  if (resource === 'fo') return numOr(maxVals.fo, 0);
+  if (resource === 'sp') return numOr(maxVals.spcap, 0);
+  if (resource === 'tx') return numOr(maxVals.tx, 0);
+  return 0;
+}
+function currentFromLedger(resource, maxVals){
+  if (resource === 'nen'){
+    return Math.max(0, Number(combatState().nen || 0));
+  }
+  const base = resourceBaseMax(resource, maxVals);
+  const computed = base + ledgerSum(resource);
+  if (resource === 'tx'){
+    return Math.max(0, computed);
+  }
+  return Math.max(0, Math.min(base, computed));
+}
+function updateNenDisplay(){
+  if (!curNenEl) return;
+  curNenEl.textContent = String(Math.max(0, Number(combatState().nen || 0)));
+}
+function pushResourceLedgerEntries(entries, { skipSync=false } = {}){
+  if (!Array.isArray(entries) || !entries.length) return;
+  const normalized = [];
+  entries.forEach(raw=>{
+    const entry = normalizeLedgerEntry(raw);
+    if (entry) normalized.push(entry);
+  });
+  if (!normalized.length) return;
+  RESOURCE_LEDGER = RESOURCE_LEDGER.concat(normalized);
+  if (!skipSync){
+    updateDerived();
+    queueSave();
+  }
+}
+function ensureLedgerInitialized(maxVals){
+  if (LEDGER_INITIALIZED) return;
+  LEDGER_INITIALIZED = true;
+  if (RESOURCE_LEDGER.length){
+    return;
+  }
+  const preset = INITIAL_CURRENT_PRESET || {};
+  const adjustments = [];
+  LEDGER_RESOURCES.forEach(resource=>{
+    const saved = preset[resource];
+    if (!Number.isFinite(Number(saved))) return;
+    const base = resourceBaseMax(resource, maxVals);
+    const delta = Number(saved) - base;
+    if (delta !== 0){
+      adjustments.push({
+        resource,
+        delta,
+        label: 'Initial sync',
+        source: 'Load',
+      });
+    }
+  });
+  if (adjustments.length){
+    pushResourceLedgerEntries(adjustments, { skipSync:true });
+  }
+  INITIAL_CURRENT_PRESET = null;
 }
 function investVal(v, fb=0){
   if (v && typeof v === 'object') return numOr(v.invest, fb);
@@ -2546,6 +2711,8 @@ let PERSONAL = {};
 let CURRENT = { hp:null, en:null, fo:null, sp:null, tx:null };
 let CURRENT_MAX_RECORD = null;
 let INITIAL_CURRENT_PRESET = null;
+let RESOURCE_LEDGER = [];
+let LEDGER_INITIALIZED = false;
 let OVERRIDE_ENABLED = false;
 let OVERRIDE_VALUES = { hp:null, en:null, fo:null, mo:null, initiative:null, spcap:null, enc:null, et:null, tx:null, talent_max:null, skill_points:null, stat_points:null, sublimation_slots:null, complex_schools:null };
 let ARCHETYPES = [];
@@ -2558,7 +2725,6 @@ let COMPUTED_ARC_ABILITIES = [];
 let UPGRADE_META = {};
 let TALENT_MAX = 1;
 let INITIAL_LOAD = true;
-let PRESERVE_INITIAL_CURRENT = true;
 let LEVEL_REWARD_CONTEXT = null;
 const LEVEL_REWARD_OPTION_DEFS = [
   { key:'talent', title:'Talent slot', desc:'Gain access to another talent.', effect:'+1 talent slot' },
@@ -2764,6 +2930,20 @@ const combatContextActionsEl = document.getElementById('combat-context-actions')
 const combatSpecialActionsEl = document.getElementById('combat-special-actions');
 const combatActiveAbilitiesEl = document.getElementById('combat-active-abilities');
 const combatDurationSpellsEl = document.getElementById('combat-duration-spells');
+const resourceActionModal = document.getElementById('resource-action-modal');
+const resourceActionBackdrop = document.getElementById('resource-action-backdrop');
+const resourceActionTitle = document.getElementById('resource-action-title');
+const resourceActionKind = document.getElementById('resource-action-kind');
+const resourceActionValue = document.getElementById('resource-action-value');
+const resourceActionNote = document.getElementById('resource-action-note');
+const resourceActionApply = document.getElementById('resource-action-apply');
+const resourceActionCancel = document.getElementById('resource-action-cancel');
+const resourceActionClose = document.getElementById('resource-action-close');
+const resourceLedgerModal = document.getElementById('resource-ledger-modal');
+const resourceLedgerBackdrop = document.getElementById('resource-ledger-backdrop');
+const resourceLedgerClose = document.getElementById('resource-ledger-close');
+const resourceLedgerList = document.getElementById('resource-ledger-list');
+const resourceLedgerOpenBtn = document.getElementById('resource-ledger-open');
 const combatSpecialAttacksEl = document.getElementById('combat-special-attacks');
 const combatSecondaryModal = document.getElementById('combat-secondary-modal');
 const combatSecondaryBackdrop = document.getElementById('combat-secondary-backdrop');
@@ -3427,22 +3607,11 @@ subCancel?.addEventListener('click', closeSubModal);
 subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) closeSubModal(); });
 
 // Overrides & current handlers
-  [curHpEl, curEnEl, curFoEl, curSpEl, curTxEl].forEach(el=>{
-    el?.addEventListener('input', ()=>{
-      CURRENT = {
-        hp: Number(curHpEl?.value||0),
-        en: Number(curEnEl?.value||0),
-        fo: Number(curFoEl?.value||0),
-        sp: Number(curSpEl?.value||0),
-        tx: Number(curTxEl?.value||0),
-      };
-      updateDerived(); queueSave();
-    });
-  });
-  curNenEl?.addEventListener('input', ()=>{
-    const st = combatState();
-    st.nen = Math.max(0, Number(curNenEl.value || 0));
-    queueSave();
+  const resourceButtons = document.querySelectorAll('.resource-button');
+  resourceButtons.forEach(btn=>{
+    const resource = btn.getAttribute('data-resource');
+    if (!resource) return;
+    btn.addEventListener('click', ()=> openResourceActionModal(resource));
   });
 
   function bindOverrideInput(el, key){
@@ -13475,43 +13644,55 @@ function renderCombatTab(){
   }
 }
 
-function applyCurrentDelta(delta){
+function applyCurrentDelta(delta, opts={}){
   const adj = applyConditionResourceAdjustments(delta || {});
-  const hp = numOr(CURRENT.hp ?? DERIVED_CACHE?.hp, 0);
-  const en = numOr(CURRENT.en ?? DERIVED_CACHE?.en, 0);
-  const fo = numOr(CURRENT.fo ?? DERIVED_CACHE?.fo, 0);
-  const sp = numOr(CURRENT.sp ?? DERIVED_CACHE?.spcap, 0);
-  const tx = numOr(CURRENT.tx ?? 0, 0);
-  CURRENT = {
-    hp: hp + numOr(adj.hp, 0),
-    en: en + numOr(adj.en, 0),
-    fo: fo + numOr(adj.fo, 0),
-    sp: sp + numOr(adj.sp, 0),
-    tx: tx + numOr(adj.tx, 0),
-  };
-  updateDerived();
-  queueSave();
+  const entries = [];
+  LEDGER_RESOURCES.forEach(resource=>{
+    const change = Number(adj[resource] || 0);
+    if (!change) return;
+    entries.push({
+      resource,
+      delta: change,
+      label: opts?.label || RESOURCE_LABELS[resource],
+      source: opts?.source || 'System',
+      note: opts?.note || '',
+    });
+  });
+  if (entries.length){
+    pushResourceLedgerEntries(entries);
+  }
   return adj;
 }
 
 function applyDamageAmount(amount, trueDamage){
   let dmg = Math.max(0, Number(amount || 0));
   if (!dmg) return;
-  const hp = numOr(CURRENT.hp ?? DERIVED_CACHE?.hp, 0);
-  const sp = numOr(CURRENT.sp ?? DERIVED_CACHE?.spcap, 0);
-  let newHp = hp;
-  let newSp = sp;
+  const entries = [];
+  const spBefore = numOr(CURRENT.sp ?? DERIVED_CACHE?.spcap, 0);
+  const hpBefore = numOr(CURRENT.hp ?? DERIVED_CACHE?.hp, 0);
+  let spLoss = 0;
+  let hpLoss = 0;
   if (trueDamage){
-    newHp = Math.max(0, hp - dmg);
+    hpLoss = dmg;
   }else{
-    const spLoss = Math.min(newSp, dmg);
-    newSp -= spLoss;
-    dmg -= spLoss;
-    newHp = Math.max(0, newHp - dmg);
+    spLoss = Math.min(spBefore, dmg);
+    hpLoss = Math.max(0, dmg - spLoss);
   }
-  CURRENT = { ...CURRENT, hp: newHp, sp: newSp };
-  updateDerived();
-  queueSave();
+  if (spLoss) entries.push({
+    resource:'sp',
+    delta:-spLoss,
+    label:'Damage',
+    source:'Combat'
+  });
+  if (hpLoss) entries.push({
+    resource:'hp',
+    delta:-hpLoss,
+    label:'Damage',
+    source:'Combat'
+  });
+  if (entries.length){
+    pushResourceLedgerEntries(entries);
+  }
   const entry = document.createElement('div');
   entry.className = 'roll-entry';
   const title = document.createElement('div');
@@ -13523,7 +13704,7 @@ function applyDamageAmount(amount, trueDamage){
   meta.textContent = new Date().toLocaleTimeString();
   entry.appendChild(meta);
   const line = document.createElement('div');
-  line.textContent = `Amount: ${Number(amount || 0)} | HP ${newHp} | SP ${newSp}`;
+  line.textContent = `Amount: ${Number(amount || 0)} | HP ${CURRENT.hp} | SP ${CURRENT.sp}`;
   entry.appendChild(line);
   appendRollLog(entry);
 }
@@ -13553,8 +13734,13 @@ function addNen(amount){
   if (!inc) return;
   const st = combatState();
   st.nen = Math.max(0, Number(st.nen || 0) + inc);
-  if (curNenEl) curNenEl.value = st.nen;
-  queueSave();
+  updateNenDisplay();
+  pushResourceLedgerEntries([{
+    resource:'nen',
+    delta:inc,
+    label:'nEN (Ability)',
+    source:'Ability'
+  }]);
 }
 
 function spellSchoolCostMode(sp){
@@ -13727,8 +13913,17 @@ function rollDeathSave(){
     ds.dead = false;
     ds.ko = false;
     ds.stabilized = false;
-    CURRENT = { ...CURRENT, hp: Math.max(1, numOr(CURRENT.hp, 0)) };
-    updateDerived();
+    const hpBefore = numOr(CURRENT.hp ?? DERIVED_CACHE?.hp, 0);
+    const target = Math.max(1, hpBefore);
+    const delta = target - hpBefore;
+    if (delta){
+      pushResourceLedgerEntries([{
+        resource:'hp',
+        delta,
+        label:'Death Save',
+        source:'Recovery'
+      }]);
+    }
   }
   clampDeathSaves(ds);
   renderCombatDeathSaves();
@@ -13854,8 +14049,17 @@ function applyRest(){
   foGain = Math.floor(foGain * mult);
   applyCurrentDelta({ hp: hpGain, en: enGain, fo: foGain });
   const st = combatState();
-  st.nen = 0;
-  if (curNenEl) curNenEl.value = 0;
+  const prevNen = Math.max(0, Number(st.nen || 0));
+  if (prevNen){
+    st.nen = 0;
+    updateNenDisplay();
+    pushResourceLedgerEntries([{
+      resource:'nen',
+      delta:-prevNen,
+      label:'nEN (Rest)',
+      source:'Rest'
+    }]);
+  }
   openRollModal({ title:'Rest', infoOnly:true, descText:`Recovered HP ${hpGain}, EN ${enGain}, FO ${foGain} (${type}, ${quality})` });
 }
 
@@ -14271,47 +14475,12 @@ function updateDerived(){
       });
     }
     DERIVED_CACHE = { ...final, ...maxVals };
-  const curTxRaw = numOr(CURRENT.tx ?? 0, 0);
-  const prevMaxRecord = CURRENT_MAX_RECORD || {};
-  const clampCurrentValue = (key, stored, maxVal) => {
-    const safeMax = numOr(maxVal, 0);
-    if (stored == null) return safeMax;
-    const val = Number(stored);
-    if (!Number.isFinite(val)) return safeMax;
-    if (OVERRIDE_ENABLED) return val;
-    if (val <= safeMax) return Math.max(0, val);
-    const prevMax = Number(prevMaxRecord[key] ?? 0);
-    if (prevMax >= safeMax) return safeMax;
-    return Math.max(0, val);
-  };
-  const computedCurrent = OVERRIDE_ENABLED ? {
-    hp: Math.max(0, numOr(CURRENT.hp ?? maxVals.hp, maxVals.hp)),
-    en: Math.max(0, numOr(CURRENT.en ?? maxVals.en, maxVals.en)),
-    fo: Math.max(0, numOr(CURRENT.fo ?? maxVals.fo, maxVals.fo)),
-    sp: Math.max(0, numOr(CURRENT.sp ?? maxVals.spcap, maxVals.spcap)),
-    tx: Math.max(0, curTxRaw),
-  } : {
-    hp: Math.max(0, clampCurrentValue('hp', CURRENT.hp, maxVals.hp)),
-    en: Math.max(0, clampCurrentValue('en', CURRENT.en, maxVals.en)),
-    fo: Math.max(0, clampCurrentValue('fo', CURRENT.fo, maxVals.fo)),
-    sp: Math.max(0, clampCurrentValue('sp', CURRENT.sp, maxVals.spcap)),
-    tx: Math.max(0, Math.min(curTxRaw, maxVals.tx)),
-  };
-  const shouldPreserveInitialCurrent = INITIAL_LOAD && PRESERVE_INITIAL_CURRENT && INITIAL_CURRENT_PRESET;
-  const displayCurrent = shouldPreserveInitialCurrent ? {
-    hp: presetOrFallback(INITIAL_CURRENT_PRESET.hp, computedCurrent.hp),
-    en: presetOrFallback(INITIAL_CURRENT_PRESET.en, computedCurrent.en),
-    fo: presetOrFallback(INITIAL_CURRENT_PRESET.fo, computedCurrent.fo),
-    sp: presetOrFallback(INITIAL_CURRENT_PRESET.sp, computedCurrent.sp),
-    tx: presetOrFallback(INITIAL_CURRENT_PRESET.tx, computedCurrent.tx),
-  } : computedCurrent;
-  CURRENT = shouldPreserveInitialCurrent ? {
-    hp: presetOrFallback(INITIAL_CURRENT_PRESET.hp, displayCurrent.hp),
-    en: presetOrFallback(INITIAL_CURRENT_PRESET.en, displayCurrent.en),
-    fo: presetOrFallback(INITIAL_CURRENT_PRESET.fo, displayCurrent.fo),
-    sp: presetOrFallback(INITIAL_CURRENT_PRESET.sp, displayCurrent.sp),
-    tx: presetOrFallback(INITIAL_CURRENT_PRESET.tx, displayCurrent.tx),
-  } : { ...displayCurrent };
+  ensureLedgerInitialized(maxVals);
+  const displayCurrent = {};
+  LEDGER_RESOURCES.forEach(resource => {
+    displayCurrent[resource] = currentFromLedger(resource, maxVals);
+  });
+  CURRENT = { ...displayCurrent };
   CURRENT_MAX_RECORD = {
     hp: numOr(maxVals.hp, 0),
     en: numOr(maxVals.en, 0),
@@ -14319,12 +14488,12 @@ function updateDerived(){
     sp: numOr(maxVals.spcap, 0),
     tx: numOr(maxVals.tx, 0),
   };
-  if (curHpEl) curHpEl.value = displayCurrent.hp;
-  if (curEnEl) curEnEl.value = displayCurrent.en;
-  if (curNenEl) curNenEl.value = Math.max(0, Number(combatState().nen || 0));
-  if (curFoEl) curFoEl.value = displayCurrent.fo;
-  if (curSpEl) curSpEl.value = displayCurrent.sp;
-  if (curTxEl) curTxEl.value = displayCurrent.tx;
+  if (curHpEl) curHpEl.textContent = String(displayCurrent.hp);
+  if (curEnEl) curEnEl.textContent = String(displayCurrent.en);
+  updateNenDisplay();
+  if (curFoEl) curFoEl.textContent = String(displayCurrent.fo);
+  if (curSpEl) curSpEl.textContent = String(displayCurrent.sp);
+  if (curTxEl) curTxEl.textContent = String(displayCurrent.tx);
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
     if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
     [
@@ -14361,12 +14530,149 @@ function updateDerived(){
     updateExpertiseCounters();
     updateAwakeningCounters();
     updateCraftomancyCounter();
-    renderCombatEtUsage();
-    renderCombatTension();
-    renderCombatDerivedBadges();
-    if (initBaseEl) initBaseEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
-    if (subSlotPill) renderSublimations();
+  renderCombatEtUsage();
+  renderCombatTension();
+  renderCombatDerivedBadges();
+  if (initBaseEl) initBaseEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
+  if (subSlotPill) renderSublimations();
+}
+
+function openResourceActionModal(resource){
+  if (!resourceActionModal || !resourceActionBackdrop) return;
+  const label = RESOURCE_LABELS[resource] || resource;
+  resourceActionTitle.textContent = `Adjust ${label}`;
+  resourceActionModal.dataset.resource = resource;
+  if (resourceActionKind) resourceActionKind.value = 'set';
+  if (resourceActionValue) resourceActionValue.value = '';
+  if (resourceActionNote) resourceActionNote.value = '';
+  resourceActionModal.classList.remove('hidden');
+  resourceActionModal.classList.add('open');
+  resourceActionBackdrop.classList.remove('hidden');
+  resourceActionBackdrop.classList.add('open');
+}
+function closeResourceActionModal(){
+  if (!resourceActionModal || !resourceActionBackdrop) return;
+  resourceActionModal.dataset.resource = '';
+  resourceActionModal.classList.remove('open');
+  resourceActionModal.classList.add('hidden');
+  resourceActionBackdrop.classList.remove('open');
+  resourceActionBackdrop.classList.add('hidden');
+}
+function applyResourceAction(){
+  if (!resourceActionModal) return;
+  const resource = resourceActionModal.dataset.resource;
+  if (!resource) return closeResourceActionModal();
+  const kind = resourceActionKind?.value || 'set';
+  const rawValue = Number(resourceActionValue?.value || 0);
+  if (!Number.isFinite(rawValue)) return;
+  const note = (resourceActionNote?.value || '').trim();
+  const labelBase = RESOURCE_LABELS[resource] || resource;
+  const maxVals = {
+    hp: numOr(DERIVED_CACHE?.hp, 0),
+    en: numOr(DERIVED_CACHE?.en, 0),
+    fo: numOr(DERIVED_CACHE?.fo, 0),
+    sp: numOr(DERIVED_CACHE?.spcap, 0),
+    tx: numOr(DERIVED_CACHE?.tx, 0),
+  };
+  const currentVal = resource === 'nen' ? Number(combatState().nen || 0) : Number(CURRENT[resource] || 0);
+  let delta = 0;
+  if (kind === 'set'){
+    let target = Math.max(0, rawValue);
+    if (resource !== 'tx' && resource !== 'nen'){
+      const baseMax = maxVals[resource] || 0;
+      target = Math.min(baseMax, target);
+    }
+    delta = target - currentVal;
+  }else if (kind === 'add'){
+    delta = rawValue;
+  }else if (kind === 'subtract'){
+    delta = -rawValue;
   }
+  if (resource === 'nen' && delta){
+    const st = combatState();
+    const prev = Math.max(0, Number(st.nen || 0));
+    st.nen = Math.max(0, prev + delta);
+    updateNenDisplay();
+    pushResourceLedgerEntries([{
+      resource,
+      delta,
+      label: `${labelBase} (${kind})`,
+      source: 'Manual',
+      note,
+    }]);
+  }else if (resource !== 'nen' && delta){
+    pushResourceLedgerEntries([{
+      resource,
+      delta,
+      label: `${labelBase} (${kind})`,
+      source: 'Manual',
+      note,
+    }]);
+  }
+  if (resourceLedgerModal && !resourceLedgerModal.classList.contains('hidden')){
+    renderResourceLedger();
+  }
+  closeResourceActionModal();
+}
+function closeResourceLedger(){
+  if (!resourceLedgerModal || !resourceLedgerBackdrop) return;
+  resourceLedgerModal.classList.remove('open');
+  resourceLedgerModal.classList.add('hidden');
+  resourceLedgerBackdrop.classList.remove('open');
+  resourceLedgerBackdrop.classList.add('hidden');
+}
+function openResourceLedger(){
+  if (!resourceLedgerModal || !resourceLedgerBackdrop) return;
+  renderResourceLedger();
+  resourceLedgerModal.classList.remove('hidden');
+  resourceLedgerModal.classList.add('open');
+  resourceLedgerBackdrop.classList.remove('hidden');
+  resourceLedgerBackdrop.classList.add('open');
+}
+function removeLedgerEntry(id){
+  if (!id) return;
+  const before = RESOURCE_LEDGER.length;
+  RESOURCE_LEDGER = RESOURCE_LEDGER.filter(entry=> entry.id !== id);
+  if (RESOURCE_LEDGER.length === before) return;
+  renderResourceLedger();
+  updateDerived();
+  queueSave();
+}
+function renderResourceLedger(){
+  if (!resourceLedgerList) return;
+  if (!RESOURCE_LEDGER.length){
+    resourceLedgerList.innerHTML = '<div class="muted">No entries yet.</div>';
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  RESOURCE_LEDGER.slice().reverse().forEach(entry=>{
+    const row = document.createElement('div');
+    row.className = 'roll-entry';
+    const label = RESOURCE_LABELS[entry.resource] || entry.resource;
+    const deltaText = `${entry.delta > 0 ? '+' : ''}${entry.delta}`;
+    row.innerHTML = `
+      <div class="row" style="justify-content:space-between; align-items:flex-start;">
+        <div class="grow">
+          <div><strong>${label}</strong> ${entry.label ? `- ${entry.label}` : ''}</div>
+          <div class="muted">${deltaText}${entry.note ? ` | ${entry.note}` : ''}</div>
+          <div class="muted" style="font-size:.78rem;">${new Date(entry.timestamp).toLocaleString()}</div>
+        </div>
+        <div class="ledger-actions"></div>
+      </div>
+    `;
+    if (entry.resource !== 'nen'){
+      const actionWrap = row.querySelector('.ledger-actions');
+      const btn = document.createElement('button');
+      btn.className = 'btn small ledger-remove';
+      btn.textContent = 'Remove';
+      btn.addEventListener('click', ()=> removeLedgerEntry(entry.id));
+      actionWrap.appendChild(btn);
+    }
+    fragment.appendChild(row);
+  });
+  resourceLedgerList.innerHTML = '';
+  resourceLedgerList.appendChild(fragment);
+}
 
 /* LOAD & SAVE */
 async function loadCharacter(){
@@ -14417,6 +14723,10 @@ async function loadCharacter(){
   CURRENT = Object.assign({hp:null,en:null,fo:null,sp:null,tx:null}, CHAR.current || {});
   INITIAL_CURRENT_PRESET = { ...CURRENT };
   CURRENT_MAX_RECORD = null;
+  RESOURCE_LEDGER = Array.isArray(CHAR.resource_ledger)
+    ? (CHAR.resource_ledger || []).map(normalizeLedgerEntry).filter(Boolean)
+    : [];
+  LEDGER_INITIALIZED = false;
   OVERRIDE_ENABLED = !!CHAR.override_stats?.enabled;
   OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,initiative:null,spcap:null,enc:null,et:null,tx:null,talent_max:null,skill_points:null,stat_points:null,sublimation_slots:null,complex_schools:null}, CHAR.override_stats?.values || {});
   if (overrideToggle) overrideToggle.checked = OVERRIDE_ENABLED;
@@ -14498,9 +14808,6 @@ async function loadCharacter(){
   if (SELECTED_INV_ID) await loadInventoryById(SELECTED_INV_ID);
   wirePersonal();
   renderCombatTab();
-  if (INITIAL_CURRENT_PRESET){
-    CURRENT = { ...INITIAL_CURRENT_PRESET };
-  }
   updateDerived();
   INITIAL_LOAD = false;
   applyReadOnlyState();
@@ -14575,6 +14882,7 @@ async function saveNow(){
       archetype_id: CHAR.archetype_id || '',
       sublimations: SUBLIMATIONS,
       current: CURRENT,
+      resource_ledger: RESOURCE_LEDGER,
       override_stats: { enabled: OVERRIDE_ENABLED, values: OVERRIDE_VALUES }
     };
     const res = await api('/characters/' + encodeURIComponent(CID), {
@@ -16308,6 +16616,13 @@ function wirePersonal(){
 }
 
 /* boot */
+resourceActionApply?.addEventListener('click', applyResourceAction);
+resourceActionCancel?.addEventListener('click', closeResourceActionModal);
+resourceActionClose?.addEventListener('click', closeResourceActionModal);
+resourceActionBackdrop?.addEventListener('click', (e)=>{ if (e.target === resourceActionBackdrop) closeResourceActionModal(); });
+resourceLedgerOpenBtn?.addEventListener('click', openResourceLedger);
+resourceLedgerClose?.addEventListener('click', closeResourceLedger);
+resourceLedgerBackdrop?.addEventListener('click', (e)=>{ if (e.target === resourceLedgerBackdrop) closeResourceLedger(); });
 loadAbiPins();
 loadAbiHidePref();
 setAllAbiHideToggleUI();
