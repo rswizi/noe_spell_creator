@@ -4459,7 +4459,40 @@ def catalog_ammo(request: Request, q: str = "", tags: str = "", limit: int = 25)
     if extra_tags:
         filters.append(extra_tags)
     filt = filters[0] if len(filters) == 1 else {"$and": filters}
-    rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1}).limit(int(limit)))
+    rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1, "tags": 1}).limit(int(limit)))
+    existing_keys = {norm_key(str(row.get("name") or "")) for row in rows if row.get("name")}
+    weapon_col = get_col("weapons")
+    ammo_name_query = (q or "").strip().lower()
+    tag_filters = [t.strip().lower() for t in (tags or "").split(",") if t.strip()]
+    ammo_rows = []
+    for weapon in weapon_col.find({"ammo_name": {"$type": "string", "$ne": ""}}):
+        ammo_name = (weapon.get("ammo_name") or "").strip()
+        if not ammo_name:
+            continue
+        key = norm_key(ammo_name)
+        if key in existing_keys:
+            continue
+        if ammo_name_query and ammo_name_query not in ammo_name.lower():
+            continue
+        entry_tags = [(t or "").strip().lower() for t in (weapon.get("tags") or [])]
+        entry_tags.append("ammo")
+        if tag_filters:
+            if not all(any(entry_tag == f or entry_tag.startswith(f + ":") or f in entry_tag for entry_tag in entry_tags) for f in tag_filters):
+                continue
+        ammo_entry = {
+            "id": f"weapon-ammo-{weapon.get('id') or key}",
+            "name": ammo_name,
+            "price": int(weapon.get("ammo_price") or 0),
+            "enc": float(weapon.get("ammo_enc") or 0.0),
+            "category": "weapon",
+            "tags": entry_tags,
+            "weapon_id": weapon.get("id"),
+            "weapon_name": weapon.get("name"),
+            "kind": "ammo"
+        }
+        ammo_rows.append(ammo_entry)
+        existing_keys.add(key)
+    rows.extend(ammo_rows)
     return {"status": "success", "ammo": rows}
 
 @app.post("/inventories/{inv_id}/deposit")
@@ -5178,10 +5211,13 @@ def use_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(.
     if not it.get("consumable"):
         raise HTTPException(400, "Item is not consumable")
 
+    amount = max(1, int(payload.get("amount") or 1))
     qty = max(0, int(it.get("quantity") or 1))
     if qty <= 0:
         raise HTTPException(400, "No quantity remaining")
-    new_qty = max(0, qty - 1)
+    if qty < amount:
+        raise HTTPException(400, f"Not enough quantity ({qty}) to consume {amount}")
+    new_qty = max(0, qty - amount)
     keep_item = it.get("alchemy_tool") or new_qty > 0
     currency = (payload.get("currency") or _pick_currency(inv)).strip()
 
@@ -5200,7 +5236,7 @@ def use_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(.
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
         "amount": 0,
-        "note": f"Used {it.get('name','Item')} (remaining {new_qty})",
+        "note": f"Used {it.get('name','Item')} x{amount} (remaining {new_qty})",
         "source": "use",
         "item_id": item_id
     }

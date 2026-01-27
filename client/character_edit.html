@@ -1152,26 +1152,26 @@
                   <div class="resource-controls">
                     <label class="muted">Max HP Dmg <input id="max-hp-dmg" type="number" min="0" step="1" class="combat-num"></label>
                     <label class="muted">Tension <input id="tension-value" type="number" min="0" step="1" class="combat-num"></label>
-                    <span class="combat-badge">Cap <span id="tension-cap">--</span></span>
                   </div>
                 </div>
-                <div class="combat-row">
-                  <span class="combat-badge">Max HP <span id="combat-max-hp">--</span></span>
-                  <span class="combat-badge">Max EN <span id="combat-max-en">--</span></span>
-                  <span class="combat-badge">Max FO <span id="combat-max-fo">--</span></span>
-                  <span class="combat-badge">Max SP <span id="combat-max-sp">--</span></span>
+                <div class="combat-row ledger-row">
+                  <button type="button" class="combat-num resource-button" data-resource="mo">
+                    <span class="resource-label">MO</span>
+                    <span class="resource-current" id="combat-der-mo">--</span>
+                  </button>
+                  <button type="button" class="combat-num resource-button" data-resource="tension">
+                    <span class="resource-label">Tension</span>
+                    <span class="resource-current" id="combat-tension-current">--</span>
+                    <span class="resource-max" id="combat-tension-cap">Cap --</span>
+                  </button>
                 </div>
                 <div class="combat-row">
-                  <span class="combat-badge">MO <span id="combat-der-mo">--</span></span>
-                  <span class="combat-badge">Init <span id="combat-der-init">--</span></span>
-                  <span class="combat-badge">ET <span id="combat-der-et">--</span></span>
-                  <span class="combat-badge">TX <span id="combat-der-tx">--</span></span>
-                  <span class="combat-badge">Enc <span id="combat-der-enc">--</span></span>
-                </div>
-                <div class="combat-row">
-                  <button class="btn small" id="combat-take-dmg">Take Damage</button>
-                  <button class="btn small" id="combat-take-true">Take True Damage</button>
-                  <button class="btn small" id="combat-heal">Heal Damage</button>
+                  <button class="btn small" id="combat-take-dmg" title="Take Damage">
+                    <i class="fa-solid fa-heart-circle-plus"></i>
+                  </button>
+                  <button class="btn small" id="combat-take-true" title="Take True Damage">
+                    <i class="fa-solid fa-heart-circle-bolt"></i>
+                  </button>
                 </div>
               </div>
             </details>
@@ -1186,6 +1186,7 @@
               <div class="panel-body">
                 <div class="combat-row">
                   <button class="btn small" id="init-roll">Roll Initiative</button>
+                  <span class="combat-badge">Init <span id="combat-der-init">--</span></span>
                 </div>
                 <div class="combat-row">
                   <button class="btn small" id="def-roll">Roll Defense</button>
@@ -2037,9 +2038,9 @@
         <input id="resource-action-value" type="number" step="1" min="0">
       </label>
     </div>
-    <label class="muted" style="display:block; margin-top:10px;">
+    <label class="muted" style="display:block; margin-top:10px; max-width:260px;">
       Note
-      <input id="resource-action-note" type="text" placeholder="Optional comment">
+      <input id="resource-action-note" type="text" placeholder="Optional comment" style="width:100%; max-width:260px;">
     </label>
     <div class="row" style="justify-content:flex-end; gap:8px; margin-top:12px;">
       <button class="btn btn-secondary" id="resource-action-cancel">Cancel</button>
@@ -2373,9 +2374,9 @@ function numOr(v, fb=0){
   const n = Number(v);
   return Number.isFinite(n) ? n : fb;
 }
-const LEDGER_RESOURCES = ['hp','en','fo','sp','tx'];
+const LEDGER_RESOURCES = ['hp','en','fo','sp','tx','mo','tension'];
 const LEDGER_ALLOWED = new Set([...LEDGER_RESOURCES, 'nen']);
-const RESOURCE_LABELS = { hp:'HP', en:'EN', fo:'FO', sp:'SP', tx:'TX', nen:'nEN' };
+const RESOURCE_LABELS = { hp:'HP', en:'EN', fo:'FO', sp:'SP', tx:'TX', mo:'MO', tension:'Tension', nen:'nEN' };
 function ledgerEntryId(){
   return 'ledger-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
 }
@@ -2405,16 +2406,26 @@ function resourceBaseMax(resource, maxVals){
   if (resource === 'fo') return numOr(maxVals.fo, 0);
   if (resource === 'sp') return numOr(maxVals.spcap, 0);
   if (resource === 'tx') return numOr(maxVals.tx, 0);
+  if (resource === 'mo') return numOr(maxVals.mo, 0);
   return 0;
 }
 function currentFromLedger(resource, maxVals){
   if (resource === 'nen'){
     return Math.max(0, Number(combatState().nen || 0));
   }
+  if (resource === 'tension'){
+    const cap = tensionCapForLevel(CHAR?.level || 1);
+    const base = Math.max(0, Number(combatState().tension || 0));
+    const computed = base + ledgerSum(resource);
+    return Math.max(0, Math.min(cap, computed));
+  }
   const base = resourceBaseMax(resource, maxVals);
   const computed = base + ledgerSum(resource);
   if (resource === 'tx'){
     return Math.max(0, computed);
+  }
+  if (resource === 'tension'){
+    return Math.max(0, Math.min(base, computed));
   }
   return Math.max(0, Math.min(base, computed));
 }
@@ -2869,18 +2880,12 @@ const maxFoEl = document.getElementById('max-fo');
 const maxSpEl = document.getElementById('max-sp');
 const maxTxEl = document.getElementById('max-tx');
 const maxHpDmgEl = document.getElementById('max-hp-dmg');
-const combatMaxHpEl = document.getElementById('combat-max-hp');
-const combatMaxEnEl = document.getElementById('combat-max-en');
-const combatMaxFoEl = document.getElementById('combat-max-fo');
-const combatMaxSpEl = document.getElementById('combat-max-sp');
 const combatDerMoEl = document.getElementById('combat-der-mo');
 const combatDerInitEl = document.getElementById('combat-der-init');
-const combatDerEtEl = document.getElementById('combat-der-et');
-const combatDerTxEl = document.getElementById('combat-der-tx');
-const combatDerEncEl = document.getElementById('combat-der-enc');
+const combatTensionCurrentEl = document.getElementById('combat-tension-current');
+const combatTensionCapEl = document.getElementById('combat-tension-cap');
 const combatTakeDmgBtn = document.getElementById('combat-take-dmg');
 const combatTakeTrueBtn = document.getElementById('combat-take-true');
-const combatHealBtn = document.getElementById('combat-heal');
 const combatDmgModal = document.getElementById('combat-dmg-modal');
 const combatDmgBackdrop = document.getElementById('combat-dmg-backdrop');
 const combatDmgTitleEl = document.getElementById('combat-dmg-title');
@@ -2918,7 +2923,6 @@ const combatAbilityOpenBtn = document.getElementById('combat-open-ability');
 const combatSpellOpenBtn = document.getElementById('combat-open-spell');
 const combatAwakenOpenBtn = document.getElementById('combat-open-awaken');
 const tensionValueEl = document.getElementById('tension-value');
-const tensionCapEl = document.getElementById('tension-cap');
 const tensionStrategyEl = document.getElementById('tension-strategy');
 const exhaustedToggleEl = document.getElementById('combat-exhausted');
 const combatActionsEl = document.getElementById('combat-actions');
@@ -3639,7 +3643,6 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   });
   combatTakeDmgBtn?.addEventListener('click', ()=> openCombatDamageModal('damage'));
   combatTakeTrueBtn?.addEventListener('click', ()=> openCombatDamageModal('true'));
-  combatHealBtn?.addEventListener('click', ()=> openCombatDamageModal('heal'));
   combatSpecialWeaponAddBtn?.addEventListener('click', ()=>{
     const key = String(combatSpecialWeaponSelect?.value || '').trim();
     if (!key) return;
@@ -3751,10 +3754,18 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   combatConditionsBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatConditionsBackdrop) invToggleModal(combatConditionsModal, combatConditionsBackdrop, false); });
   restOpenBtn?.addEventListener('click', ()=> invToggleModal(combatRestModal, combatRestBackdrop, true));
   tensionValueEl?.addEventListener('input', ()=>{
-    const st = combatState();
-    st.tension = Math.max(0, Number(tensionValueEl.value || 0));
-    renderCombatAwakenList();
-    queueSave();
+    const rawValue = Math.max(0, Number(tensionValueEl.value || 0));
+    const cap = tensionCapForLevel(CHAR?.level || 1);
+    const desired = Math.min(cap, rawValue);
+    const current = Math.max(0, Number(CURRENT?.tension ?? combatState().tension || 0));
+    const delta = desired - current;
+    if (!delta) return;
+    pushResourceLedgerEntries([{
+      resource: 'tension',
+      delta,
+      label: 'Tension',
+      source: 'Manual'
+    }]);
   });
   tensionStrategyEl?.addEventListener('change', ()=>{
     const st = combatState();
@@ -8152,18 +8163,20 @@ async function disposeItemInline(it){
   LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
 }
 
-async function useItemInline(it){
+async function useItemInline(it, amount=1){
+  const qty = Math.max(1, Math.floor(Number(amount) || 1));
   const currency = invGlobalCurEl?.value || "Jelly";
   const sourceId = getInventorySourceId();
-  if (!sourceId){ alert("Link an inventory first."); return; }
+  if (!sourceId){ alert("Link an inventory first."); return false; }
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/use`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
-    body: JSON.stringify({ currency })
+    body: JSON.stringify({ currency, amount: qty })
   });
   const j = await r.json().catch(()=>({}));
-  if (j.status !== "success"){ alert(j.message || "Use failed"); return; }
+  if (j.status !== "success"){ alert(j.message || "Use failed"); return false; }
   LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+  return true;
 }
 
 async function refillAlchemyInline(it){
@@ -11478,11 +11491,17 @@ function renderCombatTension(){
   if (st.tension == null) st.tension = 3;
   const cap = tensionCapForLevel(CHAR?.level || 1);
   const inspired = activeConditionSet().has('inspired');
-  if (tensionCapEl){
-    tensionCapEl.textContent = cap;
-    tensionCapEl.title = inspired ? 'Inspired: effective tension +2' : '';
+  if (combatTensionCapEl){
+    combatTensionCapEl.textContent = `Cap ${cap}`;
+    combatTensionCapEl.title = inspired ? 'Inspired: effective tension +2' : '';
   }
-  safeSetValue(tensionValueEl, Math.max(0, Number(st.tension ?? 3)));
+  const tensionCurrent = Math.max(0, Number(st.tension || 0));
+  if (tensionValueEl && document.activeElement !== tensionValueEl){
+    safeSetValue(tensionValueEl, tensionCurrent);
+  }
+  if (combatTensionCurrentEl){
+    combatTensionCurrentEl.textContent = String(tensionCurrent);
+  }
   if (tensionStrategyEl && document.activeElement !== tensionStrategyEl){
     tensionStrategyEl.value = st.tension_strategy || 'Offensive';
   }
@@ -12023,6 +12042,34 @@ function ensureWeaponMagazineState(it, state){
   }else{
     state.ammo_loaded = 0;
   }
+}
+
+function isAmmoCandidate(item){
+  if (!item) return false;
+  const kind = String(item.kind || item.__kind || '').toLowerCase();
+  const category = String(item.category || item.subcategory || '').toLowerCase();
+  if (kind === 'ammo' || category === 'ammo') return true;
+  const tags = Array.isArray(item.tags) ? item.tags : (item.tags ? [item.tags] : []);
+  return tags.map(t=>String(t || '').toLowerCase()).includes('ammo');
+}
+
+function findAmmoInventoryItemForWeapon(it){
+  const ammoName = String(it?.ammo_name || '').trim().toLowerCase();
+  const candidates = (LINKED_INV?.items || []).filter(isAmmoCandidate);
+  if (!candidates.length) return null;
+  if (!ammoName){
+    return candidates[0];
+  }
+  const matched = candidates.find(item=>{
+    const name = String(item.alt_name || item.name || '').trim().toLowerCase();
+    return name && name === ammoName;
+  });
+  if (matched) return matched;
+  const partial = candidates.find(item=>{
+    const name = String(item.alt_name || item.name || '').trim().toLowerCase();
+    return name && name.includes(ammoName);
+  });
+  return partial || candidates[0];
 }
 function weaponDamageParts(it){
   const raw = String(weaponDamageValue(it) || '').trim();
@@ -12917,6 +12964,11 @@ function renderCombatWeapons(){
     const hasMagazine = magCapacity > 0;
     const outOfAmmo = hasMagazine && ammoLoaded <= 0;
     const ammoDetails = [];
+    const ammoInventory = hasMagazine ? findAmmoInventoryItemForWeapon(it) : null;
+    const ammoStock = ammoInventory ? Number(ammoInventory.quantity || 0) : null;
+    if (Number.isFinite(ammoStock)){
+      ammoDetails.push(`Stock ${ammoStock}`);
+    }
     if (it?.ammo_name) ammoDetails.push(it.ammo_name);
     if (hasMagazine) ammoDetails.push(`${ammoLoaded}/${magCapacity}`);
     const ammoPriceVal = Number(it?.ammo_price ?? 0);
@@ -12933,8 +12985,12 @@ function renderCombatWeapons(){
         <div class="muted">${invEscapeHtml(attrs)}</div>
       </div>
       <div class="combat-actions-row">
-        <button class="btn small atk-roll" ${outOfAmmo ? 'disabled title="Reload before attacking"' : ''}>Attack Roll</button>
-        <button class="btn small dmg-roll" ${outOfAmmo ? 'disabled title="Reload before attacking"' : ''}>Deal Damage</button>
+        <button class="btn small atk-roll" ${outOfAmmo ? 'disabled title="Reload before attacking"' : ''} title="Attack Roll">
+          <i class="fa-solid fa-bullseye"></i>
+        </button>
+        <button class="btn small dmg-roll" ${outOfAmmo ? 'disabled title="Reload before attacking"' : ''} title="Deal Damage">
+          <i class="fa-solid fa-gavel"></i>
+        </button>
         ${hasMagazine ? '<button class="btn small reload" title="Reload"><i class="fa-solid fa-arrow-rotate-right"></i></button>' : ''}
         ${it.special ? '<button class="btn small btn-secondary special-remove">Remove</button>' : ''}
       </div>
@@ -13052,7 +13108,9 @@ function renderCombatWeapons(){
     });
     row.querySelector('.reload')?.addEventListener('click', (e)=>{
       e.stopPropagation();
-      reloadWeaponAmmo(it);
+      reloadWeaponAmmo(it).catch(err=>{
+        console.error('Reload failed', err);
+      });
     });
     combatWeaponsEl.appendChild(row);
   });
@@ -13069,14 +13127,65 @@ function removeCombatSpecialWeapon(id){
   queueSave();
 }
 
-function reloadWeaponAmmo(it){
+async function reloadWeaponAmmo(it){
   if (!it) return;
   const cap = weaponMagazineCapacity(it);
   if (!cap) return;
   const state = getWeaponState(it);
-  state.ammo_loaded = cap;
+  const loaded = Math.max(0, Number(state.ammo_loaded || 0));
+  const needed = cap - loaded;
+  if (needed <= 0) return;
+  const ammoItem = findAmmoInventoryItemForWeapon(it);
+  if (!ammoItem){
+    alert('No ammo available to reload this weapon.');
+    return;
+  }
+  const available = Math.max(0, Number(ammoItem.quantity || 0));
+  if (!available){
+    alert('Out of ammo.');
+    return;
+  }
+  const toConsume = Math.min(needed, available);
+  const consumed = await useItemInline(ammoItem, toConsume);
+  if (!consumed) return;
+  state.ammo_loaded = Math.min(cap, loaded + toConsume);
   queueSave();
   renderCombatWeapons();
+  const remainingAmmoItem = findAmmoInventoryItemForWeapon(it);
+  const ammoLabel = (ammoItem.alt_name || ammoItem.name || it.ammo_name || '').trim() || 'ammo';
+  const remainingQty = remainingAmmoItem ? Number(remainingAmmoItem.quantity || 0) : null;
+  announceWeaponReload(it, toConsume, ammoLabel, remainingQty);
+}
+
+function buildWeaponReloadChatPayload(message){
+  if (!CAMPAIGN_ID) return null;
+  const charId = CHAR?.id || CID || '';
+  const displayName = (nameEl?.value || CHAR?.name || charId || 'Character');
+  return {
+    visibility: campaignChatVisibility(),
+    ts: Date.now(),
+    user: CURRENT_USER?.username || CHAR?.owner || 'Unknown',
+    character_id: charId,
+    character_name: displayName,
+    character_avatar: charId ? `/characters/${encodeURIComponent(charId)}/avatar` : '',
+    type: 'message',
+    text: message,
+    lines: []
+  };
+}
+
+function announceWeaponReload(it, amount, ammoLabel, remainingQty){
+  if (!amount) return;
+  const weaponName = it?.alt_name || it?.name || 'Weapon';
+  const ammoText = ammoLabel || 'ammo';
+  const charName = (nameEl?.value || CHAR?.name || CHAR?.id || 'Character');
+  const suffix = Number.isFinite(remainingQty) ? ` (left ${remainingQty})` : '';
+  const message = `${charName} reloads ${weaponName} with ${amount} ${ammoText}${suffix}.`;
+  const payload = buildWeaponReloadChatPayload(message);
+  if (!payload) return;
+  postCampaignChatMessage(payload).then(ok=>{
+    if (ok) scheduleCampaignChatRefresh();
+  });
 }
 
 function renderCombatAbilityList(){
@@ -13602,20 +13711,11 @@ function renderCombatDeathSaves(){
 }
 
 function renderCombatDerivedBadges(){
-  const maxHpDamage = Math.max(0, Number(combatState().max_hp_damage || 0));
-  const maxHp = Math.max(0, numOr(DERIVED_CACHE?.hp, 0) - maxHpDamage);
-  if (combatMaxHpEl) combatMaxHpEl.textContent = maxHp;
-  if (combatMaxEnEl) combatMaxEnEl.textContent = numOr(DERIVED_CACHE?.en, 0);
-  if (combatMaxFoEl) combatMaxFoEl.textContent = numOr(DERIVED_CACHE?.fo, 0);
-  if (combatMaxSpEl) combatMaxSpEl.textContent = numOr(DERIVED_CACHE?.spcap, 0);
   if (combatDerMoEl) combatDerMoEl.textContent = numOr(DERIVED_CACHE?.mo, 0);
   if (combatDerInitEl) combatDerInitEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
-  if (combatDerEtEl) combatDerEtEl.textContent = numOr(DERIVED_CACHE?.et, 0);
-  if (combatDerTxEl) combatDerTxEl.textContent = numOr(DERIVED_CACHE?.tx, 0);
-  if (combatDerEncEl){
-    const curEnc = Number(DERIVED_CACHE?.current_enc || 0).toFixed(1);
-    const maxEnc = numOr(DERIVED_CACHE?.enc, 0);
-    combatDerEncEl.textContent = `${curEnc}/${maxEnc}`;
+  const tensionCurrent = Math.max(0, Number(CURRENT?.tension ?? combatState().tension || 0));
+  if (combatTensionCurrentEl){
+    combatTensionCurrentEl.textContent = String(tensionCurrent);
   }
 }
 
@@ -14406,6 +14506,7 @@ function skillTotalAdjustedFor(key, name){
 
 function updateDerived(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const st = combatState();
   const msBOD = milestone('body');
   const msWIL = milestone('willpower');
   const msMAG = milestone('magic');
@@ -14486,6 +14587,8 @@ function updateDerived(){
     sp: numOr(maxVals.spcap, 0),
     tx: numOr(maxVals.tx, 0),
   };
+  const tensionCurrent = Math.max(0, Number(displayCurrent.tension ?? st.tension ?? 0));
+  st.tension = tensionCurrent;
   if (curHpEl) curHpEl.textContent = String(displayCurrent.hp);
   if (curEnEl) curEnEl.textContent = String(displayCurrent.en);
   updateNenDisplay();
