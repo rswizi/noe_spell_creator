@@ -10224,12 +10224,23 @@ function renderSpellSearchResults(rows){
   });
 }
 
+function getSpellCategoryOrder(){
+  return Array.from(slFilterCategory?.options || [])
+    .map(opt=> String(opt.value || '').trim())
+    .filter(Boolean);
+}
+
 function filterSpellRowsByCategory(rows){
   const category = String(slFilterCategory?.value || '').trim();
   if (!category) return rows || [];
-  if (SHOW_LOWER_CATEGORY_SPELLS) return rows || [];
-  const target = category.toLowerCase();
-  return (rows || []).filter(sp=> String(sp.category || '').trim().toLowerCase() === target);
+  const order = getSpellCategoryOrder();
+  const targetIdx = order.findIndex(v=> v.toLowerCase() === category.toLowerCase());
+  if (targetIdx < 0) return rows || [];
+  const allowed = new Set(order.slice(0, targetIdx + 1).map(v=> v.toLowerCase()));
+  if (SHOW_LOWER_CATEGORY_SPELLS){
+    return (rows || []).filter(sp=> allowed.has(String(sp.category || '').trim().toLowerCase()));
+  }
+  return (rows || []).filter(sp=> (String(sp.category || '').trim().toLowerCase()) === category.toLowerCase());
 }
 
 function reapplySpellSearchResults(){
