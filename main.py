@@ -4414,6 +4414,8 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "ammo_price": ammo_price,
         "ammo_enc": ammo_enc,
     }
+    if kind == "ammo":
+        item["consumable"] = True
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
