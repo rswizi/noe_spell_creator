@@ -1148,26 +1148,22 @@
                       <span class="resource-current" id="cur-tx">--</span>
                       <span class="resource-max" id="max-tx">Max --</span>
                     </button>
-                  </div>
-                  <div class="resource-controls">
                     <button type="button" class="combat-num resource-button resource-control-button" id="max-hp-dmg-btn" data-resource="max_hp_damage">
                       <span class="resource-label">Max HP Dmg</span>
                       <span class="resource-current" id="max-hp-dmg-display">0</span>
                     </button>
-                    <input id="max-hp-dmg" type="hidden">
-                    <input id="tension-value" type="hidden">
+                    <button type="button" class="combat-num resource-button" data-resource="tension">
+                      <span class="resource-label">Tension</span>
+                      <span class="resource-current" id="combat-tension-current">--</span>
+                      <span class="resource-max" id="combat-tension-cap">Cap --</span>
+                    </button>
+                    <button type="button" class="combat-num resource-button" data-resource="mo" disabled aria-disabled="true">
+                      <span class="resource-label">MO</span>
+                      <span class="resource-current" id="combat-der-mo">--</span>
+                    </button>
                   </div>
-                </div>
-                <div class="combat-row ledger-row">
-                  <button type="button" class="combat-num resource-button" data-resource="mo" disabled aria-disabled="true">
-                    <span class="resource-label">MO</span>
-                    <span class="resource-current" id="combat-der-mo">--</span>
-                  </button>
-                  <button type="button" class="combat-num resource-button" data-resource="tension">
-                    <span class="resource-label">Tension</span>
-                    <span class="resource-current" id="combat-tension-current">--</span>
-                    <span class="resource-max" id="combat-tension-cap">Cap --</span>
-                  </button>
+                  <input id="max-hp-dmg" type="hidden">
+                  <input id="tension-value" type="hidden">
                 </div>
                 <div class="combat-row combat-actions-row">
                   <button class="btn small" id="combat-take-dmg" title="Take Damage">

@@ -3986,10 +3986,67 @@ def add_transaction(request: Request, inv_id: str, payload: dict = Body(...)):
         {"$set":{"currencies": cur}, "$push":{"transactions": tx}})
     return {"status":"success","currencies": cur, "transaction": tx}
 
+def _build_weapon_ammo_entry(ref_id: str, weapon: dict) -> dict | None:
+    if not weapon:
+        return None
+    ammo_name = (weapon.get("ammo_name") or "").strip()
+    if not ammo_name:
+        return None
+    price = int(weapon.get("ammo_price") or 0)
+    enc = float(weapon.get("ammo_enc") or 0.0)
+    tags = [t.strip().lower() for t in (weapon.get("tags") or []) if (t or "").strip()]
+    if "ammo" not in tags:
+        tags.append("ammo")
+    return {
+        "id": ref_id,
+        "name": ammo_name,
+        "price": price,
+        "enc": enc,
+        "category": "weapon",
+        "tags": tags,
+        "kind": "ammo",
+        "weapon_id": weapon.get("id"),
+        "weapon_name": weapon.get("name"),
+        "description": weapon.get("description"),
+        "description_html": weapon.get("description_html"),
+        "ammo_name": ammo_name,
+        "ammo_price": price,
+        "ammo_enc": enc,
+        "magazine_size": weapon.get("magazine_size") or weapon.get("magazine"),
+        "modifiers": weapon.get("modifiers") or [],
+        "consumable": bool(weapon.get("consumable")),
+        "alchemy_tool": bool(weapon.get("alchemy_tool")),
+    }
+
+def _find_weapon_for_ammo_ref(ref_id: str, db) -> dict | None:
+    if not ref_id.startswith("weapon-ammo-"):
+        return None
+    weapon_ref = ref_id[len("weapon-ammo-"):].strip()
+    if not weapon_ref:
+        return None
+    weapon = db.weapons.find_one({"id": weapon_ref})
+    if weapon:
+        return weapon
+    target_key = norm_key(weapon_ref)
+    for w in db.weapons.find({"ammo_name": {"$type": "string", "$ne": ""}}):
+        ammo_name = (w.get("ammo_name") or "").strip()
+        if norm_key(ammo_name) == target_key:
+            return w
+    return None
+
 def _fetch_catalog_item(kind: str, ref_id: str) -> dict | None:
     db = get_db()
+    if (kind or "").lower() == "ammo":
+        ammo_obj = db.objects.find_one({"id": ref_id})
+        if ammo_obj:
+            return ammo_obj
+        weapon = _find_weapon_for_ammo_ref(ref_id, db)
+        if weapon:
+            return _build_weapon_ammo_entry(ref_id, weapon)
+        return None
     col = {"weapon":"weapons","equipment":"equipment","tool":"tools","object":"objects","ammo":"objects"}.get(kind)
-    if not col: return None
+    if not col:
+        return None
     return db[col].find_one({"id": ref_id})
 
 def _extract_item_description(src: dict) -> tuple[str | None, str | None]:
