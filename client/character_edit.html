@@ -2278,6 +2278,11 @@ function numOr(v, fb=0){
   const n = Number(v);
   return Number.isFinite(n) ? n : fb;
 }
+function presetOrFallback(preset, fallback){
+  if (preset == null) return fallback;
+  const n = Number(preset);
+  return Number.isFinite(n) ? n : fallback;
+}
 function investVal(v, fb=0){
   if (v && typeof v === 'object') return numOr(v.invest, fb);
   return numOr(v, fb);
@@ -2553,7 +2558,6 @@ let COMPUTED_ARC_ABILITIES = [];
 let UPGRADE_META = {};
 let TALENT_MAX = 1;
 let INITIAL_LOAD = true;
-let PRESERVE_INITIAL_CURRENT = true;
 let LEVEL_REWARD_CONTEXT = null;
 const LEVEL_REWARD_OPTION_DEFS = [
   { key:'talent', title:'Talent slot', desc:'Gain access to another talent.', effect:'+1 talent slot' },
@@ -14294,18 +14298,18 @@ function updateDerived(){
   };
   const shouldPreserveInitialCurrent = INITIAL_LOAD && PRESERVE_INITIAL_CURRENT && INITIAL_CURRENT_PRESET;
   const displayCurrent = shouldPreserveInitialCurrent ? {
-    hp: numOr(INITIAL_CURRENT_PRESET.hp, computedCurrent.hp),
-    en: numOr(INITIAL_CURRENT_PRESET.en, computedCurrent.en),
-    fo: numOr(INITIAL_CURRENT_PRESET.fo, computedCurrent.fo),
-    sp: numOr(INITIAL_CURRENT_PRESET.sp, computedCurrent.sp),
-    tx: numOr(INITIAL_CURRENT_PRESET.tx, computedCurrent.tx),
+    hp: presetOrFallback(INITIAL_CURRENT_PRESET.hp, computedCurrent.hp),
+    en: presetOrFallback(INITIAL_CURRENT_PRESET.en, computedCurrent.en),
+    fo: presetOrFallback(INITIAL_CURRENT_PRESET.fo, computedCurrent.fo),
+    sp: presetOrFallback(INITIAL_CURRENT_PRESET.sp, computedCurrent.sp),
+    tx: presetOrFallback(INITIAL_CURRENT_PRESET.tx, computedCurrent.tx),
   } : computedCurrent;
   CURRENT = shouldPreserveInitialCurrent ? {
-    hp: numOr(INITIAL_CURRENT_PRESET.hp, displayCurrent.hp),
-    en: numOr(INITIAL_CURRENT_PRESET.en, displayCurrent.en),
-    fo: numOr(INITIAL_CURRENT_PRESET.fo, displayCurrent.fo),
-    sp: numOr(INITIAL_CURRENT_PRESET.sp, displayCurrent.sp),
-    tx: numOr(INITIAL_CURRENT_PRESET.tx, displayCurrent.tx),
+    hp: presetOrFallback(INITIAL_CURRENT_PRESET.hp, displayCurrent.hp),
+    en: presetOrFallback(INITIAL_CURRENT_PRESET.en, displayCurrent.en),
+    fo: presetOrFallback(INITIAL_CURRENT_PRESET.fo, displayCurrent.fo),
+    sp: presetOrFallback(INITIAL_CURRENT_PRESET.sp, displayCurrent.sp),
+    tx: presetOrFallback(INITIAL_CURRENT_PRESET.tx, displayCurrent.tx),
   } : { ...displayCurrent };
   CURRENT_MAX_RECORD = {
     hp: numOr(maxVals.hp, 0),
