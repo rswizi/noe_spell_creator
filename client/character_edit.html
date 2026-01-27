@@ -186,8 +186,28 @@
     .current-row input { width:100%; }
     .combat-grid { display:grid; gap:12px; grid-template-columns: 1fr; }
     .combat-col { display:grid; gap:12px; }
-    .combat-vitals { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    .combat-vitals input { width:6ch; min-width:6ch; }
+    .combat-vitals { display:flex; flex-direction:column; gap:10px; }
+    .resource-grid { width:100%; display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:10px; }
+    .resource-button {
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:4px;
+      min-height:82px;
+      font-size:1rem;
+      padding:12px 10px;
+      border-radius:14px;
+      border:1px solid var(--border);
+      background:#181821;
+      cursor:pointer;
+      transition:border .15s ease, box-shadow .15s ease;
+    }
+    .resource-button:hover { border-color:#3b3b5b; box-shadow:0 0 0 2px rgba(59,59,91,0.45); }
+    .resource-current { font-size:1.6rem; font-weight:600; }
+    .resource-max { font-size:.75rem; opacity:.8; }
+    .resource-controls { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
+    .resource-controls label { flex:1 1 210px; }
     .combat-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .combat-inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .combat-actions-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
@@ -198,22 +218,6 @@
     }
     .combat-entry .meta { font-size:.82rem; opacity:.8; }
     .combat-entry .muted { font-size:.82rem; }
-    .resource-button {
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:6px;
-      padding:8px 12px;
-      border-radius:12px;
-      border:1px solid var(--border);
-      background:#181821;
-      color:var(--text);
-      font-family:inherit;
-      cursor:pointer;
-      min-width:100px;
-    }
-    .resource-button .resource-label { opacity:.8; font-size:.9rem; }
-    .resource-button .resource-value { font-weight:600; font-size:1rem; }
     .combat-entry .tag { border:1px solid #343446; border-radius:999px; padding:2px 8px; font-size:.75rem; }
     .combat-entry .grow { min-width:0; }
     .combat-entry input[type="checkbox"],
@@ -1113,33 +1117,36 @@
               </summary>
               <div class="panel-body">
                 <div class="combat-vitals">
-                  <button type="button" class="combat-num resource-button" data-resource="hp">
-                    <span class="resource-label">HP</span>
-                    <span id="cur-hp" class="resource-value">--</span>
-                  </button>
-                  <button type="button" class="combat-num resource-button" data-resource="en">
-                    <span class="resource-label">EN</span>
-                    <span id="cur-en" class="resource-value">--</span>
-                  </button>
-                  <button type="button" class="combat-num resource-button" data-resource="nen">
-                    <span class="resource-label">nEN</span>
-                    <span id="cur-nen" class="resource-value">0</span>
-                  </button>
-                  <button type="button" class="combat-num resource-button" data-resource="fo">
-                    <span class="resource-label">FO</span>
-                    <span id="cur-fo" class="resource-value">--</span>
-                  </button>
-                  <button type="button" class="combat-num resource-button" data-resource="sp">
-                    <span class="resource-label">SP</span>
-                    <span id="cur-sp" class="resource-value">--</span>
-                  </button>
-                  <button type="button" class="combat-num resource-button" data-resource="tx">
-                    <span class="resource-label">TX</span>
-                    <span id="cur-tx" class="resource-value">--</span>
-                  </button>
-                  <label class="muted">Max HP Dmg <input id="max-hp-dmg" type="number" min="0" step="1" class="combat-num"></label>
-                  <label class="muted">Tension <input id="tension-value" type="number" min="0" step="1" class="combat-num"></label>
-                  <span class="combat-badge">Cap <span id="tension-cap">--</span></span>
+                  <div class="resource-grid">
+                    <button type="button" class="combat-num resource-button" data-resource="hp">
+                      <span class="resource-current" id="cur-hp">--</span>
+                      <span class="resource-max" id="max-hp">Max --</span>
+                    </button>
+                    <button type="button" class="combat-num resource-button" data-resource="en">
+                      <span class="resource-current" id="cur-en">--</span>
+                      <span class="resource-max" id="max-en">Max --</span>
+                    </button>
+                    <button type="button" class="combat-num resource-button" data-resource="nen">
+                      <span class="resource-current" id="cur-nen">0</span>
+                    </button>
+                    <button type="button" class="combat-num resource-button" data-resource="fo">
+                      <span class="resource-current" id="cur-fo">--</span>
+                      <span class="resource-max" id="max-fo">Max --</span>
+                    </button>
+                    <button type="button" class="combat-num resource-button" data-resource="sp">
+                      <span class="resource-current" id="cur-sp">--</span>
+                      <span class="resource-max" id="max-sp">Max --</span>
+                    </button>
+                    <button type="button" class="combat-num resource-button" data-resource="tx">
+                      <span class="resource-current" id="cur-tx">--</span>
+                      <span class="resource-max" id="max-tx">Max --</span>
+                    </button>
+                  </div>
+                  <div class="resource-controls">
+                    <label class="muted">Max HP Dmg <input id="max-hp-dmg" type="number" min="0" step="1" class="combat-num"></label>
+                    <label class="muted">Tension <input id="tension-value" type="number" min="0" step="1" class="combat-num"></label>
+                    <span class="combat-badge">Cap <span id="tension-cap">--</span></span>
+                  </div>
                 </div>
                 <div class="combat-row">
                   <span class="combat-badge">Max HP <span id="combat-max-hp">--</span></span>
@@ -2421,32 +2428,9 @@ function pushResourceLedgerEntries(entries, { skipSync=false } = {}){
     queueSave();
   }
 }
-function ensureLedgerInitialized(maxVals){
+function ensureLedgerInitialized(){
   if (LEDGER_INITIALIZED) return;
   LEDGER_INITIALIZED = true;
-  if (RESOURCE_LEDGER.length){
-    return;
-  }
-  const preset = INITIAL_CURRENT_PRESET || {};
-  const adjustments = [];
-  LEDGER_RESOURCES.forEach(resource=>{
-    const saved = preset[resource];
-    if (!Number.isFinite(Number(saved))) return;
-    const base = resourceBaseMax(resource, maxVals);
-    const delta = Number(saved) - base;
-    if (delta !== 0){
-      adjustments.push({
-        resource,
-        delta,
-        label: 'Initial sync',
-        source: 'Load',
-      });
-    }
-  });
-  if (adjustments.length){
-    pushResourceLedgerEntries(adjustments, { skipSync:true });
-  }
-  INITIAL_CURRENT_PRESET = null;
 }
 function investVal(v, fb=0){
   if (v && typeof v === 'object') return numOr(v.invest, fb);
@@ -2710,7 +2694,6 @@ let SUB_HIDDEN = {};
 let PERSONAL = {};
 let CURRENT = { hp:null, en:null, fo:null, sp:null, tx:null };
 let CURRENT_MAX_RECORD = null;
-let INITIAL_CURRENT_PRESET = null;
 let RESOURCE_LEDGER = [];
 let LEDGER_INITIALIZED = false;
 let OVERRIDE_ENABLED = false;
@@ -2872,6 +2855,11 @@ const curNenEl = document.getElementById('cur-nen');
 const curFoEl = document.getElementById('cur-fo');
 const curSpEl = document.getElementById('cur-sp');
 const curTxEl = document.getElementById('cur-tx');
+const maxHpEl = document.getElementById('max-hp');
+const maxEnEl = document.getElementById('max-en');
+const maxFoEl = document.getElementById('max-fo');
+const maxSpEl = document.getElementById('max-sp');
+const maxTxEl = document.getElementById('max-tx');
 const maxHpDmgEl = document.getElementById('max-hp-dmg');
 const combatMaxHpEl = document.getElementById('combat-max-hp');
 const combatMaxEnEl = document.getElementById('combat-max-en');
@@ -14475,7 +14463,7 @@ function updateDerived(){
       });
     }
     DERIVED_CACHE = { ...final, ...maxVals };
-  ensureLedgerInitialized(maxVals);
+  ensureLedgerInitialized();
   const displayCurrent = {};
   LEDGER_RESOURCES.forEach(resource => {
     displayCurrent[resource] = currentFromLedger(resource, maxVals);
@@ -14494,6 +14482,11 @@ function updateDerived(){
   if (curFoEl) curFoEl.textContent = String(displayCurrent.fo);
   if (curSpEl) curSpEl.textContent = String(displayCurrent.sp);
   if (curTxEl) curTxEl.textContent = String(displayCurrent.tx);
+  if (maxHpEl) maxHpEl.textContent = `Max ${numOr(maxVals.hp, 0)}`;
+  if (maxEnEl) maxEnEl.textContent = `Max ${numOr(maxVals.en, 0)}`;
+  if (maxFoEl) maxFoEl.textContent = `Max ${numOr(maxVals.fo, 0)}`;
+  if (maxSpEl) maxSpEl.textContent = `Max ${numOr(maxVals.spcap, 0)}`;
+  if (maxTxEl) maxTxEl.textContent = `Max ${numOr(maxVals.tx, 0)}`;
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
     if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
     [
@@ -14721,7 +14714,6 @@ async function loadCharacter(){
   SELECTED_INV_ID = CHAR.inventory_id || '';
    COMPUTED_ARC_ABILITIES = CHAR.computed_archetype_abilities || [];
   CURRENT = Object.assign({hp:null,en:null,fo:null,sp:null,tx:null}, CHAR.current || {});
-  INITIAL_CURRENT_PRESET = { ...CURRENT };
   CURRENT_MAX_RECORD = null;
   RESOURCE_LEDGER = Array.isArray(CHAR.resource_ledger)
     ? (CHAR.resource_ledger || []).map(normalizeLedgerEntry).filter(Boolean)
