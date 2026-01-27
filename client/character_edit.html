@@ -499,6 +499,28 @@
       pointer-events:none;
       font-style: italic;
     }
+    .richtext-toolbar {
+      display:flex;
+      gap:6px;
+      margin-bottom:6px;
+      flex-wrap:wrap;
+    }
+    .richtext-toolbar button {
+      border-radius:8px;
+      border:1px solid var(--border);
+      background:#141420;
+      color:var(--text);
+      padding:4px 10px;
+      cursor:pointer;
+      transition:border .15s ease, background .15s ease;
+    }
+    .richtext-toolbar button:hover {
+      border-color:#2f2f42;
+      background:#1c1c26;
+    }
+    .richtext-toolbar button.active {
+      background:#2f2f42;
+    }
     .level-reward-summary{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; font-size:.95rem; }
     .level-reward-line{ background:rgba(255,255,255,.04); padding:6px 10px; border-radius:6px; }
     .level-reward-options{ display:flex; flex-direction:column; gap:10px; margin-top:8px; }
@@ -1347,21 +1369,45 @@
               <div class="personal-grid">
                 <label class="kv-field">
                   <span class="k">Friends</span>
+                  <div class="richtext-toolbar" data-target="p-friends">
+                    <button type="button" data-command="bold" title="Bold"><i class="fa-solid fa-bold"></i></button>
+                    <button type="button" data-command="italic" title="Italic"><i class="fa-solid fa-italic"></i></button>
+                    <button type="button" data-command="underline" title="Underline"><i class="fa-solid fa-underline"></i></button>
+                    <button type="button" data-command="insertUnorderedList" title="Bullet list"><i class="fa-solid fa-list-ul"></i></button>
+                  </div>
                   <div id="p-friends" class="richtext" contenteditable="true" data-placeholder="Allies, contacts"></div>
                 </label>
                 <label class="kv-field">
                   <span class="k">Enemies</span>
+                  <div class="richtext-toolbar" data-target="p-enemies">
+                    <button type="button" data-command="bold" title="Bold"><i class="fa-solid fa-bold"></i></button>
+                    <button type="button" data-command="italic" title="Italic"><i class="fa-solid fa-italic"></i></button>
+                    <button type="button" data-command="underline" title="Underline"><i class="fa-solid fa-underline"></i></button>
+                    <button type="button" data-command="insertUnorderedList" title="Bullet list"><i class="fa-solid fa-list-ul"></i></button>
+                  </div>
                   <div id="p-enemies" class="richtext" contenteditable="true" data-placeholder="Rivals, threats"></div>
                 </label>
               </div>
 
               <label class="kv-field">
                 <span class="k">Notes</span>
+                <div class="richtext-toolbar" data-target="p-notes">
+                  <button type="button" data-command="bold" title="Bold"><i class="fa-solid fa-bold"></i></button>
+                  <button type="button" data-command="italic" title="Italic"><i class="fa-solid fa-italic"></i></button>
+                  <button type="button" data-command="underline" title="Underline"><i class="fa-solid fa-underline"></i></button>
+                  <button type="button" data-command="insertUnorderedList" title="Bullet list"><i class="fa-solid fa-list-ul"></i></button>
+                </div>
                 <div id="p-notes" class="richtext" contenteditable="true" data-placeholder="Any additional notes"></div>
               </label>
 
               <label class="kv-field">
                 <span class="k">Backstory</span>
+                <div class="richtext-toolbar" data-target="p-backstory">
+                  <button type="button" data-command="bold" title="Bold"><i class="fa-solid fa-bold"></i></button>
+                  <button type="button" data-command="italic" title="Italic"><i class="fa-solid fa-italic"></i></button>
+                  <button type="button" data-command="underline" title="Underline"><i class="fa-solid fa-underline"></i></button>
+                  <button type="button" data-command="insertUnorderedList" title="Bullet list"><i class="fa-solid fa-list-ul"></i></button>
+                </div>
                 <div id="p-backstory" class="richtext" contenteditable="true" data-placeholder="Describe the character's history"></div>
               </label>
             </div>
@@ -3314,6 +3360,22 @@ function wireRichTextPaste(){
         const cleaned = sanitizePastedHtml(html, text);
         if (cleaned) document.execCommand('insertHTML', false, cleaned);
       }
+    });
+  });
+}
+
+function initRichTextToolbar(){
+  document.querySelectorAll('.richtext-toolbar button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const toolbar = btn.closest('.richtext-toolbar');
+      const command = btn.getAttribute('data-command');
+      const targetId = toolbar?.getAttribute('data-target') || '';
+      if (!command || !targetId) return;
+      const target = document.getElementById(targetId);
+      if (!target || !target.isContentEditable) return;
+      target.focus();
+      document.execCommand(command, false, null);
+      target.dispatchEvent(new Event('input', { bubbles:true }));
     });
   });
 }
@@ -10160,6 +10222,7 @@ function renderSpellSearchResults(rows){
     tr.querySelector('button').addEventListener('click', ()=> addSpellsToList([sp.id]));
     slSearchBody.appendChild(tr);
   });
+}
 
 function filterSpellRowsByCategory(rows){
   const category = String(slFilterCategory?.value || '').trim();
@@ -16977,6 +17040,7 @@ checkMe().then(async ()=>{
   await initCampaignChat();
 }).catch((e)=>{ statusEl.textContent = 'Load failed: ' + (e?.message || e); });
 wireRichTextPaste();
+initRichTextToolbar();
 </script>
 
 
