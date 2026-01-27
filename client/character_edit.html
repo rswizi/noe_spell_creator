@@ -1056,14 +1056,16 @@
               <button class="btn" id="sl-search-btn">Search</button>
             </div>
             <div class="row" style="gap:10px; flex-wrap:wrap; margin-bottom:8px;">
-              <label class="muted">Category
-                <select id="sl-filter-category" style="min-width:200px;">
-                  <option value="">All categories</option>
-                </select>
-              </label>
-              <label class="row muted" style="gap:6px; align-items:center;">
-                <input type="checkbox" id="sl-filter-category-lower">
-                or Lower
+              <label class="muted">
+                Category
+                <div style="display:flex; align-items:center; gap:6px; margin-top:6px;">
+                  <select id="sl-filter-category" style="min-width:200px;">
+                    <option value="">All categories</option>
+                  </select>
+                  <button type="button" class="btn small" id="sl-filter-category-lower-toggle" aria-pressed="true" title="Hide the spells from lower category">
+                    <i class="fa-solid fa-eye"></i>
+                  </button>
+                </div>
               </label>
               <label class="muted">School
                 <select id="sl-filter-school" style="min-width:220px;">
@@ -3365,7 +3367,7 @@ const slSearchQ = document.getElementById('sl-search-q');
 const slSearchBtn = document.getElementById('sl-search-btn');
 const slSearchBody = document.getElementById('sl-search-body');
 const slFilterCategory = document.getElementById('sl-filter-category');
-const slFilterCategoryLower = document.getElementById('sl-filter-category-lower');
+const slFilterCategoryLowerToggle = document.getElementById('sl-filter-category-lower-toggle');
 const slFilterSchool = document.getElementById('sl-filter-school');
 const slAddStatus = document.getElementById('sl-add-status');
 const abiSpellsOnlyLearnedEl = document.getElementById('abi-spells-only-learned');
@@ -10113,22 +10115,28 @@ async function searchSpells(q, { category = '', schoolId = '' } = {}){
   return res.spells || [];
 }
 
+const SPELL_CATEGORY_ORDER = (MS_CATEGORIES || []).slice().sort((a,b)=> (Number(a.min)||0) - (Number(b.min)||0)).map(c=> String(c.name || '').trim()).filter(Boolean);
+let SHOW_LOWER_CATEGORY_SPELLS = true;
+
 function updateSpellSearchFilters(rows){
   if (!slFilterCategory) return;
   const prevCat = slFilterCategory.value || '';
-  const catMap = new Map();
+  const seen = new Set(SPELL_CATEGORY_ORDER);
+  const extras = [];
   (rows || []).forEach(sp=>{
-    const catRaw = String(sp.category || '').trim();
-    if (catRaw){
-      const key = catRaw.toLowerCase();
-      if (!catMap.has(key)) catMap.set(key, catRaw);
-    }
+    const cat = String(sp.category || '').trim();
+    if (!cat) return;
+    if (seen.has(cat)) return;
+    seen.add(cat);
+    extras.push(cat);
   });
+  const order = SPELL_CATEGORY_ORDER.concat(extras);
   slFilterCategory.innerHTML = '<option value="">All categories</option>';
-  Array.from(catMap.entries()).sort((a,b)=> a[1].localeCompare(b[1])).forEach(([key, label])=>{
+  order.forEach(name=>{
+    if (!name) return;
     const opt = document.createElement('option');
-    opt.value = label;
-    opt.textContent = label;
+    opt.value = name;
+    opt.textContent = name;
     slFilterCategory.appendChild(opt);
   });
   if (prevCat && Array.from(slFilterCategory.options).some(o=> o.value === prevCat)) slFilterCategory.value = prevCat;
@@ -10152,26 +10160,38 @@ function renderSpellSearchResults(rows){
     tr.querySelector('button').addEventListener('click', ()=> addSpellsToList([sp.id]));
     slSearchBody.appendChild(tr);
   });
-}
 
-function buildCategoryOrder(){
-  const order = [];
-  Array.from(slFilterCategory?.options || []).forEach(opt=>{
-    const val = String(opt.value || '').trim();
-    if (val) order.push(val);
-  });
-  return order;
-}
-
-function applyCategoryLowerFilter(rows){
+function filterSpellRowsByCategory(rows){
   const category = String(slFilterCategory?.value || '').trim();
   if (!category) return rows || [];
-  if (!(slFilterCategoryLower && slFilterCategoryLower.checked)) return rows || [];
-  const order = buildCategoryOrder();
-  const targetIdx = order.indexOf(category);
-  if (targetIdx < 0) return rows || [];
-  const allowed = new Set(order.slice(0, targetIdx + 1).map(v=> v.toLowerCase()));
-  return (rows || []).filter(sp=> allowed.has(String(sp.category || '').trim().toLowerCase()));
+  if (SHOW_LOWER_CATEGORY_SPELLS) return rows || [];
+  const target = category.toLowerCase();
+  return (rows || []).filter(sp=> String(sp.category || '').trim().toLowerCase() === target);
+}
+
+function reapplySpellSearchResults(){
+  const filtered = filterSpellRowsByCategory(SL_SEARCH_CACHE);
+  renderSpellSearchResults(filtered);
+}
+
+function setCategoryLowerToggleUI(){
+  if (!slFilterCategoryLowerToggle) return;
+  const icon = slFilterCategoryLowerToggle.querySelector('i');
+  if (SHOW_LOWER_CATEGORY_SPELLS){
+    if (icon) icon.className = 'fa-solid fa-eye';
+    slFilterCategoryLowerToggle.setAttribute('aria-pressed','true');
+    slFilterCategoryLowerToggle.title = 'Hide the spells from lower category';
+  }else{
+    if (icon) icon.className = 'fa-solid fa-eye-slash';
+    slFilterCategoryLowerToggle.setAttribute('aria-pressed','false');
+    slFilterCategoryLowerToggle.title = 'Unhide the spells from lower category';
+  }
+}
+
+function toggleCategoryLowerVisibility(){
+  SHOW_LOWER_CATEGORY_SPELLS = !SHOW_LOWER_CATEGORY_SPELLS;
+  setCategoryLowerToggleUI();
+  reapplySpellSearchResults();
 }
 
 async function populateSpellSearchSchools(){
@@ -10199,9 +10219,9 @@ async function renderSpellSearch(){
   slSearchBody.innerHTML = '<tr><td colspan="4" class="empty">Searching...</td></tr>';
   try{
     const rows = await searchSpells(q, { category, schoolId });
-    SL_SEARCH_CACHE = applyCategoryLowerFilter(rows || []);
+    SL_SEARCH_CACHE = rows || [];
     updateSpellSearchFilters(SL_SEARCH_CACHE);
-    renderSpellSearchResults(SL_SEARCH_CACHE);
+    renderSpellSearchResults(filterSpellRowsByCategory(SL_SEARCH_CACHE));
   }catch(e){
     slSearchBody.innerHTML = `<tr><td colspan="4" class="empty">Error: ${e.message}</td></tr>`;
   }
@@ -15485,8 +15505,10 @@ xpLedgerBackdrop?.addEventListener('click', (e)=>{ if (e.target===xpLedgerBackdr
 slSearchBtn.addEventListener('click', renderSpellSearch);
 slSearchQ.addEventListener('keydown', (e)=>{ if (e.key==='Enter') renderSpellSearch(); });
 slFilterCategory?.addEventListener('change', renderSpellSearch);
-slFilterCategoryLower?.addEventListener('change', renderSpellSearch);
+slFilterCategoryLowerToggle?.addEventListener('click', toggleCategoryLowerVisibility);
 slFilterSchool?.addEventListener('change', renderSpellSearch);
+updateSpellSearchFilters([]);
+setCategoryLowerToggleUI();
 craftSearchBtn?.addEventListener('click', searchCraftomancySpells);
 craftSearchQ?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchCraftomancySpells(); });
 craftSupremeEl?.addEventListener('change', renderCraftSearchResults);
