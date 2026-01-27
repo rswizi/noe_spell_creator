@@ -2818,7 +2818,7 @@ let LEVEL_REWARD_CONTEXT = null;
 const LEVEL_REWARD_OPTION_DEFS = [
   { key:'talent', title:'Talent slot', desc:'Gain access to another talent.', effect:'+1 talent slot' },
   { key:'char', title:'Characteristic points', desc:'Add two points to characteristics pool.', effect:'+2 characteristic points' },
-  { key:'skill', title:'Skill points', desc:'Receive ten extra skill points.', effect:'+10 skill points' },
+  { key:'skill', title:'Skill points', desc:'Receive six extra skill points.', effect:'+6 skill points' },
   { key:'sublimation', title:'Sublimation slots', desc:'Unlock four additional slots.', effect:'+4 sublimation slots' },
 ];
 let LEVEL_REWARD_ALLOCATIONS = { talent:0, char:0, skill:0, sublimation:0 };
@@ -4094,7 +4094,7 @@ function skillMaxForLevel(lvl){
 }
 function skillPointPool(lvl){
   const base = levelProfile(lvl).skillPoints;
-  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.skill || 0)) * 10;
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.skill || 0)) * 6;
   return base + bonus;
 }
 function statPointPool(lvl){
