@@ -1122,6 +1122,7 @@
                     <button type="button" class="combat-num resource-button" data-resource="hp">
                       <span class="resource-label">HP</span>
                       <span class="resource-current" id="cur-hp">--</span>
+                      <span class="resource-max" id="max-hp">Max --</span>
                     </button>
                     <button type="button" class="combat-num resource-button" data-resource="en">
                       <span class="resource-label">EN</span>
@@ -1149,17 +1150,23 @@
                     </button>
                   </div>
                   <div class="resource-controls">
-                    <label class="muted">Max HP Dmg <input id="max-hp-dmg" type="number" min="0" step="1" class="combat-num"></label>
+                    <button type="button" class="combat-num resource-button resource-control-button" id="max-hp-dmg-btn" data-resource="max_hp_damage">
+                      <span class="resource-label">Max HP Dmg</span>
+                      <span class="resource-current" id="max-hp-dmg-display">0</span>
+                    </button>
+                    <input id="max-hp-dmg" type="hidden">
+                    <input id="tension-value" type="hidden">
                   </div>
                 </div>
                 <div class="combat-row ledger-row">
-                  <button type="button" class="combat-num resource-button" data-resource="hp" data-resource-label="Max HP">
-                    <span class="resource-label">Max HP</span>
-                    <span class="resource-current" id="max-hp">--</span>
-                  </button>
                   <button type="button" class="combat-num resource-button" data-resource="mo" disabled aria-disabled="true">
                     <span class="resource-label">MO</span>
                     <span class="resource-current" id="combat-der-mo">--</span>
+                  </button>
+                  <button type="button" class="combat-num resource-button" data-resource="tension">
+                    <span class="resource-label">Tension</span>
+                    <span class="resource-current" id="combat-tension-current">--</span>
+                    <span class="resource-max" id="combat-tension-cap">Cap --</span>
                   </button>
                 </div>
                 <div class="combat-row combat-actions-row">
@@ -2877,6 +2884,8 @@ const maxFoEl = document.getElementById('max-fo');
 const maxSpEl = document.getElementById('max-sp');
 const maxTxEl = document.getElementById('max-tx');
 const maxHpDmgEl = document.getElementById('max-hp-dmg');
+const maxHpDmgBtn = document.getElementById('max-hp-dmg-btn');
+const maxHpDmgDisplay = document.getElementById('max-hp-dmg-display');
 const combatDerMoEl = document.getElementById('combat-der-mo');
 const combatDerInitEl = document.getElementById('combat-der-init');
 const combatTensionCurrentEl = document.getElementById('combat-tension-current');
@@ -3608,9 +3617,11 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   resourceButtons.forEach(btn=>{
     const resource = btn.getAttribute('data-resource');
     if (!resource || btn.disabled) return;
+    if (resource === 'max_hp_damage') return;
     const labelOverride = btn.getAttribute('data-resource-label');
     btn.addEventListener('click', ()=> openResourceActionModal(resource, labelOverride));
   });
+  maxHpDmgBtn?.addEventListener('click', ()=> openResourceActionModal('max_hp_damage', 'Max HP Dmg'));
 
   function bindOverrideInput(el, key){
     if (!el) return;
@@ -3636,6 +3647,7 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   maxHpDmgEl?.addEventListener('input', ()=>{
     const st = combatState();
     st.max_hp_damage = Math.max(0, Number(maxHpDmgEl.value || 0));
+    refreshMaxHpDamageDisplay(st.max_hp_damage);
     updateDerived();
     queueSave();
   });
@@ -13715,6 +13727,7 @@ function renderCombatCritList(){
       st.max_hp_damage = Math.max(0, Number(st.max_hp_damage || 0) - Number(entry.hp_loss || 0));
       renderCombatCritList();
       if (maxHpDmgEl) safeSetValue(maxHpDmgEl, st.max_hp_damage);
+      refreshMaxHpDamageDisplay(st.max_hp_damage);
       updateDerived();
       queueSave();
     });
@@ -13761,6 +13774,7 @@ function renderCombatTab(){
   renderCombatDurationSpells();
   if (initBaseEl) initBaseEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(combatState().max_hp_damage || 0)));
+  refreshMaxHpDamageDisplay(Math.max(0, Number(combatState().max_hp_damage || 0)));
   renderCombatDerivedBadges();
   if (initLastEl){
     const last = combatState().initiative_last;
@@ -14242,6 +14256,7 @@ function addCriticalInjury(type, stabilized){
   renderCombatCritList();
   renderCombatDeathSaves();
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, st.max_hp_damage);
+  refreshMaxHpDamageDisplay(st.max_hp_damage);
   updateDerived();
   queueSave();
 }
@@ -14627,6 +14642,7 @@ function updateDerived(){
   if (maxSpEl) maxSpEl.textContent = `Max ${numOr(maxVals.spcap, 0)}`;
   if (maxTxEl) maxTxEl.textContent = `Max ${numOr(maxVals.tx, 0)}`;
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
+  refreshMaxHpDamageDisplay(Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
     if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
     [
       [ovHpEl, maxVals.hp], [ovEnEl, maxVals.en], [ovFoEl, maxVals.fo], [ovMoEl, maxVals.mo],
@@ -14692,6 +14708,11 @@ function closeResourceActionModal(){
   resourceActionBackdrop.classList.remove('open');
   resourceActionBackdrop.classList.add('hidden');
 }
+function refreshMaxHpDamageDisplay(value){
+  if (!maxHpDmgDisplay) return;
+  const normalized = Math.max(0, Number(value || 0));
+  maxHpDmgDisplay.textContent = String(normalized);
+}
 function applyResourceAction(){
   if (!resourceActionModal) return;
   const resource = resourceActionModal.dataset.resource;
@@ -14701,6 +14722,24 @@ function applyResourceAction(){
   if (!Number.isFinite(rawValue)) return;
   const note = (resourceActionNote?.value || '').trim();
   const labelBase = resourceActionModal.dataset.resourceLabel || RESOURCE_LABELS[resource] || resource;
+  if (resource === 'max_hp_damage'){
+    const st = combatState();
+    const prev = Math.max(0, Number(st.max_hp_damage || 0));
+    let target = prev;
+    if (kind === 'set'){
+      target = Math.max(0, rawValue);
+    }else if (kind === 'add'){
+      target = prev + rawValue;
+    }else if (kind === 'subtract'){
+      target = Math.max(0, prev - rawValue);
+    }
+    st.max_hp_damage = Math.max(0, target);
+    if (maxHpDmgEl) safeSetValue(maxHpDmgEl, st.max_hp_damage);
+    refreshMaxHpDamageDisplay(st.max_hp_damage);
+    closeResourceActionModal();
+    queueSave();
+    return;
+  }
   const maxVals = {
     hp: numOr(DERIVED_CACHE?.hp, 0),
     en: numOr(DERIVED_CACHE?.en, 0),
