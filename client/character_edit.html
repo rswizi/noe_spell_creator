@@ -11235,6 +11235,7 @@ function renderStatistics(){
   gridEl.innerHTML = '';
   for (const c of CHARACS){
     const rec = (CHAR.stats && CHAR.stats[c.key]) || { invest:0, skills:{} };
+    const investedChar = investVal(rec.invest, 0);
     const charInfo = charAdjMod(c.key);
     const effectiveTotal = charInfo.total;
 
