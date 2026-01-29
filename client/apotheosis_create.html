@@ -27,12 +27,23 @@
         <div>
           <label>Stage</label>
           <select id="apo-stage">
+            <option>Immature Stage</option>
             <option>Stage I</option>
             <option>Stage II</option>
             <option>Stage III</option>
             <option>Stage IV</option>
             <option>Stage V</option>
           </select>
+          <table id="stage-table" style="width:100%;margin-top:6px;border-collapse:collapse;font-size:.85rem;">
+            <thead>
+              <tr>
+                <th style="padding:4px;border-bottom:1px solid #333;text-align:left;">Stage</th>
+                <th style="padding:4px;border-bottom:1px solid #333;text-align:left;">Total Stability</th>
+                <th style="padding:4px;border-bottom:1px solid #333;text-align:left;">Level Threshold</th>
+              </tr>
+            </thead>
+            <tbody id="stage-table-body"></tbody>
+          </table>
         </div>
         <div>
           <label>Type</label>
@@ -138,6 +149,7 @@
     <div class="home-card">
       <button id="save" class="btn">💾 Save</button>
       <a class="btn btn-secondary" href="apotheosis_home.html">← Back</a>
+      <div id="apo-status" class="muted small" style="margin-top:8px;">&nbsp;</div>
     </div>
   </div>
 
@@ -150,6 +162,46 @@
     localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
   const authHeaders = () =>
     getToken() ? { Authorization: "Bearer " + getToken() } : {};
+
+  const STAGE_DATA = [
+    { stage: "Immature Stage", stability: 5, threshold: "Stage I" },
+    { stage: "Stage I",         stability: 7, threshold: "30" },
+    { stage: "Stage II",        stability: 10, threshold: "45" },
+    { stage: "Stage III",       stability: 14, threshold: "60" },
+    { stage: "Stage IV",        stability: 19, threshold: "75" },
+    { stage: "Stage V",         stability: 25, threshold: "90" },
+  ];
+  const TYPE_ALIASES = {
+    environmental: "Terrain",
+    terrain: "Terrain",
+    ritual: "Ephemeral",
+    ephemeral: "Ephemeral",
+    personal: "Personal",
+  };
+  let constraintMap = new Map();
+  let selectedConstraintIds = [];
+  const stageTableBody = document.getElementById("stage-table-body");
+  const selectedConstraintsEl = document.getElementById("c-selected");
+  const availableConstraintsEl = document.getElementById("c-available");
+  const constraintInfoEl = document.getElementById("c-info");
+  const constraintFilterEl = document.getElementById("c-filter");
+  const forbidNoteEl = document.getElementById("forbid-note");
+  const statusEl = document.getElementById("apo-status");
+  const tradeInputs = [
+    { field: "trade-p2s", pill: "pill-p2s" },
+    { field: "trade-p2a", pill: "pill-p2a" },
+    { field: "trade-s2a", pill: "pill-s2a" },
+  ];
+  const summaryFields = {
+    diff: document.getElementById("diff-sum"),
+    stabDelta: document.getElementById("stab-pen-sum"),
+    ampBonus: document.getElementById("amp-bonus-sum"),
+    power: document.getElementById("out-power"),
+    stability: document.getElementById("out-stab"),
+    amplitude: document.getElementById("out-amp"),
+    diameter: document.getElementById("out-dia"),
+  };
+  const editId = new URLSearchParams(window.location.search).get("edit") || "";
 
   let CACHE = [];
   let STARS = new Set(JSON.parse(localStorage.getItem("apoth_stars") || "[]"));
@@ -244,10 +296,210 @@
     if (j.status !== "success") throw new Error(j.message || "Failed to load constraints");
 
     const list = j.constraints || [];
-    const avail = document.querySelector("#c-available");
-    if (avail) {
-      avail.innerHTML = list.map(c => `<option value="${c.id}" data-json='${JSON.stringify(c)}'>[${c.id}] ${c.name}</option>`).join("");
+    constraintMap = new Map();
+    list.forEach(c => {
+      constraintMap.set(String(c.id), c);
+    });
+    renderAvailableConstraints();
+  }
+
+  function renderStageTable() {
+    if (!stageTableBody) return;
+    stageTableBody.innerHTML = STAGE_DATA.map(row => `
+      <tr>
+        <td style="padding:4px;border-bottom:1px solid #222;">${row.stage}</td>
+        <td style="padding:4px;border-bottom:1px solid #222;">${row.stability}</td>
+        <td style="padding:4px;border-bottom:1px solid #222;">${row.threshold}</td>
+      </tr>
+    `).join("");
+  }
+
+  function renderAvailableConstraints() {
+    if (!availableConstraintsEl) return;
+    const filter = (constraintFilterEl?.value || "").trim().toLowerCase();
+    const options = Array.from(constraintMap.values())
+      .filter(c => !selectedConstraintIds.includes(String(c.id)))
+      .filter(c => !filter || (String(c.name || "").toLowerCase().includes(filter) || String(c.description || "").toLowerCase().includes(filter)))
+      .map(c => `<option value="${c.id}">[${c.id}] ${c.name}</option>`)
+      .join("");
+    availableConstraintsEl.innerHTML = options || "<option disabled>No matches</option>";
+    if (availableConstraintsEl.options.length) {
+      availableConstraintsEl.selectedIndex = 0;
+      updateConstraintInfo(availableConstraintsEl.value);
+    } else {
+      updateConstraintInfo(null);
     }
+  }
+
+  function renderSelectedConstraints() {
+    if (!selectedConstraintsEl) return;
+    selectedConstraintsEl.innerHTML = selectedConstraintIds.map(id => {
+      const data = constraintMap.get(String(id));
+      return `<option value="${id}">${data ? `[${data.id}] ${data.name}` : id}</option>`;
+    }).join("") || "<option disabled>No constraints selected</option>";
+    if (selectedConstraintIds.length) {
+      const lastId = selectedConstraintIds[selectedConstraintIds.length - 1];
+      updateConstraintInfo(lastId);
+    } else {
+      updateConstraintInfo(null);
+    }
+  }
+
+  function updateConstraintInfo(id) {
+    if (!constraintInfoEl) return;
+    const data = constraintMap.get(String(id));
+    if (data) {
+      constraintInfoEl.innerHTML = `
+        <div><strong>${data.name}</strong> [${data.id}]</div>
+        <div class="small">Difficulty: ${data.difficulty ?? "—"} | Stability Δ: ${data.stability_delta ?? 0} | Amplitude: ${data.amplitude_bonus ?? 0}</div>
+        <div style="margin-top:6px;">${data.description || "No description provided."}</div>
+      `;
+    } else {
+      constraintInfoEl.textContent = "Select a constraint to see details.";
+    }
+  }
+
+  function addConstraint() {
+    if (!availableConstraintsEl) return;
+    const id = availableConstraintsEl.value;
+    if (!id || selectedConstraintIds.includes(id)) return;
+    selectedConstraintIds.push(id);
+    renderSelectedConstraints();
+    renderAvailableConstraints();
+    triggerCompute();
+  }
+
+  function removeConstraint() {
+    if (!selectedConstraintsEl) return;
+    const id = selectedConstraintsEl.value;
+    if (!id) return;
+    selectedConstraintIds = selectedConstraintIds.filter(x => x !== id);
+    renderSelectedConstraints();
+    renderAvailableConstraints();
+    triggerCompute();
+  }
+
+  function normalizeType(value) {
+    const key = String(value || "").trim().toLowerCase();
+    return TYPE_ALIASES[key] || value || "Personal";
+  }
+
+  function updateTradePill(field, value) {
+    const pillId = tradeInputs.find(t => t.field === field)?.pill;
+    const pill = pillId ? document.getElementById(pillId) : null;
+    if (pill) pill.textContent = Number.isFinite(Number(value)) ? Number(value).toString() : "0";
+  }
+
+  function tradeValues() {
+    return {
+      p2s: Number($("#trade-p2s")?.value || 0),
+      p2a: Number($("#trade-p2a")?.value || 0),
+      s2a: Number($("#trade-s2a")?.value || 0),
+    };
+  }
+
+  async function computeSummary() {
+    if (!$("#apo-char")) return;
+    const payload = {
+      characteristic_value: Number($("#apo-char").value || 0),
+      stage: $("#apo-stage")?.value || "Stage I",
+      type: normalizeType($("#apo-type")?.value),
+      constraints: selectedConstraintIds.slice(),
+      trade_p2s: tradeValues().p2s,
+      trade_p2a: tradeValues().p2a,
+      trade_s2a: tradeValues().s2a,
+    };
+    try {
+      const resp = await fetch(`/apotheosis/compute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+      if (data.status !== "success") throw new Error(data.message || "Compute failed");
+      if (summaryFields.diff) summaryFields.diff.textContent = String(data.total_difficulty);
+      const stageRow = STAGE_DATA.find(row => row.stage === payload.stage) || {};
+      if (summaryFields.stabDelta) summaryFields.stabDelta.textContent = String((data.stability || 0) - (stageRow.stability || 0));
+      if (summaryFields.ampBonus) summaryFields.ampBonus.textContent = String(data.amplitude || 0);
+      if (summaryFields.power) summaryFields.power.textContent = String(data.power || 0);
+      if (summaryFields.stability) summaryFields.stability.textContent = String(data.stability || 0);
+      if (summaryFields.amplitude) summaryFields.amplitude.textContent = String(data.amplitude || 0);
+      if (summaryFields.diameter) summaryFields.diameter.textContent = String(data.diameter || 0);
+      if (forbidNoteEl) {
+        forbidNoteEl.textContent = data.flags?.forbid_p2s ? "Power → Stability trades disabled." : "";
+        const p2sInput = document.getElementById("trade-p2s");
+        if (p2sInput) {
+          p2sInput.disabled = !!data.flags?.forbid_p2s;
+          if (p2sInput.disabled) p2sInput.value = "0";
+        }
+      }
+      if (statusEl) statusEl.textContent = "Stats refreshed.";
+    } catch (e) {
+      if (statusEl) statusEl.textContent = `Compute failed: ${e.message || e}`;
+    }
+  }
+
+  const triggerCompute = debounce(()=>computeSummary(), 250);
+
+  async function populateFormForEdit() {
+    if (!editId) return;
+    try {
+      const res = await fetch(`/apotheoses/${encodeURIComponent(editId)}`, { headers: authHeaders() });
+      const j = await res.json();
+      if (j.status !== "success" || !j.apotheosis) throw new Error(j.message || "Not found");
+      const ap = j.apotheosis;
+      $("#apo-name").value = ap.name || "";
+      $("#apo-desc").value = ap.description || "";
+      $("#apo-stage").value = ap.stage || "Stage I";
+      $("#apo-type").value = ap.type || "Personal";
+      $("#apo-char").value = ap.characteristic_value || 0;
+      const trades = ap.trades || {};
+      $("#trade-p2s").value = Number(trades.p2s || 0);
+      $("#trade-p2a").value = Number(trades.p2a || 0);
+      $("#trade-s2a").value = Number(trades.s2a || 0);
+      selectedConstraintIds = (ap.constraints || []).map(String);
+      renderSelectedConstraints();
+      renderAvailableConstraints();
+      tradeInputs.forEach(t => updateTradePill(t.field, $(`#${t.field}`)?.value || 0));
+      triggerCompute();
+    } catch (e) {
+      if (statusEl) statusEl.textContent = `Load failed: ${e.message || e}`;
+    }
+  }
+
+  async function saveApotheosis() {
+    const payload = {
+      name: $("#apo-name")?.value.trim() || "Untitled Apotheosis",
+      description: $("#apo-desc")?.value.trim() || "",
+      type: normalizeType($("#apo-type")?.value),
+      stage: $("#apo-stage")?.value || "Stage I",
+      characteristic_value: Number($("#apo-char")?.value || 0),
+      constraints: selectedConstraintIds.slice(),
+      trade_p2s: tradeValues().p2s,
+      trade_p2a: tradeValues().p2a,
+      trade_s2a: tradeValues().s2a,
+    };
+    const method = editId ? "PUT" : "POST";
+    const endpoint = editId ? `/apotheoses/${encodeURIComponent(editId)}` : "/apotheoses";
+    try {
+      $("#save").disabled = true;
+      if (statusEl) statusEl.textContent = editId ? "Updating..." : "Saving...";
+      const res = await fetch(endpoint, {
+        method,
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.status !== "success") throw new Error(data.message || "Save failed");
+      if (statusEl) statusEl.textContent = `Saved as ${data.apotheosis?.id || editId || "new"}.`;
+      await load();
+      triggerCompute();
+    } catch (e) {
+      if (statusEl) statusEl.textContent = `Save failed: ${e.message || e}`;
+    } finally {
+      $("#save").disabled = false;
+    }
+  }
   }
 
   // ----- Details modal -----
@@ -310,6 +562,7 @@
       loadConstraints() // create page (no-op if list box not present)
     ]);
 
+    renderStageTable();
     const run = debounce(()=>render(CACHE), 200);
     $("#f-name")?.addEventListener("input", run);
     $("#f-stage")?.addEventListener("change", run);
@@ -321,8 +574,38 @@
       render(CACHE);
     });
 
+    constraintFilterEl?.addEventListener("input", renderAvailableConstraints);
+    document.getElementById("c-add")?.addEventListener("click", addConstraint);
+    document.getElementById("c-remove")?.addEventListener("click", removeConstraint);
+    document.getElementById("c-clear")?.addEventListener("click", ()=>{
+      if (constraintFilterEl) constraintFilterEl.value = "";
+      renderAvailableConstraints();
+    });
+    availableConstraintsEl?.addEventListener("change", ()=> updateConstraintInfo(availableConstraintsEl.value));
+    selectedConstraintsEl?.addEventListener("change", ()=> updateConstraintInfo(selectedConstraintsEl.value));
+
+    $("#apo-char")?.addEventListener("input", () => triggerCompute());
+    $("#apo-stage")?.addEventListener("change", () => triggerCompute());
+    $("#apo-type")?.addEventListener("change", () => triggerCompute());
+    tradeInputs.forEach(entry=>{
+      const element = document.getElementById(entry.field);
+      if (!element) return;
+      element.addEventListener("input", ()=>{
+        updateTradePill(entry.field, element.value);
+        triggerCompute();
+      });
+      updateTradePill(entry.field, element.value);
+    });
+    $("#save")?.addEventListener("click", saveApotheosis);
+
     $("#modal-close")?.addEventListener("click", closeModal);
     $("#modal")?.addEventListener("click", e=>{ if(e.target.id==="modal") closeModal(); });
     document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
+
+    if (editId){
+      await populateFormForEdit();
+    }else{
+      triggerCompute();
+    }
   });
 </script>

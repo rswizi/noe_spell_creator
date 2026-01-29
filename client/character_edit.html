@@ -6078,6 +6078,49 @@ function parseAbilityRollCard(msg){
   return { details, desc, source, skillMeta, skillName, critLine, condLine, rolls };
 }
 
+function parseIntegerFromString(raw){
+  if (raw == null) return null;
+  const match = String(raw).match(/-?\d+/);
+  if (!match) return null;
+  const num = Number(match[0]);
+  return Number.isFinite(num) ? num : null;
+}
+
+function extractSkillRollFromMessage(msg){
+  if (!msg) return null;
+  const skillCard = parseSkillCard(msg);
+  if (skillCard?.total){
+    const total = parseIntegerFromString(skillCard.total);
+    if (total != null){
+      const name = skillCard.formula || skillCard.effect || msg.text || 'Skill';
+      return { total, name };
+    }
+  }
+  const abilityMeta = parseAbilityCard(msg);
+  if (abilityMeta?.skillMeta?.total){
+    const total = parseIntegerFromString(abilityMeta.skillMeta.total);
+    if (total != null){
+      const name = abilityMeta.skillName || abilityMeta.skillMeta.formula || abilityMeta.skillMeta.effect || msg.text || 'Skill';
+      return { total, name };
+    }
+  }
+  return null;
+}
+
+function collectRecentSkillRolls(username, limit){
+  if (!username || !Number.isFinite(Number(limit)) || limit <= 0) return [];
+  const entries = [];
+  const ordered = (CAMPAIGN_CHAT_MESSAGES || []).slice().sort((a,b)=> b.ts - a.ts);
+  for (const msg of ordered){
+    if (entries.length >= limit) break;
+    if ((msg.user || '').toLowerCase() !== String(username || '').toLowerCase()) continue;
+    const roll = extractSkillRollFromMessage(msg);
+    if (!roll) continue;
+    entries.push(roll);
+  }
+  return entries;
+}
+
 function buildSegmentCard(meta, className, titleText){
   const card = document.createElement('div');
   card.className = `roll-card ${className}`.trim();
@@ -6793,6 +6836,29 @@ async function handleCampaignChatSend(){
     character_name: displayName,
     character_avatar: charId ? `/characters/${encodeURIComponent(charId)}/avatar` : ''
   };
+  if (content.startsWith('/luck')){
+    const args = content.slice(5).trim();
+    const requested = Number.parseInt(args, 10);
+    const maxRolls = Number.isFinite(requested) ? Math.max(1, Math.min(20, requested)) : 5;
+    const rolls = collectRecentSkillRolls(basePayload.user, maxRolls);
+    if (!rolls.length){
+      alert('No previous skill checks found for you.');
+      return;
+    }
+    const sum = rolls.reduce((acc, entry)=> acc + entry.total, 0);
+    const avg = sum / rolls.length;
+    const detailLines = rolls.map((entry, idx)=> `${idx + 1}. ${entry.name}: ${entry.total}`);
+    await postCampaignChatMessage({
+      ...basePayload,
+      type: 'message',
+      text: `/luck ${rolls.length}`,
+      lines: [`Average ${avg.toFixed(2)} over ${rolls.length} skill check${rolls.length === 1 ? '' : 's'}.`, ...detailLines],
+      visibility: 'self'
+    });
+    scheduleCampaignChatRefresh();
+    if (campaignChatInput) campaignChatInput.value = '';
+    return;
+  }
   if (content.startsWith('/r')){
     const expr = content.slice(2).trim();
     const roll = buildChatRollMessage(expr, visibility);
