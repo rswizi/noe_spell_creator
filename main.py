@@ -84,6 +84,10 @@ def _ensure_join_code():
             return code
     return _gen_join_code()
 
+def _generate_temp_password(length: int = 12) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
 PASSWORD_RESET_VERSION = 1
 
 def _needs_password_reset(user: dict) -> bool:
@@ -1396,6 +1400,25 @@ async def admin_set_user_role(target_username: str, request: Request):
 
     write_audit("set_role", admin_username, spell_id="—", before=None, after={"user": target_username, "role": role})
     return {"status": "success", "username": target_username, "role": role}
+
+@app.post("/admin/users/{target_username}/reset-password")
+async def admin_reset_user_password(target_username: str, request: Request):
+    admin_username, _ = require_auth(request, roles=["admin"])
+    temp_password = _generate_temp_password()
+    res = get_col("users").update_one(
+        {"username": target_username},
+        {
+            "$set": {
+                "password_hash": _sha256(temp_password),
+                "password_reset_version": PASSWORD_RESET_VERSION,
+            },
+            "$unset": {"reset_code": "", "reset_at": ""},
+        },
+    )
+    if res.matched_count == 0:
+        return JSONResponse({"status": "error", "message": "User not found."}, status_code=404)
+    write_audit("reset_password", admin_username, spell_id="—", before={"user": target_username}, after={"user": target_username})
+    return {"status": "success", "username": target_username, "temporary_password": temp_password}
 
 @app.put("/admin/spells/{spell_id}/status")
 async def set_spell_status(spell_id: str, request: Request, payload: dict = Body(...)):

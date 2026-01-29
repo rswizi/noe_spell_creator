@@ -86,6 +86,7 @@
               <button class="btn small" data-role="moderator">Make Moderator</button>
               <button class="btn small" data-role="user">Demote to User</button>
               <button class="btn small danger" data-delete="1">Delete</button>
+              <button class="btn small" data-reset="1">Reset Password</button>
             </td>
           </tr>`;
       }).join("");
@@ -133,6 +134,28 @@
     }
   }
 
+  async function resetUserPassword(username){
+    try {
+      const r = await fetch(`/admin/users/${encodeURIComponent(username)}/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({})
+      });
+      if (r.status === 401 || r.status === 403) {
+        $("#umg-msg").textContent = "Not authorized.";
+        return;
+      }
+      const j = await r.json();
+      if (j.status !== "success") {
+        $("#umg-msg").textContent = j.message || "Reset failed.";
+        return;
+      }
+      $("#umg-msg").textContent = `Temporary password for ${username}: ${j.temporary_password} (share securely and remind the user to pick a new password).`;
+    } catch {
+      $("#umg-msg").textContent = "Network error.";
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     // Make the section visible on page load
     const sec = $("#user-mgmt");
@@ -148,6 +171,7 @@
     $("#user-mgmt").addEventListener("click", (ev) => {
       const btn = ev.target.closest("button[data-role]");
       const del = ev.target.closest("button[data-delete]");
+      const reset = ev.target.closest("button[data-reset]");
       const row = ev.target.closest("tr[data-username]");
       if (!row) return;
       const username = row.getAttribute("data-username");
@@ -156,6 +180,8 @@
         setRole(username, role);
       } else if (del){
         deleteUser(username);
+      } else if (reset){
+        resetUserPassword(username);
       }
     });
   });
