@@ -11174,10 +11174,15 @@ function charBaseMod(key){
   const invest = investVal(CHAR.stats?.[key]?.invest, 0);
   return modFromTotal(totalFromInvest(invest));
 }
+function charAdjustedTotal(key){
+  const invest = investVal(CHAR.stats?.[key]?.invest, 0);
+  const baseTotal = totalFromInvest(invest);
+  const { value, notes } = applyOps(baseTotal, PASSIVE.char[key]);
+  return { total: value, notes };
+}
 function charAdjMod(key){
-  const base = charBaseMod(key);
-  const { value, notes } = applyOps(base, PASSIVE.char[key]);
-  return { mod:value, notes };
+  const adjusted = charAdjustedTotal(key);
+  return { ...adjusted, mod: modFromTotal(adjusted.total) };
 }
 function skillBaseTotal(key, skill){
   // Intensities are stored under stats.intensities instead of magic.skills
@@ -11230,10 +11235,8 @@ function renderStatistics(){
   gridEl.innerHTML = '';
   for (const c of CHARACS){
     const rec = (CHAR.stats && CHAR.stats[c.key]) || { invest:0, skills:{} };
-    const investedChar = investVal(rec.invest, 0);
-    const baseTotal = totalFromInvest(investedChar);
-    const modInfo = charAdjMod(c.key);
-    const effectiveTotal = baseTotal + modInfo.mod;
+    const charInfo = charAdjMod(c.key);
+    const effectiveTotal = charInfo.total;
 
     const details = document.createElement('details'); details.className='panel'; details.open = true;
     details.classList.add(c.skills.length >= 5 ? 'skill-5' : 'skill-4');
@@ -11241,7 +11244,7 @@ function renderStatistics(){
     sum.innerHTML = `
       <strong>${c.name}</strong>
       <span class="pill">${c.code}</span>
-      <span class="charac-badge mod-toggle" data-target="mods-char-${c.key}" title="${modInfo.notes.join('\n')}">[ <span class="total" id="${c.key}-total">${effectiveTotal}</span> | <span id="${c.key}-mod">${modInfo.mod>=0? '+'+modInfo.mod : modInfo.mod}</span> ]</span>
+      <span class="charac-badge mod-toggle" data-target="mods-char-${c.key}" title="${charInfo.notes.join('\n')}">[ <span class="total" id="${c.key}-total">${effectiveTotal}</span> | <span id="${c.key}-mod">${charInfo.mod>=0? '+'+charInfo.mod : charInfo.mod}</span> ]</span>
       <span class="grow"></span>
       <span class="k">Invested</span>
       <input type="number" class="num" min="0" id="${c.key}-invest" value="${investedChar}">
@@ -11273,7 +11276,7 @@ function renderStatistics(){
       });
     }
 
-    const charNotesList = setNotesList(`mods-char-${c.key}`, modInfo.notes);
+    const charNotesList = setNotesList(`mods-char-${c.key}`, charInfo.notes);
     body.appendChild(charNotesList);
     body.appendChild(skills);
     details.appendChild(body);
@@ -11354,12 +11357,11 @@ function renderStatistics(){
       CHAR.stats[c.key].invest = val;
 
       // update characteristic header
-      const total = totalFromInvest(val);
-      const modInfo = charAdjMod(c.key);
-      document.getElementById(`${c.key}-total`).textContent = total + modInfo.mod;
-      document.getElementById(`${c.key}-mod`).textContent = (modInfo.mod>=0? '+'+modInfo.mod : modInfo.mod);
-      document.querySelector(`#${c.key}-mod`).parentElement.title = modInfo.notes.join('\\n');
-      setNotesList(`mods-char-${c.key}`, modInfo.notes);
+      const charInfo = charAdjMod(c.key);
+      document.getElementById(`${c.key}-total`).textContent = charInfo.total;
+      document.getElementById(`${c.key}-mod`).textContent = (charInfo.mod>=0? '+'+charInfo.mod : charInfo.mod);
+      document.querySelector(`#${c.key}-mod`).parentElement.title = charInfo.notes.join('\\n');
+      setNotesList(`mods-char-${c.key}`, charInfo.notes);
 
       // update skill rows
       for (const s of c.skills){
