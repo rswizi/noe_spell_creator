@@ -10316,10 +10316,11 @@ async function renderSpellSearch(){
   const q = slSearchQ.value.trim();
   const category = (slFilterCategory?.value || '').trim();
   const schoolId = (slFilterSchool?.value || '').trim();
+  const searchCategory = (!SHOW_LOWER_CATEGORY_SPELLS && category) ? category : '';
   slAddStatus.textContent = '';
   slSearchBody.innerHTML = '<tr><td colspan="4" class="empty">Searching...</td></tr>';
   try{
-    const rows = await searchSpells(q, { category, schoolId });
+    const rows = await searchSpells(q, { category: searchCategory, schoolId });
     SL_SEARCH_CACHE = rows || [];
     updateSpellSearchFilters(SL_SEARCH_CACHE);
     renderSpellSearchResults(filterSpellRowsByCategory(SL_SEARCH_CACHE));
