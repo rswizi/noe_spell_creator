@@ -11462,7 +11462,10 @@ function renderStatistics(){
       const totalId = `intensity-${n}-total`;
       const line = document.createElement('div'); line.className = 'intensity-line';
       line.innerHTML = `
-        <div class="k">${n}</div>
+        <div class="k stat-label-row">
+          <img class="stat-icon" src="/assets/ressources/${n}.svg" alt="${n}" title="${n}">
+          <span>${n}</span>
+        </div>
         <input type="number" class="num" min="0" id="${investId}" value="${invested}">
         <div class="skill-total badge mod-toggle" data-target="mods-${totalId}" id="${totalId}" title="${intensityTooltip(adj.notes, idVal)}">${baseVal == null ? '--' : (adj.total>=0? '+'+adj.total : adj.total)}</div>
       `;
