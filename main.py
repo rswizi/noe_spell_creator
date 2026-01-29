@@ -4656,8 +4656,6 @@ def undo_inventory_transaction(request: Request, inv_id: str):
         containers = inv.get("containers") or []
         containers, inv_enc_total = _recompute_encumbrance(items, containers)
         cur_map[currency] = int(cur_map.get(currency, 0)) - amount
-        if cur_map[currency] < 0:
-            raise HTTPException(400, "Cannot undo purchase: insufficient balance")
         set_fields.update({
             "items": items,
             "containers": containers,
