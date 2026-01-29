@@ -114,6 +114,8 @@
 
     .derived-grid { display:grid; gap:10px 22px; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); }
     .derived-grid .kv { display:flex; align-items:center; gap:4px; }
+    .sl-status-cell { display:flex; align-items:center; gap:6px; }
+    .sl-status-cell button { margin-left:6px; }
     .kv { display:grid; grid-template-columns: auto 1fr; gap:6px 8px; align-items:center; }
     .kv .val { justify-self:end; font-variant-numeric: tabular-nums; }
 
@@ -719,7 +721,7 @@
             </summary>
             <div class="panel-body">
               <div class="row" style="justify-content:flex-end; margin-bottom:8px; gap:8px;">
-                <button id="sub-open-btn" class="btn small">Add sublimation</button>
+                <button id="sub-open-btn" class="btn small" title="Add Sublimation"><i class="fa-solid fa-plus"></i></button>
               </div>
               <div id="sub-list" class="abi-list"></div>
               <div class="muted" id="sub-hidden"></div>
@@ -1108,8 +1110,7 @@
                             <th style="width:30%;">Name</th>
                             <th>Schools</th>
                             <th style="width:10%;">Category</th>
-                            <th style="width:12%;">Status</th>
-                            <th style="width:18%;">Actions</th>
+                            <th style="width:18%;">Status</th>
                           </tr>
                         </thead>
                         <tbody id="sl-spells-body">
@@ -4368,7 +4369,7 @@ function renderSublimations(){
       row.appendChild(rem);
       const tierBtn = document.createElement('button');
       tierBtn.className = 'btn btn-secondary small';
-      tierBtn.textContent = 'Change Tier';
+      tierBtn.innerHTML = '<i class="fa-solid fa-gear" aria-hidden="true"></i>';
       tierBtn.addEventListener('click', ()=>{
         changeSublimationTier(sub);
       });
@@ -10009,7 +10010,7 @@ function renderSpellRows(){
   if (!slSpellsBody) return;
   const metaMap = SPELLLIST_META.spell_meta || {};
   if (!SPELLLIST_SPELLS.length){
-    slSpellsBody.innerHTML = '<tr><td colspan="5" class="empty">No spells. Add some.</td></tr>';
+    slSpellsBody.innerHTML = '<tr><td colspan="4" class="empty">No spells. Add some.</td></tr>';
     return;
   }
   slSpellsBody.innerHTML = '';
@@ -10024,13 +10025,13 @@ function renderSpellRows(){
       <td><div class="k">${nameDisplay}</div><div class="muted">id: ${sp.id}</div></td>
       <td>${schools || '—'}</td>
       <td>${sp.category || '—'}</td>
-      <td>
+      <td class="sl-status-cell">
         <select class="sl-status" data-id="${sp.id}">
         <option value="known" ${status==="known"?"selected":""}>Learnt</option>
         <option value="learnt" ${status==="learnt"?"selected":""}>Prepared</option>
         </select>
+        <button class="btn small" data-remove="${sp.id}" title="Remove"><i class="fa-solid fa-trash"></i></button>
       </td>
-      <td><button class="btn small" data-remove="${sp.id}" title="Remove"><i class="fa-solid fa-trash"></i></button></td>
     `;
     slSpellsBody.appendChild(tr);
   });
