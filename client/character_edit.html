@@ -13435,10 +13435,15 @@ async function reloadWeaponAmmo(it){
     alert('Out of ammo.');
     return;
   }
-  const toConsume = Math.min(needed, available);
-  const consumed = await useItemInline(ammoItem, toConsume);
-  if (!consumed) return;
-  state.ammo_loaded = Math.min(cap, loaded + toConsume);
+  const toReload = Math.min(needed, available);
+  let consumedCount = 0;
+  for (let i = 0; i < toReload; i++){
+    const consumed = await useItemInline(ammoItem, 1);
+    if (!consumed) break;
+    consumedCount += 1;
+  }
+  if (!consumedCount) return;
+  state.ammo_loaded = Math.min(cap, loaded + consumedCount);
   queueSave();
   renderCombatWeapons();
   const remainingAmmoItem = findAmmoInventoryItemForWeapon(it);
