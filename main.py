@@ -2171,6 +2171,8 @@ def list_apotheoses(
     typ: str | None = Query(default=None),
     stage: str | None = Query(default=None),
     favorite: str | None = Query(default=None),
+    creator: str | None = Query(default=None),
+    show_all: str | None = Query(default=None),
 ):
     # require auth; get identity and role
     username, role = require_auth(request, roles=["user","moderator","admin"])
@@ -2188,9 +2190,16 @@ def list_apotheoses(
         if not fav:
             return {"status":"success","apotheoses":[]}
         q["id"] = {"$in": fav}
+        q["creator"] = user.get("username") or username
 
-    # visibility: only admins see all; everyone else sees only their own
-    if role != "admin":
+    # visibility / creator filtering
+    explicit_creator = (creator or "").strip()
+    allow_all = str(show_all or "").lower() in ("1", "true", "yes")
+    if explicit_creator and role == "admin":
+        q["creator"] = explicit_creator
+    elif allow_all and role == "admin":
+        pass
+    else:
         q["creator"] = username
 
     docs = list(get_col("apotheoses").find(q, {"_id":0}))
@@ -2208,6 +2217,11 @@ async def bulk_apotheoses(
     if not id_list:
         return {"status": "success", "apotheoses": []}
     q: dict = {"id": {"$in": id_list}}
+    creator = (request.query_params.get("creator") or "").strip()
+    if creator and role == "admin":
+        q["creator"] = creator
+    else:
+        q["creator"] = username
     if role != "admin":
         q["creator"] = username
     docs = list(get_col("apotheoses").find(q, {"_id": 0}))

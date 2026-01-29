@@ -15650,10 +15650,11 @@ async function searchAbilities(){
     let results = (res.abilities || []).map(doc => ({ ...doc, kind: 'ability' }));
     const sourceFilter = (abiFilterSrcEl.value || '').trim().toLowerCase();
     if (sourceFilter === 'apotheosis'){
-      const apoParams = [];
-      if (abiSearchEl.value) apoParams.push('name='+encodeURIComponent(abiSearchEl.value));
-      if (abiFilterTypeEl.value) apoParams.push('typ='+encodeURIComponent(abiFilterTypeEl.value));
-      const apoQs = apoParams.length ? '?'+apoParams.join('&') : '';
+    const apoParams = [];
+    if (abiSearchEl.value) apoParams.push('name='+encodeURIComponent(abiSearchEl.value));
+    if (abiFilterTypeEl.value) apoParams.push('typ='+encodeURIComponent(abiFilterTypeEl.value));
+    if (CURRENT_USER?.username) apoParams.push('creator='+encodeURIComponent(CURRENT_USER.username));
+    const apoQs = apoParams.length ? '?'+apoParams.join('&') : '';
       try{
         const apoRes = await api('/apotheoses'+apoQs);
         const apotheoses = (apoRes.apotheoses || []).map(doc => ({
@@ -15871,7 +15872,9 @@ async function resolveAssignedAbilities(){
   (bulk.abilities||[]).forEach(a=>{ if (a && a.id) byId[a.id] = a; });
   const missingIds = uniqueIds.filter(id=> id && !byId[id]);
   if (missingIds.length){
-    const apoQs = '?ids=' + encodeURIComponent(missingIds.join(','));
+    const apoParams = ['ids='+encodeURIComponent(missingIds.join(','))];
+    if (CURRENT_USER?.username) apoParams.push('creator='+encodeURIComponent(CURRENT_USER.username));
+    const apoQs = '?' + apoParams.join('&');
     try{
       const apoBulk = await api('/apotheoses/bulk'+apoQs);
       (apoBulk.apotheoses || []).forEach(doc=>{
