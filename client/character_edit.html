@@ -5973,8 +5973,9 @@ function parseRollSegments(lines){
     const m = seg.match(/^(.+?)\s+([+-]?\d+)(?:\s*\((.+)\))?$/);
     if (m){
       const label = m[1].trim();
-      types.push({ name: label, total: m[2] });
-      if (m[3]) formulas[label] = m[3].trim();
+      const formulaText = m[3] ? m[3].trim() : '';
+      types.push({ name: label, total: m[2], formula: formulaText });
+      if (formulaText && !formulas[label]) formulas[label] = formulaText;
     }
   });
   if (!types.length){
@@ -5984,7 +5985,7 @@ function parseRollSegments(lines){
     types = [];
     typeParts.forEach(part=>{
       const m = part.match(/^(.+?)\s+([+-]?\d+)/);
-      if (m) types.push({ name: m[1].trim(), total: m[2] });
+      if (m) types.push({ name: m[1].trim(), total: m[2], formula: '' });
     });
   }
   if (!types.length) return null;
@@ -6064,10 +6065,11 @@ function parseAbilityRollCard(msg){
     const parsed = parseRollSegments([line]);
     if (!parsed) return;
     parsed.types.forEach(t=>{
+      const rollFormula = t.formula || parsed.formulas[t.name] || '';
       rolls.push({
         name: t.name,
         total: t.total,
-        formula: parsed.formulas[t.name] || ''
+        formula: rollFormula
       });
     });
   });
@@ -6096,7 +6098,7 @@ function buildSegmentCard(meta, className, titleText){
     rowEl.appendChild(typeEl);
     rowEl.appendChild(valueEl);
     card.appendChild(rowEl);
-    const formulaText = meta.formulas[row.name];
+    const formulaText = row.formula || meta.formulas[row.name];
     if (formulaText){
       const formula = document.createElement('div');
       formula.className = 'roll-formula';
