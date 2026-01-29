@@ -229,12 +229,34 @@
     .combat-grid { display:grid; gap:12px; grid-template-columns: 1fr; }
     .combat-col { display:grid; gap:12px; }
     .combat-vitals { display:flex; flex-direction:column; gap:10px; }
-    .resource-grid { width:100%; display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:10px; }
+    .resource-grid {
+      width:100%;
+      display:grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap:10px 14px;
+    }
+    .resource-entry {
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:6px;
+    }
+    .resource-icon {
+      width:36px;
+      height:36px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .resource-icon img {
+      width:100%;
+      height:100%;
+      object-fit:contain;
+    }
     .resource-button {
       display:flex;
       flex-direction:column;
       align-items:center;
-      justify-content:center;
       gap:4px;
       min-height:82px;
       font-size:1rem;
@@ -246,7 +268,23 @@
       transition:border .15s ease, box-shadow .15s ease;
     }
     .resource-button:hover { border-color:#3b3b5b; box-shadow:0 0 0 2px rgba(59,59,91,0.45); }
-    .resource-button .resource-label { font-size:.85rem; opacity:.7; text-transform:uppercase; letter-spacing:.1em; }
+    .tension-row { justify-content:flex-start; }
+    .tension-entry { min-width:150px; }
+    .combat-shield-button {
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:4px;
+      padding:12px 16px;
+      border-radius:16px;
+      font-size:1rem;
+      min-height:90px;
+      border:1px solid var(--accent);
+      background: linear-gradient(180deg, rgba(197,53,53,0.15), rgba(20,20,29,0.9));
+      box-shadow: 0 0 0 3px rgba(197,53,53,0.25);
+    }
+    .combat-shield-button i { font-size:1.6rem; }
     .stat-icon,
     .resource-label img { width:24px; height:24px; display:block; }
     .stat-label-row { display:flex; align-items:center; gap:6px; font-size:.85rem; justify-content:center; }
@@ -1212,52 +1250,63 @@
               <div class="panel-body">
                 <div class="combat-vitals">
                   <div class="resource-grid">
-                    <button type="button" class="combat-num resource-button" data-resource="hp">
-                      <span class="resource-label"><img class="stat-icon" src="/assets/ressources/HP.svg" alt="HP" title="HP"></span>
-                      <span class="resource-current" id="cur-hp">--</span>
-                      <span class="resource-max" id="max-hp">Max --</span>
-                    </button>
-                    <button type="button" class="combat-num resource-button" data-resource="en">
-                      <span class="resource-label"><img class="stat-icon" src="/assets/ressources/EN.svg" alt="EN" title="EN"></span>
-                      <span class="resource-current" id="cur-en">--</span>
-                      <span class="resource-max" id="max-en">Max --</span>
-                    </button>
-                    <button type="button" class="combat-num resource-button" data-resource="nen">
-                      <span class="resource-label"><img class="stat-icon" src="/assets/ressources/nEN.svg" alt="nEN" title="nEN"></span>
-                      <span class="resource-current" id="cur-nen">0</span>
-                    </button>
-                    <button type="button" class="combat-num resource-button" data-resource="fo">
-                      <span class="resource-label"><img class="stat-icon" src="/assets/ressources/FO.svg" alt="FO" title="FO"></span>
-                      <span class="resource-current" id="cur-fo">--</span>
-                      <span class="resource-max" id="max-fo">Max --</span>
-                    </button>
-                    <button type="button" class="combat-num resource-button" data-resource="sp">
-                      <span class="resource-label"><img class="stat-icon" src="/assets/ressources/SP.svg" alt="SP" title="SP"></span>
-                      <span class="resource-current" id="cur-sp">--</span>
-                      <span class="resource-max" id="max-sp">Max --</span>
-                    </button>
-                    <button type="button" class="combat-num resource-button" data-resource="tx">
-                      <span class="resource-label"><img class="stat-icon" src="/assets/ressources/TX.svg" alt="TX" title="TX"></span>
-                      <span class="resource-current" id="cur-tx">--</span>
-                      <span class="resource-max" id="max-tx">Max --</span>
-                    </button>
-                    <button type="button" class="combat-num resource-button resource-control-button" id="max-hp-dmg-btn" data-resource="max_hp_damage">
-                      <span class="resource-label"><img class="stat-icon" src="/assets/ressources/dmg.svg" alt="Damage" title="Damage"></span>
-                      <span class="resource-current" id="max-hp-dmg-display">0</span>
-                    </button>
-                    <button type="button" class="combat-num resource-button" data-resource="tension">
-                      <span class="resource-label"><img class="stat-icon" src="/assets/ressources/tension.svg" alt="Tension" title="Tension"></span>
-                      <span class="resource-current" id="combat-tension-current">--</span>
-                      <span class="resource-max" id="combat-tension-cap">Cap --</span>
-                    </button>
-                    <button type="button" class="combat-num resource-button" data-resource="mo" disabled aria-disabled="true">
-                      <span class="resource-label"><img class="stat-icon" src="/assets/ressources/MO.svg" alt="MO" title="MO"></span>
-                      <span class="resource-current" id="combat-der-mo">--</span>
-                    </button>
+                    <div class="resource-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/HP.svg" alt="HP" title="HP"></div>
+                      <button type="button" class="combat-num resource-button" data-resource="hp">
+                        <span class="resource-current" id="cur-hp">--</span>
+                        <span class="resource-max" id="max-hp">Max --</span>
+                      </button>
+                    </div>
+                    <div class="resource-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/EN.svg" alt="EN" title="EN"></div>
+                      <button type="button" class="combat-num resource-button" data-resource="en">
+                        <span class="resource-current" id="cur-en">--</span>
+                        <span class="resource-max" id="max-en">Max --</span>
+                      </button>
+                    </div>
+                    <div class="resource-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/nEN.svg" alt="nEN" title="nEN"></div>
+                      <button type="button" class="combat-num resource-button" data-resource="nen">
+                        <span class="resource-current" id="cur-nen">0</span>
+                      </button>
+                    </div>
+                    <div class="resource-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/FO.svg" alt="FO" title="FO"></div>
+                      <button type="button" class="combat-num resource-button" data-resource="fo">
+                        <span class="resource-current" id="cur-fo">--</span>
+                        <span class="resource-max" id="max-fo">Max --</span>
+                      </button>
+                    </div>
+                    <div class="resource-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/SP.svg" alt="SP" title="SP"></div>
+                      <button type="button" class="combat-num resource-button" data-resource="sp">
+                        <span class="resource-current" id="cur-sp">--</span>
+                        <span class="resource-max" id="max-sp">Max --</span>
+                      </button>
+                    </div>
+                    <div class="resource-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/TX.svg" alt="TX" title="TX"></div>
+                      <button type="button" class="combat-num resource-button" data-resource="tx">
+                        <span class="resource-current" id="cur-tx">--</span>
+                        <span class="resource-max" id="max-tx">Max --</span>
+                      </button>
+                    </div>
+                    <div class="resource-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/dmg.svg" alt="Damage" title="Damage"></div>
+                      <button type="button" class="combat-num resource-button resource-control-button" id="max-hp-dmg-btn" data-resource="max_hp_damage">
+                        <span class="resource-current" id="max-hp-dmg-display">0</span>
+                      </button>
+                    </div>
+                    <div class="resource-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/MO.svg" alt="MO" title="MO"></div>
+                      <button type="button" class="combat-num resource-button" data-resource="mo" disabled aria-disabled="true">
+                        <span class="resource-current" id="combat-der-mo">--</span>
+                      </button>
+                    </div>
                   </div>
-                  <input id="max-hp-dmg" type="hidden">
-                  <input id="tension-value" type="hidden">
-                </div>
+                <input id="max-hp-dmg" type="hidden">
+                <input id="tension-value" type="hidden">
+              </div>
                 <div class="combat-row combat-actions-row">
                   <button class="btn small" id="combat-take-dmg" title="Take Damage">
                     <i class="fa-solid fa-heart-circle-plus"></i>
@@ -1273,21 +1322,27 @@
           <div class="panel">
             <details open class="panel">
               <summary class="hdr">
-                <strong>Initiative & Defense</strong>
+                <strong>Tension</strong>
                 <span class="muted">(quick rolls)</span>
               </summary>
-              <div class="panel-body">
+                <div class="panel-body">
                 <div class="combat-row">
                   <button class="btn small" id="init-roll">Roll Initiative</button>
                   <span class="combat-badge">Init <span id="combat-der-init">--</span></span>
                 </div>
-                <div class="combat-row">
-                  <button class="btn small" id="def-roll">Roll Defense</button>
-                </div>
-                <div class="combat-row">
-                  <label class="muted">Strategy
-                    <select id="tension-strategy">
-                      <option>Offensive</option>
+                  <div class="combat-row tension-row">
+                    <div class="resource-entry tension-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/tension.svg" alt="Tension" title="Tension"></div>
+                      <button type="button" class="combat-num resource-button" data-resource="tension">
+                        <span class="resource-current" id="combat-tension-current">--</span>
+                        <span class="resource-max" id="combat-tension-cap">Cap --</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="combat-row">
+                    <label class="muted">Strategy
+                      <select id="tension-strategy">
+                        <option>Offensive</option>
                       <option>Defensive</option>
                       <option>Supportive</option>
                       <option>Magical</option>
@@ -1362,6 +1417,10 @@
                   <button class="btn small" id="combat-open-context">Use Contextual Action</button>
                   <button class="btn small" id="combat-open-special">Use Special Action</button>
                   <button class="btn small" id="combat-open-ability">Use Ability</button>
+                  <button class="btn combat-shield-button" id="def-roll" title="Roll Defense">
+                    <i class="fa-solid fa-shield"></i>
+                    <span>Defense</span>
+                  </button>
                   <button class="btn small" id="combat-roll-passive">Roll Passive</button>
                   <button class="btn small" id="combat-open-spell">Use Spells</button>
                   <button class="btn small" id="combat-open-awaken">Awaken</button>
