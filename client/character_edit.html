@@ -2265,9 +2265,10 @@ const TARGET_GROUPS = [
     { value:'derived.enc', label:'Encumbrance' },
     { value:'derived.et', label:'Eclipse Threshold (ET)' },
     { value:'derived.tx', label:'Max Toxicity (TX)' },
-  { value:'derived.weapon_neutral', label:'Neutral weapon damage' },
+      { value:'derived.weapon_neutral', label:'Neutral weapon damage' },
     { value:'derived.talent_max', label:'Talent Max' },
-    { value:'derived.skill_points', label:'Skill point pool' },
+    { value:'derived.nature_slots', label:'Nature slots' },
+      { value:'derived.skill_points', label:'Skill point pool' },
     { value:'derived.stat_points', label:'Characteristic point pool' },
     { value:'derived.craftomancy_max', label:'Max Craftomancies' },
     { value:'derived.sublimation_slots', label:'Sublimation slots' },
@@ -11288,7 +11289,7 @@ function renderStatistics(){
   const intPanel = document.createElement('details'); intPanel.className='panel'; intPanel.open = true;
   intPanel.classList.add('intensities-panel');
   const intSummary = document.createElement('summary'); intSummary.className = 'hdr';
-  intSummary.innerHTML = `<strong>Intensities</strong><span class="muted">(MAG)</span>`;
+  intSummary.innerHTML = `<strong>Intensities</strong><span class="muted">(MAG)</span><span class="muted intensity-limit" id="intensity-limit"></span>`;
   intPanel.appendChild(intSummary);
   const intBody = document.createElement('div'); intBody.className = 'panel-body';
   const intGrid = document.createElement('div'); intGrid.className = 'skills intensities-grid';
@@ -11312,6 +11313,7 @@ function renderStatistics(){
   intBody.appendChild(intGrid);
   intPanel.appendChild(intBody);
   gridEl.appendChild(intPanel);
+  updateIntensityLimitDisplay();
 
   // Intensity listeners (once)
   INTENSITIES.forEach(n=>{
@@ -11325,6 +11327,19 @@ function renderStatistics(){
       const desired = Math.max(0, Math.floor(investVal(input.value, 0)));
       const allowed = Math.max(0, pool - totalOther);
       const val = OVERRIDE_ENABLED ? desired : Math.min(desired, cap, allowed);
+      if (currentVal <= 0 && val > 0){
+        const natureLimit = natureSlotLimit();
+        let positiveAfter = 0;
+        for (const key of INTENSITIES){
+          const nextVal = key === n ? val : investVal(CHAR.stats.intensities?.[key], 0);
+          if (nextVal > 0) positiveAfter++;
+        }
+        if (positiveAfter > natureLimit){
+          alert(`Only ${natureLimit} nature${natureLimit === 1 ? '' : 's'} can have points invested at once. Lower another intensity before raising this one.`);
+          input.value = currentVal;
+          return;
+        }
+      }
       if (!OVERRIDE_ENABLED) input.value = val;
       CHAR.stats.intensities[n] = val;
       const adj = skillAdjTotal('magic', n);
@@ -11408,6 +11423,16 @@ function renderStatistics(){
     }
   }
   updatePointCounters();
+}
+function natureSlotLimit(){
+  const limit = Math.max(1, Math.floor(numOr(DERIVED_CACHE?.nature_slots, 1)));
+  return Math.min(limit, INTENSITIES.length);
+}
+function updateIntensityLimitDisplay(){
+  const el = document.getElementById('intensity-limit');
+  if (!el) return;
+  const limit = natureSlotLimit();
+  el.textContent = `Allowed natures: ${limit}`;
 }
 function activeConditionSet(){
   const st = combatState();
@@ -14609,7 +14634,8 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
       craftomancy_max:[`Base = ${base.craftomancy_max ?? 0}`],
       skill_points:[`Base = ${base.skill_points ?? 0}`],
       stat_points:[`Base = ${base.stat_points ?? 0}`],
-      sublimation_slots:[`Base = ${base.sublimation_slots ?? 0}`]
+      sublimation_slots:[`Base = ${base.sublimation_slots ?? 0}`],
+      nature_slots:[`Base = ${base.nature_slots ?? 0}`]
     };
   notes.enc.unshift(`Current enc = ${Number(currentEnc||0).toFixed(1)}`);
   if (base._notes){
@@ -14668,7 +14694,7 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
       'derived.et':'et','derived.tx':'tx','derived.enc':'enc','derived.spcap':'spcap','derived.talent_max':'talent_max',
       'derived.max_expertise':'max_expertise','derived.max_divine_manifestation':'max_divine_manifestation','derived.max_awakenings':'max_awakenings',
       'derived.craftomancy_max':'craftomancy_max','derived.skill_points':'skill_points','derived.stat_points':'stat_points',
-      'derived.sublimation_slots':'sublimation_slots','derived.complex_schools':'complex_schools','derived.weapon_neutral':'weapon_neutral'
+      'derived.sublimation_slots':'sublimation_slots','derived.complex_schools':'complex_schools','derived.weapon_neutral':'weapon_neutral','derived.nature_slots':'nature_slots'
     };
   for (const m of allMods){
     if (map[m.target]){
@@ -14743,7 +14769,7 @@ function milestone(key){
 }
 function baseTalentMax(lvl){
   const levelVal = 1 + Math.floor(Math.max(1, lvl) / 10);
-  return levelVal + milestone('tech') + milestone('wisdom');
+  return levelVal + 1 + milestone('tech') + milestone('wisdom');
 }
 function talentMax(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
@@ -14757,7 +14783,8 @@ function talentCount(){
 function updateTalentCounter(){
   if (!talentCounterEl) return;
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const base = 1 + Math.floor(lvl / 10);
+  const baseLevel = 1 + Math.floor(lvl / 10);
+  const baselineBonus = 1;
   const msTec = milestone('tech');
   const msWis = milestone('wisdom');
   const max = talentMax();
@@ -14765,7 +14792,7 @@ function updateTalentCounter(){
   const over = count > max;
   talentCounterEl.textContent = `Talents: ${count} / ${max}`;
   talentCounterEl.style.color = over ? '#f66' : '';
-  talentCounterEl.title = `Base ${base} + TEC milestone ${msTec} + WIS milestone ${msWis}`;
+  talentCounterEl.title = `Base ${baseLevel} + baseline +${baselineBonus} + TEC milestone ${msTec} + WIS milestone ${msWis}`;
 }
 function expertiseMax(){
   return Math.max(0, Math.floor(numOr(DERIVED_CACHE?.max_expertise, 0)));
@@ -14859,8 +14886,10 @@ function updateDerived(){
     sublimation_slots: [`Base ${slotsForLevel(lvl)} + PRE milestone ${msPRE * 2}`],
     complex_schools: [`MAG total ${magTotal} -> ${complexSchools}`],
   });
+  base._notes = Object.assign(base._notes || {}, { nature_slots: [`Base ${base.nature_slots}`] });
   base.tx = 2 + msBOD + (2 * msTEC);
   base.talent_max = baseTalentMax(lvl);
+  base.nature_slots = 1;
   base.max_expertise = 0;
   base.max_divine_manifestation = 0;
   base.max_awakenings = 0;
@@ -14966,6 +14995,7 @@ function updateDerived(){
   renderCombatDerivedBadges();
   if (initBaseEl) initBaseEl.textContent = numOr(DERIVED_CACHE?.initiative, 0);
   if (subSlotPill) renderSublimations();
+  updateIntensityLimitDisplay();
 }
 
 function openResourceActionModal(resource, labelOverride){
