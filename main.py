@@ -24,6 +24,7 @@ from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplic
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER, craftomancy_row_for_quality, craftomancy_category_index, craftomancy_next_category
 EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
+AMMO_PACK_DEFAULT = 10
 from server.src.modules.allowed_pages import ALLOWED_PAGES
 CAMPAIGN_COL = get_col("campaigns")
 CAMPAIGN_CHAT_COL = get_col("campaign_chat")
@@ -4311,9 +4312,18 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     src = _fetch_catalog_item(kind, ref_id)
     if not src:
         raise HTTPException(404, "Catalog item not found")
+    pack_size = 1
+    pack_count = qty
+    if kind == "ammo":
+        pack_size = max(1, int(src.get("pack_size") or AMMO_PACK_DEFAULT))
+        pack_count = max(1, math.ceil(qty / pack_size))
+        qty = pack_count * pack_size
 
     base_price = int(src.get("price") or 0)
     enc = float(src.get("enc") or 0.0)
+    enc_per_unit = enc
+    if kind == "ammo" and pack_size:
+        enc_per_unit = enc / pack_size
     subcat = src.get("category") if kind == "equipment" else None
     name = src.get("name") or (subcat == "armor" and f"Armor - {src.get('type')}") or src.get("style") or "Item"
     eq_slot = src.get("slot") if kind == "equipment" else None
@@ -4371,7 +4381,10 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     else:
         unit_price = max(0, int(round(unit_price)))
 
-    total = int(unit_price * qty)
+    if kind == "ammo":
+        total = int(unit_price * pack_count)
+    else:
+        total = int(unit_price * qty)
 
     # money (negative transaction)
     cur = inv.get("currencies", {})
@@ -4397,7 +4410,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "description_html": desc_html,
         "quantity": qty,
         "quality": (quality if kind in ("weapon", "equipment") else None),
-        "enc": enc,
+        "enc": enc_per_unit,
         "base_price": base_price,
         "paid_unit": unit_price,
         "upgrades": base_upgrades + add_upgrades,
@@ -4413,6 +4426,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
         "ammo_name": ammo_name,
         "ammo_price": ammo_price,
         "ammo_enc": ammo_enc,
+        "pack_size": pack_size,
     }
     if kind == "ammo":
         item["consumable"] = True
@@ -4518,7 +4532,9 @@ def catalog_ammo(request: Request, q: str = "", tags: str = "", limit: int = 25)
     if extra_tags:
         filters.append(extra_tags)
     filt = filters[0] if len(filters) == 1 else {"$and": filters}
-    rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1, "tags": 1}).limit(int(limit)))
+    rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1, "tags": 1, "pack_size": 1}).limit(int(limit)))
+    for row in rows:
+        row["pack_size"] = max(1, int(row.get("pack_size") or AMMO_PACK_DEFAULT))
     existing_keys = {norm_key(str(row.get("name") or "")) for row in rows if row.get("name")}
     weapon_col = get_col("weapons")
     ammo_name_query = (q or "").strip().lower()
@@ -4543,6 +4559,7 @@ def catalog_ammo(request: Request, q: str = "", tags: str = "", limit: int = 25)
             "name": ammo_name,
             "price": int(weapon.get("ammo_price") or 0),
             "enc": float(weapon.get("ammo_enc") or 0.0),
+            "pack_size": max(1, int(weapon.get("ammo_pack_size") or AMMO_PACK_DEFAULT)),
             "category": "weapon",
             "tags": entry_tags,
             "weapon_id": weapon.get("id"),

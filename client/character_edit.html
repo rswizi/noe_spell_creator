@@ -3318,6 +3318,7 @@ const invCreateBtn = document.getElementById('inv-create-btn');
 const invCatalogModal = document.getElementById('inv-catalog-modal');
 const invCatalogBackdrop = document.getElementById('inv-catalog-backdrop');
 const invCatalogClose = document.getElementById('inv-catalog-close');
+const AMMO_CATALOG_PACK_SIZE = 10;
 const SELF_CONTAINER_ID = 'self';
 /* Spell list refs */
 const avatarPreview = document.getElementById('avatar-preview');
@@ -7731,25 +7732,45 @@ function invRenderResults(){
     line.className = "row";
     line.style.borderBottom = "1px solid #222";
     line.style.padding = "6px 0";
-      const cat = invGetRowCategory(r);
-      const price = (r.price != null) ? `Price: ${r.price}` : "";
-      const enc = (r.enc != null) ? `Enc: ${Number(r.enc||0).toFixed(1)}` : "";
-      line.innerHTML = `
-        <div style="flex:1;min-width:260px;">
-          <div><b>${invEscapeHtml(r.name || r.title || "Item")}</b></div>
-          <div class="muted">${invEscapeHtml(cat)} ${price ? " - "+price : ""} ${enc ? " - "+enc : ""}</div>
-        </div>
-        <input type="number" min="1" value="1" style="width:90px" class="qty">
-        <button class="btn small buy">Add</button>
-      `;
+    const cat = invGetRowCategory(r);
+    const isAmmo = String((r.__kind || r.kind) || '').toLowerCase() === 'ammo';
+    const packSize = isAmmo ? Math.max(1, Number(r.pack_size || AMMO_CATALOG_PACK_SIZE)) : 1;
+    const priceLabel = (r.price != null)
+      ? `${isAmmo ? `Price (per ${packSize})` : "Price"}: ${r.price}`
+      : "";
+    const encLabel = (r.enc != null)
+      ? `${isAmmo ? `Enc (per ${packSize})` : "Enc"}: ${Number(r.enc||0).toFixed(1)}`
+      : "";
+    const qtyAttrs = isAmmo
+      ? `min="${packSize}" step="${packSize}" value="${packSize}"`
+      : 'min="1" step="1" value="1"';
+    const ammoNote = isAmmo
+      ? `<div class="muted" style="font-size:0.75rem;">Purchases are bundled in packs of ${packSize} units.</div>`
+      : "";
+    line.innerHTML = `
+      <div style="flex:1;min-width:260px;">
+        <div><b>${invEscapeHtml(r.name || r.title || "Item")}</b></div>
+        <div class="muted">${invEscapeHtml(cat)} ${priceLabel ? " - "+priceLabel : ""} ${encLabel ? " - "+encLabel : ""}</div>
+        ${ammoNote}
+      </div>
+      <input type="number" ${qtyAttrs} style="width:90px" class="qty">
+      <button class="btn small buy">Add</button>
+    `;
       line.querySelector(".buy").addEventListener("click", async ()=>{
-        const qty = Math.max(1, parseInt(line.querySelector(".qty").value||"1", 10));
-        const choice = await invPromptPricingChoice(r);
-        if (!choice) return;
-        const unitPrice = invComputeUnitPrice(r, choice);
-        const quantity = qty;
-        const sanitizedUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
-        const totalCost = sanitizedUnitPrice * quantity;
+      const input = line.querySelector(".qty");
+      const rawQty = Math.max(1, parseInt(input.value|| (isAmmo ? packSize : 1), 10));
+      let qty = rawQty;
+      let packCount = 1;
+      if (isAmmo){
+        packCount = Math.max(1, Math.ceil(rawQty / packSize));
+        qty = packCount * packSize;
+        input.value = qty;
+      }
+      const choice = await invPromptPricingChoice(r);
+      if (!choice) return;
+      const unitPrice = invComputeUnitPrice(r, choice);
+      const sanitizedUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
+      const totalCost = sanitizedUnitPrice * (isAmmo ? packCount : qty);
         const balance = Number(LINKED_INV?.currencies?.[currency] ?? 0) || 0;
         if (totalCost > balance){
           const proceed = await promptInsufficientFundsWarning(currency, totalCost, balance);
