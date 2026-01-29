@@ -98,12 +98,12 @@
     .intensities-grid {
       display:grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap:10px 12px;
+      gap:4px 24px;
     }
     .intensity-line {
       display:grid;
-      grid-template-columns: minmax(80px, 1fr) 70px 62px;
-      gap:6px;
+      grid-template-columns: auto 58px 58px;
+      gap:4px 12px;
       align-items:center;
     }
     .intensity-line input.num { width:40px; max-width:40px; }
@@ -112,7 +112,8 @@
       .intensities-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
     }
 
-    .derived-grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); }
+    .derived-grid { display:grid; gap:10px 22px; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); }
+    .derived-grid .kv { display:flex; align-items:center; gap:4px; }
     .kv { display:grid; grid-template-columns: auto 1fr; gap:6px 8px; align-items:center; }
     .kv .val { justify-self:end; font-variant-numeric: tabular-nums; }
 
@@ -11464,7 +11465,7 @@ function renderStatistics(){
       const line = document.createElement('div'); line.className = 'intensity-line';
       line.innerHTML = `
         <div class="k">
-          <img class="stat-icon" src="/assets/ressources/${iconName}.svg" alt="${n}" title="${n}">
+          <img class="stat-icon" src="/assets/natures/${iconName}.svg" alt="${n}" title="${n}">
         </div>
         <input type="number" class="num" min="0" id="${investId}" value="${invested}">
         <div class="skill-total badge mod-toggle" data-target="mods-${totalId}" id="${totalId}" title="${intensityTooltip(adj.notes, idVal)}">${baseVal == null ? '--' : (adj.total>=0? '+'+adj.total : adj.total)}</div>
