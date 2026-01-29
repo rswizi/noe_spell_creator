@@ -2197,6 +2197,24 @@ def list_apotheoses(
     docs.sort(key=lambda d: d.get("name","").lower())
     return {"status":"success","apotheoses":docs}
 
+@app.get("/apotheoses/bulk")
+@app.get("/apotheoses/bulk/")
+async def bulk_apotheoses(
+    request: Request,
+    ids: str = Query(..., description="Comma-separated apotheosis IDs")
+):
+    username, role = require_auth(request, roles=["user","moderator","admin"])
+    id_list = [s.strip() for s in (ids or "").split(",") if s.strip()]
+    if not id_list:
+        return {"status": "success", "apotheoses": []}
+    q: dict = {"id": {"$in": id_list}}
+    if role != "admin":
+        q["creator"] = username
+    docs = list(get_col("apotheoses").find(q, {"_id": 0}))
+    idx = {d["id"]: d for d in docs}
+    ordered = [idx[i] for i in id_list if i in idx]
+    return {"status": "success", "apotheoses": ordered}
+
 @app.get("/apotheoses/{aid}")
 def get_apotheosis(aid: str):
     doc = get_col("apotheoses").find_one({"id": aid}, {"_id":0})

@@ -15647,8 +15647,26 @@ async function searchAbilities(){
     if (abiFilterTagEl?.value) params.push('tags='+encodeURIComponent(abiFilterTagEl.value));
     const qs = params.length ? '?'+params.join('&') : '';
     const res = await api('/abilities'+qs);
-    const arr = res.abilities || [];
-    renderSearchResults(arr);
+    let results = (res.abilities || []).map(doc => ({ ...doc, kind: 'ability' }));
+    const sourceFilter = (abiFilterSrcEl.value || '').trim().toLowerCase();
+    if (sourceFilter === 'apotheosis'){
+      const apoParams = [];
+      if (abiSearchEl.value) apoParams.push('name='+encodeURIComponent(abiSearchEl.value));
+      if (abiFilterTypeEl.value) apoParams.push('typ='+encodeURIComponent(abiFilterTypeEl.value));
+      const apoQs = apoParams.length ? '?'+apoParams.join('&') : '';
+      try{
+        const apoRes = await api('/apotheoses'+apoQs);
+        const apotheoses = (apoRes.apotheoses || []).map(doc => ({
+          ...doc,
+          kind: 'apotheosis',
+          apotheosis_type: doc.type,
+        }));
+        results = results.concat(apotheoses);
+      }catch{
+        // intentionally swallow; fallback to abilities only
+      }
+    }
+    renderSearchResults(results);
   }catch(e){
     abiResultsEl.innerHTML = `<div class="muted">Error: ${e.message}</div>`;
   }
@@ -15809,14 +15827,24 @@ function renderSearchResults(arr){
     const div = document.createElement('div');
     div.className = 'abi-item';
     const costText = abilityCostText(a);
+    const isApotheosis = String(a.kind || '').toLowerCase() === 'apotheosis';
+    const tags = [];
+    if (isApotheosis){
+      tags.push('Apotheosis');
+      if (a.stage) tags.push(a.stage);
+      if (a.apotheosis_type) tags.push(a.apotheosis_type);
+    }else{
+      if (a.type) tags.push(a.type);
+      if (a.source_category) tags.push(a.source_category);
+    }
+    const tagsHtml = tags.map(tag => `<span class="tag">${tag}</span>`).join('');
     div.innerHTML = `
       <div class="grow">
         <div><strong>${a.name}</strong></div>
         <div class="muted" style="font-size:.85rem">${a.description_html || a.description || ''}</div>
         ${costText ? `<div class="muted" style="font-size:.8rem">Cost: ${costText}</div>` : ''}
       </div>
-      <span class="tag">${a.type||''}</span>
-      <span class="tag">${a.source_category||''}</span>
+      ${tagsHtml}
       <button>Add</button>
     `;
     div.querySelector('button').addEventListener('click', ()=> addAbilityToChar(a.id));
@@ -15841,6 +15869,27 @@ async function resolveAssignedAbilities(){
   const bulk = await api('/abilities/bulk'+qs);
   const byId = {};
   (bulk.abilities||[]).forEach(a=>{ if (a && a.id) byId[a.id] = a; });
+  const missingIds = uniqueIds.filter(id=> id && !byId[id]);
+  if (missingIds.length){
+    const apoQs = '?ids=' + encodeURIComponent(missingIds.join(','));
+    try{
+      const apoBulk = await api('/apotheoses/bulk'+apoQs);
+      (apoBulk.apotheoses || []).forEach(doc=>{
+        if (!doc?.id) return;
+        const enriched = {
+          ...doc,
+          kind: 'apotheosis',
+          source_category: 'Apotheosis',
+          type: 'passive',
+          apotheosis_stage: doc.stage,
+          apotheosis_type: doc.type,
+        };
+        byId[doc.id] = enriched;
+      });
+    }catch{
+      /* ignore; fallback to abilities only */
+    }
+  }
   let assigned = ids.map((id, idx)=> {
     const source = byId[id];
     if (!source) return null;
