@@ -4367,7 +4367,7 @@ function renderSublimations(){
 
       const rem = document.createElement('button');
       rem.className = 'btn btn-secondary small';
-      rem.textContent = 'Remove';
+      rem.innerHTML = '<i class="fa-solid fa-trash"></i>';
       rem.addEventListener('click', ()=>{
         SUBLIMATIONS = SUBLIMATIONS.filter(s=>s.id !== sub.id);
         onSublimationChanged();
