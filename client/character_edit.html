@@ -129,7 +129,40 @@
     .abi-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #2b2b3b; border-radius:12px; background:linear-gradient(145deg, #14141d, #0f0f16); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
     .abi-item.abi-block { flex-direction: column; align-items: stretch; }
     .abi-item.abi-card { display:grid; grid-template-columns: minmax(0, 1fr) auto; align-items:start; gap:12px; }
-    .abi-item.abi-card .abi-body { min-width:0; }
+    .abi-item.abi-card .abi-body {
+      min-width:0;
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+    }
+    .abi-main { flex:1; }
+    .abi-avatar {
+      width:52px;
+      height:52px;
+      border-radius:14px;
+      border:1px solid #313140;
+      background:#05050b;
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      cursor:pointer;
+    }
+    .abi-avatar img {
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+    }
+    .abi-avatar::after {
+      content:'↺';
+      position:absolute;
+      right:4px;
+      bottom:2px;
+      font-size:.75rem;
+      color:rgba(255,255,255,0.6);
+    }
     .abi-item.abi-card .abi-meta { display:flex; flex-direction:column; align-items:flex-end; gap:6px; min-width:0; }
     .abi-item.abi-card .abi-title-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .abi-item.abi-card .abi-tags { display:flex; gap:6px; flex-wrap:wrap; }
@@ -265,7 +298,24 @@
   .container-card { border:1px solid #2a2a38; border-radius:12px; padding:12px; margin-bottom:10px; background: linear-gradient(135deg, #12121a, #0f0f17); box-shadow: inset 0 1px 0 rgba(255,255,255,0.02); }
   .container-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
   .items { display:grid; gap:8px; }
-  .item-row { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; padding:8px 10px; border:1px solid #292938; border-radius:10px; background:#161623; }
+.item-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #292938; border-radius:10px; background:#161623; }
+.item-avatar {
+  width:42px;
+  height:42px;
+  border-radius:10px;
+  border:1px solid #313140;
+  background:#05050b;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.item-avatar img {
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
   .item-actions { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
   .item-actions .pill { white-space:nowrap; }
   .item-row .pill { white-space:nowrap; }
@@ -5328,7 +5378,12 @@ function renderInventoryUI(){
           const choiceBtn = hasChoice
             ? '<button class="btn small choices" title="Choices" aria-label="Choices"><i class="fa-solid fa-gear"></i></button>'
             : '';
+          const avatarUrl = avatarImageUrl(itemAvatarKey(it));
+          const avatarAlt = invEscapeHtml(it.alt_name || it.name || 'Item');
           row.innerHTML = `
+            <div class="item-avatar">
+              <img src="${avatarUrl}" alt="${avatarAlt}">
+            </div>
             <div class="grow">
               <div><strong>${invEscapeHtml(it.alt_name || it.name || 'Item')}</strong> <span class="muted">x${it.quantity||1}</span></div>
               <div class="muted">${it.kind||''}${it.variant?` - ${invEscapeHtml(it.variant)}`:''}</div>
@@ -10038,6 +10093,12 @@ function renderAbilitySpellsBucket(){
     const range = sp.range != null ? `Range: ${sp.range}` : '';
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
     const metaLine = [cost || '', range || '', aoe || ''].filter(Boolean).join(' || ');
+    const avatarKey = spellAvatarKey(sp);
+    const avatarUrl = avatarImageUrl(avatarKey);
+    const avatarHint = `Spell avatar: ${avatarKey || 'auto'}`;
+    const craftAvatarKey = spellAvatarKey(sp);
+    const craftAvatarUrl = avatarImageUrl(craftAvatarKey);
+    const craftAvatarHint = `Spell avatar: ${craftAvatarKey || 'auto'}`;
     const div = document.createElement('div');
     div.className = 'abi-item abi-card';
     const statusLabel = (meta.status === 'learnt') ? 'Prepared' : 'Learnt';
@@ -10055,18 +10116,23 @@ function renderAbilitySpellsBucket(){
     const tagA = String(sp.category || '').trim();
     div.innerHTML = `
       <div class="abi-body">
-        <div class="abi-title-row">
-          <strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span>
-          <div class="abi-tags">
-            <span class="tag ${tagA ? '' : 'abi-placeholder'}">${tagA || 'Tag'}</span>
-            <span class="tag abi-placeholder">Tag</span>
-          </div>
+        <div class="abi-avatar" title="${avatarHint}">
+          <img src="${avatarUrl}" alt="${nameDisplay} avatar">
         </div>
-        ${metaLine ? `<div class="muted" style="font-size:.8rem">${metaLine}</div>` : ''}
-        <div class="muted" style="font-size:.85rem">${desc}</div>
-        ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
-        ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
-        ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
+        <div class="abi-main">
+          <div class="abi-title-row">
+            <strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span>
+            <div class="abi-tags">
+              <span class="tag ${tagA ? '' : 'abi-placeholder'}">${tagA || 'Tag'}</span>
+              <span class="tag abi-placeholder">Tag</span>
+            </div>
+          </div>
+          ${metaLine ? `<div class="muted" style="font-size:.8rem">${metaLine}</div>` : ''}
+          <div class="muted" style="font-size:.85rem">${desc}</div>
+          ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
+          ${userFlavor ? `<div class="muted" style="font-size:.8rem"><em>User note: ${userFlavor}</em></div>` : ''}
+          ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
+        </div>
       </div>
       <div class="abi-meta">
         <div class="abi-actions">
@@ -10138,17 +10204,22 @@ function renderAbilitySpellsBucket(){
     const tagA = String(sp.category || '').trim();
     div.innerHTML = `
       <div class="abi-body">
-        <div class="abi-title-row">
-          <strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span>
-          <div class="abi-tags">
-            <span class="tag ${tagA ? '' : 'abi-placeholder'}">${tagA || 'Tag'}</span>
-            <span class="tag">Craftomancy</span>
-          </div>
+        <div class="abi-avatar" title="${craftAvatarHint}">
+          <img src="${craftAvatarUrl}" alt="${nameDisplay} avatar">
         </div>
-        ${metaLine ? `<div class="muted" style="font-size:.8rem">${metaLine}</div>` : ''}
-        <div class="muted" style="font-size:.85rem">${desc}</div>
-        ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
-        ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
+        <div class="abi-main">
+          <div class="abi-title-row">
+            <strong class="title-color-target">${nameDisplay}</strong> <span class="muted">${statusLabel}</span>
+            <div class="abi-tags">
+              <span class="tag ${tagA ? '' : 'abi-placeholder'}">${tagA || 'Tag'}</span>
+              <span class="tag">Craftomancy</span>
+            </div>
+          </div>
+          ${metaLine ? `<div class="muted" style="font-size:.8rem">${metaLine}</div>` : ''}
+          <div class="muted" style="font-size:.85rem">${desc}</div>
+          ${flavor ? `<div class="muted" style="font-size:.8rem"><em>${flavor}</em></div>` : ''}
+          ${effectsHtml ? `<div class="muted" style="font-size:.8rem">${effectsHtml}</div>` : ''}
+        </div>
       </div>
       <div class="abi-meta">
         <div class="abi-actions">
@@ -15264,6 +15335,7 @@ async function loadCharacter(){
   ensureSpeciesAbilityLinked();
   ensureBoonAbilityLinked();
   ABILITY_CHOICES = CHAR.ability_choices || {};
+  CHAR.ability_avatars = CHAR.ability_avatars || {};
   ITEM_CHOICES = CHAR.item_choices || {};
   ABILITY_CHOICE_KEYS = Array.isArray(CHAR.ability_choice_keys) ? CHAR.ability_choice_keys.slice() : [];
   alignAbilityChoiceKeys(CHAR.abilities || [], CHAR.abilities || []);
@@ -15424,6 +15496,7 @@ async function saveNow(){
       divine_manifestation_ids: CHAR.divine_manifestation_ids || [],
       awakening_ids: CHAR.awakening_ids || [],
       ability_choices: ABILITY_CHOICES || {},
+      ability_avatars: CHAR.ability_avatars || {},
       ability_choice_keys: ABILITY_CHOICE_KEYS || [],
       item_choices: ITEM_CHOICES || {},
       level_reward_allocations: LEVEL_REWARD_ALLOCATIONS,
@@ -16948,6 +17021,67 @@ const ABILITY_SOURCE_ALIASES = {
   'vita': 'talent',
 };
 
+const AVATAR_KEYS = ['boon','awakening','talents','expertise','dima','archetype','spells'];
+const AVATAR_CYCLE = ['auto', ...AVATAR_KEYS];
+const PLACEHOLDER_AVATAR_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';
+const AVATAR_SOURCE_MAP = {
+  'boon': 'boon',
+  'awakening': 'awakening',
+  'talent': 'talents',
+  'expertise': 'expertise',
+  'divine manifestation': 'dima',
+  'dima': 'dima',
+  'archetype': 'archetype',
+  'apotheosis': 'archetype',
+};
+
+function normalizedAvatarKey(raw){
+  const key = String(raw || '').trim().toLowerCase();
+  if (!key || key === 'auto') return null;
+  return AVATAR_KEYS.includes(key) ? key : null;
+}
+
+function avatarImageUrl(key){
+  if (!key) return PLACEHOLDER_AVATAR_SRC;
+  return `/assets/placeholders/${key}.png`;
+}
+
+function abilityAvatarKey(ab){
+  if (!ab) return 'spells';
+  const id = String(ab.id || '').trim();
+  const override = CHAR?.ability_avatars?.[id];
+  const manual = normalizedAvatarKey(override);
+  if (manual) return manual;
+  const stored = normalizedAvatarKey(ab.default_avatar);
+  if (stored) return stored;
+  const src = canonicalAbilitySource(ab.source_category);
+  return AVATAR_SOURCE_MAP[src] || 'spells';
+}
+
+function spellAvatarKey(sp){
+  return normalizedAvatarKey(sp?.default_avatar) || 'spells';
+}
+
+function itemAvatarKey(it){
+  return normalizedAvatarKey(it?.default_avatar) || 'spells';
+}
+
+function cycleAbilityAvatar(aid){
+  if (!aid) return;
+  if (!CHAR) return;
+  const normalized = normalizedAvatarKey(CHAR.ability_avatars?.[aid]) || 'auto';
+  const idx = AVATAR_CYCLE.indexOf(normalized);
+  const next = AVATAR_CYCLE[(idx + 1) % AVATAR_CYCLE.length] || 'auto';
+  if (!CHAR.ability_avatars) CHAR.ability_avatars = {};
+  if (next === 'auto'){
+    delete CHAR.ability_avatars[aid];
+  }else{
+    CHAR.ability_avatars[aid] = next;
+  }
+  renderAbilitiesTab();
+  queueSave();
+}
+
 function canonicalAbilitySource(src){
   const raw = String(src || '').trim().toLowerCase();
   if (!raw) return 'other';
@@ -17107,17 +17241,25 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     const pinIcon = 'fa-thumbtack';
     const pinClass = pinned ? 'is-pinned' : '';
     const pinTitle = pinned ? 'Unpin' : 'Pin';
+    const avatarKey = abilityAvatarKey(a);
+    const avatarUrl = avatarImageUrl(avatarKey);
+    const avatarHint = `Cycle avatar (current: ${avatarKey || 'auto'})`;
     div.innerHTML = `
       <div class="abi-body">
-        <div class="abi-title-row">
-          <strong class="title-color-target">${titleText}</strong>
-          <div class="abi-tags">
-            <span class="tag ${typeTag ? '' : 'abi-placeholder'}">${typeTag || 'Tag'}</span>
-            <span class="tag ${sourceTag ? '' : 'abi-placeholder'}">${sourceTag || 'Tag'}</span>
-          </div>
+        <div class="abi-avatar" title="${avatarHint}">
+          <img src="${avatarUrl}" alt="${titleText} avatar">
         </div>
-        <div class="muted" style="font-size:.85rem">${desc}</div>
-        ${costText ? `<div class="muted" style="font-size:.8rem">Cost: ${costText}</div>` : ''}
+        <div class="abi-main">
+          <div class="abi-title-row">
+            <strong class="title-color-target">${titleText}</strong>
+            <div class="abi-tags">
+              <span class="tag ${typeTag ? '' : 'abi-placeholder'}">${typeTag || 'Tag'}</span>
+              <span class="tag ${sourceTag ? '' : 'abi-placeholder'}">${sourceTag || 'Tag'}</span>
+            </div>
+          </div>
+          <div class="muted" style="font-size:.85rem">${desc}</div>
+          ${costText ? `<div class="muted" style="font-size:.8rem">Cost: ${costText}</div>` : ''}
+        </div>
       </div>
       <div class="abi-meta">
         <div class="abi-actions">
@@ -17137,6 +17279,8 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
       </div>
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
+    const avatarEl = div.querySelector('.abi-avatar');
+    avatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); cycleAbilityAvatar(id); });
     div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openAbilityRoll(a, a.source_category || 'Ability')));
     if (canRemove){
       div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));

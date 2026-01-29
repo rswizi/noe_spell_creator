@@ -37,6 +37,20 @@
     <label for="school_name">Spell Name:</label>
     <input type="text" id="school_name" name="school_name" required>
 
+    <div style="margin-top:14px;">
+      <label for="spell-avatar">Avatar</label>
+      <select id="spell-avatar" name="spell-avatar">
+        <option value="auto">Auto (default)</option>
+        <option value="boon">Boon</option>
+        <option value="awakening">Awakening</option>
+        <option value="talents">Talent</option>
+        <option value="expertise">Expertise</option>
+        <option value="dima">DiMa</option>
+        <option value="archetype">Archetype</option>
+        <option value="spells">Spell</option>
+      </select>
+    </div>
+
     <!-- Activation -->
     <div style="margin-top:14px;">
       <label for="activation">Activation:</label>
@@ -431,14 +445,16 @@ function handleSubmit(e) {
     if (!cleanId) return;
     effects.push(cleanId);
   });
+  const avatarChoice = document.querySelector("#spell-avatar")?.value || "auto";
 
   const body = {
     name: (fd.get("school_name") || "Unnamed Spell"),
-    activation: fd.get("activation"),
+      activation: fd.get("activation"),
     range: parseInt(fd.get("range") || "0", 10),
     aoe: fd.get("aoe"),
     duration: parseInt(fd.get("duration") || "1", 10),
-    effects
+    effects,
+    default_avatar: avatarChoice
 
   };
 
@@ -479,6 +495,7 @@ async function prefillFromSpell(id) {
   $("#range").value       = String(sp.range ?? "0");
   $("#aoe").value         = sp.aoe || "A Square";
   $("#duration").value    = String(sp.duration ?? "1");
+  document.querySelector("#spell-avatar").value = sp.default_avatar || "auto";
 
   $("#effects-container").innerHTML = "";
   if (Array.isArray(sp.effects)) {
@@ -493,6 +510,7 @@ function clearSpellForm() {
   const form = $("#spell-form");
   if (form) form.reset();
   $("#effects-container").innerHTML = "";
+  document.querySelector("#spell-avatar").value = "auto";
   addEffectRow();                       // keep one empty row
   recomputeKnobTypes();
   updatePreview();

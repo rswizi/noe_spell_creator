@@ -213,6 +213,20 @@
           </div>
 
         <div class="row">
+          <label for="ab-avatar">Avatar</label>
+          <select id="ab-avatar" class="grow">
+            <option value="auto">Auto (source)</option>
+            <option value="boon">Boon</option>
+            <option value="awakening">Awakening</option>
+            <option value="talents">Talent</option>
+            <option value="expertise">Expertise</option>
+            <option value="dima">DiMa</option>
+            <option value="archetype">Archetype</option>
+            <option value="spells">Spell</option>
+          </select>
+        </div>
+
+        <div class="row">
           <label for="ab-source-ref">Source Detail</label>
           <input id="ab-source-ref" class="grow" />
         </div>
@@ -488,6 +502,7 @@ const nameEl       = document.getElementById('ab-name');
 const typeEl       = document.getElementById('ab-type');
 const sourceCatEl  = document.getElementById('ab-source-cat');
 const sourceRefEl  = document.getElementById('ab-source-ref');
+const avatarSelectEl = document.getElementById('ab-avatar');
 const tagsEl       = document.getElementById('ab-tags');
 const descEditor   = setupRichTextEditor('ab-description-editor', 'Lore + global explanation of what this ability does.');
 const statusLine   = document.getElementById('status-line');
@@ -1201,6 +1216,7 @@ async function buildPayloadFromForm(){
   const out = base;
   if (active) out.active = active;
   if (passive) out.passive = passive;
+  out.default_avatar = avatarSelectEl?.value || 'auto';
   if ((sourceCatEl.value || '').toLowerCase() === 'archetype'){
     out.archetype_original_rank = Number(arcOrigRankEl.value || 0);
     out.archetype_version = Number(arcVersionEl.value || 1);
@@ -1217,6 +1233,7 @@ function populateForm(a){
   sourceCatEl.value  = a.source_category || 'Other';
   sourceRefEl.value  = a.source_ref || '';
   tagsEl.value       = (a.tags || []).join(', ');
+  if (avatarSelectEl) avatarSelectEl.value = a.default_avatar || 'auto';
   descEditor.setHTML(a.description || '');
   arcVersionEl.value = a.archetype_version || 1;
   arcOrigRankEl.value= a.archetype_original_rank || 1;

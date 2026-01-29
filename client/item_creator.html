@@ -137,6 +137,20 @@
           <input id="fld-tags" type="text" placeholder="Comma-separated tags" />
         </div>
 
+        <div style="margin-top:10px;">
+          <label>Avatar</label>
+          <select id="fld-avatar">
+            <option value="auto">Auto (default)</option>
+            <option value="boon">Boon</option>
+            <option value="awakening">Awakening</option>
+            <option value="talents">Talent</option>
+            <option value="expertise">Expertise</option>
+            <option value="dima">DiMa</option>
+            <option value="archetype">Archetype</option>
+            <option value="spells">Spell</option>
+          </select>
+        </div>
+
         <div id="section-tool" class="split" style="margin-top:10px; display:none;">
           <div>
             <label>Tool Tier</label>
@@ -1062,6 +1076,7 @@ function buildPayload(){
   const ammoName = (document.querySelector("#fld-ammo-name")?.value || "").trim();
   const ammoPrice = Math.max(0, Number(document.querySelector("#fld-ammo-price")?.value || 0));
   const ammoEnc = Math.max(0, Number(document.querySelector("#fld-ammo-enc")?.value || 0));
+  const avatarChoice = document.querySelector("#fld-avatar")?.value || "auto";
 
   if (type === "weapon"){
     const magSize = hasMagazineAttribute() ? Number(document.querySelector("#fld-magazine").value || 0) : 0;
@@ -1092,6 +1107,9 @@ function buildPayload(){
       payload.ammo_price = ammoPrice;
       payload.ammo_enc = ammoEnc;
     }
+    payload.default_avatar = avatarChoice;
+    payload.default_avatar = avatarChoice;
+    payload.default_avatar = avatarChoice;
     return payload;
   }
 
@@ -1138,6 +1156,7 @@ function buildPayload(){
     consumable: document.querySelector("#fld-obj-consumable").checked,
     modifiers: mods,
     tags,
+    default_avatar: avatarChoice,
   };
 }
 
@@ -1165,6 +1184,7 @@ function fillFromPayload(item){
   document.querySelector("#fld-enc").value = item.enc ?? 0;
   document.querySelector("#fld-price").value = item.price ?? 0;
   document.querySelector("#fld-tags").value = (item.tags || []).join(", ");
+  document.querySelector("#fld-avatar").value = item.default_avatar || "auto";
   setRichText(item.description || "");
   STATE.upgrades = (item.upgrades || []).slice();
   STATE.attributes = new Set(item.effects || []);
@@ -1298,6 +1318,7 @@ function resetForm(){
   document.querySelector("#fld-enc").value = 0;
   document.querySelector("#fld-price").value = 0;
   document.querySelector("#fld-tags").value = "";
+  document.querySelector("#fld-avatar").value = "auto";
   document.querySelector("#fld-tier").value = "1";
   document.querySelector("#fld-method").value = "crafting";
   document.querySelector("#fld-tool-consumable").checked = false;

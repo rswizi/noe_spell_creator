@@ -26,6 +26,22 @@ from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES
 EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 AMMO_PACK_DEFAULT = 10
 from server.src.modules.allowed_pages import ALLOWED_PAGES
+
+AVATAR_KEYS = frozenset({"boon","awakening","talents","expertise","dima","archetype","spells"})
+
+def _normalize_avatar_key(value: Any) -> str | None:
+    raw = (value or "").strip().lower()
+    if not raw or raw == "auto":
+        return None
+    return raw if raw in AVATAR_KEYS else None
+
+def _avatar_field(payload: dict, field_name: str = "default_avatar") -> tuple[str | None, bool]:
+    if not isinstance(payload, dict) or field_name not in payload:
+        return None, False
+    key = _normalize_avatar_key(payload.get(field_name))
+    if key:
+        return key, False
+    return None, True
 CAMPAIGN_COL = get_col("campaigns")
 CAMPAIGN_CHAT_COL = get_col("campaign_chat")
 CAMPAIGN_CHAT_WS: dict[str, set[WebSocket]] = {}
@@ -1140,7 +1156,17 @@ async def update_spell(spell_id: str, request: Request):
         if "effects_meta" in body:
             updates["effects_meta"] = _normalize_effects_meta(effect_ids, body.get("effects_meta"))
 
-        r = get_col("spells").update_one({"id": spell_id}, {"$set": updates}, upsert=False)
+        unset_fields = {}
+        avatar_key, avatar_unset = _avatar_field(body)
+        if avatar_key:
+            updates["default_avatar"] = avatar_key
+        elif avatar_unset:
+            unset_fields["default_avatar"] = ""
+
+        ops = {"$set": updates}
+        if unset_fields:
+            ops["$unset"] = unset_fields
+        r = get_col("spells").update_one({"id": spell_id}, ops, upsert=False)
         if r.matched_count == 0:
             return JSONResponse({"status": "error", "message": f"Spell {spell_id} not found"}, status_code=404)
 
@@ -1317,6 +1343,9 @@ async def submit_spell(request: Request):
             "creator": username,         # ← track owner
             "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         }
+        spell_avatar, _ = _avatar_field(body)
+        if spell_avatar:
+            doc["default_avatar"] = spell_avatar
 
         get_col("spells").insert_one(dict(doc))
 
@@ -2689,6 +2718,9 @@ def create_object(request: Request, body: dict = Body(...)):
     username, role = require_auth(request, roles=["user","moderator","admin"])
     col = get_col("objects")
     doc = _object_from_body(body)
+    avatar_key, _ = _avatar_field(body)
+    if avatar_key:
+        doc["default_avatar"] = avatar_key
     if role not in ("moderator","admin"):
         pending = _create_pending_submission(username, role, "item", doc, kind="object")
         return {"status":"pending","submission": pending}
@@ -2706,7 +2738,16 @@ def update_object(oid: str, request: Request, body: dict = Body(...)):
         raise HTTPException(status_code=404, detail="Not found")
     upd = _object_from_body(body)
     upd["updated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
-    col.update_one({"id": oid}, {"$set": upd})
+    avatar_key, avatar_unset = _avatar_field(body)
+    unset_fields = {}
+    if avatar_key:
+        upd["default_avatar"] = avatar_key
+    elif avatar_unset:
+        unset_fields["default_avatar"] = ""
+    ops = {"$set": upd}
+    if unset_fields:
+        ops["$unset"] = unset_fields
+    col.update_one({"id": oid}, ops)
     new = col.find_one({"id": oid}, {"_id": 0})
     return {"status": "success", "object": new}
 
@@ -2730,6 +2771,9 @@ def bulk_create_objects(request: Request, payload: dict = Body(...)):
     created = []
     for b in items:
         doc = _object_from_body(b)
+        avatar_key, _ = _avatar_field(b)
+        if avatar_key:
+            doc["default_avatar"] = avatar_key
         doc["id"] = next_id_str("objects", padding=4)
         doc["created_at"] = datetime.datetime.utcnow().isoformat() + "Z"
         col.insert_one(dict(doc))
@@ -4038,6 +4082,7 @@ def _build_weapon_ammo_entry(ref_id: str, weapon: dict) -> dict | None:
         "ammo_enc": enc,
         "magazine_size": weapon.get("magazine_size") or weapon.get("magazine"),
         "modifiers": weapon.get("modifiers") or [],
+        "default_avatar": weapon.get("default_avatar"),
         "consumable": bool(weapon.get("consumable")),
         "alchemy_tool": bool(weapon.get("alchemy_tool")),
     }
@@ -4118,6 +4163,7 @@ def _refresh_inventory_items_from_catalog(inv_id: str, inv: dict) -> tuple[dict,
         set_if_diff("description_html", desc_html)
         set_if_diff("consumable", consumable)
         set_if_diff("alchemy_tool", alchemy_tool)
+        set_if_diff("default_avatar", src.get("default_avatar"))
         set_if_diff("is_animarma", bool(src.get("is_animarma")))
         set_if_diff("magazine_size", _safe_int(src.get("magazine_size") or src.get("magazine"), 0))
         set_if_diff("ammo_name", (src.get("ammo_name") or src.get("ammo") or "").strip())
@@ -5580,6 +5626,7 @@ async def create_character(request: Request):
         "expertise_ids": body.get("expertise_ids") or [],
         "divine_manifestation_ids": body.get("divine_manifestation_ids") or [],
         "awakening_ids": body.get("awakening_ids") or [],
+        "ability_avatars": {},
     }
     if inv_id:
         doc["inventory_id"] = inv_id
@@ -5695,6 +5742,19 @@ async def update_character(cid: str, request: Request):
         awake_ids = body.get("awakening_ids") or []
         if isinstance(awake_ids, list):
             updates["awakening_ids"] = [str(x).strip() for x in awake_ids if str(x).strip()]
+
+    if "ability_avatars" in body:
+        avatars_in = body.get("ability_avatars") or {}
+        if isinstance(avatars_in, dict):
+            cleaned = {}
+            for aid, val in avatars_in.items():
+                key = _normalize_avatar_key(val)
+                aid_key = str(aid or "").strip()
+                if not aid_key:
+                    continue
+                if key:
+                    cleaned[aid_key] = key
+            updates["ability_avatars"] = cleaned
 
     if "sublimations" in body:
         subs = body.get("sublimations") or []
@@ -6064,6 +6124,10 @@ def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
         passive_block = {"description":pdesc,"modifiers":modifiers}
 
     now = _now_iso()
+    avatar_key, _ = _avatar_field(payload)
+    if avatar_key:
+        doc["default_avatar"] = avatar_key
+
     return {
         "name": name,
         "name_key": norm_key(name),
@@ -6301,8 +6365,20 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
         "archetype_original_rank": archetype_original_rank,
         "archetype_replaces": archetype_replaces,
     }
-    col.update_one({"id": aid}, {"$set": updated})
+    avatar_key, avatar_unset = _avatar_field(payload)
+    unset_fields = {}
+    if avatar_key:
+        updated["default_avatar"] = avatar_key
+    elif avatar_unset:
+        unset_fields["default_avatar"] = ""
+
+    update_ops: dict[str, Any] = {"$set": updated}
+    if unset_fields:
+        update_ops["$unset"] = unset_fields
+    col.update_one({"id": aid}, update_ops)
     existing.update(updated)
+    for field in unset_fields:
+        existing.pop(field, None)
     existing.pop("_id", None)
     return {"status":"success","ability": existing}
 
