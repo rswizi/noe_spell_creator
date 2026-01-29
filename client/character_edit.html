@@ -8328,29 +8328,14 @@ async function useItemInline(it, amount=1){
   if (!sourceId){ alert("Link an inventory first."); return false; }
   const itemId = String(it?.item_id || it?.id || '').trim();
   if (!itemId){ alert("Unable to locate that item."); return false; }
-
-  let lastInventory = null;
-  for (let i = 0; i < qty; i++){
-    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(itemId)}/use`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json", ...authHeaders() },
-      body: JSON.stringify({ currency })
-    });
-    const j = await r.json().catch(()=>({}));
-    if (j.status !== "success"){
-      alert(j.message || "Use failed");
-      return false;
-    }
-    lastInventory = j.inventory;
-  }
-  if (!lastInventory) return false;
-
-  LINKED_INV = lastInventory;
-  renderInventoryUI();
-  recomputePassiveAgg();
-  renderStatistics();
-  updateDerived();
-  queueSave();
+  const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(itemId)}/use`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...authHeaders() },
+    body: JSON.stringify({ currency, amount: qty })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Use failed"); return false; }
+  LINKED_INV = j.inventory; renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
   return true;
 }
 

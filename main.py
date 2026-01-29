@@ -5267,7 +5267,13 @@ def use_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(.
     if idx < 0:
         raise HTTPException(404, "Item not found")
     it = dict(items[idx])
-    if not it.get("consumable"):
+    consumable = bool(it.get("consumable"))
+    if not consumable:
+        kind = str(it.get("kind") or it.get("__kind") or "").lower()
+        category = str(it.get("category") or it.get("subcategory") or "").lower()
+        if kind == "ammo" or category == "ammo":
+            consumable = True
+    if not consumable:
         raise HTTPException(400, "Item is not consumable")
 
     amount = max(1, int(payload.get("amount") or 1))
