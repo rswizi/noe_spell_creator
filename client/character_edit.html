@@ -1349,6 +1349,7 @@
                   <button class="btn small" id="combat-open-context">Use Contextual Action</button>
                   <button class="btn small" id="combat-open-special">Use Special Action</button>
                   <button class="btn small" id="combat-open-ability">Use Ability</button>
+                  <button class="btn small" id="combat-roll-passive">Roll Passive</button>
                   <button class="btn small" id="combat-open-spell">Use Spells</button>
                   <button class="btn small" id="combat-open-awaken">Awaken</button>
                   <span class="combat-badge">ET Used: <span id="combat-et-used">0</span></span>
@@ -2726,6 +2727,7 @@ let AWAK_ASSIGNED = []; // full documents of awakening abilities (resolved by id
 let ABI_SORT_PASSIVE = 'manual';
 let ABI_SORT_ACTIVE = 'manual';
 let ABI_SORT_SPELLS = 'manual';
+let COMBAT_PASSIVE_MODE = false;
 const ABI_PIN_KEY = CID ? `abi_pins:${CID}` : '';
 const ABI_HIDE_KEY = CID ? `abi_hide_unpinned:${CID}` : '';
 let ABI_PINNED = { passive:new Set(), active:new Set(), spell:new Set() };
@@ -3069,6 +3071,7 @@ const combatSecondaryOpenBtn = document.getElementById('combat-open-secondary');
 const combatContextOpenBtn = document.getElementById('combat-open-context');
 const combatSpecialOpenBtn = document.getElementById('combat-open-special');
 const combatAbilityOpenBtn = document.getElementById('combat-open-ability');
+const combatRollPassiveBtn = document.getElementById('combat-roll-passive');
 const combatSpellOpenBtn = document.getElementById('combat-open-spell');
 const combatAwakenOpenBtn = document.getElementById('combat-open-awaken');
 const tensionValueEl = document.getElementById('tension-value');
@@ -3107,6 +3110,7 @@ const combatSpecialBackdrop = document.getElementById('combat-special-backdrop')
 const combatSpecialClose = document.getElementById('combat-special-close');
 const combatSpecialCancel = document.getElementById('combat-special-cancel');
 const combatAbilityModal = document.getElementById('combat-ability-modal');
+const combatAbilityTitleEl = document.getElementById('combat-ability-title');
 const combatAbilityBackdrop = document.getElementById('combat-ability-backdrop');
 const combatAbilityClose = document.getElementById('combat-ability-close');
 const combatAbilityCancel = document.getElementById('combat-ability-cancel');
@@ -3879,6 +3883,21 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   combatDefBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatDefBackdrop) invToggleModal(combatDefModal, combatDefBackdrop, false); });
   initRollBtn?.addEventListener('click', rollInitiativeSpecial);
   combatAbilitySearchEl?.addEventListener('input', renderCombatAbilityList);
+  function updateCombatAbilityTitle(){
+    if (!combatAbilityTitleEl) return;
+    combatAbilityTitleEl.textContent = COMBAT_PASSIVE_MODE ? 'Roll Passive Ability' : 'Use Ability';
+  }
+  function openCombatAbilityModal(passive = false){
+    COMBAT_PASSIVE_MODE = !!passive;
+    updateCombatAbilityTitle();
+    renderCombatAbilityList();
+    invToggleModal(combatAbilityModal, combatAbilityBackdrop, true);
+  }
+  function closeCombatAbilityModal(){
+    COMBAT_PASSIVE_MODE = false;
+    updateCombatAbilityTitle();
+    invToggleModal(combatAbilityModal, combatAbilityBackdrop, false);
+  }
   combatSpellSearchEl?.addEventListener('input', renderCombatSpellList);
   combatSecondaryOpenBtn?.addEventListener('click', ()=>{
     renderCombatActions();
@@ -3901,13 +3920,11 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
   combatSpecialClose?.addEventListener('click', ()=> invToggleModal(combatSpecialModal, combatSpecialBackdrop, false));
   combatSpecialCancel?.addEventListener('click', ()=> invToggleModal(combatSpecialModal, combatSpecialBackdrop, false));
   combatSpecialBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatSpecialBackdrop) invToggleModal(combatSpecialModal, combatSpecialBackdrop, false); });
-  combatAbilityOpenBtn?.addEventListener('click', ()=>{
-    renderCombatAbilityList();
-    invToggleModal(combatAbilityModal, combatAbilityBackdrop, true);
-  });
-  combatAbilityClose?.addEventListener('click', ()=> invToggleModal(combatAbilityModal, combatAbilityBackdrop, false));
-  combatAbilityCancel?.addEventListener('click', ()=> invToggleModal(combatAbilityModal, combatAbilityBackdrop, false));
-  combatAbilityBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatAbilityBackdrop) invToggleModal(combatAbilityModal, combatAbilityBackdrop, false); });
+  combatAbilityOpenBtn?.addEventListener('click', ()=> openCombatAbilityModal(false));
+  combatRollPassiveBtn?.addEventListener('click', ()=> openCombatAbilityModal(true));
+  combatAbilityClose?.addEventListener('click', closeCombatAbilityModal);
+  combatAbilityCancel?.addEventListener('click', closeCombatAbilityModal);
+  combatAbilityBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatAbilityBackdrop) closeCombatAbilityModal(); });
   combatSpellOpenBtn?.addEventListener('click', ()=>{
     renderCombatSpellList();
     invToggleModal(combatSpellModal, combatSpellBackdrop, true);
@@ -13680,68 +13697,96 @@ function announceWeaponReload(it, amount, ammoLabel, remainingQty){
 function renderCombatAbilityList(){
   if (!combatAbilityListEl) return;
   const st = combatState();
-  const activeSet = new Set((st.active_abilities || []).map(String));
   const search = String(combatAbilitySearchEl?.value || '').trim().toLowerCase();
+  const isPassiveMode = !!COMBAT_PASSIVE_MODE;
   const list = (collectDisplayAbilities() || []).filter(a=>{
-    if (String(a?.type || '').toLowerCase() !== 'active') return false;
-    return String(a?.source_category || '').toLowerCase() !== 'awakening';
+    const type = String(a?.type || '').toLowerCase();
+    if (isPassiveMode){
+      return type !== 'active';
+    }
+    return type === 'active' && String(a?.source_category || '').toLowerCase() !== 'awakening';
   });
-  const validIds = new Set(list.map(a=> String(a?.id || '')));
-  const eligibleIds = new Set(list.filter(abilityHasActiveCost).map(a=> String(a?.id || '')));
-  Array.from(activeSet).forEach(id=>{
-    if (!validIds.has(id) || !eligibleIds.has(id)) activeSet.delete(id);
-  });
-  st.active_abilities = Array.from(activeSet);
-  combatAbilityListEl.innerHTML = '';
   if (!list.length){
-    combatAbilityListEl.innerHTML = '<div class="muted">No active abilities.</div>';
+    combatAbilityListEl.innerHTML = `<div class="muted">No ${isPassiveMode ? 'passive' : 'active'} abilities.</div>`;
+    if (!isPassiveMode){
+      renderCombatActiveAbilities();
+    }
     return;
   }
+  const activeSet = new Set((st.active_abilities || []).map(String));
+  let eligibleIds = new Set();
+  if (!isPassiveMode){
+    const validIds = new Set(list.map(a=> String(a?.id || '')));
+    eligibleIds = new Set(list.filter(abilityHasActiveCost).map(a=> String(a?.id || '')));
+    Array.from(activeSet).forEach(id=>{
+      if (!validIds.has(id) || !eligibleIds.has(id)) activeSet.delete(id);
+    });
+    st.active_abilities = Array.from(activeSet);
+  }
+  combatAbilityListEl.innerHTML = '';
   let rendered = 0;
   list.forEach(a=>{
     const name = a?.name || a?.id || 'Ability';
     if (search && !name.toLowerCase().includes(search)) return;
     rendered += 1;
-    const cost = abilityCostText(a);
     const id = String(a?.id || '');
-    const canStayActive = eligibleIds.has(id);
-    const isActive = activeSet.has(id);
     const row = document.createElement('div');
     row.className = 'combat-entry';
-    row.innerHTML = `
-      <div class="grow">
-        <div><strong>${invEscapeHtml(name)}</strong>${isActive ? ' <span class="tag">Active</span>' : ''}</div>
-        ${cost ? `<div class="muted">Cost: ${invEscapeHtml(cost)}</div>` : ''}
-      </div>
-      <div class="combat-actions-row">
-        ${isActive ? '<button class="btn btn-secondary small abi-deactivate">Deactivate</button>' : ''}
-        <button class="btn small abi-use">Use</button>
-      </div>
-    `;
-    row.querySelector('.abi-deactivate')?.addEventListener('click', ()=>{
-      activeSet.delete(id);
-      st.active_abilities = Array.from(activeSet);
-      renderCombatEtUsage();
-      renderCombatAbilityList();
-      queueSave();
-    });
-    row.querySelector('.abi-use')?.addEventListener('click', ()=>{
-      applyAbilityCosts(a);
-      if (canStayActive && !activeSet.has(id)){
-        activeSet.add(id);
+    if (!isPassiveMode){
+      const cost = abilityCostText(a);
+      const canStayActive = eligibleIds.has(id);
+      const isActive = activeSet.has(id);
+      row.innerHTML = `
+        <div class="grow">
+          <div><strong>${invEscapeHtml(name)}</strong>${isActive ? ' <span class="tag">Active</span>' : ''}</div>
+          ${cost ? `<div class="muted">Cost: ${invEscapeHtml(cost)}</div>` : ''}
+        </div>
+        <div class="combat-actions-row">
+          ${isActive ? '<button class="btn btn-secondary small abi-deactivate">Deactivate</button>' : ''}
+          <button class="btn small abi-use">Use</button>
+        </div>
+      `;
+      row.querySelector('.abi-deactivate')?.addEventListener('click', ()=>{
+        activeSet.delete(id);
         st.active_abilities = Array.from(activeSet);
-      }
-      renderCombatEtUsage();
-      renderCombatAbilityList();
-      queueSave();
-      openCombatAbilityRoll(a, a?.source_category || '');
-    });
+        renderCombatEtUsage();
+        renderCombatAbilityList();
+        queueSave();
+      });
+      row.querySelector('.abi-use')?.addEventListener('click', ()=>{
+        applyAbilityCosts(a);
+        if (canStayActive && !activeSet.has(id)){
+          activeSet.add(id);
+          st.active_abilities = Array.from(activeSet);
+        }
+        renderCombatEtUsage();
+        renderCombatAbilityList();
+        queueSave();
+        openCombatAbilityRoll(a, a?.source_category || '');
+      });
+    }else{
+      const details = abilityRollDetails(a);
+      row.innerHTML = `
+        <div class="grow">
+          <div><strong>${invEscapeHtml(name)}</strong>${details.type ? ` <span class="tag">${invEscapeHtml(details.type)}</span>` : ''}${details.skillRoll ? ' <span class="tag">Skill</span>' : ''}</div>
+          ${details.desc ? `<div class="muted" style="font-size:.85rem">${invEscapeHtml(details.desc)}</div>` : ''}
+        </div>
+        <div class="combat-actions-row">
+          <button class="btn small abi-roll-passive">Roll Passive</button>
+        </div>
+      `;
+      row.querySelector('.abi-roll-passive')?.addEventListener('click', ()=>{
+        openCombatAbilityRoll(a, a?.source_category || '');
+      });
+    }
     combatAbilityListEl.appendChild(row);
   });
   if (!rendered){
-    combatAbilityListEl.innerHTML = '<div class="muted">No matching abilities.</div>';
+    combatAbilityListEl.innerHTML = `<div class="muted">No matching ${isPassiveMode ? 'passive' : 'active'} abilities.</div>`;
   }
-  renderCombatActiveAbilities();
+  if (!isPassiveMode){
+    renderCombatActiveAbilities();
+  }
 }
 
 function renderCombatSpellList(){
