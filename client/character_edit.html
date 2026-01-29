@@ -13411,6 +13411,9 @@ function renderCombatWeapons(){
   weapons.forEach(it=>{
     const state = getWeaponState(it);
     const name = it.alt_name || it.name || 'Weapon';
+    const avatarKey = itemAvatarKey(it);
+    const avatarUrl = avatarImageUrl(avatarKey);
+    const avatarAlt = invEscapeHtml(name);
     const skill = weaponSkillValue(it);
     const dmg = weaponDamageValue(it) || '--';
     const attrList = getWeaponAttributes(it);
@@ -13461,6 +13464,9 @@ function renderCombatWeapons(){
     const range = it.range != null ? String(it.range) : '';
     const hands = it.hands != null ? String(it.hands) : '';
     row.innerHTML = `
+      <div class="item-avatar">
+        <img src="${avatarUrl}" alt="${avatarAlt}">
+      </div>
       <div class="grow">
         <div><strong>${invEscapeHtml(name)}</strong></div>
         <div class="meta">Skill: ${invEscapeHtml(skill)} | Damage: ${invEscapeHtml(dmgDisplay)}${range ? ` | Range: ${invEscapeHtml(range)}` : ''}${hands ? ` | Hands: ${invEscapeHtml(hands)}` : ''}${ammoMeta}</div>
@@ -17021,7 +17027,7 @@ const ABILITY_SOURCE_ALIASES = {
   'vita': 'talent',
 };
 
-const AVATAR_KEYS = ['boon','awakening','talents','expertise','dima','archetype','spells'];
+const AVATAR_KEYS = ['boon','awakening','talents','expertise','dima','archetype','spells','ammo','gear','tools','consumables','equipment','species','weapon'];
 const AVATAR_CYCLE = ['auto', ...AVATAR_KEYS];
 const PLACEHOLDER_AVATAR_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';
 const AVATAR_SOURCE_MAP = {
@@ -17033,6 +17039,8 @@ const AVATAR_SOURCE_MAP = {
   'dima': 'dima',
   'archetype': 'archetype',
   'apotheosis': 'archetype',
+  'specie': 'species',
+  'species': 'species',
 };
 
 function normalizedAvatarKey(raw){
@@ -17063,7 +17071,18 @@ function spellAvatarKey(sp){
 }
 
 function itemAvatarKey(it){
-  return normalizedAvatarKey(it?.default_avatar) || 'spells';
+  if (!it) return 'spells';
+  const override = normalizedAvatarKey(it?.default_avatar);
+  if (override) return override;
+  const kind = String(it?.kind || it?.type || '').trim().toLowerCase();
+  if (kind === 'weapon') return 'weapon';
+  if (kind === 'equipment') return 'equipment';
+  if (kind === 'ammo') return 'ammo';
+  if (kind === 'gear') return 'gear';
+  if (kind === 'species' || kind === 'specie') return 'species';
+  if (kind === 'tool' || kind === 'tools') return it?.consumable ? 'consumables' : 'tools';
+  if (it?.consumable) return 'consumables';
+  return 'gear';
 }
 
 function cycleAbilityAvatar(aid){

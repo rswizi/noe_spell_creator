@@ -27,7 +27,7 @@ EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 AMMO_PACK_DEFAULT = 10
 from server.src.modules.allowed_pages import ALLOWED_PAGES
 
-AVATAR_KEYS = frozenset({"boon","awakening","talents","expertise","dima","archetype","spells"})
+AVATAR_KEYS = frozenset({"boon","awakening","talents","expertise","dima","archetype","spells","ammo","gear","tools","consumables","equipment","species","weapon"})
 
 def _normalize_avatar_key(value: Any) -> str | None:
     raw = (value or "").strip().lower()
