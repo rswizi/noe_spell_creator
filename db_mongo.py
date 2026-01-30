@@ -1,31 +1,59 @@
 from functools import lru_cache
-from urllib.parse import urlparse
 from typing import List
+import os
+import re
+import json
+import hashlib
+
 from pymongo import MongoClient, ReturnDocument, ASCENDING
+from pymongo.errors import ConfigurationError
 from pymongo.database import Database
 from settings import settings
-import json, hashlib, re
-import os
 
-_client = MongoClient(settings.mongodb_uri)
+try:
+    import mongomock
+except ImportError:  # pragma: no cover
+    mongomock = None
 
-def norm_key(s: str) -> str:
-    return re.sub(r"\s+", " ", (s or "").strip()).lower()
+
+def _normalize_mongodb_uri(uri: str) -> str:
+    return (uri or "").strip()
+
+
+def _create_client() -> MongoClient:
+    uri = _normalize_mongodb_uri(settings.mongodb_uri)
+    if not uri or "xxxx.mongodb.net" in uri or "example.com" in uri:
+        raise RuntimeError("MONGODB_URI is missing or still a placeholder.")
+    if uri.startswith("mongomock://"):
+        if not mongomock:
+            raise RuntimeError("mongomock is required for mongomock:// URIs")
+        return mongomock.MongoClient()
+    return MongoClient(uri)
+
 
 @lru_cache
 def get_client() -> MongoClient:
-    uri = settings.mongodb_uri
-    if not uri or "xxxx.mongodb.net" in uri or "example.com" in uri:
-        raise RuntimeError("MONGODB_URI is missing or still a placeholder.")
-    return MongoClient(uri)
+    return _create_client()
+
 
 def get_db() -> Database:
     client = get_client()
-    db = client.get_default_database()
-    return db if db is not None else client["noe"]
+    try:
+        db = client.get_default_database()
+    except ConfigurationError:
+        db = None
+    if db:
+        return db
+    return client["noe"]
+
 
 def get_col(name: str):
     return get_db()[name]
+
+
+def norm_key(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip()).lower()
+
 
 def ensure_indexes() -> None:
     db = get_db()
@@ -40,8 +68,6 @@ def ensure_indexes() -> None:
     db.schools.create_index("name_key")
     db.tools.create_index("id", unique=True)
     db.tools.create_index("name_key", unique=True)
-    db.weapons.create_index("id", unique=True)
-    db.weapons.create_index("name_key", unique=True)
     db.equipment.create_index("id", unique=True)
     db.equipment.create_index([("category", 1), ("name_key", 1)], unique=True)
     db.inventories.create_index("id", unique=True)
@@ -65,6 +91,7 @@ def ensure_indexes() -> None:
     db.campaign_chat.create_index("id", unique=True)
     db.campaign_chat.create_index([("campaign_id", ASCENDING), ("ts", ASCENDING)])
 
+
 def next_id_str(sequence_name: str, padding: int = 4) -> str:
     doc = get_col("counters").find_one_and_update(
         {"_id": sequence_name},
@@ -73,6 +100,7 @@ def next_id_str(sequence_name: str, padding: int = 4) -> str:
         return_document=ReturnDocument.AFTER,
     )
     return str(doc["seq"]).zfill(padding)
+
 
 def sync_counters() -> None:
     db = get_db()
@@ -86,7 +114,7 @@ def sync_counters() -> None:
         db.counters.update_one({"_id": coll}, {"$max": {"seq": max_id}}, upsert=True)
     max_chat = 0
     for d in db.campaign_chat.find({}, {"id": 1, "_id": 0}):
-        raw = str(d.get("id", "") or "")
+        raw = str(d.get("id") or "")
         match = re.search(r"(\d+)$", raw)
         if not match:
             continue
@@ -97,8 +125,8 @@ def sync_counters() -> None:
     if max_chat:
         db.counters.update_one({"_id": "campaign_chat"}, {"$max": {"seq": max_chat}}, upsert=True)
 
+
 def spell_sig(activation: str, range_val: int, aoe: str, duration: int, effect_ids: List[str]) -> str:
-    """Stable signature for a spell's parameters (NOT the name)."""
     payload = {
         "activation": (activation or "").strip().lower(),
         "range": int(range_val or 0),
@@ -108,10 +136,3 @@ def spell_sig(activation: str, range_val: int, aoe: str, duration: int, effect_i
     }
     raw = json.dumps(payload, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-def _db_name_from_uri_fallback() -> str:
-    u = urlparse(settings.mongodb_uri or "")
-    return (u.path or "").lstrip("/") or os.getenv("DB_NAME") or "noe_spell_creator"
-
-def get_db() -> Database:
-    return _client[_db_name_from_uri_fallback()]

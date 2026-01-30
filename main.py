@@ -25,6 +25,7 @@ from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplic
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER, craftomancy_row_for_quality, craftomancy_category_index, craftomancy_next_category
 from server.src.modules.wiki_api import router as wiki_router
+from server.src.modules.assets_api import router as assets_router
 EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 AMMO_PACK_DEFAULT = 10
 from server.src.modules.allowed_pages import ALLOWED_PAGES
@@ -141,6 +142,7 @@ app.add_middleware(
 )
 
 app.include_router(wiki_router, prefix="")
+app.include_router(assets_router, prefix="")
 
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
@@ -149,6 +151,26 @@ ASSETS_DIR = BASE_DIR / "assets"
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+
+WIKI_DIST_DIR = BASE_DIR / "frontend" / "wiki" / "dist"
+WIKI_INDEX = WIKI_DIST_DIR / "index.html"
+if WIKI_DIST_DIR.exists():
+    app.mount("/wiki/assets", StaticFiles(directory=str(WIKI_DIST_DIR / "assets")), name="wiki-assets")
+
+    @app.get("/wiki", include_in_schema=False)
+    def wiki_index():
+        if WIKI_INDEX.exists():
+            return FileResponse(WIKI_INDEX)
+        raise HTTPException(404)
+
+    @app.get("/wiki/{rest:path}", include_in_schema=False)
+    def wiki_fallback(rest: str):
+        target = WIKI_DIST_DIR / rest
+        if target.exists() and target.is_file():
+            return FileResponse(target)
+        if WIKI_INDEX.exists():
+            return FileResponse(WIKI_INDEX)
+        raise HTTPException(404)
 
 @app.get("/", include_in_schema=False)
 def root():

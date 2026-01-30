@@ -3,4 +3,4 @@ __pycache__
 .env
 *.env
 .env.*
-h
+frontend/wiki/dist

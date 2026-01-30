@@ -1,43 +1,23 @@
 import json
 import os
 import re
-import secrets
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.src.modules.authentification_helpers import get_auth_token, require_auth
+from server.src.modules.wiki_auth import require_wiki_admin
 from server.src.modules.wiki_db import WikiPage, WikiRevision, get_session
-
-API_TOKEN = os.environ.get("API_TOKEN", "")
-ENV = os.environ.get("ENV", "development").lower()
-if ENV == "production" and not API_TOKEN:
-    raise RuntimeError("API_TOKEN must be set in production for wiki API")
-elif not API_TOKEN:
-    print("WARNING: Running wiki API without API_TOKEN (allowed only in non-production environments)")
 MAX_DOC_BYTES = int(os.environ.get("WIKI_MAX_DOC_BYTES", "200000"))
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-
-
-async def wiki_auth(request: Request):
-    try:
-        username, role = require_auth(request)
-        return {"username": username, "role": role}
-    except HTTPException:
-        token = get_auth_token(request)
-        if token and API_TOKEN and secrets.compare_digest(token, API_TOKEN):
-            return {"username": "api", "role": "api"}
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
 
 router = APIRouter(
     prefix="/api/wiki",
     tags=["wiki"],
-    dependencies=[Depends(wiki_auth)],
 )
 
 
@@ -114,6 +94,7 @@ def _revision_to_dict(revision: WikiRevision) -> WikiRevisionOut:
 async def create_page(
     payload: WikiPagePayload,
     session: AsyncSession = Depends(get_session),
+    _auth: dict = Depends(require_wiki_admin),
 ):
     slug = validate_slug(payload.slug)
     title = payload.title.strip()
@@ -145,6 +126,7 @@ async def update_page(
     page_id: str,
     payload: WikiPagePayload,
     session: AsyncSession = Depends(get_session),
+    _auth: dict = Depends(require_wiki_admin),
 ):
     page = await session.get(WikiPage, page_id)
     if not page:
@@ -210,8 +192,38 @@ async def get_page_by_slug(slug: str, session: AsyncSession = Depends(get_sessio
     return _page_to_dict(page)
 
 
+@router.get("/resolve")
+async def resolve_pages(
+    query: str = Query(..., min_length=1),
+    limit: int = Query(default=10, ge=1),
+    session: AsyncSession = Depends(get_session),
+):
+    safe_limit = min(limit, 25)
+    pattern = f"%{query.lower()}%"
+    match_title = func.lower(WikiPage.title).ilike(pattern)
+    match_slug = WikiPage.slug.ilike(pattern)
+    score = case(
+        (match_title, 0),
+        (match_slug, 1),
+        else_=2,
+    )
+    stmt = (
+        select(WikiPage.id, WikiPage.title, WikiPage.slug)
+        .where(or_(match_title, match_slug))
+        .order_by(score, WikiPage.updated_at.desc())
+        .limit(safe_limit)
+    )
+    rows = await session.execute(stmt)
+    result = rows.all()
+    return [{"id": str(id_), "title": title, "slug": slug} for id_, title, slug in result]
+
+
 @router.post("/pages/{page_id}/revisions", response_model=WikiRevisionOut)
-async def create_revision(page_id: str, session: AsyncSession = Depends(get_session)):
+async def create_revision(
+    page_id: str,
+    session: AsyncSession = Depends(get_session),
+    _auth: dict = Depends(require_wiki_admin),
+):
     page = await session.get(WikiPage, page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
@@ -223,7 +235,11 @@ async def create_revision(page_id: str, session: AsyncSession = Depends(get_sess
 
 
 @router.get("/pages/{page_id}/revisions", response_model=list[WikiRevisionOut])
-async def list_revisions(page_id: str, session: AsyncSession = Depends(get_session)):
+async def list_revisions(
+    page_id: str,
+    session: AsyncSession = Depends(get_session),
+    _auth: dict = Depends(require_wiki_admin),
+):
     result = await session.execute(
         select(WikiRevision)
         .where(WikiRevision.page_id == page_id)

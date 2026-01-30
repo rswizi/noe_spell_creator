@@ -1,0 +1,280 @@
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, sans-serif;
+  background: #05060b;
+  color: #f5f7ff;
+}
+
+.wiki-shell {
+  min-height: 100vh;
+  padding: 20px;
+  background: linear-gradient(135deg, #05060b, #101025);
+}
+
+.wiki-content {
+  max-width: 960px;
+  margin: 0 auto;
+  background: #0b0d1a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  background: rgba(9, 11, 19, 0.9);
+  padding: 8px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  z-index: 10;
+}
+
+.toolbar button {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.toolbar button.active {
+  background: linear-gradient(135deg, #6c5ce7, #fd79a8);
+  color: #05060b;
+}
+
+.editor-wrapper {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 20px;
+  background: #0f1021;
+}
+
+.status-pill {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bubble-menu {
+  background: #11132a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  align-items: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  color: #fff;
+}
+
+.slash-menu {
+  position: absolute;
+  background: #11132a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 8px;
+  z-index: 20;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  width: 220px;
+}
+
+.slash-menu button {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.slash-menu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.page-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+}
+
+.page-table th,
+.page-table td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.page-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.card-link {
+  color: #a9b2ff;
+  text-decoration: none;
+}
+
+.table-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.table-picker button {
+  border-radius: 8px;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 6px 12px;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+ .table-grid {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  background: #0b0d1a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 20;
+}
+
+.table-grid__cells {
+  display: grid;
+  grid-template-columns: repeat(9, 20px);
+  gap: 4px;
+}
+
+.table-grid button {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.table-grid button.active,
+.table-grid button:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.table-picker-label {
+  font-size: 11px;
+  color: #9ba5ff;
+  margin-top: 6px;
+  display: block;
+  text-align: center;
+}
+
+.table-context-menu {
+  display: flex;
+  gap: 6px;
+  background: #11132a;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.table-context-menu button {
+  all: unset;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+}
+
+.table-context-menu button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.editor-wrapper table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.editor-wrapper th,
+.editor-wrapper td {
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.image-node {
+  margin: 24px auto;
+  text-align: center;
+}
+
+.image-node img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+  border-radius: 6px;
+}
+
+.image-node--left {
+  text-align: left;
+}
+
+.image-node--right {
+  text-align: right;
+}
+
+.image-caption {
+  font-size: 12px;
+  color: #9ba5ff;
+  margin-top: 6px;
+}
+
+.image-context-menu {
+  display: flex;
+  gap: 6px;
+  background: #11132a;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.image-context-menu button {
+  all: unset;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+}
+
+.image-context-menu button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.error-text {
+  color: #ff7675;
+  font-size: 12px;
+  margin-top: 6px;
+}
