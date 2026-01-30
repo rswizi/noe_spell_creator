@@ -1568,7 +1568,6 @@
                     </div>
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/ET.svg" alt="ET" title="ET"></div>
-                      <div class="resource-label-text">ET</div>
                       <div class="resource-amounts">
                         <span class="resource-current" id="combat-et-used">0</span>
                         <span class="resource-max" id="combat-et-max">Max --</span>
@@ -1645,80 +1644,85 @@
             </details>
           </div>
 
-          <div class="panel">
-            <details open class="panel">
-              <summary class="hdr">
-                <strong>Tension</strong>
-                <span class="muted">(quick rolls)</span>
-              </summary>
-              <div class="panel-body">
-                <div class="combat-row tension-row">
-                  <div class="resource-entry tension-entry">
-                    <div class="resource-icon"><img src="/assets/ressources/tension.svg" alt="Tension" title="Tension"></div>
-                    <div class="resource-amounts">
-                      <span class="resource-current" id="combat-tension-current">--</span>
-                      <span class="resource-max" id="combat-tension-cap">Cap --</span>
+          <div class="panel-row">
+            <div class="panel">
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Tension</strong>
+                  <span class="muted">(quick rolls)</span>
+                </summary>
+                <div class="panel-body">
+                  <div class="combat-row tension-row">
+                    <div class="resource-entry tension-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/tension.svg" alt="Tension" title="Tension"></div>
+                      <div class="resource-amounts">
+                        <span class="resource-current" id="combat-tension-current">--</span>
+                        <span class="resource-max" id="combat-tension-cap">Cap --</span>
+                      </div>
+                      <button type="button" class="combat-num resource-button" data-resource="tension" aria-label="Tension progress"></button>
                     </div>
-                    <button type="button" class="combat-num resource-button" data-resource="tension" aria-label="Tension progress"></button>
-                  </div>
-                  <div class="tension-controls">
-                    <label class="muted tension-strategy-label">Strategy
-                      <select id="tension-strategy">
-                        <option>Offensive</option>
-                        <option>Defensive</option>
-                        <option>Supportive</option>
-                        <option>Magical</option>
-                        <option>Mobile</option>
-                      </select>
-                    </label>
-                    <div class="exhausted-state">
-                      <button class="btn tiny exhausted-toggle" id="combat-exhausted-toggle" aria-pressed="false" title="Toggle Exhausted state">
-                        <i class="fa-solid fa-circle"></i>
-                      </button>
-                      <span class="muted exhausted-label">Exhausted</span>
+                    <div class="tension-controls">
+                      <label class="muted tension-strategy-label">Strategy
+                        <select id="tension-strategy">
+                          <option>Offensive</option>
+                          <option>Defensive</option>
+                          <option>Supportive</option>
+                          <option>Magical</option>
+                          <option>Mobile</option>
+                        </select>
+                      </label>
+                      <div class="exhausted-state">
+                        <button class="btn tiny exhausted-toggle" id="combat-exhausted-toggle" aria-pressed="false" title="Toggle Exhausted state">
+                          <i class="fa-solid fa-circle"></i>
+                        </button>
+                        <span class="muted exhausted-label">Exhausted</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </details>
-          </div>
-
-          <div class="panel">
-            <details open class="panel">
-              <summary class="hdr">
-                <strong>Death Saves & Critical Injuries</strong>
-                <span class="muted">(tracking)</span>
-              </summary>
-              <div class="panel-body">
-                <div class="combat-actions-row">
-                  <button class="btn small" id="crit-add" title="Take Critical Injury" aria-label="Take Critical Injury">
-                    <i class="fa-solid fa-skull-crossbones"></i>
-                  </button>
-                  <button class="btn small" id="death-save-roll" title="Roll Death Save" aria-label="Roll Death Save">
-                    <i class="fa-solid fa-face-dizzy"></i>
-                  </button>
-                  <button class="btn small" id="death-save-success-add" title="+ Success" aria-label="Add a Death Save Success">
-                    <i class="fa-solid fa-plus"></i>
-                  </button>
-                  <button class="btn small" id="death-save-fail-add" title="+ Failure" aria-label="Add a Death Save Failure">
-                    <i class="fa-solid fa-minus"></i>
-                  </button>
-                  <button class="btn small" id="death-save-stabilize" title="Stabilize" aria-label="Stabilize">
-                    <i class="fa-solid fa-bandage"></i>
-                  </button>
-                  <button class="btn small" id="death-save-reset" title="Reset Saves" aria-label="Reset Saves" style="display:none;">
-                    <i class="fa-solid fa-arrow-rotate-left"></i>
-                  </button>
-                  <button class="btn small" id="death-reset">Reset Death</button>
+              </details>
+            </div>
+            <div class="panel">
+              <details open class="panel">
+                <summary class="hdr">
+                  <strong>Death Saves & Critical Injuries</strong>
+                  <span class="muted">(tracking)</span>
+                </summary>
+                <div class="panel-body">
+                  <div class="combat-actions-row">
+                    <button class="btn small" id="crit-add" title="Take Critical Injury" aria-label="Take Critical Injury">
+                      <i class="fa-solid fa-skull-crossbones"></i>
+                    </button>
+                    <button class="btn small" id="death-save-roll" title="Roll Death Save" aria-label="Roll Death Save">
+                      <i class="fa-solid fa-face-dizzy"></i>
+                    </button>
+                    <button class="btn small" id="death-save-success-add" title="+ Success" aria-label="Add a Death Save Success">
+                      <i class="fa-solid fa-plus"></i>
+                    </button>
+                    <button class="btn small" id="death-save-fail-add" title="+ Failure" aria-label="Add a Death Save Failure">
+                      <i class="fa-solid fa-minus"></i>
+                    </button>
+                    <button class="btn small" id="death-save-stabilize" title="Stabilize" aria-label="Stabilize">
+                      <i class="fa-solid fa-bandage"></i>
+                    </button>
+                    <button class="btn small" id="death-save-reset" title="Reset Saves" aria-label="Reset Saves" style="display:none;">
+                      <i class="fa-solid fa-arrow-rotate-left"></i>
+                    </button>
+                    <button class="btn small" id="death-reset">Reset Death</button>
+                    <button class="btn small" id="rest-open" title="Rest & Eat" aria-label="Rest & Eat">
+                      <i class="fa-solid fa-bed"></i>
+                      <i class="fa-solid fa-drumstick-bite"></i>
+                    </button>
+                  </div>
+                  <div class="combat-row">
+                    <span class="combat-badge">Successes <span id="death-save-success">0</span></span>
+                    <span class="combat-badge">Failures <span id="death-save-fail">0</span></span>
+                    <span class="combat-badge" id="death-status">Alive</span>
+                  </div>
+                  <div id="crit-list" class="combat-list" style="margin-top:8px;"></div>
                 </div>
-                <div class="combat-row">
-                  <span class="combat-badge">Successes <span id="death-save-success">0</span></span>
-                  <span class="combat-badge">Failures <span id="death-save-fail">0</span></span>
-                  <span class="combat-badge" id="death-status">Alive</span>
-                </div>
-                <div id="crit-list" class="combat-list" style="margin-top:8px;"></div>
-              </div>
-            </details>
+              </details>
+            </div>
           </div>
 
           <div class="panel">
@@ -1766,17 +1770,6 @@
             </details>
           </div>
 
-          <div class="panel">
-            <details open class="panel">
-              <summary class="hdr">
-                <strong>Rest & Eat</strong>
-                <span class="muted">(recovery)</span>
-              </summary>
-              <div class="panel-body">
-                <button class="btn small" id="rest-open">Rest & Eat</button>
-              </div>
-            </details>
-          </div>
         </div>
       </div>
       <div id="tab-per" class="tabpane" style="display:none;">
@@ -12550,7 +12543,7 @@ function renderCombatEtUsage(){
     if (Number.isFinite(enCost)) used += enCost;
   });
   const maxEt = numOr(DERIVED_CACHE?.et, 0);
-  combatEtUsedEl.textContent = `${used} / ${maxEt}`;
+  combatEtUsedEl.textContent = String(used);
   combatEtUsedEl.style.color = used > maxEt ? '#f66' : '';
   if (combatEtMaxEl) combatEtMaxEl.textContent = `Max ${maxEt}`;
   setResourceProgress('et', used, maxEt);
