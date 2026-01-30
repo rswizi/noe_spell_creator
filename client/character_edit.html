@@ -529,6 +529,18 @@
     .combat-inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .combat-actions-row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
     .combat-actions-row.action-row > * { height:120px; width:140px; }
+    .combat-active-section {
+      margin-top: 12px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .combat-active-label {
+      font-size:.75rem;
+      letter-spacing:.2em;
+      text-transform:uppercase;
+      opacity:.65;
+    }
     .combat-action-danger,
     .combat-action-warning {
       font-weight:600;
@@ -580,8 +592,19 @@
     .combat-entry input[type="checkbox"],
     .combat-entry input[type="radio"] { width:auto; }
     .combat-pill-list { display:flex; gap:6px; flex-wrap:wrap; }
-    .combat-pill { border:1px solid #2d2d3d; border-radius:999px; padding:4px 10px; background:#141420; font-size:.82rem; }
-    .combat-pill button { padding:0 6px; border:none; background:none; color:inherit; cursor:pointer; }
+    .combat-pill { border:1px solid #2d2d3d; border-radius:999px; padding:4px 10px; background:#141420; font-size:.82rem; display:flex; align-items:center; gap:6px; }
+    .combat-pill button {
+      padding:0;
+      border:none;
+      background:none;
+      color:inherit;
+      cursor:pointer;
+      margin-left:4px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .combat-pill button i { font-size:0.85rem; }
     .combat-mini { font-size:.82rem; opacity:.85; }
     .combat-table { width:100%; border-collapse:collapse; }
     .combat-table th, .combat-table td { text-align:left; padding:6px 8px; border-bottom:1px solid #222233; vertical-align:top; font-size:.9rem; }
@@ -1639,6 +1662,10 @@
                     <i class="fa-solid fa-heart-circle-bolt"></i>
                     <span>True Dmg</span>
                   </button>
+                </div>
+                <div class="combat-active-section">
+                  <span class="muted combat-active-label">Active costs</span>
+                  <div id="combat-active-abilities" class="combat-pill-list"></div>
                 </div>
               </div>
             </details>
@@ -12603,8 +12630,15 @@ function renderCombatActiveAbilities(){
   const makePill = (label, onRemove, tagLabel)=>{
     const pill = document.createElement('span');
     pill.className = 'combat-pill';
-    pill.innerHTML = `${invEscapeHtml(label)}${tagLabel ? ` <span class="tag">${invEscapeHtml(tagLabel)}</span>` : ''} <button title="Remove">×</button>`;
-    pill.querySelector('button')?.addEventListener('click', onRemove);
+    pill.innerHTML = `${invEscapeHtml(label)}${tagLabel ? ` <span class="tag">${invEscapeHtml(tagLabel)}</span>` : ''}`;
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    const accessibleLabel = tagLabel ? `${tagLabel} ${label}` : label;
+    removeBtn.title = `Deactivate ${tagLabel ? tagLabel.toLowerCase() : ''}`.trim() || 'Deactivate';
+    removeBtn.setAttribute('aria-label', `Deactivate ${accessibleLabel}`);
+    removeBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+    removeBtn.addEventListener('click', onRemove);
+    pill.appendChild(removeBtn);
     combatActiveAbilitiesEl.appendChild(pill);
   };
   activeAbilityIds.forEach(id=>{
