@@ -254,37 +254,75 @@
       object-fit:contain;
     }
     .resource-button {
+      position:relative;
       width:100%;
       display:flex;
       flex-direction:column;
       align-items:center;
       gap:4px;
-      min-height:82px;
+      min-height:90px;
       font-size:1rem;
-      padding:12px 10px;
-      border-radius:14px;
-      border:1px solid var(--border);
-      background:#181821;
+      padding:14px 12px;
+      border-radius:16px;
+      border:1px solid #1c1c2a;
+      background:#0c0c16;
       cursor:pointer;
+      overflow:hidden;
       transition:border .15s ease, box-shadow .15s ease;
     }
+    .resource-button::after {
+      content:'';
+      position:absolute;
+      left:8px;
+      right:8px;
+      bottom:8px;
+      top:8px;
+      border-radius:12px;
+      background: linear-gradient(to top, var(--resource-color, rgba(255,255,255,0.2)), rgba(0,0,0,0.1));
+      transform: scaleY(var(--resource-fill, 0));
+      transform-origin: bottom;
+      transition: transform .35s ease, opacity .35s ease;
+      opacity:0.75;
+      pointer-events:none;
+      z-index:1;
+    }
+    .resource-button > * {
+      position:relative;
+      z-index:2;
+    }
+    .resource-button .resource-current {
+      font-size:2.4rem;
+      font-weight:600;
+    }
+    .resource-button .resource-max {
+      font-size:.85rem;
+      opacity:.75;
+    }
+    .resource-button[data-resource="hp"] { --resource-color: #9b1c1c; }
+    .resource-button[data-resource="en"] { --resource-color: #1f3a7a; }
+    .resource-button[data-resource="sp"] { --resource-color: #bf5e0c; }
+    .resource-button[data-resource="fo"] { --resource-color: #b18917; }
+    .resource-button[data-resource="tx"] { --resource-color: #4b1a68; }
     .resource-button:hover { border-color:#3b3b5b; box-shadow:0 0 0 2px rgba(59,59,91,0.45); }
     .action-block { position:relative; }
     .combat-act-button,
     .combat-shield-button,
-    .combat-init-button {
-      border-radius:16px;
-      padding:12px 16px;
-      gap:6px;
-      min-height:90px;
+    .combat-init-button,
+    .combat-action-danger,
+    .combat-action-warning {
+      border-radius:18px;
+      padding:16px 18px;
+      gap:10px;
+      min-height:120px;
+      min-width:140px;
       display:flex;
       flex-direction:column;
       align-items:center;
       justify-content:center;
       border:1px solid transparent;
+      text-align:center;
     }
     .combat-act-button {
-      min-width:120px;
       border-color:#60a5fa;
       background: linear-gradient(180deg, rgba(59,130,246,0.25), rgba(9,10,26,0.95));
       box-shadow: 0 0 0 3px rgba(59,130,246,0.35);
@@ -294,15 +332,23 @@
       border-color:#fbbf24;
       background: linear-gradient(180deg, rgba(251,191,36,0.35), rgba(40,28,6,0.95));
       box-shadow: 0 0 0 3px rgba(251,191,36,0.35);
-      color:#0f0a02;
+      color:#ffffff;
     }
     .combat-init-icon img {
-      width:36px;
-      height:36px;
+      width:42px;
+      height:42px;
       display:block;
     }
     .combat-init-value {
       font-size:1.4rem;
+      font-weight:600;
+      color:#ffffff;
+    }
+    .combat-act-button i {
+      font-size:2.4rem;
+    }
+    .combat-act-button span {
+      font-size:1.25rem;
       font-weight:600;
     }
     .combat-shield-button {
@@ -317,48 +363,57 @@
     .combat-act-menu {
       display:none;
       position:absolute;
-      top:calc(100% + 8px);
+      top:calc(100% + 12px);
       right:0;
       left:auto;
-      padding:8px;
-      background:#13131c;
-      border:1px solid #373948;
-      border-radius:12px;
-      box-shadow:0 14px 30px rgba(0,0,0,0.5);
-      gap:6px;
-      flex-direction:column;
-      width:min(260px, 90vw);
-      max-height:320px;
+      padding:12px;
+      background:#14131c;
+      border:1px solid #3b3b55;
+      border-radius:16px;
+      box-shadow:0 20px 40px rgba(0,0,0,0.45);
+      gap:10px;
+      width:auto;
+      min-width:260px;
+      max-width:360px;
+      max-height:360px;
       overflow:auto;
       z-index:40;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     }
-    .combat-act-menu.open { display:flex; }
+    .combat-act-menu.open { display:grid; }
     .combat-act-menu .btn.tiny {
-      padding:8px 12px;
-      font-size:.8rem;
-      border-radius:10px;
+      padding:10px;
+      font-size:.9rem;
+      border-radius:12px;
       width:100%;
-      justify-content:flex-start;
-      text-align:left;
+      justify-content:center;
+      text-align:center;
+      font-weight:600;
     }
     .combat-badge.et-used {
       display:flex;
       align-items:center;
-      gap:6px;
-      border-radius:12px;
+      gap:10px;
+      border-radius:16px;
       border:1px solid #3b82f6;
-      padding:6px 10px;
-      background: linear-gradient(180deg, rgba(59,130,246,0.25), rgba(6,12,28,0.9));
-      color:#d6ecff;
+      padding:8px 14px;
+      background: linear-gradient(180deg, rgba(59,130,246,0.25), rgba(6,12,28,0.95));
+      color:#f0f9ff;
+      font-size:1rem;
+      font-weight:600;
     }
     .combat-badge.et-used.combat-et-highlight {
       border-color:#7dd3fc;
       background: linear-gradient(180deg, rgba(125,211,252,0.25), rgba(6,18,34,0.95));
-      color:#f0f9ff;
+      color:#ffffff;
     }
     .combat-badge.et-used img {
-      width:20px;
-      height:20px;
+      width:28px;
+      height:28px;
+    }
+    .combat-badge.et-used span {
+      font-size:1.15rem;
+      font-weight:600;
     }
 
     .tension-row {
@@ -418,16 +473,13 @@
     .combat-actions-row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
     .combat-action-danger,
     .combat-action-warning {
-      border-radius:16px;
-      border:1px solid transparent;
-      display:flex;
-      align-items:center;
-      gap:6px;
-      padding:12px 16px;
-      min-height:88px;
       font-weight:600;
-      font-size:1rem;
+      font-size:1.05rem;
       text-transform:none;
+    }
+    .combat-action-danger i,
+    .combat-action-warning i {
+      font-size:2rem;
     }
     .combat-action-danger {
       background: linear-gradient(180deg, rgba(239,68,68,0.35), rgba(40,10,10,0.95));
@@ -472,6 +524,7 @@
     .combat-actions-grid .combat-entry { align-items:flex-start; }
     .combat-actions-grid .btn { white-space:nowrap; }
     .combat-num { width:4ch; min-width:4ch; text-align:right; }
+    #combat-dmg-input { width:8ch; min-width:8ch; }
       .override-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
       #override-inputs { display:none; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap:8px; margin-top:10px; }
   /* Avatar */
@@ -1464,10 +1517,10 @@
               <div class="panel-body">
                 <div class="combat-actions-row action-row">
                   <div class="action-block">
-                    <button class="btn combat-act-button" id="combat-act">
-                      <i class="fa-solid fa-play"></i>
-                      <span>Act</span>
-                    </button>
+                  <button class="btn combat-act-button" id="combat-act">
+                    <i class="fa-solid fa-play"></i>
+                    <span>Act</span>
+                  </button>
                     <div class="combat-act-menu" id="combat-act-menu">
                       <button class="btn tiny" id="combat-open-secondary">Secondary</button>
                       <button class="btn tiny" id="combat-open-context">Context</button>
@@ -1490,11 +1543,11 @@
                   </button>
                   <button class="btn combat-action-danger" id="combat-take-dmg" title="Take Damage">
                     <i class="fa-solid fa-heart-circle-plus"></i>
-                    <span>Take Damage</span>
+                    <span>Dmg</span>
                   </button>
                   <button class="btn combat-action-warning" id="combat-take-true" title="Take True Damage">
                     <i class="fa-solid fa-heart-circle-bolt"></i>
-                    <span>Take True Damage</span>
+                    <span>True Dmg</span>
                   </button>
                   <span class="combat-badge et-used combat-et-highlight">
                     <img src="/assets/ressources/ET.svg" alt="ET" title="ET">
@@ -4071,15 +4124,26 @@ subCancel?.addEventListener('click', closeSubModal);
 subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) closeSubModal(); });
 
 // Overrides & current handlers
-  const resourceButtons = document.querySelectorAll('.resource-button');
-  resourceButtons.forEach(btn=>{
-    const resource = btn.getAttribute('data-resource');
-    if (!resource || btn.disabled) return;
-    if (resource === 'max_hp_damage') return;
-    const labelOverride = btn.getAttribute('data-resource-label');
-    btn.addEventListener('click', ()=> openResourceActionModal(resource, labelOverride));
-  });
-  maxHpDmgBtn?.addEventListener('click', ()=> openResourceActionModal('max_hp_damage', 'Max HP Dmg'));
+const RESOURCE_PROGRESS_BUTTONS = {};
+const resourceButtons = document.querySelectorAll('.resource-button');
+resourceButtons.forEach(btn=>{
+  const resource = btn.getAttribute('data-resource');
+  if (resource) RESOURCE_PROGRESS_BUTTONS[resource] = btn;
+  if (!resource || btn.disabled) return;
+  if (resource === 'max_hp_damage') return;
+  const labelOverride = btn.getAttribute('data-resource-label');
+  btn.addEventListener('click', ()=> openResourceActionModal(resource, labelOverride));
+});
+maxHpDmgBtn?.addEventListener('click', ()=> openResourceActionModal('max_hp_damage', 'Max HP Dmg'));
+
+function setResourceProgress(resource, current, maximum){
+  const btn = RESOURCE_PROGRESS_BUTTONS[resource];
+  if (!btn) return;
+  const maxVal = Number.isFinite(Number(maximum)) ? Number(maximum) : 0;
+  const curVal = Number.isFinite(Number(current)) ? Number(current) : 0;
+  const ratio = maxVal > 0 ? Math.min(1, Math.max(0, curVal / maxVal)) : 0;
+  btn.style.setProperty('--resource-fill', ratio.toFixed(3));
+}
 
   function bindOverrideInput(el, key){
     if (!el) return;
@@ -15484,6 +15548,11 @@ function updateDerived(){
   if (maxFoEl) maxFoEl.textContent = `Max ${numOr(maxVals.fo, 0)}`;
   if (maxSpEl) maxSpEl.textContent = `Max ${numOr(maxVals.spcap, 0)}`;
   if (maxTxEl) maxTxEl.textContent = `Max ${numOr(maxVals.tx, 0)}`;
+  setResourceProgress('hp', displayCurrent.hp, maxVals.hp);
+  setResourceProgress('en', displayCurrent.en, maxVals.en);
+  setResourceProgress('fo', displayCurrent.fo, maxVals.fo);
+  setResourceProgress('sp', displayCurrent.sp, maxVals.spcap);
+  setResourceProgress('tx', displayCurrent.tx, maxVals.tx);
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
   refreshMaxHpDamageDisplay(Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
     if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
