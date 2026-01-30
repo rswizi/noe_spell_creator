@@ -50,6 +50,7 @@
 - `CORS_ORIGINS` (e.g., `https://your-frontend.onrender.com`)
 - Optional: `WIKI_MAX_DOC_BYTES`
 - `MONGODB_URI` (used for GridFS image storage; set to `mongomock://localhost` for local tests or your Atlas URL in production)
+- `DB_NAME` (optional override when your URI doesn't already encode `NoeSpellCreator`; defaults to that name if unspecified)
 - `ASSETS_MAX_UPLOAD_MB` (defaults to `10`; caps image uploads in the browser)
 Images are uploaded by admins/moderators via `/api/assets/upload` (tooling enforces the same `API_TOKEN`/session guard), then served at `/api/assets/{asset_id}` with long cache headers.
 

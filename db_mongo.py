@@ -44,7 +44,8 @@ def get_db() -> Database:
         db = None
     if db:
         return db
-    return client["noe"]
+    db_name = os.getenv("DB_NAME") or "NoeSpellCreator"
+    return client[db_name]
 
 
 def get_col(name: str):
