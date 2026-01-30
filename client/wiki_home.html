@@ -12,415 +12,635 @@
       --border: #262838;
       --accent: #7dd3fc;
       --accent-strong: #38bdf8;
-      --muted: rgba(255,255,255,.6);
+      --muted: rgba(255,255,255,.65);
     }
     * { box-sizing:border-box; }
     body {
       margin:0;
       font-family: 'Segoe UI', system-ui, sans-serif;
-      background: radial-gradient(circle at top, #111422, #08090f 55%);
-      color:#f7f7f9;
+      background: radial-gradient(circle at top, #101426, #05060c 65%);
+      color:#f5f7ff;
       min-height:100vh;
     }
     .topbar {
-      background:#05060c;
-      border-bottom:1px solid #1f2030;
-      padding:12px 32px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-    }
-    .topbar h1 {
-      font-size:1.4rem;
-      letter-spacing:0.1em;
-      text-transform:uppercase;
-      margin:0;
-    }
-    .topbar .nav-links {
-      display:flex;
-      gap:10px;
-    }
-    .btn {
-      border-radius:10px;
-      border:1px solid #2a2b3c;
-      padding:10px 18px;
-      background:linear-gradient(180deg, #1b2336, #0c101b);
-      color:#fff;
-      cursor:pointer;
-      font-size:.95rem;
-      transition:border .2s ease, box-shadow .2s ease;
-    }
-    .btn:hover { border-color:var(--accent); box-shadow:0 0 0 2px rgba(125,211,252,0.15); }
-    .btn.btn-secondary {
-      border-color:#3d405a;
-      background:#151b2a;
-      color:#c6c8dc;
-    }
-    .btn.btn-secondary:hover { border-color:#5a5f84; }
-    .wiki-hero {
-      max-width:1100px;
-      margin:24px auto 16px;
-      padding:24px 32px;
-      background:linear-gradient(135deg, rgba(125,211,252,0.1), rgba(15,23,42,0.95));
-      border:1px solid rgba(125,211,252,.4);
-      border-radius:18px;
+      background:#04050a;
+      border-bottom:1px solid #1c1f31;
+      padding:12px 28px;
       display:flex;
       align-items:center;
       justify-content:space-between;
       gap:20px;
+    }
+    .topbar h1 {
+      margin:0;
+      font-size:1.4rem;
+      letter-spacing:0.25em;
+      text-transform:uppercase;
+    }
+    .topbar .top-actions {
+      display:flex;
+      gap:8px;
+    }
+    .btn {
+      border-radius:10px;
+      border:1px solid #2d3144;
+      padding:10px 18px;
+      background:linear-gradient(180deg, #1c2340, #0d121f);
+      color:#fff;
+      cursor:pointer;
+      font-size:.95rem;
+      text-transform:none;
+      transition:border .2s ease, box-shadow .2s ease;
+    }
+    .btn:hover { border-color:var(--accent); box-shadow:0 0 0 2px rgba(125,211,252,0.2); }
+    .btn.btn-secondary { border-color:#374151; background:#151a28; color:#cdd0e5; }
+    .btn.btn-secondary:hover { border-color:#5a65ff; }
+    .wiki-hero {
+      max-width:1100px;
+      margin:20px auto 8px;
+      padding:24px 32px;
+      border-radius:18px;
+      border:1px solid rgba(125,211,252,0.4);
+      background:linear-gradient(135deg, rgba(125,211,252,0.12), rgba(10,12,24,0.9));
+      display:flex;
+      justify-content:space-between;
+      gap:20px;
+      flex-wrap:wrap;
     }
     .wiki-hero h2 {
       margin:0 0 8px;
       font-size:2rem;
+      letter-spacing:0.05em;
     }
     .wiki-hero p {
-      max-width:640px;
-      color:var(--muted);
       margin:0;
+      color:var(--muted);
+      max-width:640px;
+      line-height:1.5;
     }
-    .wiki-grid {
-      display:grid;
-      grid-template-columns:250px minmax(0,1fr) 260px;
-      gap:20px;
+    .wiki-main {
       max-width:1200px;
       margin:0 auto 32px;
-      padding:0 32px 20px;
+      padding:0 24px 24px;
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap:20px;
     }
     .wiki-panel {
       background:var(--panel);
       border:1px solid var(--border);
       border-radius:16px;
       padding:16px;
-      box-shadow:0 20px 40px rgba(0,0,0,.4);
-    }
-    .wiki-sidebar h2,
-    .wiki-pages-panel h3 {
-      margin-top:0;
-      font-size:1.1rem;
-      letter-spacing:0.12em;
-      text-transform:uppercase;
-      color:#d1d6ff;
-    }
-    .wiki-sidebar .category {
-      padding:10px 12px;
-      border:1px solid transparent;
-      border-radius:10px;
-      margin-bottom:10px;
-      cursor:pointer;
-      transition:border .2s, background .2s;
-    }
-    .wiki-sidebar .category strong {
-      display:block;
-      font-size:1rem;
-    }
-    .wiki-sidebar .category.active {
-      border-color:var(--accent);
-      background:rgba(125,211,252,0.08);
-    }
-    .wiki-sidebar .category .meta {
-      color:var(--muted);
-      font-size:.85rem;
-    }
-    .wiki-body {
+      box-shadow:0 18px 30px rgba(0,0,0,.45);
       display:flex;
       flex-direction:column;
       gap:12px;
     }
-    .wiki-toolbar {
+    .wiki-panel.hidden { display:none; }
+    .wiki-panel h2,
+    .wiki-panel h3 {
+      margin:0;
+      letter-spacing:0.15em;
+      text-transform:uppercase;
+      font-size:1.05rem;
+      color:#d1d5ff;
+    }
+    .wiki-panel p {
+      margin:0;
+      color:var(--muted);
+      font-size:.95rem;
+      line-height:1.4;
+    }
+    .wiki-home-categories {
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap:12px;
+    }
+    .category-card {
+      border:1px solid #1e2134;
+      border-radius:12px;
+      padding:14px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(11,14,28,0.9));
+      cursor:pointer;
+      transition:border .2s ease, transform .2s ease, box-shadow .2s ease;
+    }
+    .category-card:hover {
+      border-color:var(--accent);
+      transform:translateY(-2px);
+      box-shadow:0 8px 20px rgba(0,0,0,.35);
+    }
+    .category-card.active {
+      border-color:var(--accent);
+      box-shadow:0 0 0 2px rgba(125,211,252,.25);
+    }
+    .category-card strong {
+      display:block;
+      font-size:1rem;
+      margin-bottom:6px;
+    }
+    .category-card span {
+      font-size:.85rem;
+      color:var(--muted);
+    }
+    .wiki-category-header {
       display:flex;
-      align-items:center;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:16px;
+      flex-wrap:wrap;
+    }
+    .wiki-page-list {
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .page-item {
+      border:1px solid #1f2137;
+      border-radius:10px;
+      padding:10px 12px;
+      background:#101425;
+      cursor:pointer;
+      transition:border .2s ease, background .2s ease;
+    }
+    .page-item:hover { border-color:var(--accent); }
+    .page-item.active {
+      border-color:var(--accent);
+      background:rgba(125,211,252,0.08);
+    }
+    .page-item h4 {
+      margin:0;
+      font-size:1rem;
+    }
+    .page-item p {
+      margin:4px 0 0;
+      color:var(--muted);
+      font-size:.85rem;
+    }
+    .wiki-page-view-header {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .wiki-page-view {
+      min-height:200px;
+      border-radius:12px;
+      border:1px dashed rgba(255,255,255,.2);
+      padding:16px;
+      background:#05070f;
+      overflow:auto;
+    }
+    .wiki-page-view .muted {
+      color:var(--muted);
+    }
+    .wiki-page-actions {
+      display:flex;
       gap:8px;
       flex-wrap:wrap;
     }
-    .wiki-toolbar button, .wiki-toolbar input {
-      font-size:.9rem;
+    .wiki-editor-card {
+      display:none;
+      flex-direction:column;
+      gap:10px;
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:16px;
+      background:#05070f;
     }
-    .wiki-toolbar button {
-      padding:6px 10px;
+    .wiki-editor-card.active { display:flex; }
+    .wiki-toolbar {
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+    }
+    .wiki-toolbar button, .wiki-toolbar input, .wiki-toolbar select {
+      font-size:.85rem;
       border-radius:8px;
       border:1px solid #23263a;
-      background:#0f1220;
-      color:#f8fafc;
+      background:#0b0f1f;
+      color:#f5f7ff;
+      padding:6px 10px;
+      cursor:pointer;
     }
     .wiki-toolbar button.active {
       border-color:var(--accent-strong);
       box-shadow:0 0 0 1px rgba(125,211,252,0.4);
     }
-    .wiki-editor-card {
-      border:1px solid var(--border);
-      border-radius:16px;
-      padding:18px;
-      background:#0c0f1b;
-      min-height:420px;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
-    #wiki-page-title {
+    #wiki-page-title-edit {
       width:100%;
       border:none;
-      font-size:1.3rem;
-      font-weight:600;
       background:transparent;
+      font-size:1.2rem;
+      font-weight:600;
       color:#fff;
     }
-    #wiki-page-title:focus { outline:none; }
+    #wiki-page-title-edit:focus { outline:none; }
     #wiki-editor {
-      flex:1;
-      border:1px dashed rgba(255,255,255,.1);
+      min-height:220px;
       border-radius:12px;
-      padding:16px;
-      min-height:240px;
+      border:1px solid rgba(125,211,252,0.3);
+      padding:12px;
+      background:#06080f;
+      color:#eef1ff;
       overflow:auto;
-      background:#050611;
-      color:#f3f4ff;
     }
     #wiki-editor:focus { outline:none; }
-    .wiki-pages-panel {
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-    }
-    .wiki-pages-panel .page-item {
-      border:1px solid transparent;
-      padding:10px 12px;
-      border-radius:10px;
-      cursor:pointer;
-      transition:border .2s, background .2s;
-    }
-    .wiki-pages-panel .page-item.active {
-      border-color:var(--accent);
-      background:rgba(125,211,252,0.08);
-    }
-    .wiki-pages-panel .page-item h4 {
-      margin:0;
-      font-size:1rem;
-    }
-    .wiki-pages-panel .page-item p {
-      margin:4px 0 0;
-      color:var(--muted);
-      font-size:.85rem;
-    }
     .wiki-actions {
       display:flex;
+      gap:10px;
       align-items:center;
-      gap:12px;
+      flex-wrap:wrap;
       color:var(--muted);
     }
-    .wiki-actions span { font-size:.9rem; }
-    .wiki-status {
-      color:#34d399;
+    .wiki-status { color:#34d399; font-size:.9rem; }
+    .wiki-footer-note {
+      font-size:.85rem;
+      color:var(--muted);
+      margin-top:10px;
     }
-    @media (max-width:1200px){
-      .wiki-grid {
-        grid-template-columns:1fr;
-      }
-      .wiki-pages-panel {
-        order:-1;
-      }
+    .hidden { display:none !important; }
+    @media (max-width: 900px){
+      .wiki-main { grid-template-columns: 1fr; }
+      .wiki-hero { flex-direction:column; }
     }
   </style>
 </head>
 <body>
   <div class="topbar">
     <h1>NoE Wiki</h1>
-    <div class="nav-links">
-      <button class="btn btn-secondary" onclick="location.href='portal.html'">Return to Portal</button>
-      <button class="btn" onclick="document.getElementById('wiki-editor').focus()">Edit a page</button>
+    <div class="top-actions">
+      <button id="wiki-toggle-moderator" class="btn btn-secondary">Moderator: Off</button>
+      <button class="btn" onclick="location.href='portal.html'">Return to Portal</button>
     </div>
   </div>
 
-  <div class="wiki-hero">
+  <section class="wiki-hero">
     <div>
-      <h2>Document the world</h2>
-      <p>The NoE Wiki mirrors the Fandom vibe: pages live inside categories, share summaries, and you can edit each entry with rich text tools, colors, tables, and more.</p>
+      <h2>Describe the world</h2>
+      <p>The Wiki mirrors a Fandom-style experience. Categories organize pages, each page can be embellished with formatted text, tables, links, and imagery. Moderate the knowledge base and steer authorship with targeted controls.</p>
     </div>
-    <div style="display:flex; gap:10px;">
-      <button id="wiki-new-page" class="btn">+ Create page</button>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
       <button id="wiki-show-help" class="btn btn-secondary">Formatting guide</button>
     </div>
-  </div>
+  </section>
 
-  <div class="wiki-grid">
-    <aside class="wiki-panel wiki-sidebar">
-      <h2>Categories</h2>
-      <div id="wiki-category-list"></div>
-    </aside>
-
-    <section class="wiki-panel wiki-body">
-      <div class="wiki-toolbar">
-        <button type="button" data-command="bold" title="Bold (Ctrl+B)">B</button>
-        <button type="button" data-command="italic" title="Italic (Ctrl+I)">I</button>
-        <button type="button" data-command="underline" title="Underline">U</button>
-        <button type="button" data-command="strikeThrough" title="Strike">S</button>
-        <button type="button" data-command="insertUnorderedList" title="Bullet list">&bull; List</button>
-        <button type="button" data-command="insertOrderedList" title="Numbered list">1. List</button>
-        <button type="button" id="wiki-table-btn" title="Insert table">Table</button>
-        <input type="color" id="wiki-color-picker" title="Text color" value="#7dd3fc" />
-        <select id="wiki-format" title="Block style">
-          <option value="p">Paragraph</option>
-          <option value="h1">Heading 1</option>
-          <option value="h2" selected>Heading 2</option>
-          <option value="h3">Heading 3</option>
-        </select>
+  <main class="wiki-main">
+    <section id="wiki-home-pane" class="wiki-panel">
+      <h2>Overview</h2>
+      <p>This is the landing view: you see a quick description and the list of all categories. Click through to browse or, if you're a moderator, create new categories to expand the knowledge base.</p>
+      <div style="display:flex; justify-content:flex-end;">
+        <button id="wiki-create-category" class="btn" data-moderator>Create Category</button>
       </div>
-      <div class="wiki-editor-card">
-        <input id="wiki-page-title" placeholder="Select or create a page" />
-        <div id="wiki-editor" contenteditable="true">Choose a page from the right or compose a new entry.</div>
-      </div>
-      <div class="wiki-actions">
-        <button id="wiki-save-btn" class="btn">Save page</button>
-        <button id="wiki-reset-btn" class="btn btn-secondary">Reset edits</button>
-        <span id="wiki-status" class="wiki-status"></span>
-      </div>
+      <div id="wiki-home-categories" class="wiki-home-categories"></div>
+      <div class="wiki-footer-note">Click a category to see its pages. When you view a page you do not edit it unless you use the moderator edit button.</div>
     </section>
 
-    <aside class="wiki-panel wiki-pages-panel">
-      <h3><span id="wiki-category-title"></span> Pages</h3>
-      <div id="wiki-page-list"></div>
-    </aside>
-  </div>
+    <section id="wiki-category-pane" class="wiki-panel hidden">
+      <div class="wiki-category-header">
+        <div>
+          <h2 id="wiki-category-title">Category</h2>
+          <p id="wiki-category-desc"></p>
+        </div>
+        <div class="wiki-page-actions">
+          <button id="wiki-create-page" class="btn" data-moderator>Create Page</button>
+          <button id="wiki-back-home" class="btn btn-secondary">Back to overview</button>
+        </div>
+      </div>
+      <div class="wiki-page-list" id="wiki-page-list"></div>
+    </section>
+
+    <section id="wiki-page-pane" class="wiki-panel hidden">
+      <div class="wiki-page-view-header">
+        <div>
+          <h3 id="wiki-page-title-display">Select a page</h3>
+          <p id="wiki-page-summary" class="muted">Page summary will appear here.</p>
+        </div>
+        <div class="wiki-page-actions">
+          <button id="wiki-page-edit-btn" class="btn" data-moderator>Edit</button>
+          <button id="wiki-page-move-btn" class="btn btn-secondary" data-moderator>Move Page</button>
+        </div>
+      </div>
+      <div id="wiki-page-view" class="wiki-page-view">Choose a page to view its content.</div>
+
+      <div id="wiki-editor-card" class="wiki-editor-card">
+        <div class="wiki-toolbar">
+          <button type="button" data-command="bold" title="Bold (Ctrl+B)">B</button>
+          <button type="button" data-command="italic" title="Italic (Ctrl+I)">I</button>
+          <button type="button" data-command="underline" title="Underline">U</button>
+          <button type="button" data-command="strikeThrough" title="Strike">S</button>
+          <button type="button" data-command="insertUnorderedList" title="Bullet list">&bull; List</button>
+          <button type="button" data-command="insertOrderedList" title="Numbered list">1. List</button>
+          <button type="button" id="wiki-link-btn" title="Hyperlink">Link</button>
+          <button type="button" id="wiki-image-btn" title="Insert Image">Image</button>
+          <button type="button" id="wiki-table-btn" title="Insert table">Table</button>
+          <button type="button" id="wiki-add-row" title="Add row">+ Row</button>
+          <button type="button" id="wiki-add-col" title="Add column">+ Col</button>
+          <button type="button" id="wiki-del-row" title="Delete row">- Row</button>
+          <button type="button" id="wiki-del-col" title="Delete column">- Col</button>
+          <input type="color" id="wiki-cell-color-picker" title="Cell background" value="#1e40af" />
+          <select id="wiki-format" title="Header style">
+            <option value="p">Paragraph</option>
+            <option value="h1">Heading 1</option>
+            <option value="h2" selected>Heading 2</option>
+            <option value="h3">Heading 3</option>
+          </select>
+          <input type="color" id="wiki-header-color" title="Header color" value="#fbbf24" />
+        </div>
+        <input id="wiki-page-title-edit" placeholder="Page title" />
+        <div id="wiki-editor" contenteditable="true">Select a page to edit.</div>
+        <div class="wiki-actions">
+          <button id="wiki-save-btn" class="btn">Save edits</button>
+          <button id="wiki-reset-btn" class="btn btn-secondary">Cancel</button>
+          <span id="wiki-status" class="wiki-status"></span>
+        </div>
+      </div>
+    </section>
+  </main>
 
   <script>
     const WIKI_CATEGORIES = [
       {
         id:'rules',
         name:'Rules & Systems',
-        description:'Core combat, advancement, and resource rules.',
+        description:'Core beats of combat, resources, and advancement.',
         pages:[
-          { id:'combat-flow', title:'Combat Flow', summary:'Step-by-step turn sequence.', content:'<p>Combat moves through Initiative → Actions → Resolution. Track TP and watch resource bars.</p>' },
-          { id:'leveling', title:'Advancement', summary:'XP, leveling, and perks.', content:'<p>Characters gain XP from missions. When leveling, update stats, check equipment list, and record choices.</p>' }
+          { id:'combat-flow', title:'Combat Flow', summary:'Turn order, actions, and resource tracking.', content:'<p>Combat flows through Initiative → Actions → Resolution. Track TP and key resources in the vitals panel.</p>' },
+          { id:'resource-ledger', title:'Resource Ledger', summary:'Tracking HP, EN, FO, ET, and more.', content:'<p>Use the ledger to record surgical losses and restorations. Changes persist even when you refresh.</p>' }
         ]
       },
       {
         id:'lore',
         name:'Lore & Setting',
-        description:'Stories, factions, and the world state.',
+        description:'Stories, factions, and the world around NoE.',
         pages:[
-          { id:'noe-history', title:'History of NoE', summary:'Timeline and major events.', content:'<p>The Eclipse forged new orders. The Council of Lanterns now oversees the perimeters.</p>' },
-          { id:'factions', title:'Factions Guide', summary:'Handy reference for groups.', content:'<p><strong>Lanterns:</strong> Guardians of knowledge.<br><strong>Animaris:</strong> Masters of spirit-metal.</p>' }
+          { id:'noe-history', title:'History of NoE', summary:'Major epochs and orders.', content:'<p>The Great Eclipse changed everything. The Council of Lanterns now maintains archives and the Champions patrol the borders.</p>' },
+          { id:'factions', title:'Factions', summary:'Lanterns, Animaris, and others.', content:'<p><strong>Lanterns:</strong> Wardens of knowledge.<br><strong>Animaris:</strong> Spirit-metal wielders.</p>' }
         ]
       },
       {
         id:'mechanics',
         name:'Mechanics & Tools',
-        description:'Unique mechanics like Tension, ET, and the ledger.',
+        description:'Special mechanics like Tension, ET, and threads.',
         pages:[
-          { id:'tension-hub', title:'Tension & Special Actions', summary:'How Tension fuels bold moves.', content:'<p>Tension stacks, enabling special actions at the cost of focus. Track it with the tension panel.</p>' },
-          { id:'ledger-usage', title:'Resource Ledger', summary:'Persisting consumables.', content:'<p>Record changes to HP/EN/FO in the ledger. The ledger persists while editing characters.</p>' }
+          { id:'tension-usage', title:'Tension & Special Actions', summary:'Getting the most out of tension.', content:'<p>Build tension with daring choices to unleash special actions. Track the slider and only go all-in when the team is ready.</p>' },
+          { id:'initiative', title:'Initiative and Action Panel', summary:'How to resolve initiative and the action tray.', content:'<p>The Action panel hosts spells, abilities, and ET costs. Ensure each button is consistent before your turn.</p>' }
         ]
       }
     ];
 
     const state = {
-      categoryId: WIKI_CATEGORIES[0].id,
-      pageId: WIKI_CATEGORIES[0].pages[0].id
+      categoryId: null,
+      pageId: null,
+      editing: false
     };
 
-    const titleInput = document.getElementById('wiki-page-title');
-    const editor = document.getElementById('wiki-editor');
-    const listEl = document.getElementById('wiki-category-list');
-    const pageListEl = document.getElementById('wiki-page-list');
+    const homePane = document.getElementById('wiki-home-pane');
+    const categoryPane = document.getElementById('wiki-category-pane');
+    const pagePane = document.getElementById('wiki-page-pane');
     const categoryTitleEl = document.getElementById('wiki-category-title');
-    const statusEl = document.getElementById('wiki-status');
+    const categoryDescEl = document.getElementById('wiki-category-desc');
+    const homeCategoryList = document.getElementById('wiki-home-categories');
+    const pageListEl = document.getElementById('wiki-page-list');
+    const pageTitleDisplay = document.getElementById('wiki-page-title-display');
+    const pageSummaryDisplay = document.getElementById('wiki-page-summary');
+    const pageView = document.getElementById('wiki-page-view');
+    const editorCard = document.getElementById('wiki-editor-card');
+    const editor = document.getElementById('wiki-editor');
+    const titleEditInput = document.getElementById('wiki-page-title-edit');
+    const wikiStatus = document.getElementById('wiki-status');
+    const createCategoryBtn = document.getElementById('wiki-create-category');
+    const createPageBtn = document.getElementById('wiki-create-page');
+    const editPageBtn = document.getElementById('wiki-page-edit-btn');
+    const movePageBtn = document.getElementById('wiki-page-move-btn');
+    const backHomeBtn = document.getElementById('wiki-back-home');
+    const showHelpBtn = document.getElementById('wiki-show-help');
+    const modToggleBtn = document.getElementById('wiki-toggle-moderator');
 
-    function getCategory(id){
-      return WIKI_CATEGORIES.find(cat => cat.id === id);
+    function ensureRole() {
+      if (!localStorage.getItem('wikiRole')) {
+        localStorage.setItem('wikiRole', 'guest');
+      }
     }
-    function getPage(){
-      const cat = getCategory(state.categoryId);
-      if (!cat) return null;
-      return cat.pages.find(pg => pg.id === state.pageId) || cat.pages[0] || null;
+    function userRole() {
+      return localStorage.getItem('wikiRole') || 'guest';
     }
-    function sanitizeId(text){
-      return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    function isModerator() {
+      return ['moderator','admin'].includes(userRole());
     }
-
-    function renderCategories(){
-      listEl.innerHTML = '';
-      WIKI_CATEGORIES.forEach(cat=>{
-        const wrapper = document.createElement('div');
-        wrapper.className = 'category' + (cat.id===state.categoryId ? ' active' : '');
-        wrapper.innerHTML = `<strong>${cat.name}</strong><div class="meta">${cat.description}</div><div class="meta">Pages: ${cat.pages.length}</div>`;
-        wrapper.addEventListener('click', ()=> {
-          state.categoryId = cat.id;
-          state.pageId = cat.pages[0]?.id || '';
-          renderCategories();
-          renderPages();
-          selectPage();
-        });
-        listEl.appendChild(wrapper);
+    function updateModeratorUI() {
+      const mod = isModerator();
+      modToggleBtn.textContent = mod ? 'Moderator: On' : 'Moderator: Off';
+      document.querySelectorAll('[data-moderator]').forEach(el=>{
+        el.style.display = mod ? '' : 'none';
       });
     }
 
-    function renderPages(){
+    modToggleBtn.addEventListener('click', ()=>{
+      const nextRole = isModerator() ? 'guest' : 'moderator';
+      localStorage.setItem('wikiRole', nextRole);
+      updateModeratorUI();
+    });
+
+    function getCategory(id) {
+      return WIKI_CATEGORIES.find(cat => cat.id === id);
+    }
+
+    function getPage() {
+      const cat = getCategory(state.categoryId);
+      if (!cat) return null;
+      return cat.pages.find(pg => pg.id === state.pageId) || null;
+    }
+
+    function renderCategoryCards() {
+      homeCategoryList.innerHTML = '';
+      WIKI_CATEGORIES.forEach(cat=>{
+        const card = document.createElement('div');
+        card.className = 'category-card';
+        if (cat.id === state.categoryId) card.classList.add('active');
+        card.innerHTML = `
+          <strong>${cat.name}</strong>
+          <span>${cat.description}</span>
+          <span>${cat.pages.length} page${cat.pages.length === 1 ? '' : 's'}</span>
+        `;
+        card.addEventListener('click', ()=> openCategory(cat.id));
+        homeCategoryList.appendChild(card);
+      });
+    }
+
+    function openHome() {
+      state.categoryId = null;
+      state.pageId = null;
+      homePane.classList.remove('hidden');
+      categoryPane.classList.add('hidden');
+      pagePane.classList.add('hidden');
+      editorCard.classList.remove('active');
+      editorCard.classList.add('hidden');
+      renderPageViewArea();
+    }
+
+    function openCategory(catId) {
+      state.categoryId = catId;
+      state.pageId = null;
+      homePane.classList.add('hidden');
+      categoryPane.classList.remove('hidden');
+      pagePane.classList.add('hidden');
+      editorCard.classList.remove('active');
+      editorCard.classList.add('hidden');
+      renderCategoriesPanel();
+    }
+
+    function renderCategoriesPanel() {
       const cat = getCategory(state.categoryId);
       if (!cat) return;
       categoryTitleEl.textContent = cat.name;
+      categoryDescEl.textContent = cat.description;
+      renderPageList();
+    }
+
+    function renderPageList() {
+      const cat = getCategory(state.categoryId);
+      if (!cat) return;
       pageListEl.innerHTML = '';
       cat.pages.forEach(pg=>{
         const item = document.createElement('div');
-        item.className = 'page-item' + (pg.id===state.pageId ? ' active' : '');
+        item.className = 'page-item';
+        if (pg.id === state.pageId) item.classList.add('active');
         item.innerHTML = `<h4>${pg.title}</h4><p>${pg.summary}</p>`;
-        item.addEventListener('click', ()=> {
-          state.pageId = pg.id;
-          selectPage(true);
-        });
+        item.addEventListener('click', ()=> viewPage(pg.id));
         pageListEl.appendChild(item);
       });
     }
 
-    function selectPage(skipRender){
+    function renderPageViewArea() {
       const page = getPage();
-      if (!page) return;
-      titleInput.value = page.title;
-      editor.innerHTML = page.content;
-      if (!skipRender){
-        renderCategories();
-        renderPages();
+      if (!page) {
+        pageTitleDisplay.textContent = 'Select a page';
+        pageSummaryDisplay.textContent = 'Page summary will appear here.';
+        pageView.innerHTML = 'Choose a page to view its content.';
+        pagePane.classList.add('hidden');
+        return;
       }
-      statusEl.textContent = '';
+      pagePane.classList.remove('hidden');
+      pageTitleDisplay.textContent = page.title;
+      pageSummaryDisplay.textContent = page.summary;
+      pageView.innerHTML = page.content;
+      editPageBtn.textContent = 'Edit';
+      movePageBtn.style.display = toVisibleIf(page);
+      stopEditing(true);
     }
 
-    function updateActivePageContent(){
+    function toVisibleIf(page) {
+      return isModerator() ? '' : 'none';
+    }
+
+    function viewPage(pageId) {
+      state.pageId = pageId;
+      renderPageList();
+      renderPageViewArea();
+    }
+
+    function startEditing() {
+      const page = getPage();
+      if (!page) return;
+      state.editing = true;
+      editorCard.classList.add('active');
+      editorCard.classList.remove('hidden');
+      editor.innerHTML = page.content;
+      titleEditInput.value = page.title;
+      pageView.classList.add('hidden');
+      editPageBtn.textContent = 'Close editor';
+      movePageBtn.style.display = '';
+      wikiStatus.textContent = '';
+    }
+
+    function stopEditing(reloadView = false) {
+      state.editing = false;
+      editorCard.classList.remove('active');
+      editorCard.classList.add('hidden');
+      pageView.classList.remove('hidden');
+      editPageBtn.textContent = 'Edit';
+      movePageBtn.style.display = 'none';
+      if (reloadView) renderPageViewArea();
+    }
+
+    function updateActivePageContent() {
       const page = getPage();
       if (!page) return;
       page.content = editor.innerHTML;
-      page.title = titleInput.value.trim() || page.title;
-      renderPages();
+      page.title = titleEditInput.value.trim() || page.title;
+      renderPageViewArea();
     }
 
-    document.getElementById('wiki-new-page').addEventListener('click', ()=>{
-      const category = getCategory(state.categoryId);
-      const title = prompt('New page title?');
+    createCategoryBtn.addEventListener('click', ()=>{
+      const title = prompt('Category name?');
       if (!title) return;
-      const id = sanitizeId(title);
-      const newPage = { id: id || `page-${Date.now()}`, title, summary:'Draft page', content:'<p>Start writing.</p>' };
-      category.pages.push(newPage);
+      const description = prompt('Category description?') || '';
+      const id = title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || `cat-${Date.now()}`;
+      WIKI_CATEGORIES.push({
+        id,
+        name: title.trim(),
+        description,
+        pages:[]
+      });
+      renderCategoryCards();
+      updateModeratorUI();
+    });
+
+    createPageBtn.addEventListener('click', ()=>{
+      const cat = getCategory(state.categoryId);
+      if (!cat) return;
+      const title = prompt('Page title?');
+      if (!title) return;
+      const summary = prompt('Page summary?') || '';
+      const id = title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || `page-${Date.now()}`;
+      const newPage = { id, title: title.trim(), summary, content:'<p>New page content.</p>' };
+      cat.pages.push(newPage);
       state.pageId = newPage.id;
-      renderPages();
-      selectPage();
-      statusEl.textContent = 'Created a new draft page.';
+      renderPageList();
+      renderPageViewArea();
     });
 
-    document.getElementById('wiki-save-btn').addEventListener('click', ()=>{
-      updateActivePageContent();
-      statusEl.textContent = 'Saved locally.';
+    backHomeBtn.addEventListener('click', openHome);
+
+    editPageBtn.addEventListener('click', ()=>{
+      if (state.editing) {
+        stopEditing(true);
+      } else {
+        startEditing();
+      }
     });
 
-    document.getElementById('wiki-reset-btn').addEventListener('click', ()=>{
-      selectPage();
-      statusEl.textContent = 'Reverted to last saved content.';
+    movePageBtn.addEventListener('click', ()=>{
+      const page = getPage();
+      if (!page) return;
+      const choices = WIKI_CATEGORIES.map(cat=> `${cat.id} (${cat.name})`).join('\\n');
+      const targetId = prompt(`Move page to category. Choose one of:\\n${choices}`, state.categoryId);
+      if (!targetId || targetId === state.categoryId) return;
+      const target = getCategory(targetId.trim());
+      if (!target) {
+        alert('Category not found.');
+        return;
+      }
+      const source = getCategory(state.categoryId);
+      if (source) {
+        source.pages = source.pages.filter(pg=> pg.id !== page.id);
+      }
+      target.pages.push(page);
+      state.categoryId = target.id;
+      renderCategoryCards();
+      renderCategoriesPanel();
+      renderPageList();
+      renderPageViewArea();
+      statusUpdated('Page moved.');
     });
 
-    document.getElementById('wiki-show-help').addEventListener('click', ()=>{
-      alert('Use the toolbar for inline formatting. Bold (Ctrl+B), Italic (Ctrl+I), colors, headings, lists, and tables can be inserted directly while editing.');
-    });
+    editor.addEventListener('input', updateActivePageContent);
 
     document.querySelectorAll('.wiki-toolbar button[data-command]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const cmd = btn.dataset.command;
-        document.execCommand(cmd);
+        document.execCommand(cmd, false, null);
         editor.focus();
       });
     });
@@ -435,22 +655,127 @@
       editor.focus();
     });
 
-    document.getElementById('wiki-table-btn').addEventListener('click', ()=>{
-      const table = `
-        <table border="1" cellpadding="4" cellspacing="0" style="border-color:#374151;width:100%;border-collapse:collapse;">
-          <tr><th>Header 1</th><th>Header 2</th></tr>
-          <tr><td>Row 1</td><td>Row 1</td></tr>
-        </table>
-      `;
-      document.execCommand('insertHTML', false, table);
+    document.getElementById('wiki-header-color').addEventListener('input', (event)=>{
+      document.execCommand('foreColor', false, event.target.value);
       editor.focus();
     });
 
-    function init(){
-      renderCategories();
-      renderPages();
-      selectPage();
-      editor.addEventListener('input', ()=> { updateActivePageContent(); });
+    document.getElementById('wiki-link-btn').addEventListener('click', ()=>{
+      const text = window.getSelection().toString() || prompt('Link text?');
+      const href = prompt('URL (use #section for internal anchors):', 'https://');
+      if (!href) return;
+      document.execCommand('insertHTML', false, `<a href="${href}" style="color:${document.getElementById('wiki-header-color').value}; text-decoration:underline;">${text || href}</a>`);
+      editor.focus();
+    });
+
+    document.getElementById('wiki-image-btn').addEventListener('click', ()=>{
+      const url = prompt('Image URL?');
+      if (!url) return;
+      const alt = prompt('Alt text?') || 'Image';
+      document.execCommand('insertHTML', false, `<img src="${url}" alt="${alt}" style="max-width:100%; border-radius:6px;">`);
+      editor.focus();
+    });
+
+    function tableOperation(action) {
+      const cell = getSelectedCell();
+      if (!cell) {
+        alert('Place the cursor inside a table cell first.');
+        return;
+      }
+      const table = cell.closest('table');
+      const row = cell.closest('tr');
+      const cellIndex = Array.from(row.cells).indexOf(cell);
+      if (!table) return;
+      if (action === 'insert-table') {
+        const tableHtml = `<table border="1" cellpadding="4" cellspacing="0" style="border-color:#374151;border-collapse:collapse;width:100%;">
+          <tr><th>Header 1</th><th>Header 2</th></tr>
+          <tr><td>Cell 1</td><td>Cell 2</td></tr>
+        </table>`;
+        document.execCommand('insertHTML', false, tableHtml);
+        editor.focus();
+        return;
+      }
+      if (action === 'add-row') {
+        const clone = row.cloneNode(true);
+        clone.querySelectorAll('td,th').forEach(c=> c.innerHTML = '');
+        row.parentElement.insertBefore(clone, row.nextSibling);
+        return;
+      }
+      if (action === 'add-col') {
+        Array.from(table.rows).forEach(r=>{
+          const reference = r.cells[cellIndex];
+          const newCell = reference ? reference.cloneNode(true) : document.createElement('td');
+          newCell.innerHTML = '';
+          newCell.style.background = '';
+          r.insertBefore(newCell, reference ? reference.nextSibling : null);
+        });
+        return;
+      }
+      if (action === 'del-row') {
+        if (table.rows.length <= 1) return alert('Cannot delete the last row.');
+        row.remove();
+        return;
+      }
+      if (action === 'del-col') {
+        const rows = Array.from(table.rows);
+        if (!rows.length) return;
+        const columnCount = rows[0].cells.length;
+        if (columnCount <= 1) return alert('Cannot delete the last column.');
+        rows.forEach(r=> {
+          if (r.cells[cellIndex]) r.cells[cellIndex].remove();
+        });
+      }
+    }
+
+    document.getElementById('wiki-table-btn').addEventListener('click', ()=> tableOperation('insert-table'));
+    document.getElementById('wiki-add-row').addEventListener('click', ()=> tableOperation('add-row'));
+    document.getElementById('wiki-add-col').addEventListener('click', ()=> tableOperation('add-col'));
+    document.getElementById('wiki-del-row').addEventListener('click', ()=> tableOperation('del-row'));
+    document.getElementById('wiki-del-col').addEventListener('click', ()=> tableOperation('del-col'));
+
+    document.getElementById('wiki-cell-color-picker').addEventListener('input', (event)=>{
+      const cell = getSelectedCell();
+      if (!cell) return;
+      cell.style.backgroundColor = event.target.value;
+    });
+
+    function getSelectedCell() {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return null;
+      let node = sel.anchorNode;
+      while(node && node.nodeType !== 1) node = node.parentNode;
+      while(node && !['TD','TH'].includes(node.nodeName)) node = node.parentNode;
+      return node;
+    }
+
+    function statusUpdated(txt) {
+      wikiStatus.textContent = txt;
+      setTimeout(()=> wikiStatus.textContent = '', 2400);
+    }
+
+    showHelpBtn.addEventListener('click', ()=>{
+      alert('Use the toolbar for inline formatting. Bold, italic, links, images, tables, headers, and colors are supported. Insert a table and then add/del rows or columns to customize it.');
+    });
+
+    document.getElementById('wiki-save-btn').addEventListener('click', ()=>{
+      updateActivePageContent();
+      statusUpdated('Saved locally.');
+    });
+
+    document.getElementById('wiki-reset-btn').addEventListener('click', ()=>{
+      const page = getPage();
+      if (page) {
+        editor.innerHTML = page.content;
+        titleEditInput.value = page.title;
+      }
+      statusUpdated('Reverted to last saved snapshot.');
+    });
+
+    function init() {
+      ensureRole();
+      updateModeratorUI();
+      renderCategoryCards();
+      openHome();
     }
 
     document.addEventListener('DOMContentLoaded', init);
