@@ -3,9 +3,9 @@ from io import BytesIO
 from typing import Any, Optional, Tuple
 from uuid import uuid4
 
+import struct
 from bson.objectid import ObjectId
 from gridfs import GridFS
-from PIL import Image
 from pymongo.database import Database
 
 from db_mongo import get_db
@@ -13,11 +13,27 @@ from settings import settings
 
 
 def _image_dimensions(data: bytes) -> Tuple[Optional[int], Optional[int]]:
-    try:
-        with Image.open(BytesIO(data)) as img:
-            return img.width, img.height
-    except Exception:
-        return None, None
+    if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 24:
+        width, height = struct.unpack(">II", data[16:24])
+        return width, height
+    if data.startswith(b"\xff\xd8"):
+        idx = 2
+        while idx < len(data):
+            marker, size = struct.unpack(">BH", data[idx : idx + 3])
+            if marker in (0xc0, 0xc1, 0xc2, 0xc3):
+                height, width = struct.unpack(">HH", data[idx + 5 : idx + 9])
+                return width, height
+            idx += 2 + size
+    if data[:6] in (b"GIF87a", b"GIF89a") and len(data) >= 10:
+        width, height = struct.unpack("<HH", data[6:10])
+        return width, height
+    if data.startswith(b"RIFF") and b"WEBP" in data[8:12]:
+        idx = data.find(b"VP8")
+        if idx != -1 and len(data) >= idx + 10:
+            if data[idx : idx + 4] == b"VP8 ":
+                width, height = struct.unpack("<HH", data[idx + 6 : idx + 10])
+                return width & 0x3fff, height & 0x3fff
+    return None, None
 
 
 class _MemoryGridOut(BytesIO):
