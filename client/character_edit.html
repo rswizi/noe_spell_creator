@@ -249,6 +249,15 @@
       color: #f5f5f8;
       min-height:38px;
     }
+    .resource-label-text {
+      font-size:1rem;
+      font-weight:600;
+      letter-spacing:0.08em;
+      text-transform:uppercase;
+      color: #f9fafb;
+      margin-top:-4px;
+      margin-bottom:-2px;
+    }
     .resource-icon {
       width:36px;
       height:36px;
@@ -312,7 +321,10 @@
     .resource-button[data-resource="fo"] { --resource-color: #b18917; }
     .resource-button[data-resource="tx"] { --resource-color: #4b1a68; }
     .resource-button:hover { border-color:#3b3b5b; box-shadow:0 0 0 2px rgba(59,59,91,0.45); }
-    .action-block { position:relative; }
+    .action-block {
+      position:relative;
+      overflow:visible;
+    }
     .combat-act-button,
     .combat-shield-button,
     .combat-init-button,
@@ -381,10 +393,7 @@
     .combat-panel > .panel-body { overflow: visible; }
     .combat-act-menu {
       display:none;
-      position:absolute;
-      bottom:calc(100% + 12px);
-      right:0;
-      left:auto;
+      position:fixed;
       padding:12px;
       background:#14131c;
       border:1px solid #3b3b55;
@@ -396,7 +405,7 @@
       max-width:360px;
       max-height:360px;
       overflow:auto;
-      z-index:40;
+      z-index:60;
       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     }
     .combat-act-menu.open { display:grid; }
@@ -411,11 +420,15 @@
     }
     .combat-badge.et-used {
       display:flex;
+      flex-direction:column;
       align-items:center;
-      gap:10px;
-      border-radius:16px;
+      justify-content:center;
+      gap:6px;
+      min-height:120px;
+      min-width:140px;
+      border-radius:18px;
       border:1px solid #3b82f6;
-      padding:8px 14px;
+      padding:12px;
       background: linear-gradient(180deg, rgba(59,130,246,0.25), rgba(6,12,28,0.95));
       color:#f0f9ff;
       font-size:1rem;
@@ -427,12 +440,13 @@
       color:#ffffff;
     }
     .combat-badge.et-used img {
-      width:28px;
-      height:28px;
+      width:34px;
+      height:34px;
     }
     .combat-badge.et-used span {
-      font-size:1.15rem;
+      font-size:1rem;
       font-weight:600;
+      letter-spacing:0.5px;
     }
 
     .tension-row {
@@ -1468,6 +1482,7 @@
                   <div class="resource-grid">
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/HP.svg" alt="HP" title="HP"></div>
+                      <div class="resource-label-text">HP</div>
                       <div class="resource-amounts">
                         <span class="resource-current" id="cur-hp">--</span>
                         <span class="resource-max" id="max-hp">Max --</span>
@@ -1521,8 +1536,11 @@
                     </div>
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/MO.svg" alt="MO" title="MO"></div>
-                      <button type="button" class="combat-num resource-button" data-resource="mo" disabled aria-disabled="true">
+                      <div class="resource-label-text">MO</div>
+                      <div class="resource-amounts">
                         <span class="resource-current" id="combat-der-mo">--</span>
+                      </div>
+                      <button type="button" class="combat-num resource-button" data-resource="mo" disabled aria-disabled="true">
                       </button>
                     </div>
                   </div>
@@ -3454,6 +3472,28 @@ const combatContextActionsEl = document.getElementById('combat-context-actions')
 const combatSpecialActionsEl = document.getElementById('combat-special-actions');
 const combatActiveAbilitiesEl = document.getElementById('combat-active-abilities');
 const combatDurationSpellsEl = document.getElementById('combat-duration-spells');
+const COMBAT_ACT_MENU_OFFSET = 14;
+
+function positionCombatActMenu(){
+  if (!combatActMenu || !combatActButton || !combatActMenu.classList.contains('open')) return;
+  const rect = combatActButton.getBoundingClientRect();
+  const menuRect = combatActMenu.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  let left = rect.left + (rect.width / 2) - (menuRect.width / 2);
+  left = Math.min(Math.max(8, left), viewportWidth - menuRect.width - 8);
+  let top = rect.top - menuRect.height - COMBAT_ACT_MENU_OFFSET;
+  if (top < 8){
+    top = rect.bottom + COMBAT_ACT_MENU_OFFSET;
+  }
+  combatActMenu.style.left = `${left}px`;
+  combatActMenu.style.top = `${top}px`;
+}
+
+function repositionCombatActMenu(){
+  if (combatActMenu?.classList.contains('open')){
+    positionCombatActMenu();
+  }
+}
 const resourceActionModal = document.getElementById('resource-action-modal');
 const resourceActionBackdrop = document.getElementById('resource-action-backdrop');
 const resourceActionTitle = document.getElementById('resource-action-title');
@@ -3750,6 +3790,7 @@ const SELF_CONTAINER_ID = 'self';
 /* Spell list refs */
 const avatarPreview = document.getElementById('avatar-preview');
 const avatarOpenBtn = document.getElementById('avatar-open');
+const avatarTitleEl = document.getElementById('avatar-title');
 const avatarFileEl = document.getElementById('avatar-file');
 const avatarZoomEl = document.getElementById('avatar-zoom');
 const avatarOffsetXEl = document.getElementById('avatar-offset-x');
@@ -4306,12 +4347,28 @@ function setResourceProgress(resource, current, maximum){
   combatAbilityOpenBtn?.addEventListener('click', ()=> openCombatAbilityModal(false));
   combatRollPassiveBtn?.addEventListener('click', ()=> openCombatAbilityModal(true));
   if (combatActButton && combatActMenu){
-    combatActButton.addEventListener('click', (e)=>{
+    const handleCombatActToggle = (e)=>{
       e.stopPropagation();
+      const willOpen = !combatActMenu.classList.contains('open');
       combatActMenu.classList.toggle('open');
-    });
+      if (willOpen){
+        positionCombatActMenu();
+      }else{
+        combatActMenu.style.top = '';
+        combatActMenu.style.left = '';
+      }
+    };
+    combatActButton.addEventListener('click', handleCombatActToggle);
     combatActMenu.addEventListener('click', (e)=> e.stopPropagation());
-    document.addEventListener('click', ()=> combatActMenu.classList.remove('open'));
+    document.addEventListener('click', ()=> {
+      if (combatActMenu.classList.contains('open')){
+        combatActMenu.classList.remove('open');
+        combatActMenu.style.top = '';
+        combatActMenu.style.left = '';
+      }
+    });
+    window.addEventListener('resize', repositionCombatActMenu);
+    document.addEventListener('scroll', repositionCombatActMenu, true);
   }
   combatAbilityClose?.addEventListener('click', closeCombatAbilityModal);
   combatAbilityCancel?.addEventListener('click', closeCombatAbilityModal);
@@ -5779,10 +5836,11 @@ function renderInventoryUI(){
           const choiceBtn = hasChoice
             ? '<button class="btn small choices" title="Choices" aria-label="Choices"><i class="fa-solid fa-gear"></i></button>'
             : '';
-          const avatarUrl = avatarImageUrl(itemAvatarKey(it));
-          const avatarAlt = invEscapeHtml(it.alt_name || it.name || 'Item');
-          row.innerHTML = `
-            <div class="item-avatar">
+        const avatarUrl = itemAvatarUrl(it);
+        const avatarAlt = invEscapeHtml(it.alt_name || it.name || 'Item');
+        const avatarHint = 'Click to upload your own avatar (right-click to reset).';
+        row.innerHTML = `
+            <div class="item-avatar" title="${avatarHint}">
               <img src="${avatarUrl}" alt="${avatarAlt}">
             </div>
             <div class="grow">
@@ -5803,6 +5861,18 @@ function renderInventoryUI(){
           }
           if (hasChoice) row.querySelector('.choices')?.addEventListener('click', ()=> openItemChoiceModal(it));
           row.querySelector('.open').addEventListener('click', ()=> openInvItemModal(it));
+          const itemAvatarEl = row.querySelector('.item-avatar');
+          const itemAvatarId = String(it.item_id || it.id || '').trim();
+          if (itemAvatarEl && itemAvatarId){
+            itemAvatarEl.addEventListener('click', (e)=>{
+              e.stopPropagation();
+              openAvatarOverrideModal('item', itemAvatarId);
+            });
+            itemAvatarEl.addEventListener('contextmenu', (e)=>{
+              e.preventDefault();
+              requestAvatarReset('item', itemAvatarId);
+            });
+          }
           list.appendChild(row);
         });
       }
@@ -9621,24 +9691,35 @@ async function uploadAvatar(){
     avatarStatusEl.textContent = 'Pick an image first.';
     return;
   }
-  avatarStatusEl.textContent = 'Uploading...';
+  const target = AVATAR_MODAL_CONTEXT || { kind: 'character', id: String(CID || '') };
+  const kind = target.kind || 'character';
+  const targetId = String(target.id || CID || '');
+  avatarStatusEl.textContent = kind === 'character' ? 'Uploading...' : 'Saving...';
   await new Promise(res=> requestAnimationFrame(res));
   drawAvatarCanvas();
   await new Promise((resolve, reject)=>{
     avatarCanvas.toBlob(async (blob)=>{
       if (!blob){ reject(new Error("Cannot encode image")); return; }
       try{
-        const fd = new FormData();
-        fd.append('file', blob, 'avatar.png');
-        const r = await fetch(`/characters/${encodeURIComponent(CID)}/avatar`, {
-          method:'POST',
-          headers: authHeaders(),
-          body: fd
-        });
-        const j = await r.json().catch(()=>({}));
-        if (j.status !== "success"){ throw new Error(j.message || "Upload failed"); }
-        avatarStatusEl.textContent = 'Uploaded.';
-        avatarPreview.src = `/characters/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
+        if (kind === 'character'){
+          const fd = new FormData();
+          fd.append('file', blob, 'avatar.png');
+          const r = await fetch(`/characters/${encodeURIComponent(CID)}/avatar`, {
+            method:'POST',
+            headers: authHeaders(),
+            body: fd
+          });
+          const j = await r.json().catch(()=>({}));
+          if (j.status !== "success"){ throw new Error(j.message || "Upload failed"); }
+          avatarStatusEl.textContent = 'Uploaded.';
+          avatarPreview.src = `/characters/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
+        }else{
+          const dataUrl = avatarCanvas.toDataURL('image/png');
+          setAvatarOverrideUrl(kind, targetId, dataUrl);
+          avatarStatusEl.textContent = 'Saved.';
+          refreshAvatarTarget(kind);
+          toggleAvatarModal(false);
+        }
       }catch(e){
         avatarStatusEl.textContent = e.message;
       }
@@ -9647,9 +9728,29 @@ async function uploadAvatar(){
   });
 }
 avatarUploadBtn?.addEventListener('click', uploadAvatar);
-function toggleAvatarModal(open){
+function applyAvatarModalContext(context){
+  const kind = String(context?.kind || 'character');
+  const id = String(context?.id || '');
+  AVATAR_MODAL_CONTEXT = { kind, id };
+  if (avatarTitleEl){
+    avatarTitleEl.textContent = context?.title || (kind === 'character' ? 'Set Avatar' : `Set ${prettyKindLabel(kind)} Avatar`);
+  }
+  if (avatarStatusEl){
+    avatarStatusEl.textContent = context?.instructions || 'Select an image to crop.';
+  }
+  if (avatarFileEl){
+    avatarFileEl.value = '';
+  }
+  AVATAR_IMG = null;
+  if (avatarPreview){
+    avatarPreview.src = '';
+  }
+}
+
+function toggleAvatarModal(open, context){
   if (!avatarModal || !avatarBackdrop) return;
   if (open){
+    if (context) applyAvatarModalContext(context);
     avatarModal.classList.remove('hidden');
     avatarModal.classList.add('open');
     avatarBackdrop.classList.add('open');
@@ -9660,7 +9761,7 @@ function toggleAvatarModal(open){
   }
 }
 avatarOpenBtn?.addEventListener('click', ()=>{
-  toggleAvatarModal(true);
+  openAvatarOverrideModal('character', CID, { title: 'Set Avatar', instructions: 'Select an image to crop.' });
 });
 avatarClose?.addEventListener('click', ()=> toggleAvatarModal(false));
 avatarCancel?.addEventListener('click', ()=> toggleAvatarModal(false));
@@ -10498,7 +10599,6 @@ function renderAbilitySpellsBucket(){
     const avatarUrl = spellAvatarUrl(sp);
     const avatarHint = 'Click to upload your own avatar (right-click to reset).';
     const craftAvatarUrl = spellAvatarUrl(sp);
-    const craftAvatarHint = 'Click to upload your own avatar (right-click to reset).';
     const div = document.createElement('div');
     div.className = 'abi-item abi-card';
     const statusLabel = (meta.status === 'learnt') ? 'Prepared' : 'Learnt';
@@ -10551,7 +10651,7 @@ function renderAbilitySpellsBucket(){
       `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
     const avatarEl = div.querySelector('.abi-avatar');
-    avatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); requestAvatarUpload('spell', id); });
+    avatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); openAvatarOverrideModal('spell', id); });
     avatarEl?.addEventListener('contextmenu', (e)=>{
       e.preventDefault();
       requestAvatarReset('spell', id);
@@ -10610,7 +10710,7 @@ function renderAbilitySpellsBucket(){
     const tagA = String(sp.category || '').trim();
     div.innerHTML = `
       <div class="abi-body">
-        <div class="abi-avatar" title="${craftAvatarHint}">
+        <div class="abi-avatar" title="${avatarHint}">
           <img src="${craftAvatarUrl}" alt="${nameDisplay} avatar">
         </div>
         <div class="abi-main">
@@ -10645,7 +10745,7 @@ function renderAbilitySpellsBucket(){
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
     const craftAvatarEl = div.querySelector('.abi-avatar');
     const spIdForOverride = String(sp?.id || '').trim();
-    craftAvatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); requestAvatarUpload('spell', spIdForOverride); });
+    craftAvatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); openAvatarOverrideModal('spell', spIdForOverride); });
     craftAvatarEl?.addEventListener('contextmenu', (e)=>{
       e.preventDefault();
       requestAvatarReset('spell', spIdForOverride);
@@ -17589,8 +17689,7 @@ function avatarImageUrl(key){
 }
 
 const AVATAR_OVERRIDE_PREFIX = 'noe_avatar_override:v1';
-let AVATAR_UPLOAD_INPUT = null;
-let AVATAR_UPLOAD_TARGET = null;
+let AVATAR_MODAL_CONTEXT = { kind: 'character', id: '' };
 
 function avatarOverrideStorageKey(kind, id){
   const user = String(CURRENT_USER?.username || 'anon');
@@ -17629,47 +17728,46 @@ function spellAvatarUrl(sp){
   return avatarImageUrl(spellAvatarKey(sp));
 }
 
-function ensureAvatarUploadInput(){
-  if (AVATAR_UPLOAD_INPUT) return AVATAR_UPLOAD_INPUT;
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.style.display = 'none';
-  input.id = 'avatar-upload';
-  document.body.appendChild(input);
-  input.addEventListener('change', async ()=>{
-    const target = AVATAR_UPLOAD_TARGET;
-    AVATAR_UPLOAD_TARGET = null;
-    if (!target) return;
-    const file = input.files && input.files[0];
-    input.value = '';
-    if (!file) return;
-    try{
-      const dataUrl = await imageFileToDataUrl(file, 256, 0.85);
-      if (!dataUrl) return;
-      setAvatarOverrideUrl(target.kind, target.id, dataUrl);
-      renderAbilitiesTab();
-    }catch(err){
-      alert(err?.message || 'Avatar upload failed');
-    }
-  });
-  AVATAR_UPLOAD_INPUT = input;
-  return input;
-}
-
-function requestAvatarUpload(kind, id){
-  const sid = String(id || '').trim();
-  if (!sid) return;
-  const input = ensureAvatarUploadInput();
-  AVATAR_UPLOAD_TARGET = { kind: String(kind || ''), id: sid };
-  input.click();
+function itemAvatarUrl(it){
+  const id = String(it?.item_id || it?.id || '').trim();
+  const override = id ? getAvatarOverrideUrl('item', id) : '';
+  if (override) return override;
+  return avatarImageUrl(itemAvatarKey(it));
 }
 
 function requestAvatarReset(kind, id){
   const sid = String(id || '').trim();
   if (!sid) return;
   clearAvatarOverrideUrl(kind, sid);
-  renderAbilitiesTab();
+  refreshAvatarTarget(kind);
+}
+
+function refreshAvatarTarget(kind){
+  if (!kind) return;
+  if (kind === 'ability' || kind === 'spell'){
+    renderAbilitiesTab();
+  }else if (kind === 'item'){
+    renderInventoryUI();
+  }
+}
+
+function prettyKindLabel(kind){
+  if (!kind) return '';
+  return String(kind)
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map(part=> part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function openAvatarOverrideModal(kind, id, opts = {}){
+  const payload = {
+    kind: String(kind || 'character'),
+    id: String(id || ''),
+    title: opts.title || (kind === 'character' ? 'Set Avatar' : `Set ${prettyKindLabel(kind)} Avatar`),
+    instructions: opts.instructions || 'Select an image to crop.'
+  };
+  toggleAvatarModal(true, payload);
 }
 
 function imageFileToDataUrl(file, maxSize, quality){
@@ -17963,7 +18061,7 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
     const avatarEl = div.querySelector('.abi-avatar');
-    avatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); requestAvatarUpload('ability', id); });
+    avatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); openAvatarOverrideModal('ability', id); });
     avatarEl?.addEventListener('contextmenu', (e)=>{
       e.preventDefault();
       requestAvatarReset('ability', id);
