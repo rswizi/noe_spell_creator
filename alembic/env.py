@@ -20,6 +20,8 @@ sync_url = os.environ.get("DATABASE_SYNC_URL")
 if not sync_url:
     if DATABASE_URL.startswith("postgresql+asyncpg"):
         sync_url = DATABASE_URL.replace("+asyncpg", "+psycopg2")
+    elif DATABASE_URL.startswith("sqlite+aiosqlite"):
+        sync_url = DATABASE_URL.replace("sqlite+aiosqlite", "sqlite+pysqlite", 1)
     else:
         sync_url = DATABASE_URL
 config.set_main_option("sqlalchemy.url", sync_url)
