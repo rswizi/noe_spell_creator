@@ -232,8 +232,13 @@
     .resource-grid {
       width:100%;
       display:grid;
-      grid-template-columns: repeat(8, minmax(0, 1fr));
+      grid-template-columns: repeat(9, minmax(0, 1fr));
       gap:10px 14px;
+    }
+    @media (max-width: 1400px){
+      .resource-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
     }
     @media (max-width: 1400px){
       .resource-grid {
@@ -516,6 +521,11 @@
     .resource-controls { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
     .resource-controls label { flex:1 1 210px; }
     .combat-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .panel-row {
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap:14px;
+    }
     .combat-inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .combat-actions-row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
     .combat-actions-row.action-row > * { height:120px; width:140px; }
@@ -540,39 +550,6 @@
       border-color:#f97316;
       color:#fff7ed;
       box-shadow:0 0 0 3px rgba(249,115,22,0.25);
-    }
-    .combat-et-block {
-      width:140px;
-      height:120px;
-      border-radius:18px;
-      border:1px solid transparent;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      gap:6px;
-      padding:0;
-    }
-    .combat-et-block .resource-button {
-      width:100%;
-      height:100%;
-      border-radius:18px;
-      border:1px solid transparent;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-    }
-    .combat-et-button .combat-et-icon {
-      width:42px;
-      height:42px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-    }
-    .combat-et-button .combat-et-icon img {
-      width:38px;
-      height:38px;
     }
     .crit-stable-btn {
       gap:6px;
@@ -1590,6 +1567,15 @@
                       <button type="button" class="combat-num resource-button" data-resource="tx" aria-label="TX progress"></button>
                     </div>
                     <div class="resource-entry">
+                      <div class="resource-icon"><img src="/assets/ressources/ET.svg" alt="ET" title="ET"></div>
+                      <div class="resource-label-text">ET</div>
+                      <div class="resource-amounts">
+                        <span class="resource-current" id="combat-et-used">0</span>
+                        <span class="resource-max" id="combat-et-max">Max --</span>
+                      </div>
+                      <button type="button" class="combat-num resource-button" data-resource="et" aria-label="ET progress"></button>
+                    </div>
+                    <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/max_hp.svg" alt="Max HP damage" title="Max HP"></div>
                       <div class="resource-amounts">
                         <span class="resource-current" id="max-hp-dmg-display">0</span>
@@ -1654,18 +1640,6 @@
                     <i class="fa-solid fa-heart-circle-bolt"></i>
                     <span>True Dmg</span>
                   </button>
-                  <div class="combat-et-block">
-                    <div class="resource-icon"><img src="/assets/ressources/ET.svg" alt="ET" title="ET"></div>
-                    <div class="resource-amounts">
-                      <span class="resource-current" id="combat-et-used">0</span>
-                      <span class="resource-max" id="combat-et-max">Max --</span>
-                    </div>
-                    <button type="button" class="btn combat-et-button resource-button" data-resource="et" aria-label="ET progress">
-                      <span class="combat-et-icon">
-                        <img src="/assets/ressources/ET.svg" alt="ET">
-                      </span>
-                    </button>
-                  </div>
                 </div>
               </div>
             </details>
@@ -2989,9 +2963,32 @@ function updateNenDisplay(){
   if (!curNenEl) return;
   curNenEl.textContent = String(Math.max(0, Number(combatState().nen || 0)));
 }
+function resourceLedgerStorageKey(){
+  const safeCid = String(CID || CHAR?.id || '').trim();
+  return `noe_resource_ledger:${safeCid}`;
+}
+function persistResourceLedgerLocal(){
+  try{
+    if (!resourceLedgerStorageKey()) return;
+    localStorage.setItem(resourceLedgerStorageKey(), JSON.stringify(RESOURCE_LEDGER || []));
+  }catch{}
+}
+function loadResourceLedgerLocal(){
+  try{
+    const key = resourceLedgerStorageKey();
+    if (!key) return [];
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  }catch{
+    return [];
+  }
+}
 function syncResourceLedgerToChar(){
   if (!CHAR) return;
   CHAR.resource_ledger = (RESOURCE_LEDGER || []).slice();
+  persistResourceLedgerLocal();
 }
 
 function pushResourceLedgerEntries(entries, { skipSync=false } = {}){
@@ -16028,6 +16025,26 @@ async function loadCharacter(){
   RESOURCE_LEDGER = Array.isArray(CHAR.resource_ledger)
     ? (CHAR.resource_ledger || []).map(normalizeLedgerEntry).filter(Boolean)
     : [];
+  const storedLocal = loadResourceLedgerLocal();
+  if (storedLocal.length){
+    const existingIds = new Set(RESOURCE_LEDGER.map(entry=> entry.id));
+    const merged = RESOURCE_LEDGER.slice();
+    storedLocal.forEach(raw=>{
+      const normalized = normalizeLedgerEntry(raw);
+      if (normalized && !existingIds.has(normalized.id)){
+        merged.push(normalized);
+        existingIds.add(normalized.id);
+      }
+    });
+    if (merged.length !== RESOURCE_LEDGER.length){
+      RESOURCE_LEDGER = merged;
+      syncResourceLedgerToChar();
+    }else{
+      persistResourceLedgerLocal();
+    }
+  }else{
+    persistResourceLedgerLocal();
+  }
   LEDGER_INITIALIZED = false;
   OVERRIDE_ENABLED = !!CHAR.override_stats?.enabled;
   OVERRIDE_VALUES = Object.assign({hp:null,en:null,fo:null,mo:null,initiative:null,spcap:null,enc:null,et:null,tx:null,talent_max:null,skill_points:null,stat_points:null,sublimation_slots:null,complex_schools:null}, CHAR.override_stats?.values || {});
