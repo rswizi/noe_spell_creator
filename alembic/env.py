@@ -16,14 +16,13 @@ from server.src.modules.wiki_db import Base, DATABASE_URL
 config = context.config
 fileConfig(config.config_file_name)
 
-if not config.get_main_option("sqlalchemy.url"):
-    sync_url = os.environ.get("DATABASE_SYNC_URL")
-    if not sync_url:
-        if DATABASE_URL.startswith("postgresql+asyncpg"):
-            sync_url = DATABASE_URL.replace("+asyncpg", "+psycopg2")
-        else:
-            sync_url = DATABASE_URL
-    config.set_main_option("sqlalchemy.url", sync_url)
+sync_url = os.environ.get("DATABASE_SYNC_URL")
+if not sync_url:
+    if DATABASE_URL.startswith("postgresql+asyncpg"):
+        sync_url = DATABASE_URL.replace("+asyncpg", "+psycopg2")
+    else:
+        sync_url = DATABASE_URL
+config.set_main_option("sqlalchemy.url", sync_url)
 
 target_metadata = Base.metadata
 
