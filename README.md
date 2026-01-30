@@ -37,7 +37,7 @@
   - `API_TOKEN` (random bearer token that secures `/api/wiki/*`)
   - `CORS_ORIGINS` (e.g., `https://your-frontend.onrender.com`)
   - Optional: `WIKI_MAX_DOC_BYTES`
-- Recommended start command: `alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT`
+- Recommended start command: `pip install -r requirements.txt && alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT`
 
 ## Tips
 
