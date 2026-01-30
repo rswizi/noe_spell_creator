@@ -9832,6 +9832,8 @@ function toggleAvatarModal(open, context){
     avatarModal.classList.add('hidden');
     avatarModal.classList.remove('open');
     avatarBackdrop.classList.remove('open');
+    restoreCharacterAvatarPreview();
+    AVATAR_MODAL_CONTEXT = { kind: 'character', id: '' };
   }
 }
 avatarOpenBtn?.addEventListener('click', ()=>{
@@ -14045,8 +14047,7 @@ function renderCombatWeapons(){
   weapons.forEach(it=>{
     const state = getWeaponState(it);
     const name = it.alt_name || it.name || 'Weapon';
-    const avatarKey = itemAvatarKey(it);
-    const avatarUrl = avatarImageUrl(avatarKey);
+    const avatarUrl = itemAvatarUrl(it);
     const avatarAlt = invEscapeHtml(name);
     const skill = weaponSkillValue(it);
     const dmg = weaponDamageValue(it) || '--';
@@ -17884,6 +17885,18 @@ function refreshAvatarTarget(kind){
   }else if (kind === 'item'){
     renderInventoryUI();
   }
+}
+
+function characterAvatarBaseUrl(){
+  if (!CID) return '';
+  return `/characters/${encodeURIComponent(CID)}/avatar`;
+}
+
+function restoreCharacterAvatarPreview(){
+  if (!avatarPreview) return;
+  const base = characterAvatarBaseUrl();
+  if (!base) return;
+  avatarPreview.src = `${base}?ts=${Date.now()}`;
 }
 
 function prettyKindLabel(kind){
