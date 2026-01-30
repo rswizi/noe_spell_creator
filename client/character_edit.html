@@ -241,6 +241,14 @@
       align-items:center;
       gap:6px;
     }
+    .resource-amounts {
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:2px;
+      color: #f5f5f8;
+      min-height:38px;
+    }
     .resource-icon {
       width:36px;
       height:36px;
@@ -334,10 +342,21 @@
       box-shadow: 0 0 0 3px rgba(251,191,36,0.35);
       color:#ffffff;
     }
+    .combat-init-icon {
+      width:72px;
+      height:72px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:transparent;
+      border-radius:50%;
+      padding:0;
+    }
     .combat-init-icon img {
       width:42px;
       height:42px;
       display:block;
+      background:transparent;
     }
     .combat-init-value {
       font-size:1.4rem;
@@ -1449,44 +1468,50 @@
                   <div class="resource-grid">
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/HP.svg" alt="HP" title="HP"></div>
-                      <button type="button" class="combat-num resource-button" data-resource="hp">
+                      <div class="resource-amounts">
                         <span class="resource-current" id="cur-hp">--</span>
                         <span class="resource-max" id="max-hp">Max --</span>
-                      </button>
+                      </div>
+                      <button type="button" class="combat-num resource-button" data-resource="hp" aria-label="HP progress"></button>
                     </div>
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/EN.svg" alt="EN" title="EN"></div>
-                      <button type="button" class="combat-num resource-button" data-resource="en">
+                      <div class="resource-amounts">
                         <span class="resource-current" id="cur-en">--</span>
                         <span class="resource-max" id="max-en">Max --</span>
-                      </button>
+                      </div>
+                      <button type="button" class="combat-num resource-button" data-resource="en" aria-label="EN progress"></button>
                     </div>
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/nEN.svg" alt="nEN" title="nEN"></div>
-                      <button type="button" class="combat-num resource-button" data-resource="nen">
+                      <div class="resource-amounts">
                         <span class="resource-current" id="cur-nen">0</span>
-                      </button>
+                      </div>
+                      <button type="button" class="combat-num resource-button" data-resource="nen" aria-label="nEN progress"></button>
                     </div>
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/FO.svg" alt="FO" title="FO"></div>
-                      <button type="button" class="combat-num resource-button" data-resource="fo">
+                      <div class="resource-amounts">
                         <span class="resource-current" id="cur-fo">--</span>
                         <span class="resource-max" id="max-fo">Max --</span>
-                      </button>
+                      </div>
+                      <button type="button" class="combat-num resource-button" data-resource="fo" aria-label="FO progress"></button>
                     </div>
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/SP.svg" alt="SP" title="SP"></div>
-                      <button type="button" class="combat-num resource-button" data-resource="sp">
+                      <div class="resource-amounts">
                         <span class="resource-current" id="cur-sp">--</span>
                         <span class="resource-max" id="max-sp">Max --</span>
-                      </button>
+                      </div>
+                      <button type="button" class="combat-num resource-button" data-resource="sp" aria-label="SP progress"></button>
                     </div>
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/TX.svg" alt="TX" title="TX"></div>
-                      <button type="button" class="combat-num resource-button" data-resource="tx">
+                      <div class="resource-amounts">
                         <span class="resource-current" id="cur-tx">--</span>
                         <span class="resource-max" id="max-tx">Max --</span>
-                      </button>
+                      </div>
+                      <button type="button" class="combat-num resource-button" data-resource="tx" aria-label="TX progress"></button>
                     </div>
                     <div class="resource-entry">
                     <div class="resource-icon"><img src="/assets/ressources/max_hp.svg" alt="Max HP damage" title="Max HP"></div>
