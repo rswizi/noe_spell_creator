@@ -270,9 +270,9 @@
     }
     .resource-button:hover { border-color:#3b3b5b; box-shadow:0 0 0 2px rgba(59,59,91,0.45); }
     .action-block { position:relative; }
-    .combat-act-button, .combat-shield-button, .combat-init-button {
-      border:1px solid var(--accent);
-      color:var(--text);
+    .combat-act-button,
+    .combat-shield-button,
+    .combat-init-button {
       border-radius:16px;
       padding:12px 16px;
       gap:6px;
@@ -281,78 +281,128 @@
       flex-direction:column;
       align-items:center;
       justify-content:center;
-      box-shadow: 0 0 0 3px rgba(197,53,53,0.25);
+      border:1px solid transparent;
     }
     .combat-act-button {
       min-width:120px;
-      background: linear-gradient(180deg, rgba(59,130,246,0.25), rgba(9,10,26,0.95));
       border-color:#60a5fa;
+      background: linear-gradient(180deg, rgba(59,130,246,0.25), rgba(9,10,26,0.95));
       box-shadow: 0 0 0 3px rgba(59,130,246,0.35);
     }
     .combat-init-button {
-      font-size:1rem;
-      background: linear-gradient(180deg, rgba(248,250,252,0.25), rgba(33,37,48,0.95));
-      border-color:#c4c8d7;
-      box-shadow: 0 0 0 3px rgba(248,250,252,0.35);
-      color:#f8fafc;
+      font-size:1.05rem;
+      border-color:#fbbf24;
+      background: linear-gradient(180deg, rgba(251,191,36,0.35), rgba(40,28,6,0.95));
+      box-shadow: 0 0 0 3px rgba(251,191,36,0.35);
+      color:#0f0a02;
+    }
+    .combat-init-icon img {
+      width:36px;
+      height:36px;
+      display:block;
+    }
+    .combat-init-value {
+      font-size:1.4rem;
+      font-weight:600;
     }
     .combat-shield-button {
       font-size:1rem;
-      background: linear-gradient(180deg, rgba(197,53,53,0.15), rgba(20,20,29,0.9));
-      border-color:var(--accent);
-      box-shadow: 0 0 0 3px rgba(197,53,53,0.25);
+      border-color:#4ade80;
+      background: linear-gradient(180deg, rgba(34,197,94,0.35), rgba(5,36,13,0.95));
+      box-shadow: 0 0 0 3px rgba(34,197,94,0.35);
+      color:#ecfdf5;
     }
-    .combat-init-button i, .combat-shield-button i, .combat-act-button i { font-size:1.6rem; }
+    .combat-panel { overflow: visible; }
+    .combat-panel > .panel-body { overflow: visible; }
     .combat-act-menu {
       display:none;
       position:absolute;
-      top:100%;
-      left:0;
-      margin-top:8px;
-      padding:6px;
+      top:calc(100% + 8px);
+      right:0;
+      left:auto;
+      padding:8px;
       background:#13131c;
-      border:1px solid #2f2f42;
+      border:1px solid #373948;
       border-radius:12px;
-      box-shadow:0 10px 20px rgba(0,0,0,0.4);
+      box-shadow:0 14px 30px rgba(0,0,0,0.5);
       gap:6px;
-      flex-wrap:wrap;
-      z-index:2;
+      flex-direction:column;
+      width:min(260px, 90vw);
+      max-height:320px;
+      overflow:auto;
+      z-index:40;
     }
     .combat-act-menu.open { display:flex; }
     .combat-act-menu .btn.tiny {
-      padding:6px 12px;
+      padding:8px 12px;
       font-size:.8rem;
       border-radius:10px;
+      width:100%;
+      justify-content:flex-start;
+      text-align:left;
     }
     .combat-badge.et-used {
       display:flex;
       align-items:center;
       gap:6px;
       border-radius:12px;
-      border:1px solid #2f2f42;
+      border:1px solid #3b82f6;
       padding:6px 10px;
+      background: linear-gradient(180deg, rgba(59,130,246,0.25), rgba(6,12,28,0.9));
+      color:#d6ecff;
+    }
+    .combat-badge.et-used.combat-et-highlight {
+      border-color:#7dd3fc;
+      background: linear-gradient(180deg, rgba(125,211,252,0.25), rgba(6,18,34,0.95));
+      color:#f0f9ff;
     }
     .combat-badge.et-used img {
-      width:18px;
-      height:18px;
+      width:20px;
+      height:20px;
     }
 
-    .tension-row { justify-content:flex-start; }
+    .tension-row {
+      justify-content:flex-start;
+      align-items:flex-start;
+      gap:18px;
+    }
     .tension-entry { min-width:150px; }
-    .combat-shield-button {
+    .tension-controls {
+      flex:1;
       display:flex;
-      flex-direction:column;
+      align-items:center;
+      gap:14px;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+    }
+    .tension-controls select { min-width:150px; }
+    .tension-strategy-label { margin:0; }
+    .exhausted-state {
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .exhausted-toggle {
+      border-radius:50%;
+      width:36px;
+      height:36px;
+      padding:0;
+      display:flex;
       align-items:center;
       justify-content:center;
-      gap:4px;
-      padding:12px 16px;
-      border-radius:16px;
-      font-size:1rem;
-      min-height:90px;
-      border:1px solid var(--accent);
-      background: linear-gradient(180deg, rgba(197,53,53,0.15), rgba(20,20,29,0.9));
-      box-shadow: 0 0 0 3px rgba(197,53,53,0.25);
+      border:1px solid #4b5563;
+      background:#11121a;
+      color:#f8fafc;
+      transition:border .15s ease, background .15s ease;
     }
+    .exhausted-toggle[aria-pressed="true"] {
+      border-color:#fbbf24;
+      background:linear-gradient(180deg, rgba(251,191,36,0.3), rgba(32,24,11,0.95));
+    }
+    .exhausted-toggle i {
+      font-size:1rem;
+    }
+    .exhausted-label { font-size:.85rem; }
     .combat-shield-button i { font-size:1.6rem; }
     .stat-icon,
     .resource-label img { width:24px; height:24px; display:block; }
@@ -365,7 +415,32 @@
     .resource-controls label { flex:1 1 210px; }
     .combat-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .combat-inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    .combat-actions-row { display:flex; gap:8px; flex-wrap:nowrap; align-items:center; }
+    .combat-actions-row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+    .combat-action-danger,
+    .combat-action-warning {
+      border-radius:16px;
+      border:1px solid transparent;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      padding:12px 16px;
+      min-height:88px;
+      font-weight:600;
+      font-size:1rem;
+      text-transform:none;
+    }
+    .combat-action-danger {
+      background: linear-gradient(180deg, rgba(239,68,68,0.35), rgba(40,10,10,0.95));
+      border-color:#ef4444;
+      color:#ffe5e5;
+      box-shadow:0 0 0 3px rgba(239,68,68,0.25);
+    }
+    .combat-action-warning {
+      background: linear-gradient(180deg, rgba(249,115,22,0.35), rgba(50,22,6,0.95));
+      border-color:#f97316;
+      color:#fff7ed;
+      box-shadow:0 0 0 3px rgba(249,115,22,0.25);
+    }
     .combat-list { display:grid; gap:8px; }
     .combat-entry {
       display:flex; align-items:center; gap:10px; padding:8px 10px;
@@ -1361,7 +1436,7 @@
                       </button>
                     </div>
                     <div class="resource-entry">
-                      <div class="resource-icon"><img src="/assets/ressources/dmg.svg" alt="Damage" title="Damage"></div>
+                    <div class="resource-icon"><img src="/assets/ressources/max_hp.svg" alt="Max HP damage" title="Max HP"></div>
                       <button type="button" class="combat-num resource-button resource-control-button" id="max-hp-dmg-btn" data-resource="max_hp_damage">
                         <span class="resource-current" id="max-hp-dmg-display">0</span>
                       </button>
@@ -1376,13 +1451,55 @@
                 <input id="max-hp-dmg" type="hidden">
                 <input id="tension-value" type="hidden">
               </div>
-                <div class="combat-row combat-actions-row">
-                  <button class="btn small" id="combat-take-dmg" title="Take Damage">
+              </div>
+            </details>
+          </div>
+
+          <div class="panel">
+            <details open class="panel combat-panel">
+              <summary class="hdr">
+                <strong>Actions</strong>
+                <span class="muted">(contextual menus)</span>
+              </summary>
+              <div class="panel-body">
+                <div class="combat-actions-row action-row">
+                  <div class="action-block">
+                    <button class="btn combat-act-button" id="combat-act">
+                      <i class="fa-solid fa-play"></i>
+                      <span>Act</span>
+                    </button>
+                    <div class="combat-act-menu" id="combat-act-menu">
+                      <button class="btn tiny" id="combat-open-secondary">Secondary</button>
+                      <button class="btn tiny" id="combat-open-context">Context</button>
+                      <button class="btn tiny" id="combat-open-special">Special</button>
+                      <button class="btn tiny" id="combat-open-ability">Ability</button>
+                      <button class="btn tiny" id="combat-roll-passive">Passive</button>
+                      <button class="btn tiny" id="combat-open-spell">Spell</button>
+                      <button class="btn tiny" id="combat-open-awaken">Awaken</button>
+                    </div>
+                  </div>
+                  <button class="btn combat-shield-button" id="def-roll" title="Roll Defense">
+                    <i class="fa-solid fa-shield"></i>
+                    <span>Defense</span>
+                  </button>
+                  <button class="btn combat-init-button" id="init-roll" title="Roll Initiative" aria-label="Roll Initiative">
+                    <span class="combat-init-icon">
+                      <img src="/assets/ressources/initiative.svg" alt="Initiative" title="Initiative">
+                    </span>
+                    <span class="combat-init-value" id="combat-der-init">--</span>
+                  </button>
+                  <button class="btn combat-action-danger" id="combat-take-dmg" title="Take Damage">
                     <i class="fa-solid fa-heart-circle-plus"></i>
+                    <span>Take Damage</span>
                   </button>
-                  <button class="btn small" id="combat-take-true" title="Take True Damage">
+                  <button class="btn combat-action-warning" id="combat-take-true" title="Take True Damage">
                     <i class="fa-solid fa-heart-circle-bolt"></i>
+                    <span>Take True Damage</span>
                   </button>
+                  <span class="combat-badge et-used combat-et-highlight">
+                    <img src="/assets/ressources/ET.svg" alt="ET" title="ET">
+                    <span id="combat-et-used">0</span>
+                  </span>
                 </div>
               </div>
             </details>
@@ -1394,33 +1511,32 @@
                 <strong>Tension</strong>
                 <span class="muted">(quick rolls)</span>
               </summary>
-                <div class="panel-body">
-                <div class="combat-row">
-                  <button class="btn small" id="init-roll">Roll Initiative</button>
-                  <span class="combat-badge">Init <span id="combat-der-init">--</span></span>
-                </div>
-                  <div class="combat-row tension-row">
-                    <div class="resource-entry tension-entry">
-                      <div class="resource-icon"><img src="/assets/ressources/tension.svg" alt="Tension" title="Tension"></div>
-                      <button type="button" class="combat-num resource-button" data-resource="tension">
-                        <span class="resource-current" id="combat-tension-current">--</span>
-                        <span class="resource-max" id="combat-tension-cap">Cap --</span>
-                      </button>
-                    </div>
+              <div class="panel-body">
+                <div class="combat-row tension-row">
+                  <div class="resource-entry tension-entry">
+                    <div class="resource-icon"><img src="/assets/ressources/tension.svg" alt="Tension" title="Tension"></div>
+                    <button type="button" class="combat-num resource-button" data-resource="tension">
+                      <span class="resource-current" id="combat-tension-current">--</span>
+                      <span class="resource-max" id="combat-tension-cap">Cap --</span>
+                    </button>
                   </div>
-                  <div class="combat-row">
-                    <label class="muted">Strategy
+                  <div class="tension-controls">
+                    <label class="muted tension-strategy-label">Strategy
                       <select id="tension-strategy">
                         <option>Offensive</option>
-                      <option>Defensive</option>
-                      <option>Supportive</option>
-                      <option>Magical</option>
-                      <option>Mobile</option>
-                    </select>
-                  </label>
-                  <label class="muted">
-                    <input type="checkbox" id="combat-exhausted"> Exhausted
-                  </label>
+                        <option>Defensive</option>
+                        <option>Supportive</option>
+                        <option>Magical</option>
+                        <option>Mobile</option>
+                      </select>
+                    </label>
+                    <div class="exhausted-state">
+                      <button class="btn tiny exhausted-toggle" id="combat-exhausted-toggle" aria-pressed="false" title="Toggle Exhausted state">
+                        <i class="fa-solid fa-circle"></i>
+                      </button>
+                      <span class="muted exhausted-label">Exhausted</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </details>
@@ -1513,11 +1629,13 @@
                     <i class="fa-solid fa-shield"></i>
                     <span>Defense</span>
                   </button>
-                  <button class="btn combat-shield-button combat-init-button" id="init-roll" title="Roll Initiative">
-                    <i class="fa-solid fa-bolt"></i>
-                    <span id="combat-der-init">--</span>
+                  <button class="btn combat-init-button" id="init-roll" title="Roll Initiative" aria-label="Roll Initiative">
+                    <span class="combat-init-icon">
+                      <img src="/assets/ressources/initiative.svg" alt="Initiative" title="Initiative">
+                    </span>
+                    <span class="combat-init-value" id="combat-der-init">--</span>
                   </button>
-                  <span class="combat-badge et-used">
+                  <span class="combat-badge et-used combat-et-highlight">
                     <img src="/assets/ressources/ET.svg" alt="ET" title="ET">
                     <span id="combat-et-used">0</span>
                   </span>
@@ -3252,7 +3370,7 @@ const combatSpellOpenBtn = document.getElementById('combat-open-spell');
 const combatAwakenOpenBtn = document.getElementById('combat-open-awaken');
 const tensionValueEl = document.getElementById('tension-value');
 const tensionStrategyEl = document.getElementById('tension-strategy');
-const exhaustedToggleEl = document.getElementById('combat-exhausted');
+const exhaustedToggleBtn = document.getElementById('combat-exhausted-toggle');
 const combatActionsEl = document.getElementById('combat-actions');
 const combatContextActionsEl = document.getElementById('combat-context-actions');
 const combatSpecialActionsEl = document.getElementById('combat-special-actions');
@@ -4152,16 +4270,9 @@ subBackdrop?.addEventListener('click', (e)=>{ if (e.target === subBackdrop) clos
     st.tension_strategy = tensionStrategyEl.value || 'Offensive';
     queueSave();
   });
-  exhaustedToggleEl?.addEventListener('change', ()=>{
-    const st = combatState();
-    st.exhausted = !!exhaustedToggleEl.checked;
-    const active = new Set((st.conditions || []).map(String));
-    if (st.exhausted) active.add('exhausted');
-    else active.delete('exhausted');
-    st.conditions = Array.from(active);
-    renderCombatConditions();
-    renderCombatActions();
-    queueSave();
+  exhaustedToggleBtn?.addEventListener('click', (e)=>{
+    e.preventDefault();
+    setCombatExhaustedState(!combatState().exhausted);
   });
   critAddBtn?.addEventListener('click', ()=> toggleCritModal(true));
   deathSaveRollBtn?.addEventListener('click', rollDeathSave);
@@ -10295,12 +10406,10 @@ function renderAbilitySpellsBucket(){
     const range = sp.range != null ? `Range: ${sp.range}` : '';
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
     const metaLine = [cost || '', range || '', aoe || ''].filter(Boolean).join(' || ');
-    const avatarKey = spellAvatarKey(sp);
-    const avatarUrl = avatarImageUrl(avatarKey);
-    const avatarHint = `Spell avatar: ${avatarKey || 'auto'}`;
-    const craftAvatarKey = spellAvatarKey(sp);
-    const craftAvatarUrl = avatarImageUrl(craftAvatarKey);
-    const craftAvatarHint = `Spell avatar: ${craftAvatarKey || 'auto'}`;
+    const avatarUrl = spellAvatarUrl(sp);
+    const avatarHint = 'Click to upload your own avatar (right-click to reset).';
+    const craftAvatarUrl = spellAvatarUrl(sp);
+    const craftAvatarHint = 'Click to upload your own avatar (right-click to reset).';
     const div = document.createElement('div');
     div.className = 'abi-item abi-card';
     const statusLabel = (meta.status === 'learnt') ? 'Prepared' : 'Learnt';
@@ -10352,6 +10461,12 @@ function renderAbilitySpellsBucket(){
       </div>
       `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
+    const avatarEl = div.querySelector('.abi-avatar');
+    avatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); requestAvatarUpload('spell', id); });
+    avatarEl?.addEventListener('contextmenu', (e)=>{
+      e.preventDefault();
+      requestAvatarReset('spell', id);
+    });
     div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, meta, { cost, range, aoe, desc, effectsLines, statusLabel, nameDisplay })));
     div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveSpellOrder(sp.id, 'up', { onlyLearned }));
     div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveSpellOrder(sp.id, 'down', { onlyLearned }));
@@ -10439,6 +10554,13 @@ function renderAbilitySpellsBucket(){
       </div>
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, nameDisplay);
+    const craftAvatarEl = div.querySelector('.abi-avatar');
+    const spIdForOverride = String(sp?.id || '').trim();
+    craftAvatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); requestAvatarUpload('spell', spIdForOverride); });
+    craftAvatarEl?.addEventListener('contextmenu', (e)=>{
+      e.preventDefault();
+      requestAvatarReset('spell', spIdForOverride);
+    });
     div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openSpellRoll(sp, {}, { cost, range, aoe, desc, effectsLines, statusLabel, nameDisplay })));
     div.querySelector('button[data-move="up"]')?.addEventListener('click', ()=> moveCraftomancyOrder(id, 'up'));
     div.querySelector('button[data-move="down"]')?.addEventListener('click', ()=> moveCraftomancyOrder(id, 'down'));
@@ -12090,10 +12212,40 @@ function renderCombatTension(){
   if (tensionStrategyEl && document.activeElement !== tensionStrategyEl){
     tensionStrategyEl.value = st.tension_strategy || 'Offensive';
   }
-  if (exhaustedToggleEl && document.activeElement !== exhaustedToggleEl){
-    exhaustedToggleEl.checked = !!st.exhausted;
-  }
+  updateExhaustedToggleUI();
   renderCombatAwakenList();
+}
+
+function updateExhaustedToggleUI(){
+  if (!exhaustedToggleBtn) return;
+  const pressed = !!combatState().exhausted;
+  const icon = exhaustedToggleBtn.querySelector('i');
+  const iconClass = pressed ? 'fa-circle-dot' : 'fa-circle';
+  if (icon){
+    icon.className = `fa-solid ${iconClass}`;
+  }else{
+    exhaustedToggleBtn.innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+  }
+  exhaustedToggleBtn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+  exhaustedToggleBtn.title = pressed ? 'Mark as not exhausted' : 'Mark as exhausted';
+}
+
+function setCombatExhaustedState(value){
+  const st = combatState();
+  const next = !!value;
+  if (st.exhausted === next){
+    updateExhaustedToggleUI();
+    return;
+  }
+  st.exhausted = next;
+  const active = new Set((st.conditions || []).map(String));
+  if (next) active.add('exhausted');
+  else active.delete('exhausted');
+  st.conditions = Array.from(active);
+  renderCombatConditions();
+  renderCombatActions();
+  queueSave();
+  updateExhaustedToggleUI();
 }
 
 function renderCombatEtUsage(){
@@ -12316,27 +12468,23 @@ function renderCombatActions(){
       const btn = row.querySelector('button');
       btn?.addEventListener('click', ()=>{
         const pickEl = row.querySelector('.sec-skill');
-        const skill = pickEl ? pickEl.value : pick;
-        const charKey = charKeyForSkillName(skill);
-        const adj = charKey ? skillAdjTotal(charKey, skill).total : 0;
-        const cond = getCombatRollModifiers('offense', skill);
-        const adv = action.name === 'Detect' ? 'dis' : (cond.adv || 'normal');
-        openRollModal({
-          title: `${action.name}`,
-          subtitle: 'Secondary Action',
-          baseLabel: 'Skill value',
-          base: adj,
-          mod: cond.mod,
-          adv,
-          autoConds: cond.conds,
-          detailsText: `Attack: ${action.attack} | Defense: ${action.defense}`,
-          descText: action.effect,
-          detailLines: [
-            'Type: Passive',
-            `Attack: ${action.attack}`,
-            `Defense: ${action.defense}`,
-            action.effect ? `Effect: ${action.effect}` : ''
-          ].filter(Boolean)
+        const skill = (pickEl ? pickEl.value : pick || '').trim();
+        if (!skill){
+          alert('This Secondary Action has no associated skill.');
+          return;
+        }
+        const summary = rollSkillSummaryLines(skill);
+        const lines = [
+          `Action: ${action.name}`,
+          `Skill: ${skill}`,
+          `Attack: ${action.attack || '--'}`,
+          `Defense: ${action.defense || '--'}`,
+          action.effect ? `Effect: ${action.effect}` : '',
+          ...summary.lines
+        ].filter(Boolean);
+        appendAbilityCombinedEntry({
+          title: `${action.name} (Secondary Action)`,
+          lines
         });
       });
       combatActionsEl.appendChild(row);
@@ -17346,6 +17494,136 @@ function avatarImageUrl(key){
   return `/assets/placeholders/${key}.png`;
 }
 
+const AVATAR_OVERRIDE_PREFIX = 'noe_avatar_override:v1';
+let AVATAR_UPLOAD_INPUT = null;
+let AVATAR_UPLOAD_TARGET = null;
+
+function avatarOverrideStorageKey(kind, id){
+  const user = String(CURRENT_USER?.username || 'anon');
+  const cid = String(CID || CHAR?.id || '');
+  const safeKind = String(kind || '');
+  const safeId = String(id || '');
+  return `${AVATAR_OVERRIDE_PREFIX}:${user}:${cid}:${safeKind}:${safeId}`;
+}
+
+function getAvatarOverrideUrl(kind, id){
+  const key = avatarOverrideStorageKey(kind, id);
+  try{ return localStorage.getItem(key) || ''; }catch(e){ return ''; }
+}
+
+function setAvatarOverrideUrl(kind, id, dataUrl){
+  const key = avatarOverrideStorageKey(kind, id);
+  try{ localStorage.setItem(key, String(dataUrl || '')); }catch(e){}
+}
+
+function clearAvatarOverrideUrl(kind, id){
+  const key = avatarOverrideStorageKey(kind, id);
+  try{ localStorage.removeItem(key); }catch(e){}
+}
+
+function abilityAvatarUrl(ab){
+  const id = String(ab?.id || '').trim();
+  const override = id ? getAvatarOverrideUrl('ability', id) : '';
+  if (override) return override;
+  return avatarImageUrl(abilityAvatarKey(ab));
+}
+
+function spellAvatarUrl(sp){
+  const id = String(sp?.id || '').trim();
+  const override = id ? getAvatarOverrideUrl('spell', id) : '';
+  if (override) return override;
+  return avatarImageUrl(spellAvatarKey(sp));
+}
+
+function ensureAvatarUploadInput(){
+  if (AVATAR_UPLOAD_INPUT) return AVATAR_UPLOAD_INPUT;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.style.display = 'none';
+  input.id = 'avatar-upload';
+  document.body.appendChild(input);
+  input.addEventListener('change', async ()=>{
+    const target = AVATAR_UPLOAD_TARGET;
+    AVATAR_UPLOAD_TARGET = null;
+    if (!target) return;
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    try{
+      const dataUrl = await imageFileToDataUrl(file, 256, 0.85);
+      if (!dataUrl) return;
+      setAvatarOverrideUrl(target.kind, target.id, dataUrl);
+      renderAbilitiesTab();
+    }catch(err){
+      alert(err?.message || 'Avatar upload failed');
+    }
+  });
+  AVATAR_UPLOAD_INPUT = input;
+  return input;
+}
+
+function requestAvatarUpload(kind, id){
+  const sid = String(id || '').trim();
+  if (!sid) return;
+  const input = ensureAvatarUploadInput();
+  AVATAR_UPLOAD_TARGET = { kind: String(kind || ''), id: sid };
+  input.click();
+}
+
+function requestAvatarReset(kind, id){
+  const sid = String(id || '').trim();
+  if (!sid) return;
+  clearAvatarOverrideUrl(kind, sid);
+  renderAbilitiesTab();
+}
+
+function imageFileToDataUrl(file, maxSize, quality){
+  const max = Number(maxSize || 256);
+  const q = Number.isFinite(Number(quality)) ? Number(quality) : 0.85;
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const w = img.naturalWidth || img.width || 0;
+        const h = img.naturalHeight || img.height || 0;
+        if (!w || !h){
+          URL.revokeObjectURL(url);
+          reject(new Error('Invalid image'));
+          return;
+        }
+        const scale = Math.min(1, max / Math.max(w, h));
+        const outW = Math.max(1, Math.round(w * scale));
+        const outH = Math.max(1, Math.round(h * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = outW;
+        canvas.height = outH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx){
+          URL.revokeObjectURL(url);
+          reject(new Error('Canvas not available'));
+          return;
+        }
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, outW, outH);
+        ctx.drawImage(img, 0, 0, outW, outH);
+        const dataUrl = canvas.toDataURL('image/jpeg', q);
+        URL.revokeObjectURL(url);
+        resolve(dataUrl);
+      }catch(e){
+        URL.revokeObjectURL(url);
+        reject(e);
+      }
+    };
+    img.onerror = ()=>{
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+    img.src = url;
+  });
+}
+
 function abilityAvatarKey(ab){
   if (!ab) return 'spells';
   const id = String(ab.id || '').trim();
@@ -17553,8 +17831,8 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     const pinClass = pinned ? 'is-pinned' : '';
     const pinTitle = pinned ? 'Unpin' : 'Pin';
     const avatarKey = abilityAvatarKey(a);
-    const avatarUrl = avatarImageUrl(avatarKey);
-    const avatarHint = `Cycle avatar (current: ${avatarKey || 'auto'})`;
+    const avatarUrl = abilityAvatarUrl(a);
+    const avatarHint = `Click to upload your own avatar (right-click to reset).`;
     div.innerHTML = `
       <div class="abi-body">
         <div class="abi-avatar" title="${avatarHint}">
@@ -17591,7 +17869,11 @@ function renderAbilitiesBucket(el, list, { assignedIds, bucketType, sortMode } =
     `;
     registerTitleColorTarget(div.querySelector('.title-color-target'), titleKey, titleText);
     const avatarEl = div.querySelector('.abi-avatar');
-    avatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); cycleAbilityAvatar(id); });
+    avatarEl?.addEventListener('click', (e)=>{ e.stopPropagation(); requestAvatarUpload('ability', id); });
+    avatarEl?.addEventListener('contextmenu', (e)=>{
+      e.preventDefault();
+      requestAvatarReset('ability', id);
+    });
     div.addEventListener('click', (e)=> handleInfoClick(e, ()=> openAbilityRoll(a, a.source_category || 'Ability')));
     if (canRemove){
       div.querySelector('.mod-remove')?.addEventListener('click', ()=> removeAbilityFromChar(a.id));
