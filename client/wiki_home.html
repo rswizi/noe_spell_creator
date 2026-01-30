@@ -86,6 +86,16 @@
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap:20px;
     }
+    .wiki-main.page-full {
+      grid-template-columns: 1fr;
+    }
+    .wiki-main.page-full #wiki-home-pane,
+    .wiki-main.page-full #wiki-category-pane {
+      display:none;
+    }
+    .wiki-main.page-full #wiki-page-pane {
+      grid-column: 1 / -1;
+    }
     .wiki-panel {
       background:var(--panel);
       border:1px solid var(--border);
@@ -285,7 +295,7 @@
     </div>
   </section>
 
-  <main class="wiki-main">
+  <main class="wiki-main" id="wiki-main">
     <section id="wiki-home-pane" class="wiki-panel">
       <h2>Overview</h2>
       <p>This is the landing view: you see a quick description and the list of all categories. Click through to browse or, if you're a moderator, create new categories to expand the knowledge base.</p>
@@ -319,6 +329,7 @@
         <div class="wiki-page-actions">
           <button id="wiki-page-edit-btn" class="btn" data-moderator>Edit</button>
           <button id="wiki-page-move-btn" class="btn btn-secondary" data-moderator>Move Page</button>
+          <button id="wiki-back-category" class="btn btn-secondary">Back to category</button>
         </div>
       </div>
       <div id="wiki-page-view" class="wiki-page-view">Choose a page to view its content.</div>
@@ -359,7 +370,7 @@
   </main>
 
   <script>
-    const WIKI_CATEGORIES = [
+    const DEFAULT_WIKI_CATEGORIES = [
       {
         id:'rules',
         name:'Rules & Systems',
@@ -389,6 +400,27 @@
       }
     ];
 
+    let WIKI_CATEGORIES = [];
+
+    function loadWikiData(){
+      const stored = localStorage.getItem('wiki_data');
+      if (stored){
+        try{
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length){
+            return parsed;
+          }
+        }catch(e){}
+      }
+      return JSON.parse(JSON.stringify(DEFAULT_WIKI_CATEGORIES));
+    }
+
+    function saveWikiData(){
+      localStorage.setItem('wiki_data', JSON.stringify(WIKI_CATEGORIES));
+    }
+
+    WIKI_CATEGORIES = loadWikiData();
+
     const state = {
       categoryId: null,
       pageId: null,
@@ -398,6 +430,7 @@
     const homePane = document.getElementById('wiki-home-pane');
     const categoryPane = document.getElementById('wiki-category-pane');
     const pagePane = document.getElementById('wiki-page-pane');
+    const wikiMain = document.getElementById('wiki-main');
     const categoryTitleEl = document.getElementById('wiki-category-title');
     const categoryDescEl = document.getElementById('wiki-category-desc');
     const homeCategoryList = document.getElementById('wiki-home-categories');
@@ -416,6 +449,7 @@
     const backHomeBtn = document.getElementById('wiki-back-home');
     const showHelpBtn = document.getElementById('wiki-show-help');
     const modToggleBtn = document.getElementById('wiki-toggle-moderator');
+    const backCategoryBtn = document.getElementById('wiki-back-category');
 
     function ensureRole() {
       if (!localStorage.getItem('wikiRole')) {
@@ -434,6 +468,11 @@
       document.querySelectorAll('[data-moderator]').forEach(el=>{
         el.style.display = mod ? '' : 'none';
       });
+    }
+
+    function setPageFullMode(enabled) {
+      if (!wikiMain) return;
+      wikiMain.classList.toggle('page-full', !!enabled);
     }
 
     modToggleBtn.addEventListener('click', ()=>{
@@ -477,6 +516,7 @@
       editorCard.classList.remove('active');
       editorCard.classList.add('hidden');
       renderPageViewArea();
+      setPageFullMode(false);
     }
 
     function openCategory(catId) {
@@ -488,6 +528,21 @@
       editorCard.classList.remove('active');
       editorCard.classList.add('hidden');
       renderCategoriesPanel();
+      setPageFullMode(false);
+    }
+
+    function returnToCategoryView() {
+      if (!state.categoryId) {
+        openHome();
+        return;
+      }
+      homePane.classList.add('hidden');
+      categoryPane.classList.remove('hidden');
+      pagePane.classList.add('hidden');
+      editorCard.classList.remove('active');
+      editorCard.classList.add('hidden');
+      renderPageList();
+      setPageFullMode(false);
     }
 
     function renderCategoriesPanel() {
@@ -519,6 +574,7 @@
         pageSummaryDisplay.textContent = 'Page summary will appear here.';
         pageView.innerHTML = 'Choose a page to view its content.';
         pagePane.classList.add('hidden');
+        setPageFullMode(false);
         return;
       }
       pagePane.classList.remove('hidden');
@@ -528,6 +584,7 @@
       editPageBtn.textContent = 'Edit';
       movePageBtn.style.display = toVisibleIf(page);
       stopEditing(true);
+      setPageFullMode(true);
     }
 
     function toVisibleIf(page) {
@@ -570,6 +627,7 @@
       page.content = editor.innerHTML;
       page.title = titleEditInput.value.trim() || page.title;
       renderPageViewArea();
+      saveWikiData();
     }
 
     createCategoryBtn.addEventListener('click', ()=>{
@@ -583,6 +641,7 @@
         description,
         pages:[]
       });
+      saveWikiData();
       renderCategoryCards();
       updateModeratorUI();
     });
@@ -599,9 +658,11 @@
       state.pageId = newPage.id;
       renderPageList();
       renderPageViewArea();
+      saveWikiData();
     });
 
     backHomeBtn.addEventListener('click', openHome);
+    backCategoryBtn.addEventListener('click', returnToCategoryView);
 
     editPageBtn.addEventListener('click', ()=>{
       if (state.editing) {
@@ -632,6 +693,7 @@
       renderCategoriesPanel();
       renderPageList();
       renderPageViewArea();
+      saveWikiData();
       statusUpdated('Page moved.');
     });
 

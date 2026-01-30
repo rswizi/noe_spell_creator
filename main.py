@@ -1,11 +1,13 @@
 import datetime
 import json
 import math
+import os
 import re
 import secrets
 import string
 from pathlib import Path
 from contextlib import asynccontextmanager
+from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Query, Body, Depends, UploadFile, File, WebSocket, WebSocketDisconnect
@@ -13,7 +15,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import DuplicateKeyError
-from typing import Any
 
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
 
@@ -23,6 +24,7 @@ from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect, recompute_all_spells
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER, craftomancy_row_for_quality, craftomancy_category_index, craftomancy_next_category
+from server.src.modules.wiki_api import router as wiki_router
 EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 AMMO_PACK_DEFAULT = 10
 from server.src.modules.allowed_pages import ALLOWED_PAGES
@@ -122,12 +124,23 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+ENV = os.environ.get("ENV", "development").lower()
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "").strip()
+if not CORS_ORIGINS:
+    if ENV == "production":
+        raise RuntimeError("CORS_ORIGINS must be set in production")
+    allowed_origins = ["*"]
+else:
+    allowed_origins = [origin.strip() for origin in CORS_ORIGINS.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(wiki_router, prefix="")
 
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
@@ -6157,10 +6170,8 @@ def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
 
     now = _now_iso()
     avatar_key, _ = _avatar_field(payload)
-    if avatar_key:
-        doc["default_avatar"] = avatar_key
 
-    return {
+    ability_doc = {
         "name": name,
         "name_key": norm_key(name),
         "type": ab_type,
@@ -6177,6 +6188,11 @@ def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
         "archetype_original_rank": archetype_original_rank,
         "archetype_replaces": archetype_replaces,
     }
+
+    if avatar_key:
+        ability_doc["default_avatar"] = avatar_key
+
+    return ability_doc
 
 @app.post("/abilities")
 async def create_ability(request: Request, payload: dict = Body(...)):
