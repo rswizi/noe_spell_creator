@@ -322,6 +322,9 @@
     .resource-button[data-resource="fo"] { --resource-color: #b18917; }
     .resource-button[data-resource="tx"] { --resource-color: #4b1a68; }
     .resource-button[data-resource="max_hp_damage"] { --resource-color: #5b5b63; }
+    .resource-button[data-resource="mo"] { --resource-color: #16a34a; }
+    .resource-button[data-resource="tension"] { --resource-color: #f59e0b; }
+    .resource-button[data-resource="et"] { --resource-color: #38bdf8; }
     .resource-button:hover { border-color:#3b3b5b; box-shadow:0 0 0 2px rgba(59,59,91,0.45); }
     .action-block {
       position:relative;
@@ -510,7 +513,7 @@
     .combat-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .combat-inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .combat-actions-row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
-    .combat-actions-row > * { height:120px; width:140px; }
+    .combat-actions-row.action-row > * { height:120px; width:140px; }
     .combat-action-danger,
     .combat-action-warning {
       font-weight:600;
@@ -533,6 +536,53 @@
       color:#fff7ed;
       box-shadow:0 0 0 3px rgba(249,115,22,0.25);
     }
+    .combat-et-block {
+      height:100%;
+      width:100%;
+      border-radius:18px;
+      border:1px solid #1c1c2a;
+      background:#0c0c16;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:flex-start;
+      gap:6px;
+      padding:8px 10px 6px;
+      box-sizing:border-box;
+    }
+    .combat-et-block .resource-amounts {
+      min-height:auto;
+      margin-top:0;
+    }
+    .combat-et-block .resource-button {
+      width:100%;
+      flex:1;
+      min-height:0;
+    }
+    .combat-et-button .combat-et-icon {
+      width:40px;
+      height:40px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .combat-et-button .combat-et-icon img {
+      width:32px;
+      height:32px;
+    }
+    .crit-stable-btn {
+      gap:6px;
+      justify-content:center;
+      background:#11121a;
+      border-color:#374151;
+      color:#f8fafc;
+      padding:8px 12px;
+      border-radius:12px;
+      font-size:.85rem;
+    }
+    .crit-stable-btn i { font-size:1rem; }
+    .crit-entry-stable { min-width:40px; }
+    .crit-entry-stable i { font-size:1.2rem; }
     .combat-list { display:grid; gap:8px; }
     .combat-entry {
       display:flex; align-items:center; gap:10px; padding:8px 10px;
@@ -1541,15 +1591,18 @@
                       <div class="resource-icon"><img src="/assets/ressources/max_hp.svg" alt="Max HP damage" title="Max HP"></div>
                       <div class="resource-amounts">
                         <span class="resource-current" id="max-hp-dmg-display">0</span>
-                        <span class="resource-max">Max HP</span>
+                        <span class="resource-max" id="max-hp-dmg-max">Max --</span>
                       </div>
                       <button type="button" class="combat-num resource-button resource-control-button" id="max-hp-dmg-btn" data-resource="max_hp_damage" aria-label="Max HP damage progress"></button>
                     </div>
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/MO.svg" alt="MO" title="MO"></div>
-                      <button type="button" class="combat-num resource-button" data-resource="mo" disabled aria-disabled="true">
+                      <div class="resource-label-text">MO</div>
+                      <div class="resource-amounts">
                         <span class="resource-current" id="combat-der-mo">--</span>
-                      </button>
+                        <span class="resource-max" id="max-mo">Max --</span>
+                      </div>
+                      <button type="button" class="combat-num resource-button" data-resource="mo" aria-label="MO progress"></button>
                     </div>
                   </div>
                 <input id="max-hp-dmg" type="hidden">
@@ -1600,10 +1653,19 @@
                     <i class="fa-solid fa-heart-circle-bolt"></i>
                     <span>True Dmg</span>
                   </button>
-                  <span class="combat-badge et-used combat-et-highlight">
-                    <img src="/assets/ressources/ET.svg" alt="ET" title="ET">
-                    <span id="combat-et-used">0</span>
-                  </span>
+                  <div class="combat-et-block">
+                    <div class="resource-icon"><img src="/assets/ressources/ET.svg" alt="ET" title="ET"></div>
+                    <div class="resource-label-text">ET</div>
+                    <div class="resource-amounts">
+                      <span class="resource-current" id="combat-et-used">0</span>
+                      <span class="resource-max" id="combat-et-max">Max --</span>
+                    </div>
+                    <button type="button" class="btn combat-et-button resource-button" data-resource="et" aria-label="ET progress">
+                      <span class="combat-et-icon">
+                        <img src="/assets/ressources/ET.svg" alt="ET">
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </details>
@@ -1619,10 +1681,12 @@
                 <div class="combat-row tension-row">
                   <div class="resource-entry tension-entry">
                     <div class="resource-icon"><img src="/assets/ressources/tension.svg" alt="Tension" title="Tension"></div>
-                    <button type="button" class="combat-num resource-button" data-resource="tension">
+                    <div class="resource-label-text">Tension Set</div>
+                    <div class="resource-amounts">
                       <span class="resource-current" id="combat-tension-current">--</span>
                       <span class="resource-max" id="combat-tension-cap">Cap --</span>
-                    </button>
+                    </div>
+                    <button type="button" class="combat-num resource-button" data-resource="tension" aria-label="Tension progress"></button>
                   </div>
                   <div class="tension-controls">
                     <label class="muted tension-strategy-label">Strategy
@@ -2494,7 +2558,10 @@
           <option value="mortal">Mortal Injury (DC 16)</option>
         </select>
       </label>
-      <label class="muted"><input type="checkbox" id="crit-stable"> Stabilized</label>
+      <button type="button" class="btn tiny crit-stable-btn" id="crit-stable" aria-pressed="false" title="Toggle stabilization">
+        <i class="fa-solid fa-heart-crack"></i>
+        <span>Stabilized</span>
+      </button>
     </div>
     <div class="muted" id="crit-note" style="margin-top:8px;"></div>
     <div class="row" style="margin-top:12px; gap:8px;">
@@ -3374,10 +3441,12 @@ const maxNenEl = document.getElementById('max-nen');
 const maxHpDmgEl = document.getElementById('max-hp-dmg');
 const maxHpDmgBtn = document.getElementById('max-hp-dmg-btn');
 const maxHpDmgDisplay = document.getElementById('max-hp-dmg-display');
+const maxHpDmgMaxEl = document.getElementById('max-hp-dmg-max');
 const combatDerMoEl = document.getElementById('combat-der-mo');
 const combatDerInitEl = document.getElementById('combat-der-init');
 const combatTensionCurrentEl = document.getElementById('combat-tension-current');
 const combatTensionCapEl = document.getElementById('combat-tension-cap');
+const maxMoEl = document.getElementById('max-mo');
 const combatTakeDmgBtn = document.getElementById('combat-take-dmg');
 const combatTakeTrueBtn = document.getElementById('combat-take-true');
 const combatDmgModal = document.getElementById('combat-dmg-modal');
@@ -3419,6 +3488,7 @@ const combatAbilitySearchEl = document.getElementById('combat-ability-search');
 const combatSpellListEl = document.getElementById('combat-spell-list');
 const combatSpellSearchEl = document.getElementById('combat-spell-search');
 const combatEtUsedEl = document.getElementById('combat-et-used');
+const combatEtMaxEl = document.getElementById('combat-et-max');
 const combatSecondaryOpenBtn = document.getElementById('combat-open-secondary');
 const combatContextOpenBtn = document.getElementById('combat-open-context');
 const combatSpecialOpenBtn = document.getElementById('combat-open-special');
@@ -3547,6 +3617,21 @@ const critStableEl = document.getElementById('crit-stable');
 const critConfirm = document.getElementById('crit-confirm');
 const critNoteEl = document.getElementById('crit-note');
 let DERIVED_CACHE = {};
+let critStableState = false;
+
+function refreshCritStableButton(){
+  if (!critStableEl) return;
+  const icon = critStableEl.querySelector('i');
+  const text = critStableEl.querySelector('span');
+  critStableEl.setAttribute('aria-pressed', critStableState ? 'true' : 'false');
+  critStableEl.title = critStableState ? 'Marked as stabilized' : 'Marked as unstable';
+  if (icon){
+    icon.className = `fa-solid ${critStableState ? 'fa-heart' : 'fa-heart-crack'}`;
+  }
+  if (text){
+    text.textContent = critStableState ? 'Stabilized' : 'Unstable';
+  }
+}
 
 /* Abilities tab refs */
 const abiOpenAddBtn = document.getElementById('abi-open-add');
@@ -4160,7 +4245,7 @@ resourceButtons.forEach(btn=>{
   const resource = btn.getAttribute('data-resource');
   if (resource) RESOURCE_PROGRESS_BUTTONS[resource] = btn;
   if (!resource || btn.disabled) return;
-  if (resource === 'max_hp_damage') return;
+  if (resource === 'max_hp_damage' || resource === 'et') return;
   const labelOverride = btn.getAttribute('data-resource-label');
   btn.addEventListener('click', ()=> openResourceActionModal(resource, labelOverride));
 });
@@ -4411,8 +4496,9 @@ function setResourceProgress(resource, current, maximum){
   critCancel?.addEventListener('click', ()=> toggleCritModal(false));
   critBackdrop?.addEventListener('click', (e)=>{ if (e.target === critBackdrop) toggleCritModal(false); });
   critTypeEl?.addEventListener('change', updateCritNote);
+  critStableEl?.addEventListener('click', ()=>{ critStableState = !critStableState; refreshCritStableButton(); });
   critConfirm?.addEventListener('click', ()=>{
-    addCriticalInjury(critTypeEl?.value || 'severe', !!critStableEl?.checked);
+    addCriticalInjury(critTypeEl?.value || 'severe', critStableState);
     toggleCritModal(false);
   });
 
@@ -12368,6 +12454,7 @@ function renderCombatTension(){
     tensionStrategyEl.value = st.tension_strategy || 'Offensive';
   }
   updateExhaustedToggleUI();
+  setResourceProgress('tension', tensionCurrent, cap);
   renderCombatAwakenList();
 }
 
@@ -12463,6 +12550,8 @@ function renderCombatEtUsage(){
   const maxEt = numOr(DERIVED_CACHE?.et, 0);
   combatEtUsedEl.textContent = `${used} / ${maxEt}`;
   combatEtUsedEl.style.color = used > maxEt ? '#f66' : '';
+  if (combatEtMaxEl) combatEtMaxEl.textContent = `Max ${maxEt}`;
+  setResourceProgress('et', used, maxEt);
 }
 
 function renderCombatActiveAbilities(){
@@ -14710,14 +14799,22 @@ function renderCombatCritList(){
         <div class="muted">HP loss: ${Number(entry.hp_loss || 0)} | True damage: ${Number(entry.true_damage || 0)}</div>
       </div>
       <div class="combat-actions-row">
-        <label class="muted"><input type="checkbox" class="crit-stable" ${entry.stabilized ? 'checked' : ''}> Stabilized</label>
+        <button type="button" class="btn tiny crit-entry-stable" aria-pressed="${entry.stabilized ? 'true' : 'false'}" aria-label="${entry.stabilized ? 'Mark as unstable' : 'Mark as stabilized'}">
+          <i class="fa-solid ${entry.stabilized ? 'fa-heart' : 'fa-heart-crack'}"></i>
+        </button>
         <button class="btn small" title="Remove injury" aria-label="Remove injury">
           <i class="fa-solid fa-trash"></i>
         </button>
       </div>
     `;
-    row.querySelector('.crit-stable')?.addEventListener('change', (e)=>{
-      entry.stabilized = !!e.target.checked;
+    const stableToggle = row.querySelector('.crit-entry-stable');
+    stableToggle?.addEventListener('click', ()=>{
+      entry.stabilized = !entry.stabilized;
+      const pressed = !!entry.stabilized;
+      stableToggle.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+      stableToggle.setAttribute('aria-label', pressed ? 'Mark as unstable' : 'Mark as stabilized');
+      const icon = stableToggle.querySelector('i');
+      if (icon) icon.className = `fa-solid ${pressed ? 'fa-heart' : 'fa-heart-crack'}`;
       queueSave();
     });
     row.querySelector('button')?.addEventListener('click', ()=>{
@@ -15277,6 +15374,8 @@ function toggleCritModal(open){
     critModal.classList.remove('hidden');
     critModal.classList.add('open');
     critBackdrop.classList.add('open');
+    critStableState = false;
+    refreshCritStableButton();
     updateCritNote();
   }else{
     critModal.classList.add('hidden');
@@ -15640,20 +15739,24 @@ function updateDerived(){
   if (curFoEl) curFoEl.textContent = String(displayCurrent.fo);
   if (curSpEl) curSpEl.textContent = String(displayCurrent.sp);
   if (curTxEl) curTxEl.textContent = String(displayCurrent.tx);
+  if (combatDerMoEl) combatDerMoEl.textContent = String(displayCurrent.mo);
   if (maxHpEl) maxHpEl.textContent = String(numOr(maxVals.hp, 0));
   if (maxEnEl) maxEnEl.textContent = `Max ${numOr(maxVals.en, 0)}`;
   if (maxNenEl) maxNenEl.textContent = `Max ${numOr(maxVals.en, 0)}`;
   if (maxFoEl) maxFoEl.textContent = `Max ${numOr(maxVals.fo, 0)}`;
   if (maxSpEl) maxSpEl.textContent = `Max ${numOr(maxVals.spcap, 0)}`;
   if (maxTxEl) maxTxEl.textContent = `Max ${numOr(maxVals.tx, 0)}`;
+  if (maxMoEl) maxMoEl.textContent = `Max ${numOr(maxVals.mo, 0)}`;
   const maxHpDamage = Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0));
   if (maxHpDmgDisplay) maxHpDmgDisplay.textContent = String(maxHpDamage);
+  if (maxHpDmgMaxEl) maxHpDmgMaxEl.textContent = `Max ${numOr(maxVals.hp, 0)}`;
   setResourceProgress('hp', displayCurrent.hp, maxVals.hp);
   setResourceProgress('en', displayCurrent.en, maxVals.en);
   setResourceProgress('nen', displayCurrent.nen, maxVals.en);
   setResourceProgress('fo', displayCurrent.fo, maxVals.fo);
   setResourceProgress('sp', displayCurrent.sp, maxVals.spcap);
   setResourceProgress('tx', displayCurrent.tx, maxVals.tx);
+  setResourceProgress('mo', displayCurrent.mo, maxVals.mo);
   setResourceProgress('max_hp_damage', maxHpDamage, maxVals.hp);
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
   refreshMaxHpDamageDisplay(Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
@@ -15727,6 +15830,10 @@ function refreshMaxHpDamageDisplay(value){
   if (!maxHpDmgDisplay) return;
   const normalized = Math.max(0, Number(value || 0));
   maxHpDmgDisplay.textContent = String(normalized);
+  if (maxHpDmgMaxEl){
+    const baseMax = numOr(DERIVED_CACHE?.hp, 0);
+    maxHpDmgMaxEl.textContent = `Max ${baseMax}`;
+  }
 }
 function applyResourceAction(){
   if (!resourceActionModal) return;
@@ -15751,6 +15858,7 @@ function applyResourceAction(){
     st.max_hp_damage = Math.max(0, target);
     if (maxHpDmgEl) safeSetValue(maxHpDmgEl, st.max_hp_damage);
     refreshMaxHpDamageDisplay(st.max_hp_damage);
+    updateDerived();
     closeResourceActionModal();
     queueSave();
     return;
