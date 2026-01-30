@@ -59,7 +59,7 @@ Images are uploaded by admins/moderators via `/api/assets/upload` (tooling enfor
 2. Uploads automatically POST to the asset endpoint, store GridFS metadata, and insert nodes with `asset_id`, caption, and sizing attributes.
 3. The floating toolbar lets you adjust width, alignment, or caption without triggering extra autosaves.
 - Recommended start command: `pip install -r requirements.txt && alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT`
-- Recommended Render build pipeline: `pip install -r requirements.txt && cd frontend/wiki && npm ci && npm run build`
+- Recommended Render build pipeline: `pip install -r requirements.txt && cd frontend/wiki && npm install && npm run build`
 
 ## Tips
 
