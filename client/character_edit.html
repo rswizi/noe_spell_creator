@@ -510,6 +510,7 @@
     .combat-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .combat-inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .combat-actions-row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+    .combat-actions-row > * { height:120px; width:140px; }
     .combat-action-danger,
     .combat-action-warning {
       font-weight:600;
@@ -2862,7 +2863,7 @@ function numOr(v, fb=0){
   const n = Number(v);
   return Number.isFinite(n) ? n : fb;
 }
-const LEDGER_RESOURCES = ['hp','en','fo','sp','tx','mo','tension'];
+const LEDGER_RESOURCES = ['hp','en','fo','sp','tx','mo','tension','nen'];
 const LEDGER_ALLOWED = new Set([...LEDGER_RESOURCES, 'nen']);
 const RESOURCE_LABELS = { hp:'HP', en:'EN', fo:'FO', sp:'SP', tx:'TX', mo:'MO', tension:'Tension', nen:'nEN' };
 function ledgerEntryId(){
@@ -2895,6 +2896,7 @@ function resourceBaseMax(resource, maxVals){
   if (resource === 'sp') return numOr(maxVals.spcap, 0);
   if (resource === 'tx') return numOr(maxVals.tx, 0);
   if (resource === 'mo') return numOr(maxVals.mo, 0);
+  if (resource === 'nen') return numOr(maxVals.en, 0);
   return 0;
 }
 function currentFromLedger(resource, maxVals){
@@ -7722,10 +7724,11 @@ function openSpellRoll(sp, meta, info){
   if (activationText) parts.push(activationText);
   const detailLine = parts.join(' | ');
   const effectText = normalizeDescText(info?.desc || '');
+  const effectsLines = Array.isArray(info?.effectsLines) ? info.effectsLines : [];
+  const effectSummary = spellEffectSummary(effectText, effectsLines);
   const lines = [];
   if (detailLine) lines.push(detailLine);
-  if (effectText) lines.push(`Effect: ${effectText}`);
-  const effectsLines = Array.isArray(info?.effectsLines) ? info.effectsLines : [];
+  if (effectSummary) lines.push(`Effect: ${effectSummary}`);
   if (effectsLines.length){
     lines.push('Effects:');
     effectsLines.forEach(line=> lines.push(line));
@@ -7756,6 +7759,7 @@ async function openCombatSpellRoll(sp, meta, info){
   const detailLine = parts.join(' | ');
   const effectText = normalizeDescText(info?.desc || '');
   const effectsLines = Array.isArray(info?.effectsLines) ? info.effectsLines : [];
+  const effectSummary = spellEffectSummary(effectText, effectsLines);
 
   try{ await ensureEffectsLoaded(); }catch{}
   const instances = spellEffectInstances(sp || {});
@@ -7764,7 +7768,7 @@ async function openCombatSpellRoll(sp, meta, info){
   if (!needsSkillRoll && !aggregatedRolls.length){
     const lines = [];
     if (detailLine) lines.push(detailLine);
-    if (effectText) lines.push(`Effect: ${effectText}`);
+    if (effectSummary) lines.push(`Effect: ${effectSummary}`);
     if (effectsLines.length){
       lines.push('Effects:');
       effectsLines.forEach(line=> lines.push(line));
@@ -7788,7 +7792,7 @@ async function openCombatSpellRoll(sp, meta, info){
   const lines = ['Template: Spell Roll'];
   if (info?.statusLabel) lines.push(`Source: ${info.statusLabel}`);
   if (detailLine) lines.push(detailLine);
-  if (effectText) lines.push(`Effect: ${effectText}`);
+  if (effectSummary) lines.push(`Effect: ${effectSummary}`);
   if (effectsLines.length){
     lines.push('Effects:');
     effectsLines.forEach(line=> lines.push(line));
@@ -13775,6 +13779,12 @@ function spellEffectsLines(sp, meta){
     entries.set(key, entry);
   });
   return Array.from(entries.values()).map(entry=> formatEffectLine(entry.text, entry.count)).filter(Boolean);
+}
+
+function spellEffectSummary(effectText, effectLines){
+  if (String(effectText || '').trim()) return effectText;
+  if (effectLines && effectLines.length) return effectLines.join(' | ');
+  return '';
 }
 
 function spellEffectsDesc(sp, meta){
