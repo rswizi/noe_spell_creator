@@ -317,9 +317,11 @@
     }
     .resource-button[data-resource="hp"] { --resource-color: #9b1c1c; }
     .resource-button[data-resource="en"] { --resource-color: #1f3a7a; }
+    .resource-button[data-resource="nen"] { --resource-color: #e04ab1; }
     .resource-button[data-resource="sp"] { --resource-color: #bf5e0c; }
     .resource-button[data-resource="fo"] { --resource-color: #b18917; }
     .resource-button[data-resource="tx"] { --resource-color: #4b1a68; }
+    .resource-button[data-resource="max_hp_damage"] { --resource-color: #5b5b63; }
     .resource-button:hover { border-color:#3b3b5b; box-shadow:0 0 0 2px rgba(59,59,91,0.45); }
     .action-block {
       position:relative;
@@ -353,6 +355,8 @@
       background: linear-gradient(180deg, rgba(251,191,36,0.35), rgba(40,28,6,0.95));
       box-shadow: 0 0 0 3px rgba(251,191,36,0.35);
       color:#ffffff;
+      min-width:140px;
+      min-height:120px;
     }
     .combat-init-icon {
       width:72px;
@@ -426,6 +430,8 @@
       gap:6px;
       min-height:120px;
       min-width:140px;
+      width:140px;
+      height:120px;
       border-radius:18px;
       border:1px solid #3b82f6;
       padding:12px;
@@ -1499,8 +1505,10 @@
                     </div>
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/nEN.svg" alt="nEN" title="nEN"></div>
+                      <div class="resource-label-text">nEN</div>
                       <div class="resource-amounts">
                         <span class="resource-current" id="cur-nen">0</span>
+                        <span class="resource-max" id="max-nen">Max --</span>
                       </div>
                       <button type="button" class="combat-num resource-button" data-resource="nen" aria-label="nEN progress"></button>
                     </div>
@@ -1529,18 +1537,18 @@
                       <button type="button" class="combat-num resource-button" data-resource="tx" aria-label="TX progress"></button>
                     </div>
                     <div class="resource-entry">
-                    <div class="resource-icon"><img src="/assets/ressources/max_hp.svg" alt="Max HP damage" title="Max HP"></div>
-                      <button type="button" class="combat-num resource-button resource-control-button" id="max-hp-dmg-btn" data-resource="max_hp_damage">
+                      <div class="resource-icon"><img src="/assets/ressources/max_hp.svg" alt="Max HP damage" title="Max HP"></div>
+                      <div class="resource-label-text">Max HP Dmg</div>
+                      <div class="resource-amounts">
                         <span class="resource-current" id="max-hp-dmg-display">0</span>
-                      </button>
+                        <span class="resource-max">Max HP</span>
+                      </div>
+                      <button type="button" class="combat-num resource-button resource-control-button" id="max-hp-dmg-btn" data-resource="max_hp_damage" aria-label="Max HP damage progress"></button>
                     </div>
                     <div class="resource-entry">
                       <div class="resource-icon"><img src="/assets/ressources/MO.svg" alt="MO" title="MO"></div>
-                      <div class="resource-label-text">MO</div>
-                      <div class="resource-amounts">
-                        <span class="resource-current" id="combat-der-mo">--</span>
-                      </div>
                       <button type="button" class="combat-num resource-button" data-resource="mo" disabled aria-disabled="true">
+                        <span class="resource-current" id="combat-der-mo">--</span>
                       </button>
                     </div>
                   </div>
@@ -1694,52 +1702,6 @@
                   <button class="btn small" id="combat-special-weapon-add">Add</button>
                 </div>
                 <div id="combat-weapon-list" class="combat-list"></div>
-              </div>
-            </details>
-          </div>
-
-          <div class="panel">
-            <details open class="panel">
-              <summary class="hdr">
-                <strong>Actions</strong>
-                <span class="muted">(contextual menus)</span>
-              </summary>
-              <div class="panel-body">
-                <div class="combat-actions-row">
-                  <div class="action-block">
-                    <button class="btn combat-act-button" id="combat-act">
-                      <i class="fa-solid fa-play"></i>
-                      <span>Act</span>
-                    </button>
-                    <div class="combat-act-menu" id="combat-act-menu">
-                      <button class="btn tiny" id="combat-open-secondary">Secondary</button>
-                      <button class="btn tiny" id="combat-open-context">Context</button>
-                      <button class="btn tiny" id="combat-open-special">Special</button>
-                      <button class="btn tiny" id="combat-open-ability">Ability</button>
-                      <button class="btn tiny" id="combat-roll-passive">Passive</button>
-                      <button class="btn tiny" id="combat-open-spell">Spell</button>
-                      <button class="btn tiny" id="combat-open-awaken">Awaken</button>
-                    </div>
-                  </div>
-                  <button class="btn combat-shield-button" id="def-roll" title="Roll Defense">
-                    <i class="fa-solid fa-shield"></i>
-                    <span>Defense</span>
-                  </button>
-                  <button class="btn combat-init-button" id="init-roll" title="Roll Initiative" aria-label="Roll Initiative">
-                    <span class="combat-init-icon">
-                      <img src="/assets/ressources/initiative.svg" alt="Initiative" title="Initiative">
-                    </span>
-                    <span class="combat-init-value" id="combat-der-init">--</span>
-                  </button>
-                  <span class="combat-badge et-used combat-et-highlight">
-                    <img src="/assets/ressources/ET.svg" alt="ET" title="ET">
-                    <span id="combat-et-used">0</span>
-                  </span>
-                </div>
-                <div class="muted" style="margin-top:8px;">Active abilities & spells</div>
-                <div id="combat-active-abilities" class="combat-pill-list" style="margin-top:6px;"></div>
-                <div class="muted" style="margin-top:8px;">Duration spells (2+)</div>
-                <div id="combat-duration-spells" class="combat-pill-list" style="margin-top:6px;"></div>
               </div>
             </details>
           </div>
@@ -3407,6 +3369,7 @@ const maxEnEl = document.getElementById('max-en');
 const maxFoEl = document.getElementById('max-fo');
 const maxSpEl = document.getElementById('max-sp');
 const maxTxEl = document.getElementById('max-tx');
+const maxNenEl = document.getElementById('max-nen');
 const maxHpDmgEl = document.getElementById('max-hp-dmg');
 const maxHpDmgBtn = document.getElementById('max-hp-dmg-btn');
 const maxHpDmgDisplay = document.getElementById('max-hp-dmg-display');
@@ -15670,14 +15633,19 @@ function updateDerived(){
   if (curTxEl) curTxEl.textContent = String(displayCurrent.tx);
   if (maxHpEl) maxHpEl.textContent = String(numOr(maxVals.hp, 0));
   if (maxEnEl) maxEnEl.textContent = `Max ${numOr(maxVals.en, 0)}`;
+  if (maxNenEl) maxNenEl.textContent = `Max ${numOr(maxVals.en, 0)}`;
   if (maxFoEl) maxFoEl.textContent = `Max ${numOr(maxVals.fo, 0)}`;
   if (maxSpEl) maxSpEl.textContent = `Max ${numOr(maxVals.spcap, 0)}`;
   if (maxTxEl) maxTxEl.textContent = `Max ${numOr(maxVals.tx, 0)}`;
+  const maxHpDamage = Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0));
+  if (maxHpDmgDisplay) maxHpDmgDisplay.textContent = String(maxHpDamage);
   setResourceProgress('hp', displayCurrent.hp, maxVals.hp);
   setResourceProgress('en', displayCurrent.en, maxVals.en);
+  setResourceProgress('nen', displayCurrent.nen, maxVals.en);
   setResourceProgress('fo', displayCurrent.fo, maxVals.fo);
   setResourceProgress('sp', displayCurrent.sp, maxVals.spcap);
   setResourceProgress('tx', displayCurrent.tx, maxVals.tx);
+  setResourceProgress('max_hp_damage', maxHpDamage, maxVals.hp);
   if (maxHpDmgEl) safeSetValue(maxHpDmgEl, Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
   refreshMaxHpDamageDisplay(Math.max(0, Number(CHAR?.stats?.combat?.max_hp_damage || 0)));
     if (overrideInputsWrap) overrideInputsWrap.style.display = OVERRIDE_ENABLED ? 'grid' : 'none';
