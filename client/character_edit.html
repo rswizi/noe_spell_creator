@@ -17,14 +17,17 @@
       --accent-2: #f04a4a;
       --text: #f3f3f5;
     }
-    html,body { height: 100%; }
+    html,body { min-height: 100%; }
+    html {
+      background: linear-gradient(180deg, #1a0c0f 0%, #0b0b10 100%);
+      background-repeat: no-repeat;
+      background-attachment: scroll;
+    }
     body {
       margin: 0;
       font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
       color: var(--text);
-      background: linear-gradient(180deg, #1a0c0f 0%, #0b0b10 100%);
-      background-repeat: no-repeat;
-      background-attachment: scroll;
+      background: transparent;
     }
     .page { min-height: 100vh; display: grid; place-items: start center; }
     .wrap { width: 100%; max-width: 1100px; padding: 28px 16px 60px; }
@@ -10049,7 +10052,8 @@ async function renderSchoolSpellCounters(){
   const maxSimpleSchools = null; // unlimited simple schools
     const maxComplexSchools = numOr(DERIVED_CACHE?.complex_schools, msMAG || 0);
   const maxSimplePreparedBase = magVal;
-  const maxComplexPreparedBase = msMAG * 2;
+  const complexSlotsFromMag = Math.max(0, Math.floor(Math.max(0, magVal - 8) / 2) * 2);
+  const maxComplexPreparedBase = complexSlotsFromMag;
   const simpleAdj = applyOps(maxSimplePreparedBase, PASSIVE.spell_slots?.simple);
   const complexAdj = applyOps(maxComplexPreparedBase, PASSIVE.spell_slots?.complex);
   const maxSimplePrepared = Math.max(0, Math.floor(simpleAdj.value));
