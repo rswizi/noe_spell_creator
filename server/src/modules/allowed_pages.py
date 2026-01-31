@@ -59,6 +59,7 @@ ALLOWED_PAGES = {
     "weapons_edit",
     "weapons_home",
     "weapons_parse",
+    "nature_picker",
     "wiki",
     "wiki_home",
 }
