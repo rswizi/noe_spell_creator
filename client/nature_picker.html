@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>NoE — Nature Picker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    body {
+      background: #07060a;
+      color: #f3f3f5;
+      min-height: 100vh;
+    }
+    .topbar {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:20px;
+      border-bottom:1px solid #1d1c2a;
+      background:linear-gradient(95deg, #0c0b12, #17131f);
+      position:sticky;
+      top:0;
+      z-index:20;
+    }
+    .topbar h1 {
+      font-size:1.4rem;
+      margin:0;
+    }
+    .wrap {
+      max-width:980px;
+      margin:0 auto;
+      padding:24px 16px 40px;
+    }
+    .hero {
+      font-size:2rem;
+      margin-bottom:4px;
+    }
+    .desc {
+      color:#b1b0c2;
+      max-width:760px;
+      margin-bottom:18px;
+    }
+    .nature-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(140px,1fr));
+      gap:12px;
+      margin-bottom:24px;
+    }
+    .nature-cell {
+      border:1px solid #292837;
+      border-radius:14px;
+      padding:12px;
+      text-align:center;
+      background:#0d0c13;
+      cursor:pointer;
+      transition:border .2s ease, transform .2s ease;
+    }
+    .nature-cell.selected {
+      border-color:#c54b4b;
+      box-shadow:0 0 14px rgba(197,75,75,0.35);
+      transform:translateY(-3px);
+    }
+    .nature-cell img {
+      width:48px;
+      height:48px;
+      margin-bottom:8px;
+    }
+    .nature-cell span {
+      display:block;
+      font-size:1rem;
+      font-weight:600;
+    }
+    .controls {
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      align-items:center;
+      margin-bottom:14px;
+    }
+    .controls .pill {
+      padding:6px 12px;
+      border-radius:999px;
+      border:1px solid #33334b;
+      background:#11111c;
+      font-size:.9rem;
+    }
+    .results {
+      display:grid;
+      gap:12px;
+    }
+    .school-card {
+      border:1px solid #1f1f2c;
+      border-radius:14px;
+      padding:14px;
+      background:#10101a;
+      box-shadow:0 8px 18px rgba(0,0,0,0.35);
+    }
+    .school-card header {
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .school-card header h3 {
+      margin:0;
+      font-size:1.1rem;
+    }
+    .school-card .meta {
+      color:#9998b2;
+      font-size:.85rem;
+    }
+    .tags {
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      margin-top:10px;
+    }
+    .tag {
+      border-radius:999px;
+      background:#171520;
+      border:1px solid #2b2b3b;
+      padding:4px 10px;
+      font-size:.8rem;
+    }
+    #status {
+      color:#f66;
+      margin-top:12px;
+      font-size:.9rem;
+    }
+    @media (max-width:720px){
+      .topbar {
+        flex-direction:column;
+        gap:10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Nature Picker</h1>
+    <a class="btn" href="portal.html">Back to Portal</a>
+  </div>
+
+  <div class="wrap">
+    <div class="hero">Mix Eclipse natures to uncover schools</div>
+    <p class="desc">
+      Click any combination of natures to see which schools become available.
+      Complex schools require every linked nature to be selected; simple schools open
+      when their linked intensity is part of the collection.
+    </p>
+
+    <div class="nature-grid" id="nature-grid"></div>
+
+    <div class="controls">
+      <span id="selected-summary">Selected natures: none</span>
+      <span class="pill" id="result-count">— schools available</span>
+      <span class="pill" id="complex-hint">Complex schools require every linked nature.</span>
+    </div>
+
+    <div class="results" id="school-results"></div>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    const API_BASE = "";
+    const NATURES = [
+      { key: "fire", label: "Fire" },
+      { key: "water", label: "Water" },
+      { key: "earth", label: "Earth" },
+      { key: "wind", label: "Wind" },
+      { key: "lightning", label: "Lightning" },
+      { key: "sun", label: "Sun" },
+      { key: "moon", label: "Moon" },
+      { key: "ki", label: "Ki" },
+    ];
+
+    const selected = new Set();
+    let schools = [];
+
+    const gridEl = document.getElementById("nature-grid");
+    const summaryEl = document.getElementById("selected-summary");
+    const resultCountEl = document.getElementById("result-count");
+    const resultsEl = document.getElementById("school-results");
+    const statusEl = document.getElementById("status");
+
+    function normalize(name) {
+      return String(name || "").trim().toLowerCase();
+    }
+
+    function renderNatures() {
+      gridEl.innerHTML = "";
+      NATURES.forEach(nature => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "nature-cell" + (selected.has(nature.key) ? " selected" : "");
+        button.innerHTML = `
+          <img src="/assets/natures/${nature.key}.svg" alt="${nature.label}">
+          <span>${nature.label}</span>
+        `;
+        button.addEventListener("click", () => {
+          if (selected.has(nature.key)) selected.delete(nature.key);
+          else selected.add(nature.key);
+          renderNatures();
+          renderResults();
+        });
+        gridEl.appendChild(button);
+      });
+    }
+
+    function updateSummary() {
+      if (!selected.size) {
+        summaryEl.textContent = "Selected natures: none";
+        resultCountEl.textContent = "— schools available";
+        return;
+      }
+      const names = NATURES.filter(n => selected.has(n.key)).map(n => n.label);
+      summaryEl.textContent = `Selected natures: ${names.join(", ")}`;
+    }
+
+    function isAccessible(school) {
+      const required = (school.linked_intensities || []).map(normalize).filter(Boolean);
+      if (!required.length) return true;
+      return required.every(req => selected.has(req));
+    }
+
+    function renderResults() {
+      updateSummary();
+      const accessible = schools.filter(isAccessible);
+      resultCountEl.textContent = `${accessible.length} school${accessible.length === 1 ? "" : "s"} available`;
+      resultsEl.innerHTML = "";
+      if (!selected.size) {
+        resultsEl.innerHTML = "<div class='desc'>Pick at least one nature to unlock schools.</div>";
+        return;
+      }
+      if (!accessible.length) {
+        resultsEl.innerHTML = "<div class='desc'>No schools match that combination yet.</div>";
+        return;
+      }
+      accessible.forEach(school => {
+        const card = document.createElement("article");
+        card.className = "school-card";
+        const typeLabel = school.school_type === "complex" ? "Complex" : "Simple";
+        const range = school.range_type ? `Range ${school.range_type}` : "";
+        const aoe = school.aoe_type ? `AoE ${school.aoe_type}` : "";
+        const meta = [range, aoe].filter(Boolean).join(" • ");
+        const skill = school.linked_skill ? school.linked_skill : "—";
+        const natures = (school.linked_intensities || []).slice();
+
+        card.innerHTML = `
+          <header>
+            <div>
+              <h3>${school.name}</h3>
+              <div class="meta">${typeLabel}${meta ? " • " + meta : ""}</div>
+            </div>
+            <div class="tag">${skill} skill</div>
+          </header>
+          <div class="tags">
+            ${natures.map(n => `<span class="tag">${n}</span>`).join("")}
+          </div>
+        `;
+        resultsEl.appendChild(card);
+      });
+    }
+
+    async function loadSchools() {
+      statusEl.textContent = "Loading schools…";
+      try {
+        const response = await fetch(`${API_BASE}/schools`);
+        const payload = await response.json();
+        schools = Array.isArray(payload?.schools) ? payload.schools : [];
+        renderNatures();
+        renderResults();
+        statusEl.textContent = "";
+      } catch (error) {
+        statusEl.textContent = "Unable to load schools: " + (error.message || "unknown error");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      renderNatures();
+      loadSchools();
+    });
+  </script>
+</body>
+</html>
