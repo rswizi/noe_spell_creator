@@ -10772,6 +10772,7 @@ function renderAbilitySpellsBucket(){
     const range = sp.range != null ? `Range: ${sp.range}` : '';
     const aoe = sp.aoe ? `AoE: ${sp.aoe}` : '';
     const metaLine = [cost || '', range || '', aoe || ''].filter(Boolean).join(' || ');
+    const craftAvatarUrl = spellAvatarUrl(sp);
     const div = document.createElement('div');
     div.className = 'abi-item abi-card';
     const statusLabel = 'Craftomancy';
