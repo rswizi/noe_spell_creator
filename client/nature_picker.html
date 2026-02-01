@@ -46,6 +46,42 @@
       gap:12px;
       margin-bottom:24px;
     }
+    .school-section {
+      border:1px solid #1d1c2a;
+      border-radius:16px;
+      padding:18px;
+      background:#0c0c14;
+      box-shadow:0 10px 25px rgba(0,0,0,.45);
+      display:grid;
+      gap:12px;
+      margin-bottom:16px;
+    }
+    .school-section:last-child {
+      margin-bottom:0;
+    }
+    .section-header {
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .section-header h4 {
+      margin:0;
+      font-size:1rem;
+      text-transform:uppercase;
+      letter-spacing:.03em;
+      color:#d8d6f6;
+    }
+    .section-header .section-count {
+      font-size:.85rem;
+      opacity:.8;
+    }
+    .school-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(220px,1fr));
+      gap:12px;
+    }
     .nature-cell {
       border:1px solid #292837;
       border-radius:14px;
@@ -95,12 +131,22 @@
       background:#10101a;
       box-shadow:0 8px 18px rgba(0,0,0,0.35);
     }
+    .school-card.overlap {
+      border-color:#1f6a70;
+      box-shadow:0 15px 30px rgba(31,106,112,0.35);
+    }
     .school-card header {
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
       gap:10px;
       flex-wrap:wrap;
+    }
+    .school-card header .school-type {
+      font-size:.8rem;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+      color:#8ee1db;
     }
     .school-card header h3 {
       margin:0;
@@ -122,6 +168,16 @@
       border:1px solid #2b2b3b;
       padding:4px 10px;
       font-size:.8rem;
+    }
+    .school-card.overlap .tags .tag {
+      background:#0c2a31;
+      border-color:#1f6a70;
+      color:#87e4e0;
+    }
+    .tag.overlap-tag {
+      border-color:#1faaaf;
+      background:#0d2f33;
+      color:#b6fff8;
     }
     #status {
       color:#f66;
@@ -188,7 +244,14 @@
       return String(name || "").trim().toLowerCase();
     }
 
-    function renderNatures() {
+    function labelNature(key) {
+      if (!key) return "";
+      const match = NATURES.find(n => n.key === key.toLowerCase());
+      if (match) return match.label;
+      return key.charAt(0).toUpperCase() + key.slice(1);
+    }
+
+    function drawNatureGrid() {
       gridEl.innerHTML = "";
       NATURES.forEach(nature => {
         const button = document.createElement("button");
@@ -201,7 +264,7 @@
         button.addEventListener("click", () => {
           if (selected.has(nature.key)) selected.delete(nature.key);
           else selected.add(nature.key);
-          renderNatures();
+          drawNatureGrid();
           renderResults();
         });
         gridEl.appendChild(button);
@@ -211,56 +274,160 @@
     function updateSummary() {
       if (!selected.size) {
         summaryEl.textContent = "Selected natures: none";
-        resultCountEl.textContent = "â€” schools available";
         return;
       }
       const names = NATURES.filter(n => selected.has(n.key)).map(n => n.label);
       summaryEl.textContent = `Selected natures: ${names.join(", ")}`;
     }
 
-    function isAccessible(school) {
-      const required = (school.linked_intensities || []).map(normalize).filter(Boolean);
-      if (!required.length) return true;
-      return required.every(req => selected.has(req));
+    function createSchoolCard(school, options = {}) {
+      const card = document.createElement("article");
+      const range = school.range_type ? `Range ${school.range_type}` : "";
+      const aoe = school.aoe_type ? `AoE ${school.aoe_type}` : "";
+      const metaText = [range, aoe].filter(Boolean).join(" â€¢ ");
+      const skill = school.linked_skill || "—";
+      const typeLabel = school.school_type === "complex" ? "Complex" : "Simple";
+      const natures = (school.linked_intensities || []).slice();
+      const matches = Array.isArray(options.matchNatures) ? options.matchNatures : [];
+      const matchTag = matches.length
+        ? `<span class="tag overlap-tag">Overlap: ${matches.map(labelNature).join(" + ")}</span>`
+        : "";
+      card.className = "school-card" + (options.highlight ? " overlap" : "");
+      card.innerHTML = `
+        <header>
+          <div>
+            <h3>${school.name}</h3>
+            <div class="meta">${metaText || "—"}</div>
+          </div>
+          <div class="school-type">${typeLabel}</div>
+        </header>
+        <div class="tags">
+          ${natures.map(n => `<span class="tag">${n}</span>`).join("")}
+          ${matchTag}
+          <span class="tag">${skill} skill</span>
+        </div>
+      `;
+      return card;
+    }
+
+    function createSectionHeader(title, count) {
+      const header = document.createElement("div");
+      header.className = "section-header";
+      const h4 = document.createElement("h4");
+      h4.textContent = title;
+      const badge = document.createElement("span");
+      badge.className = "section-count";
+      badge.textContent = `${count} ${count === 1 ? "entry" : "entries"}`;
+      header.appendChild(h4);
+      header.appendChild(badge);
+      return header;
     }
 
     function renderResults() {
       updateSummary();
-      const accessible = schools.filter(isAccessible);
-      resultCountEl.textContent = `${accessible.length} school${accessible.length === 1 ? "" : "s"} available`;
       resultsEl.innerHTML = "";
       if (!selected.size) {
+        resultCountEl.textContent = "— schools available";
         resultsEl.innerHTML = "<div class='desc'>Pick at least one nature to unlock schools.</div>";
         return;
       }
-      if (!accessible.length) {
-        resultsEl.innerHTML = "<div class='desc'>No schools match that combination yet.</div>";
-        return;
-      }
-      accessible.forEach(school => {
-        const card = document.createElement("article");
-        card.className = "school-card";
-        const typeLabel = school.school_type === "complex" ? "Complex" : "Simple";
-        const range = school.range_type ? `Range ${school.range_type}` : "";
-        const aoe = school.aoe_type ? `AoE ${school.aoe_type}` : "";
-        const meta = [range, aoe].filter(Boolean).join(" â€¢ ");
-        const skill = school.linked_skill ? school.linked_skill : "â€”";
-        const natures = (school.linked_intensities || []).slice();
 
-        card.innerHTML = `
-          <header>
-            <div>
-              <h3>${school.name}</h3>
-              <div class="meta">${typeLabel}${meta ? " â€¢ " + meta : ""}</div>
-            </div>
-            <div class="tag">${skill} skill</div>
-          </header>
-          <div class="tags">
-            ${natures.map(n => `<span class="tag">${n}</span>`).join("")}
-          </div>
-        `;
-        resultsEl.appendChild(card);
+      const simpleByNature = new Map();
+      const complexByNature = new Map();
+      Array.from(selected).forEach(nature => {
+        simpleByNature.set(nature, []);
+        complexByNature.set(nature, []);
       });
+
+      const overlapCandidates = [];
+      const overlapIds = new Set();
+
+      schools.forEach(school => {
+        const linked = (school.linked_intensities || []).map(normalize).filter(Boolean);
+        if (!linked.length) return;
+        const linkedSet = new Set(linked);
+        const isComplex = (school.school_type || "").toLowerCase() === "complex";
+
+        selected.forEach(nature => {
+          if (!linkedSet.has(nature)) return;
+          if (isComplex && linkedSet.size === 1) {
+            const list = complexByNature.get(nature);
+            if (list && !list.some(entry => entry.id === school.id)) {
+              list.push(school);
+            }
+          } else if (!isComplex) {
+            const list = simpleByNature.get(nature);
+            if (list && !list.some(entry => entry.id === school.id)) {
+              list.push(school);
+            }
+          }
+        });
+
+        if (selected.size > 1) {
+          const matches = Array.from(linkedSet).filter(n => selected.has(n));
+          if (matches.length >= 2 && !overlapIds.has(school.id)) {
+            overlapCandidates.push({ school, matches });
+            overlapIds.add(school.id);
+          }
+        }
+      });
+
+      const totalSimple = Array.from(simpleByNature.values()).reduce((sum, list) => sum + list.length, 0);
+      const overlapCount = overlapCandidates.length;
+      resultCountEl.textContent = `${totalSimple} simple school${totalSimple === 1 ? "" : "s"} available`;
+      if (overlapCount) {
+        resultCountEl.textContent += ` · ${overlapCount} overlapping school${overlapCount === 1 ? "" : "s"}`;
+      }
+
+      Array.from(selected).forEach(nature => {
+        const simpleList = simpleByNature.get(nature) || [];
+        const complexList = complexByNature.get(nature) || [];
+        const section = document.createElement("section");
+        section.className = "school-section";
+        section.appendChild(createSectionHeader(`${labelNature(nature)} simple schools`, simpleList.length));
+
+        if (simpleList.length) {
+          const grid = document.createElement("div");
+          grid.className = "school-grid";
+          simpleList.forEach(school => grid.appendChild(createSchoolCard(school)));
+          section.appendChild(grid);
+        } else {
+          const note = document.createElement("div");
+          note.className = "desc";
+          note.textContent = "No simple schools tied to this nature yet.";
+          section.appendChild(note);
+        }
+
+        if (complexList.length) {
+          section.appendChild(createSectionHeader(`${labelNature(nature)} complex schools`, complexList.length));
+          const grid = document.createElement("div");
+          grid.className = "school-grid";
+          complexList.forEach(school => grid.appendChild(createSchoolCard(school)));
+          section.appendChild(grid);
+        }
+
+        resultsEl.appendChild(section);
+      });
+
+      if (selected.size > 1) {
+        if (overlapCandidates.length) {
+          const overlapSection = document.createElement("section");
+          overlapSection.className = "school-section";
+          overlapSection.appendChild(createSectionHeader("Overlapping schools", overlapCount));
+          const grid = document.createElement("div");
+          grid.className = "school-grid";
+          overlapCandidates.forEach(({ school, matches }) => {
+            grid.appendChild(createSchoolCard(school, { highlight: true, matchNatures: matches }));
+          });
+          overlapSection.appendChild(grid);
+          resultsEl.appendChild(overlapSection);
+        } else {
+          const note = document.createElement("div");
+          note.className = "desc";
+          note.textContent = "No schools currently overlap two selected natures.";
+          resultsEl.appendChild(note);
+        }
+      }
     }
 
     async function loadSchools() {
@@ -269,7 +436,7 @@
         const response = await fetch(`${API_BASE}/schools`);
         const payload = await response.json();
         schools = Array.isArray(payload?.schools) ? payload.schools : [];
-        renderNatures();
+        drawNatureGrid();
         renderResults();
         statusEl.textContent = "";
       } catch (error) {
@@ -278,7 +445,7 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-      renderNatures();
+      drawNatureGrid();
       loadSchools();
     });
   </script>

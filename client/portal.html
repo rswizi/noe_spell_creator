@@ -11,6 +11,7 @@
     .cta{display:grid;grid-template-columns:1fr 1fr;gap:16px}
     .cta a{display:block;text-align:center;padding:24px;border-radius:12px;border:1px solid #333;background:#101010}
     .muted{opacity:.85}
+    .portal-logo{height:48px;width:auto;display:block;margin:auto;}
 
     .modal, .modal-backdrop { display: none; }
     .modal.open, .modal-backdrop.open { display: block; }
@@ -18,7 +19,9 @@
 </head>
 <body>
   <div class="topbar">
-    <h1>NoE Manager</h1>
+    <h1>
+      <img src="/assets/logo/logo.png" alt="NoE Asset Manager" class="portal-logo" />
+    </h1>
     <div class="auth-inline">
       <div id="user-chip" class="user-chip">
         <span class="chip-name" id="chip-name"></span>
