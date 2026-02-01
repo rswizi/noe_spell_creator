@@ -13271,6 +13271,21 @@ function finalizeWeaponDamageRoll(mods){
   appendRollLog(entry);
 }
 
+function htmlToPlainText(html){
+  let raw = html ?? "";
+  if (raw === null || raw === undefined) {
+    raw = "";
+  }
+  raw = String(raw);
+  if (typeof document === "undefined") {
+    return raw.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  }
+  const div = document.createElement("div");
+  div.innerHTML = raw;
+  const text = div.textContent || div.innerText || "";
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function normalizeAbilityRolls(a){
   const active = a?.active || {};
   const raw = Array.isArray(active.rolls) ? active.rolls : (Array.isArray(a?.rolls) ? a.rolls : []);
@@ -13807,7 +13822,8 @@ function spellHasDurationTrack(sp){
 }
 
 function cleanEffectText(text){
-  return String(text || '').replace(/\s*\|\s*$/, '').replace(/\s+/g, ' ').trim();
+  const plain = htmlToPlainText(text);
+  return String(plain || '').replace(/\s*\|\s*$/, '').replace(/\s+/g, ' ').trim();
 }
 
 function normalizeDescText(raw){
