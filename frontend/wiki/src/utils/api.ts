@@ -1,13 +1,14 @@
 const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-const token = import.meta.env.VITE_API_TOKEN || "";
 
 const defaultHeaders: Record<string, string> = {
   "Content-Type": "application/json",
 };
 
-if (token) {
-  defaultHeaders["Authorization"] = `Bearer ${token}`;
-}
+const redirectToLogin = () => {
+  if (typeof window !== "undefined") {
+    window.location.assign("/wiki/login");
+  }
+};
 
 async function fetcher(path: string, options: RequestInit = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -18,6 +19,10 @@ async function fetcher(path: string, options: RequestInit = {}) {
     },
     credentials: "include",
   });
+  if (response.status === 401) {
+    redirectToLogin();
+    throw new Error("Unauthorized");
+  }
   if (!response.ok) {
     const message = await response.text();
     throw new Error(message || response.statusText);
@@ -87,13 +92,8 @@ export type AssetUploadResponse = {
 export async function uploadAsset(file: File): Promise<AssetUploadResponse> {
   const form = new FormData();
   form.append("file", file);
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
   const response = await fetch(`${baseUrl}/api/assets/upload`, {
     method: "POST",
-    headers,
     body: form,
     credentials: "include",
   });

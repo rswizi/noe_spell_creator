@@ -6,6 +6,7 @@ from fastapi import Request, HTTPException
 from db_mongo import get_col
 
 SESSIONS: Dict[str, Tuple[str, str]] = {}
+AUTH_TOKEN_COOKIE = "auth_token"
 
 def _sha256(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
@@ -17,6 +18,9 @@ def get_auth_token(request: Request) -> Optional[str]:
     auth = request.headers.get("Authorization", "")
     if auth.lower().startswith("bearer "):
         return auth.split(" ", 1)[1].strip()
+    cookie_token = request.cookies.get(AUTH_TOKEN_COOKIE)
+    if cookie_token:
+        return cookie_token
     return None
 
 def verify_password(input_pw: str, user_doc: dict) -> bool:

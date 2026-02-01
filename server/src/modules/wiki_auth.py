@@ -8,10 +8,11 @@ from server.src.modules.authentification_helpers import get_auth_token, require_
 API_TOKEN = os.environ.get("API_TOKEN", "")
 ENV = os.environ.get("ENV", "development").lower()
 
-if ENV == "production" and not API_TOKEN:
-    raise RuntimeError("API_TOKEN must be set in production for wiki APIs")
-elif not API_TOKEN:
-    print("WARNING: Running wiki APIs without API_TOKEN (allowed only in non-production environments)")
+if not API_TOKEN:
+    print(
+        "NOTICE: No API_TOKEN configured for wiki APIs; session-based logins will be used instead."
+        + (" (Production workload should ensure admins are authenticated)." if ENV == "production" else "")
+    )
 
 
 def require_wiki_admin(request: Request):

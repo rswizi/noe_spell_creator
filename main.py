@@ -19,7 +19,18 @@ from pymongo.errors import DuplicateKeyError
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
 
 from server.src.modules.apotheosis_helpers import compute_apotheosis_stats, _can_edit_apotheosis
-from server.src.modules.authentification_helpers import _ALLOWED_ROLES, SESSIONS, find_user, require_auth, make_token, verify_password, get_auth_token, normalize_email,_sha256
+from server.src.modules.authentification_helpers import (
+    _ALLOWED_ROLES,
+    AUTH_TOKEN_COOKIE,
+    SESSIONS,
+    find_user,
+    require_auth,
+    make_token,
+    verify_password,
+    get_auth_token,
+    normalize_email,
+    _sha256,
+)
 from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect, recompute_all_spells
 from server.src.modules.objects_helpers import _object_from_body
@@ -125,8 +136,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-ENV = os.environ.get("ENV", "development").lower()
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "").strip()
+ENV = os.environ.get("ENV", "development").lower()
+COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+COOKIE_SECURE = ENV == "production"
 if not CORS_ORIGINS:
     if ENV == "production":
         raise RuntimeError("CORS_ORIGINS must be set in production")
@@ -134,11 +147,14 @@ if not CORS_ORIGINS:
 else:
     allowed_origins = [origin.strip() for origin in CORS_ORIGINS.split(",") if origin.strip()]
 
+allow_credentials = bool(CORS_ORIGINS)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=allow_credentials,
 )
 
 app.include_router(wiki_router, prefix="")
@@ -576,7 +592,7 @@ async def campaign_chat_ws(websocket: WebSocket, cid: str):
             CAMPAIGN_CHAT_WS.pop(cid, None)
 # ---------- Auth ----------
 @app.post("/auth/login")
-async def auth_login(request: Request):
+async def auth_login(request: Request, response: Response):
     body = await request.json()
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
@@ -597,6 +613,15 @@ async def auth_login(request: Request):
     role = user.get("role", "user")
     SESSIONS[token] = (username, role)
     logger.info("Login ok: %s (%s)", username, role)
+    response.set_cookie(
+        AUTH_TOKEN_COOKIE,
+        token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=COOKIE_MAX_AGE,
+        path="/",
+    )
     return {"status": "success", "token": token, "username": username, "role": role}
 
 @app.post("/auth/forgot")
@@ -710,10 +735,11 @@ async def auth_me(request: Request):
     return {"status": "success", "username": username, "role": role}
 
 @app.post("/auth/logout")
-async def auth_logout(request: Request):
+async def auth_logout(request: Request, response: Response):
     token = get_auth_token(request)
     if token and token in SESSIONS:
         del SESSIONS[token]
+    response.delete_cookie(AUTH_TOKEN_COOKIE, path="/")
     return {"status": "success"}
 
 
