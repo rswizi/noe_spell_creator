@@ -16372,18 +16372,16 @@ async function searchAbilities(){
     let results = (res.abilities || []).map(doc => ({ ...doc, kind: 'ability' }));
     const sourceFilter = (abiFilterSrcEl.value || '').trim().toLowerCase();
     if (sourceFilter === 'apotheosis'){
-    const apoParams = [];
-    if (abiSearchEl.value) apoParams.push('name='+encodeURIComponent(abiSearchEl.value));
-    if (abiFilterTypeEl.value) apoParams.push('typ='+encodeURIComponent(abiFilterTypeEl.value));
-    if (CURRENT_USER?.username) apoParams.push('creator='+encodeURIComponent(CURRENT_USER.username));
-    const apoQs = apoParams.length ? '?'+apoParams.join('&') : '';
+      const apoParams = [];
+      if (abiSearchEl.value) apoParams.push('name='+encodeURIComponent(abiSearchEl.value));
+      if (abiFilterTypeEl.value) apoParams.push('typ='+encodeURIComponent(abiFilterTypeEl.value));
+      if (CURRENT_USER?.username) apoParams.push('creator='+encodeURIComponent(CURRENT_USER.username));
+      const apoQs = apoParams.length ? '?'+apoParams.join('&') : '';
       try{
         const apoRes = await api('/apotheoses'+apoQs);
-        const apotheoses = (apoRes.apotheoses || []).map(doc => ({
-          ...doc,
-          kind: 'apotheosis',
-          apotheosis_type: doc.type,
-        }));
+        const apotheoses = (apoRes.apotheoses || [])
+          .map(doc => apotheosisToAbility(doc))
+          .filter(Boolean);
         results = results.concat(apotheoses);
       }catch{
         // intentionally swallow; fallback to abilities only
@@ -16393,6 +16391,40 @@ async function searchAbilities(){
   }catch(e){
     abiResultsEl.innerHTML = `<div class="muted">Error: ${e.message}</div>`;
   }
+}
+function apotheosisToAbility(doc){
+  if (!doc || !doc.id) return null;
+  const amplitudeRaw = Number(doc?.stats?.amplitude ?? 0);
+  const amplitude = Math.max(0, Number.isFinite(amplitudeRaw) ? amplitudeRaw : 0);
+  const baseDiameter = 17 + 2 * amplitude;
+  const diameterRaw = doc?.stats?.diameter;
+  const diameter = Number.isFinite(Number(diameterRaw)) ? Number(diameterRaw) : baseDiameter;
+  const formula = `17+2×${amplitude}`;
+  const aoeLabel = Number.isFinite(diameter) ? `Circle (${formula} = ${diameter})` : `Circle (${formula})`;
+  return {
+    ...doc,
+    kind: 'apotheosis',
+    type: 'active',
+    source_category: 'Apotheosis',
+    apotheosis_stage: doc.stage,
+    apotheosis_type: doc.type,
+    active: {
+      costs_active: true,
+      costs: {
+        HP: 0,
+        EN: 0,
+        FO: 0,
+        MO: 0,
+        TX: 0,
+        other_label: 'Cost',
+        other_value: 0,
+      },
+      activation: 'Action (Reaction)',
+      range: '0',
+      aoe: aoeLabel,
+      rolls: [],
+    },
+  };
 }
 abiSearchBtn.addEventListener('click', searchAbilities);
 abiSearchEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') searchAbilities(); });
@@ -16601,15 +16633,10 @@ async function resolveAssignedAbilities(){
       const apoBulk = await api('/apotheoses/bulk'+apoQs);
       (apoBulk.apotheoses || []).forEach(doc=>{
         if (!doc?.id) return;
-        const enriched = {
-          ...doc,
-          kind: 'apotheosis',
-          source_category: 'Apotheosis',
-          type: 'passive',
-          apotheosis_stage: doc.stage,
-          apotheosis_type: doc.type,
-        };
+      const enriched = apotheosisToAbility(doc);
+      if (enriched) {
         byId[doc.id] = enriched;
+      }
       });
     }catch{
       /* ignore; fallback to abilities only */
