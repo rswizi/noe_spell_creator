@@ -1644,6 +1644,7 @@
                       <button class="btn tiny" id="combat-roll-passive">Passive</button>
                       <button class="btn tiny" id="combat-open-spell">Spell</button>
                       <button class="btn tiny" id="combat-open-awaken">Awaken</button>
+                      <button class="btn tiny" id="combat-open-apotheosis">Apotheosis</button>
                     </div>
                   </div>
                   <button class="btn combat-shield-button" id="def-roll" title="Roll Defense">
@@ -3170,6 +3171,7 @@ let ABI_SORT_PASSIVE = 'manual';
 let ABI_SORT_ACTIVE = 'manual';
 let ABI_SORT_SPELLS = 'manual';
 let COMBAT_PASSIVE_MODE = false;
+let COMBAT_APOTHEOSIS_MODE = false;
 const ABI_PIN_KEY = CID ? `abi_pins:${CID}` : '';
 const ABI_HIDE_KEY = CID ? `abi_hide_unpinned:${CID}` : '';
 let ABI_PINNED = { passive:new Set(), active:new Set(), spell:new Set() };
@@ -3517,6 +3519,7 @@ const combatSecondaryOpenBtn = document.getElementById('combat-open-secondary');
 const combatContextOpenBtn = document.getElementById('combat-open-context');
 const combatSpecialOpenBtn = document.getElementById('combat-open-special');
 const combatAbilityOpenBtn = document.getElementById('combat-open-ability');
+const combatApotheosisOpenBtn = document.getElementById('combat-open-apotheosis');
 const combatActButton = document.getElementById('combat-act');
 const combatActMenu = document.getElementById('combat-act-menu');
 const combatRollPassiveBtn = document.getElementById('combat-roll-passive');
@@ -4380,20 +4383,36 @@ function setResourceProgress(resource, current, maximum){
   combatDefBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatDefBackdrop) invToggleModal(combatDefModal, combatDefBackdrop, false); });
   initRollBtn?.addEventListener('click', rollInitiativeSpecial);
   combatAbilitySearchEl?.addEventListener('input', renderCombatAbilityList);
-  function updateCombatAbilityTitle(){
+function updateCombatAbilityTitle(){
     if (!combatAbilityTitleEl) return;
+    if (COMBAT_APOTHEOSIS_MODE){
+      combatAbilityTitleEl.textContent = 'Roll Apotheosis';
+      return;
+    }
     combatAbilityTitleEl.textContent = COMBAT_PASSIVE_MODE ? 'Roll Passive Ability' : 'Use Ability';
   }
   function openCombatAbilityModal(passive = false){
-    COMBAT_PASSIVE_MODE = !!passive;
+    if (!COMBAT_APOTHEOSIS_MODE){
+      COMBAT_PASSIVE_MODE = !!passive;
+    }else{
+      COMBAT_PASSIVE_MODE = false;
+    }
     updateCombatAbilityTitle();
     renderCombatAbilityList();
     invToggleModal(combatAbilityModal, combatAbilityBackdrop, true);
   }
   function closeCombatAbilityModal(){
     COMBAT_PASSIVE_MODE = false;
+    COMBAT_APOTHEOSIS_MODE = false;
     updateCombatAbilityTitle();
     invToggleModal(combatAbilityModal, combatAbilityBackdrop, false);
+  }
+  function openCombatApotheosisModal(){
+    COMBAT_APOTHEOSIS_MODE = true;
+    COMBAT_PASSIVE_MODE = false;
+    updateCombatAbilityTitle();
+    renderCombatAbilityList();
+    invToggleModal(combatAbilityModal, combatAbilityBackdrop, true);
   }
   combatSpellSearchEl?.addEventListener('input', renderCombatSpellList);
   combatSecondaryOpenBtn?.addEventListener('click', ()=>{
@@ -4419,6 +4438,7 @@ function setResourceProgress(resource, current, maximum){
   combatSpecialBackdrop?.addEventListener('click', (e)=>{ if (e.target === combatSpecialBackdrop) invToggleModal(combatSpecialModal, combatSpecialBackdrop, false); });
   combatAbilityOpenBtn?.addEventListener('click', ()=> openCombatAbilityModal(false));
   combatRollPassiveBtn?.addEventListener('click', ()=> openCombatAbilityModal(true));
+  combatApotheosisOpenBtn?.addEventListener('click', ()=> openCombatApotheosisModal());
   if (combatActButton && combatActMenu){
     const handleCombatActToggle = (e)=>{
       e.stopPropagation();
@@ -14318,10 +14338,14 @@ function announceWeaponReload(it, amount, ammoLabel, remainingQty){
 
 function renderCombatAbilityList(){
   if (!combatAbilityListEl) return;
+  const docs = collectDisplayAbilities() || [];
+  const visibleDocs = COMBAT_APOTHEOSIS_MODE
+    ? docs.filter(a=> String(a?.kind || '').toLowerCase() === 'apotheosis')
+    : docs;
   const st = combatState();
   const search = String(combatAbilitySearchEl?.value || '').trim().toLowerCase();
   const isPassiveMode = !!COMBAT_PASSIVE_MODE;
-  const list = (collectDisplayAbilities() || []).filter(a=>{
+  const list = visibleDocs.filter(a=>{
     const type = String(a?.type || '').toLowerCase();
     if (isPassiveMode){
       return type !== 'active';
