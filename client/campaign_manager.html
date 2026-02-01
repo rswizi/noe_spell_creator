@@ -12,13 +12,14 @@
     :root{
       color-scheme: dark;
       --ink:#f6f2ea;
-      --muted:#b5b1a8;
+      --muted:#b7b2a8;
       --bg:#0b0c10;
       --bg-2:#12141c;
       --panel:#161924;
       --border:#2a2f3a;
       --accent:#c9a227;
       --accent-2:#4a8b8f;
+      --panel-strong:#1c1f2c;
     }
     *{box-sizing:border-box;}
     body{
@@ -31,106 +32,616 @@
         linear-gradient(180deg, var(--bg), #090a0f 60%, #07080c);
       min-height:100vh;
     }
-    .page{max-width:980px;margin:0 auto;padding:32px 16px 70px;}
+    .page{max-width:1200px;margin:0 auto;padding:30px 16px 70px;}
     .topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;}
     .topbar h1{margin:0;font-family:"Cinzel","Times New Roman",serif;font-weight:700;letter-spacing:0.08em;font-size:2rem;}
     .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid #3a3f49;font-size:.82rem;color:var(--muted);}
-    .hero{
-      border:1px solid var(--border);
-      border-radius:18px;
-      padding:18px;
-      background:linear-gradient(145deg, rgba(22,25,36,0.95), rgba(12,13,19,0.9));
-      box-shadow:0 18px 40px rgba(0,0,0,0.4);
-    }
-    .hero strong{display:block;font-size:1.1rem;}
-    .hero p{margin:8px 0 0;color:var(--muted);}
-    .grid{display:grid;gap:16px;margin-top:20px;}
-    @media(min-width:720px){.grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
-    .card{
-      border:1px solid var(--border);
-      border-radius:18px;
-      padding:16px;
-      background:linear-gradient(160deg, rgba(19,22,32,0.95), rgba(9,10,14,0.92));
-      display:grid;
-      gap:10px;
-      position:relative;
-      overflow:hidden;
-      min-height:180px;
-    }
-    .card:before{
-      content:"";
-      position:absolute;inset:0;
-      background:linear-gradient(110deg, transparent, rgba(201,162,39,0.08), transparent);
-      opacity:.5;pointer-events:none;
-    }
-    .card h2{margin:0;font-family:"Cinzel","Times New Roman",serif;font-size:1.15rem;letter-spacing:.05em;}
-    .card p{margin:0;color:var(--muted);line-height:1.35;}
-    .card a{
-      justify-self:start;
-      display:inline-flex;align-items:center;gap:8px;
-      border-radius:999px;border:1px solid #3a3f49;
-      padding:8px 14px;text-decoration:none;color:var(--ink);
-      background:#121521;transition:transform .15s ease, border-color .15s ease;
-    }
-    .card a:hover{border-color:#5c626f;transform:translateY(-1px);}
     .spacer{flex:1 1 auto;}
+    .btn{font-family:inherit;border-radius:999px;border:1px solid var(--border);padding:7px 16px;background:#121521;color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;}
+    .btn:hover{border-color:#5c626f;}
+    .panel{margin-top:20px;border:1px solid var(--border);border-radius:18px;padding:22px;background:linear-gradient(145deg, rgba(22,25,36,0.95), rgba(12,13,19,0.9));box-shadow:0 18px 40px rgba(0,0,0,0.4);}
+    .panel-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .panel-header h2{margin:0;font-family:"Cinzel","Times New Roman",serif;font-size:1.4rem;}
+    .panel-header .muted{margin:0;}
+    .cards{display:grid;gap:14px;}
+    @media(min-width:720px){.cards{grid-template-columns:repeat(2,minmax(0,1fr));}}
+    .card{border:1px solid var(--border);border-radius:14px;padding:14px;background:#10121a;display:grid;gap:6px;}
+    .card strong{display:block;font-size:1rem;}
+    .muted{color:var(--muted);}
+    .hidden{display:none;}
+    .pill.badge{border-color:var(--accent);color:var(--accent);}
+    .carousel{display:flex;gap:8px;overflow-x:auto;padding:6px 4px;}
+    .initiative-pill{padding:6px 12px;border-radius:999px;background:#1d2130;border:1px solid #2c3140;white-space:nowrap;font-size:.85rem;}
+    .initiative-pill.active{border-color:var(--accent);background:rgba(201,162,39,0.1);}
+    .icon-btn{border-radius:50%;width:36px;height:36px;border:1px solid var(--border);background:#121521;color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:1rem;}
+    .tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+    .tab{border:1px solid var(--border);border-radius:12px;padding:8px 12px;background:#10121a;color:var(--ink);cursor:pointer;font-size:.9rem;display:inline-flex;align-items:center;gap:6px;}
+    .tab small{color:var(--muted);}
+    .chat-panel{border:1px solid var(--border);border-radius:12px;padding:12px;background:#0f1119;display:grid;gap:10px;margin-top:18px;}
+    .chat-log{max-height:240px;overflow:auto;border-radius:10px;background:#08090f;padding:10px;border:1px solid #1d1f2a;display:grid;gap:10px;}
+    .chat-message{border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:8px;}
+    .chat-message:last-child{border-bottom:none;}
+    .chat-meta{font-size:.75rem;color:var(--muted);}
+    .chat-controls{display:flex;gap:8px;align-items:flex-end;margin-top:4px;flex-wrap:wrap;}
+    .chat-controls textarea{flex:1 1 240px;border-radius:10px;border:1px solid var(--border);background:#08090f;color:var(--ink);padding:8px;font-family:inherit;resize:none;}
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:100;}
+    .modal.open{display:flex;}
+    .modal-backdrop{position:absolute;inset:0;background:rgba(5,5,5,0.85);}
+    .modal-content{position:relative;background:#0f1119;border-radius:18px;border:1px solid var(--border);padding:24px;width:min(640px,94vw);max-height:90vh;overflow:auto;z-index:101;}
+    .character-row,.dummy-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.05);}
+    .character-row:last-child,.dummy-row:last-child{border-bottom:none;}
+    .character-row label{flex:1;}
+    .character-row input[type="number"],.dummy-row input[type="number"],.dummy-row input[type="text"]{width:80px;border-radius:8px;border:1px solid var(--border);padding:4px;background:#08090f;color:var(--ink);}
+    .character-label{display:flex;flex-direction:column;font-size:.9rem;}
+    .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap;}
+    .modal .subtle{font-size:.85rem;color:var(--muted);margin-bottom:12px;}
   </style>
 </head>
 <body>
   <div class="page">
     <div class="topbar">
       <h1>Campaign Manager</h1>
-      <span class="pill" id="login-chip">Checking login...</span>
+      <span id="login-chip" class="pill">Checking login...</span>
       <span class="spacer"></span>
-      <a class="btn btn-secondary" href="portal.html">Back to Portal</a>
+      <a class="btn" href="portal.html">Portal</a>
     </div>
 
-    <div class="hero">
-      <strong>Choose your path</strong>
-      <p>Create a new campaign, join an existing one, or return to a campaign you already play in.</p>
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Campaigns</h2>
+          <p class="muted">Select the story you want to run combats for.</p>
+        </div>
+        <button class="btn" id="refresh-campaigns">Refresh</button>
+      </div>
+      <div id="campaigns-list" class="cards"></div>
+      <p id="no-campaigns" class="muted" style="margin-top:12px;display:none;">No campaigns yet. Create one from the portal first.</p>
     </div>
 
-    <div class="grid">
-      <div class="card">
-        <h2>Create Campaign</h2>
-        <p>Name your story, write a short description, and set an avatar.</p>
-        <a href="campaigns_create.html">Create</a>
+    <div id="campaign-detail" class="panel hidden">
+      <div class="panel-header">
+        <div>
+          <h2 id="campaign-name">Campaign</h2>
+          <p class="muted" id="campaign-info">Select a campaign to manage.</p>
+        </div>
+        <div class="actions">
+          <button class="btn" id="start-combat-btn">Start Combat</button>
+          <button class="btn" id="load-active-btn">Refresh Combat</button>
+        </div>
       </div>
-      <div class="card">
-        <h2>Join Campaign</h2>
-        <p>Enter a campaign code and bring in a new or existing character.</p>
-        <a href="campaigns_join.html">Join</a>
+      <div id="campaign-characters" class="cards"></div>
+      <p class="subtle muted">Only campaign GMs (owner/admin) can start a combat.</p>
+    </div>
+
+    <div id="combat-panel" class="panel hidden">
+      <div class="panel-header">
+        <div>
+          <h2>Active Combat</h2>
+          <p class="muted" id="combat-status">Loading combat...</p>
+        </div>
+        <div class="actions">
+          <button class="btn" id="combat-prev" title="Previous turn">◀</button>
+          <button class="btn" id="combat-next" title="Next turn">▶</button>
+        </div>
       </div>
-      <div class="card">
-        <h2>My Campaigns</h2>
-        <p>Open any campaign you already joined.</p>
-        <a href="campaigns_my.html">Open list</a>
+      <div class="carousel-wrapper" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <div class="carousel" id="initiative-tracker"></div>
+        <div class="muted" id="combat-round"></div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+        <button class="btn" id="join-combat-btn">Join Combat</button>
+        <span class="muted" id="combat-token"></span>
+      </div>
+      <div id="participant-tabs" class="tabs"></div>
+      <div id="combat-characters" class="cards"></div>
+      <div id="combat-chat" class="chat-panel">
+        <div class="muted">Campaign Chat</div>
+        <div id="chat-log" class="chat-log"></div>
+        <div class="chat-controls">
+          <textarea id="chat-input" rows="2" placeholder="Share a message with the group..."></textarea>
+          <button class="btn" id="chat-send">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="combat-modal" class="modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h3>Start Combat</h3>
+      <p class="subtle">Pick characters to include, set initiatives, add dummy foes, then start the encounter.</p>
+      <div id="modal-error" class="muted" style="color:#e36f6f;"></div>
+      <div>
+        <label>
+          Title (optional):
+          <input type="text" id="combat-title" style="width:100%;border-radius:10px;border:1px solid var(--border);padding:6px;margin-top:4px;background:#08090f;color:var(--ink);">
+        </label>
+      </div>
+      <div style="margin-top:10px;">
+        <label>
+          Notes (optional):
+          <textarea id="combat-notes" rows="2" style="width:100%;border-radius:10px;border:1px solid var(--border);padding:6px;margin-top:4px;background:#08090f;color:var(--ink);font-family:inherit;"></textarea>
+        </label>
+      </div>
+      <div style="margin-top:16px;">
+        <strong>Characters</strong>
+        <div id="start-character-list" style="margin-top:10px;"></div>
+      </div>
+      <div style="margin-top:16px;">
+        <strong>Dummy combatants</strong>
+        <p class="subtle">Create placeholders for non-player participants.</p>
+        <div class="dummy-row" style="padding-bottom:0;border-bottom:none;">
+          <input type="text" id="dummy-name" placeholder="Name" style="flex:1;border-radius:8px;border:1px solid var(--border);padding:4px;background:#08090f;color:var(--ink);">
+          <input type="number" id="dummy-init" placeholder="Initiative" min="0">
+          <button class="btn" id="dummy-add">Add</button>
+        </div>
+        <div id="dummy-list" style="margin-top:8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="combat-modal-cancel">Cancel</button>
+        <button class="btn" id="combat-modal-start">Start Combat</button>
       </div>
     </div>
   </div>
 
   <script>
-    function authHeaders(){
-      const t = localStorage.getItem('auth_token') || '';
-      return t ? { Authorization: 'Bearer ' + t, 'X-Auth-Token': t } : {};
+    const state = {
+      me: null,
+      campaigns: [],
+      selectedCampaign: null,
+      activeCombat: null,
+      chatMessages: [],
+      dummyEntries: [],
+      chatInterval: null,
+      combatInterval: null,
+      lastTurnToken: 0,
+    };
+
+    function api(path, options = {}) {
+      const opts = { credentials: 'include', ...options };
+      return fetch(path, opts).then(async (resp) => {
+        const ct = resp.headers.get('content-type') || '';
+        const data = ct.includes('application/json') ? await resp.json() : {};
+        if (!resp.ok) {
+          const errMsg = (data && (data.message || data.error)) || resp.statusText;
+          throw new Error(errMsg || 'Request failed');
+        }
+        if (data && data.status === 'error') {
+          throw new Error(data.message || 'Request failed');
+        }
+        return data;
+      });
     }
-    async function api(path,opt={}){
-      const headers = Object.assign({}, opt.headers||{}, authHeaders());
-      const resp = await fetch(path, { credentials:'include', ...opt, headers });
-      const ct = resp.headers.get('content-type') || '';
-      const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() };
-      if (!resp.ok || data.status === 'error') throw new Error(data.message || `HTTP ${resp.status}`);
-      return data;
+
+    function setText(el, text) {
+      if (el) el.textContent = text;
     }
-    async function checkMe(){
-      try{
-        const me = await api('/auth/me');
-        document.getElementById('login-chip').textContent = `${me.username} (${me.role})`;
-      }catch{
-        document.getElementById('login-chip').textContent = 'Not logged in';
+
+    async function checkMe() {
+    try {
+        const res = await api('/auth/me');
+        state.me = { username: res.username, role: res.role };
+        setText(document.getElementById('login-chip'), `${res.username} (${res.role})`);
+      } catch (err) {
+        setText(document.getElementById('login-chip'), 'Not logged in');
+      }
+      updateStartButton();
+    }
+
+    function renderCampaigns() {
+      const list = document.getElementById('campaigns-list');
+      const empty = document.getElementById('no-campaigns');
+      list.innerHTML = '';
+      if (!state.campaigns.length) {
+        empty.style.display = '';
+        return;
+      }
+      empty.style.display = 'none';
+      state.campaigns.forEach((camp) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        const desc = (camp.description || '').trim() || 'No description.';
+        const owner = camp.owner || 'Unknown';
+        const chars = (camp.characters || []).length;
+        card.innerHTML = `
+          <div>
+            <strong>${camp.name || 'Campaign'}</strong>
+            <span class="muted">Owner: ${owner}</span><br>
+            <span class="muted">${chars} character${chars === 1 ? '' : 's'} · ${desc}</span>
+          </div>
+        `;
+        const button = document.createElement('button');
+        button.className = 'btn';
+        button.textContent = 'Manage';
+        button.addEventListener('click', () => selectCampaign(camp));
+        card.appendChild(button);
+        list.appendChild(card);
+      });
+    }
+
+    async function loadCampaigns() {
+      try {
+        const res = await api('/campaigns');
+        state.campaigns = res.campaigns || [];
+        renderCampaigns();
+      } catch (err) {
+        console.error(err);
       }
     }
-    checkMe();
+
+    function selectCampaign(camp) {
+      state.selectedCampaign = camp;
+      const detail = document.getElementById('campaign-detail');
+      detail.classList.remove('hidden');
+      setText(document.getElementById('campaign-name'), camp.name || 'Campaign');
+      setText(document.getElementById('campaign-info'), `Owner: ${camp.owner || 'Unknown'} · ${camp.description || 'No description'}`);
+      renderCharacterList();
+      updateStartButton();
+      loadActiveCombat();
+      startPolling();
+    }
+
+    function updateStartButton() {
+      const startBtn = document.getElementById('start-combat-btn');
+      const isGM = state.me && (((state.selectedCampaign?.owner || '').toLowerCase() === (state.me?.username || '').toLowerCase()) || (state.me?.role === 'admin'));
+      const hasCombat = !!state.activeCombat;
+      startBtn.disabled = !isGM || hasCombat;
+      if (!state.me) {
+        startBtn.disabled = true;
+      }
+    }
+
+    function renderCharacterList() {
+      const container = document.getElementById('campaign-characters');
+      container.innerHTML = '';
+      const chars = state.selectedCampaign?.characters || [];
+      if (!chars.length) {
+        const empty = document.createElement('div');
+        empty.className = 'muted';
+        empty.textContent = 'No characters have been added to this campaign yet.';
+        container.appendChild(empty);
+        return;
+      }
+      chars.forEach((char) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div>
+            <strong>${char.name || char.character_name || char.character_id || 'Character'}</strong>
+            <span class="muted">Assigned to: ${char.assigned_to || 'Nobody'}</span><br>
+            <span class="muted">Folder: ${char.folder || 'None'}</span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+      renderStartCharacterChecklist();
+    }
+
+    function renderStartCharacterChecklist() {
+      const list = document.getElementById('start-character-list');
+      list.innerHTML = '';
+      const chars = state.selectedCampaign?.characters || [];
+      chars.forEach((char) => {
+        const row = document.createElement('div');
+        row.className = 'character-row';
+        const charId = char.character_id || '';
+        row.innerHTML = `
+          <label class="character-label">
+            <input type="checkbox" data-character-id="${charId}">
+            ${char.name || char.character_name || charId || 'Character'}
+            <small>${char.assigned_to ? `Player: ${char.assigned_to}` : 'Unassigned'}</small>
+          </label>
+          <input type="number" class="init-input" placeholder="Initiative" min="0" value="0">
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    function showModal() {
+      state.dummyEntries = [];
+      document.getElementById('combat-title').value = '';
+      document.getElementById('combat-notes').value = '';
+      document.getElementById('modal-error').textContent = '';
+      renderDummyList();
+      renderStartCharacterChecklist();
+      document.getElementById('combat-modal').classList.add('open');
+    }
+
+    function hideModal() {
+      document.getElementById('combat-modal').classList.remove('open');
+    }
+
+    function renderDummyList() {
+      const container = document.getElementById('dummy-list');
+      container.innerHTML = '';
+      if (!state.dummyEntries.length) {
+        container.innerHTML = '<p class="muted">No dummy combatants added.</p>';
+        return;
+      }
+      state.dummyEntries.forEach((entry, idx) => {
+        const row = document.createElement('div');
+        row.className = 'dummy-row';
+        row.innerHTML = `
+          <span>${entry.name} (Initiative ${entry.initiative})</span>
+          <button class="btn" data-index="${idx}">Remove</button>
+        `;
+        row.querySelector('button').addEventListener('click', () => {
+          state.dummyEntries.splice(idx, 1);
+          renderDummyList();
+        });
+        container.appendChild(row);
+      });
+    }
+
+    document.getElementById('dummy-add').addEventListener('click', () => {
+      const nameInput = document.getElementById('dummy-name');
+      const initInput = document.getElementById('dummy-init');
+      const name = (nameInput.value || '').trim();
+      if (!name) return;
+      const initiative = Number(initInput.value) || 0;
+      state.dummyEntries.push({ name, initiative });
+      nameInput.value = '';
+      initInput.value = '';
+      renderDummyList();
+    });
+
+    document.getElementById('start-combat-btn').addEventListener('click', () => {
+      if (!state.selectedCampaign) return;
+      showModal();
+    });
+
+    document.getElementById('combat-modal-cancel').addEventListener('click', hideModal);
+
+    document.getElementById('combat-modal-start').addEventListener('click', async () => {
+      if (!state.selectedCampaign) return;
+      const rows = document.querySelectorAll('#start-character-list .character-row');
+      const participants = [];
+      rows.forEach((row) => {
+        const input = row.querySelector('input[type="checkbox"]');
+        if (input?.checked) {
+          const charId = input.dataset.characterId;
+          const init = Number(row.querySelector('.init-input')?.value) || 0;
+          if (charId) {
+            participants.push({ character_id: charId, initiative: init });
+          }
+        }
+      });
+      state.dummyEntries.forEach((entry) => {
+        participants.push({ name: entry.name, initiative: Number(entry.initiative) || 0 });
+      });
+      if (!participants.length) {
+        document.getElementById('modal-error').textContent = 'Add at least one participant.';
+        return;
+      }
+      const payload = {
+        participants,
+        title: document.getElementById('combat-title').value.trim(),
+        notes: document.getElementById('combat-notes').value.trim(),
+      };
+      try {
+        const res = await api(`/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/combats`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        state.activeCombat = res.combat || null;
+        state.lastTurnToken = state.activeCombat?.turn_token || 0;
+        hideModal();
+        renderCombatPanel();
+        updateStartButton();
+      } catch (err) {
+        document.getElementById('modal-error').textContent = err.message;
+      }
+    });
+
+    async function loadActiveCombat() {
+      if (!state.selectedCampaign) return;
+      try {
+        const res = await api(`/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/combats/active`);
+        state.activeCombat = res.combat;
+        state.lastTurnToken = state.activeCombat?.turn_token || 0;
+        renderCombatPanel();
+      } catch {
+        state.activeCombat = null;
+        renderCombatPanel();
+      }
+    }
+
+    function renderCombatPanel() {
+      const panel = document.getElementById('combat-panel');
+      if (!state.activeCombat) {
+        panel.classList.add('hidden');
+        updateStartButton();
+        setText(document.getElementById('combat-status'), 'No combat running.');
+        return;
+      }
+      panel.classList.remove('hidden');
+      setText(document.getElementById('combat-status'), `Combat ${state.activeCombat.id} · status: ${state.activeCombat.status}`);
+      updateStartButton();
+      renderInitiativeCarousel();
+      renderParticipantTabs();
+      renderParticipantCards();
+      setText(document.getElementById('combat-round'), `Round ${state.activeCombat.round || 1}`);
+      setText(document.getElementById('combat-token'), `Turn token ${state.activeCombat.turn_token || 0}`);
+      const joinBtn = document.getElementById('join-combat-btn');
+      const isGM = state.me && (state.me.role === 'admin' || (state.selectedCampaign && state.selectedCampaign.owner === state.me.username));
+      ['combat-next', 'combat-prev'].forEach((id) => {
+        const ctrl = document.getElementById(id);
+        if (ctrl) ctrl.disabled = !isGM;
+      });
+      const joined = (state.activeCombat.joined_users || []).includes(state.me?.username);
+      joinBtn.disabled = joined;
+      joinBtn.textContent = joined ? 'Joined' : 'Join Combat';
+      loadCampaignChat();
+    }
+
+    function renderInitiativeCarousel() {
+      const tracker = document.getElementById('initiative-tracker');
+      tracker.innerHTML = '';
+      const order = state.activeCombat?.initiative_order || [];
+      const participants = state.activeCombat?.participants || [];
+      const index = Number(state.activeCombat?.turn_index || 0);
+      order.forEach((pid, idx) => {
+        const part = participants.find((p) => p.id === pid) || {};
+        const pill = document.createElement('div');
+        pill.className = `initiative-pill${idx === index ? ' active' : ''}`;
+        pill.textContent = `${part.name || 'Unknown'} (${part.initiative || 0})`;
+        tracker.appendChild(pill);
+      });
+    }
+
+    function renderParticipantTabs() {
+      const tabs = document.getElementById('participant-tabs');
+      tabs.innerHTML = '';
+      const participants = state.activeCombat?.participants || [];
+      const isGM = state.me && (state.me.role === 'admin' || (state.selectedCampaign && state.selectedCampaign.owner === state.me.username));
+      const visible = isGM ? participants : participants.filter((p) => p.assigned_to && state.me && p.assigned_to.toLowerCase() === state.me.username.toLowerCase());
+      if (!visible.length) {
+        tabs.innerHTML = '<span class="muted">Join the combat to view your characters.</span>';
+        return;
+      }
+      visible.forEach((part) => {
+        const tab = document.createElement('button');
+        tab.className = 'tab';
+        tab.innerHTML = `<span>${part.name || part.character_id || 'Combatant'}</span><small>${part.type || part.assigned_to ? `Player: ${part.assigned_to || 'NPC'}` : 'NPC'}</small>`;
+        tab.addEventListener('click', () => {
+          if (part.character_id) {
+            window.open(`character_edit.html?id=${encodeURIComponent(part.character_id)}#combat`, '_blank');
+          }
+        });
+        tabs.appendChild(tab);
+      });
+    }
+
+    function renderParticipantCards() {
+      const container = document.getElementById('combat-characters');
+      container.innerHTML = '';
+      const participants = state.activeCombat?.participants || [];
+      if (!participants.length) {
+        container.innerHTML = '<p class="muted">No participants yet.</p>';
+        return;
+      }
+      participants.forEach((part) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div>
+            <strong>${part.name || 'Combatant'}</strong>
+            <span class="muted">Initiative ${part.initiative || 0}</span><br>
+            <span class="muted">${part.character_id ? 'Linked character' : 'Dummy'}</span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    document.getElementById('combat-next').addEventListener('click', () => advanceTurn('next'));
+    document.getElementById('combat-prev').addEventListener('click', () => advanceTurn('prev'));
+
+    async function advanceTurn(direction) {
+      if (!state.activeCombat || !state.selectedCampaign) return;
+      try {
+        const res = await api(`/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/combats/${encodeURIComponent(state.activeCombat.id)}/advance`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ direction }),
+        });
+        state.activeCombat = res.combat;
+        renderCombatPanel();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    document.getElementById('join-combat-btn').addEventListener('click', async () => {
+      if (!state.activeCombat || !state.selectedCampaign) return;
+      try {
+        await api(`/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/combats/${encodeURIComponent(state.activeCombat.id)}/join`, {
+          method: 'POST',
+        });
+        loadActiveCombat();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    async function loadCampaignChat() {
+      if (!state.selectedCampaign) return;
+      try {
+        const res = await api(`/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/chat?limit=40`);
+        state.chatMessages = res.messages || [];
+        renderChat();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function renderChat() {
+      const log = document.getElementById('chat-log');
+      log.innerHTML = '';
+      const sorted = (state.chatMessages || []).slice().sort((a, b) => a.ts - b.ts);
+      sorted.forEach((msg) => {
+        const entry = document.createElement('div');
+        entry.className = 'chat-message';
+        const when = new Date(msg.ts || Date.now()).toLocaleTimeString();
+        entry.innerHTML = `
+          <div class="chat-meta">${msg.user || 'Unknown'} · ${when}</div>
+          <div>${(msg.text || '').replace(/\n/g, '<br>')}</div>
+        `;
+        log.appendChild(entry);
+      });
+      log.scrollTop = log.scrollHeight;
+    }
+
+    document.getElementById('chat-send').addEventListener('click', async () => {
+      if (!state.selectedCampaign) return;
+      const txt = document.getElementById('chat-input').value.trim();
+      if (!txt) return;
+      try {
+        await api(`/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: txt }),
+        });
+        document.getElementById('chat-input').value = '';
+        loadCampaignChat();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    function startPolling() {
+      stopPolling();
+      state.chatInterval = setInterval(() => {
+        loadCampaignChat();
+      }, 5000);
+      state.combatInterval = setInterval(() => {
+        loadActiveCombat();
+      }, 5000);
+    }
+
+    function stopPolling() {
+      if (state.chatInterval) {
+        clearInterval(state.chatInterval);
+        state.chatInterval = null;
+      }
+      if (state.combatInterval) {
+        clearInterval(state.combatInterval);
+        state.combatInterval = null;
+      }
+    }
+
+    document.getElementById('refresh-campaigns').addEventListener('click', () => {
+      loadCampaigns();
+    });
+
+    document.getElementById('load-active-btn').addEventListener('click', () => {
+      loadActiveCombat();
+    });
+
+    window.addEventListener('beforeunload', () => stopPolling());
+
+    checkMe().then(loadCampaigns);
   </script>
 </body>
 </html>

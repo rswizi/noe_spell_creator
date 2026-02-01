@@ -91,6 +91,8 @@ def ensure_indexes() -> None:
     )
     db.campaign_chat.create_index("id", unique=True)
     db.campaign_chat.create_index([("campaign_id", ASCENDING), ("ts", ASCENDING)])
+    db.campaign_combats.create_index("id", unique=True)
+    db.campaign_combats.create_index("campaign_id")
 
 
 def next_id_str(sequence_name: str, padding: int = 4) -> str:

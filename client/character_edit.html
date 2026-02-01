@@ -2614,10 +2614,23 @@
 
 <script>
 /* --- auth helper --- */
-function getToken(){ return localStorage.getItem('auth_token') || ''; }
-function setCookieToken(tok){ if(!tok) return; document.cookie = `token=${tok}; path=/; SameSite=Lax`; }
-function authHeaders(){ const t=getToken(); if(t) setCookieToken(t); return t ? {'Authorization':'Bearer '+t, 'X-Auth-Token':t} : {}; }
+function authHeaders(){ return {}; }
 async function api(path,opt={}){ const headers = Object.assign({}, opt.headers||{}, authHeaders()); const resp = await fetch(path, { credentials:'include', ...opt, headers }); const ct = resp.headers.get('content-type') || ''; const data = ct.includes('application/json') ? await resp.json() : { status:'error', message: await resp.text() }; if(!resp.ok || data.status==='error') throw new Error(data.message || ('HTTP '+resp.status)); return data; }
+
+function htmlToPlainText(html){
+  let raw = html ?? "";
+  if (raw === null || raw === undefined) {
+    raw = "";
+  }
+  raw = String(raw);
+  if (typeof document === "undefined") {
+    return raw.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  }
+  const div = document.createElement("div");
+  div.innerHTML = raw;
+  const text = div.textContent || div.innerText || "";
+  return text.replace(/\s+/g, " ").trim();
+}
 
 /* Constants */
 const CHARACS = [
@@ -6666,7 +6679,8 @@ function parseAbilityRollCard(msg){
   const details = typeLine ? detailMapFromLine(typeLine) : {};
   const sourceLine = baseLines.find(l=> /^Source:/i.test(l)) || '';
   const descLine = baseLines.find(l=> /^(Effect|Description):/i.test(l)) || '';
-  const desc = descLine ? descLine.replace(/^(Effect|Description):\s*/i, '').trim() : '';
+  const rawDesc = descLine ? descLine.replace(/^(Effect|Description):\s*/i, '').trim() : '';
+  const desc = htmlToPlainText(rawDesc);
   const source = sourceLine ? sourceLine.replace(/^Source:\s*/i, '').trim() : '';
   const skillStart = baseLines.findIndex(l=> /^Skill:/i.test(l));
   let skillLines = [];
@@ -7317,15 +7331,15 @@ function appendRollLog(entry){
 
 function appendRollDesc(entry){
   if (!ROLL_CONTEXT) return;
-  const html = ROLL_CONTEXT.logDescHtml || '';
   const text = ROLL_CONTEXT.logDescText || '';
-  if (html){
-    const desc = document.createElement('div');
-    desc.innerHTML = html;
-    entry.appendChild(desc);
-  }else if (text){
+  const html = ROLL_CONTEXT.logDescHtml || '';
+  if (text){
     const desc = document.createElement('div');
     desc.textContent = text;
+    entry.appendChild(desc);
+  }else if (html){
+    const desc = document.createElement('div');
+    desc.textContent = htmlToPlainText(html);
     entry.appendChild(desc);
   }
 }
@@ -7734,6 +7748,7 @@ async function openCombatAbilityRoll(a, sourceLabel){
       detailsText: detailLine,
       descHtml: details.desc || '',
       logDescHtml: details.desc || '',
+      logDescText: htmlToPlainText(details.desc || ''),
       detailLines: lines,
       infoOnly: false
     });
@@ -7911,6 +7926,7 @@ async function openCombatSpellRoll(sp, meta, info){
       detailsText: detailLine,
       descHtml: info?.desc || '',
       logDescHtml: info?.desc || '',
+      logDescText: htmlToPlainText(info?.desc || ''),
       detailLines: lines,
       infoOnly: false
     });
@@ -13269,21 +13285,6 @@ function finalizeWeaponDamageRoll(mods){
   line.textContent = `Roll: ${finalSegments.join(' | ')}`;
   entry.appendChild(line);
   appendRollLog(entry);
-}
-
-function htmlToPlainText(html){
-  let raw = html ?? "";
-  if (raw === null || raw === undefined) {
-    raw = "";
-  }
-  raw = String(raw);
-  if (typeof document === "undefined") {
-    return raw.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-  }
-  const div = document.createElement("div");
-  div.innerHTML = raw;
-  const text = div.textContent || div.innerText || "";
-  return text.replace(/\s+/g, " ").trim();
 }
 
 function normalizeAbilityRolls(a){

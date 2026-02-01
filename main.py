@@ -7,7 +7,7 @@ import secrets
 import string
 from pathlib import Path
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, List
 
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Query, Body, Depends, UploadFile, File, WebSocket, WebSocketDisconnect
@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import DuplicateKeyError
+from urllib.parse import quote
 
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
 
@@ -37,6 +38,14 @@ from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER, craftomancy_row_for_quality, craftomancy_category_index, craftomancy_next_category
 from server.src.modules.wiki_api import router as wiki_router
 from server.src.modules.assets_api import router as assets_router
+from server.src.modules.campaign_combat import (
+    create_combat_doc,
+    get_active_combat,
+    get_combat,
+    start_combat,
+    advance_combat_turn,
+    join_combat,
+)
 EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 AMMO_PACK_DEFAULT = 10
 from server.src.modules.allowed_pages import ALLOWED_PAGES
@@ -208,6 +217,105 @@ def _require_campaign_access(cid: str, user: str, role: str | None = None):
     if user != doc.get("owner") and user not in (doc.get("members") or []):
         raise HTTPException(403, "Access denied")
     return doc
+
+
+def _require_campaign_gm(cid: str, user: str, role: str | None = None):
+    doc = _require_campaign_access(cid, user, role)
+    normalized_role = (role or "").lower()
+    if normalized_role == "admin":
+        return doc
+    if doc.get("owner") == user:
+        return doc
+    raise HTTPException(403, "Only GM/admin can manage combats")
+
+
+def _character_avatar_url(cid: str) -> str | None:
+    if not cid:
+        return None
+    return f"/characters/{quote(cid)}/avatar"
+
+
+def _combat_response_payload(doc: dict[str, Any] | None) -> dict[str, Any]:
+    if not doc:
+        return {}
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+def _safe_int_value(value: Any, default: int = 0) -> int:
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _collect_characters(character_ids: List[str]) -> dict[str, dict[str, Any]]:
+    if not character_ids:
+        return {}
+    docs = list(
+        get_col("characters").find(
+            {"id": {"$in": [cid for cid in character_ids if cid]}},
+            {"_id": 0, "id": 1, "name": 1, "owner": 1},
+        )
+    )
+    return {str(doc.get("id") or ""): doc for doc in docs}
+
+
+def _build_participants(
+    payload: Any,
+    campaign_doc: dict[str, Any],
+    gm_username: str,
+    start_idx: int = 0,
+) -> List[dict[str, Any]]:
+    if not isinstance(payload, list):
+        return []
+    sanitized: List[dict[str, Any]] = []
+    char_entries = {
+        str(entry.get("character_id") or "").strip(): entry
+        for entry in (campaign_doc.get("characters") or [])
+        if entry.get("character_id")
+    }
+    requested_ids = [
+        str(item.get("character_id") or "").strip()
+        for item in payload
+        if isinstance(item, dict) and item.get("character_id")
+    ]
+    character_docs = _collect_characters(list(dict.fromkeys(requested_ids)))
+    for offset, raw in enumerate(payload):
+        if not isinstance(raw, dict):
+            continue
+        char_id = str(raw.get("character_id") or "").strip()
+        is_character = bool(char_id)
+        if not is_character and not raw.get("name"):
+            continue
+        entry_info = char_entries.get(char_id)
+        char_doc = character_docs.get(char_id) if char_id else None
+        user_label = str(raw.get("name") or "").strip()
+        fallback_name = (
+            (entry_info and entry_info.get("name"))
+            or (char_doc and char_doc.get("name"))
+            or (char_doc and char_doc.get("id"))
+        )
+        name = user_label or fallback_name or (f"Dummy {offset + 1}" if not is_character else f"Character {char_id}")
+        initiative = _safe_int_value(raw.get("initiative"))
+        participant = {
+            "id": f"part_{next_id_str('combat_part', padding=5)}",
+            "type": "character" if is_character else "dummy",
+            "character_id": char_id if is_character else "",
+            "name": name,
+            "assigned_to": (entry_info and entry_info.get("assigned_to"))
+            or (char_doc and char_doc.get("owner"))
+            or "",
+            "initiative": initiative,
+            "added_idx": start_idx + offset,
+            "notes": str(raw.get("notes") or raw.get("note") or "").strip(),
+            "avatar": _character_avatar_url(char_id),
+            "player_controlled": bool(entry_info),
+            "created_by": gm_username,
+        }
+        sanitized.append(participant)
+    return sanitized
 
 @app.post("/campaigns")
 async def create_campaign(req: Request):
@@ -555,6 +663,8 @@ async def post_campaign_chat(cid: str, req: Request):
 @app.websocket("/campaigns/{cid}/chat/ws")
 async def campaign_chat_ws(websocket: WebSocket, cid: str):
     token = websocket.query_params.get("token") or websocket.query_params.get("auth") or ""
+    if not token:
+        token = websocket.cookies.get(AUTH_TOKEN_COOKIE)
     if not token or token not in SESSIONS:
         await websocket.close(code=1008)
         return
@@ -590,6 +700,122 @@ async def campaign_chat_ws(websocket: WebSocket, cid: str):
         CAMPAIGN_CHAT_WS.get(cid, set()).discard(websocket)
         if not CAMPAIGN_CHAT_WS.get(cid):
             CAMPAIGN_CHAT_WS.pop(cid, None)
+
+
+# ---------- Campaign Combats ----------
+@app.get("/campaigns/{cid}/combats")
+def list_campaign_combats(cid: str, req: Request, status: str | None = Query(default=None)):
+    user, role = require_auth(req)
+    _require_campaign_access(cid, user, role)
+    query = {"campaign_id": cid}
+    if status:
+        query["status"] = status.strip().lower()
+    docs = list(get_col("campaign_combats").find(query, {"_id": 0}).sort("created_at", -1))
+    return {"status": "success", "combats": [_combat_response_payload(doc) for doc in docs]}
+
+
+@app.get("/campaigns/{cid}/combats/active")
+def get_campaign_active_combat(cid: str, req: Request):
+    user, role = require_auth(req)
+    _require_campaign_access(cid, user, role)
+    doc = get_active_combat(cid)
+    if not doc:
+        raise HTTPException(404, "No active combat")
+    return {"status": "success", "combat": _combat_response_payload(doc)}
+
+
+@app.get("/campaigns/{cid}/combats/{combat_id}")
+def get_campaign_combat(cid: str, combat_id: str, req: Request):
+    user, role = require_auth(req)
+    _require_campaign_access(cid, user, role)
+    doc = get_combat(cid, combat_id)
+    if not doc:
+        raise HTTPException(404, "Combat not found")
+    return {"status": "success", "combat": _combat_response_payload(doc)}
+
+
+@app.post("/campaigns/{cid}/combats")
+async def create_campaign_combat(cid: str, req: Request):
+    user, role = require_auth(req)
+    campaign = _require_campaign_gm(cid, user, role)
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    participants_raw = body.get("participants") or []
+    participants = _build_participants(participants_raw, campaign, user)
+    combat = create_combat_doc(
+        cid,
+        user,
+        participants,
+        title=(body.get("title") or "").strip(),
+        note=(body.get("notes") or body.get("description") or "").strip(),
+    )
+    return {"status": "success", "combat": _combat_response_payload(combat)}
+
+
+@app.post("/campaigns/{cid}/combats/{combat_id}/participants")
+async def add_campaign_combat_participants(cid: str, combat_id: str, req: Request):
+    user, role = require_auth(req)
+    campaign = _require_campaign_gm(cid, user, role)
+    doc = get_combat(cid, combat_id)
+    if not doc:
+        raise HTTPException(404, "Combat not found")
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    new_entries = _build_participants(
+        body.get("participants") or [], campaign, user, start_idx=len(doc.get("participants") or [])
+    )
+    if not new_entries:
+        return {"status": "success", "combat": _combat_response_payload(doc)}
+    coll = get_col("campaign_combats")
+    coll.update_one(
+        {"id": combat_id, "campaign_id": cid},
+        {"$push": {"participants": {"$each": new_entries}}},
+    )
+    updated = get_combat(cid, combat_id)
+    return {"status": "success", "combat": _combat_response_payload(updated)}
+
+
+@app.post("/campaigns/{cid}/combats/{combat_id}/start")
+def start_campaign_combat(cid: str, combat_id: str, req: Request):
+    user, role = require_auth(req)
+    _require_campaign_gm(cid, user, role)
+    doc = start_combat(cid, combat_id)
+    if not doc:
+        raise HTTPException(404, "Combat not found or no participants")
+    return {"status": "success", "combat": _combat_response_payload(doc)}
+
+
+@app.post("/campaigns/{cid}/combats/{combat_id}/advance")
+async def advance_campaign_combat(cid: str, combat_id: str, req: Request):
+    user, role = require_auth(req)
+    _require_campaign_gm(cid, user, role)
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    direction = (body.get("direction") or "next").strip().lower()
+    if direction not in {"next", "prev"}:
+        direction = "next"
+    doc = advance_combat_turn(cid, combat_id, direction)
+    if not doc:
+        raise HTTPException(404, "Combat not found or not active")
+    return {"status": "success", "combat": _combat_response_payload(doc)}
+
+
+@app.post("/campaigns/{cid}/combats/{combat_id}/join")
+def join_campaign_combat(cid: str, combat_id: str, req: Request):
+    user, role = require_auth(req)
+    _require_campaign_access(cid, user, role)
+    doc = join_combat(cid, combat_id, user)
+    if not doc:
+        raise HTTPException(404, "Combat not found")
+    return {"status": "success", "combat": _combat_response_payload(doc)}
+
+
 # ---------- Auth ----------
 @app.post("/auth/login")
 async def auth_login(request: Request, response: Response):
