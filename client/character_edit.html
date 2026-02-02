@@ -3183,6 +3183,7 @@ let READ_ONLY = false;
 let CAN_EDIT = false;
 let SAVE_TIMER = null;
 let CHAR = null;
+let CONDITION_MARKER_STATE = { round: 0, token: 0 };
 let ASSIGNED = []; // full documents of assigned abilities (resolved by id)
 let ARC_ASSIGNED = []; // full documents of archetype abilities (resolved by id)
 let EXP_ASSIGNED = []; // full documents of expertise abilities (resolved by id)
@@ -12486,6 +12487,59 @@ function advanceConditionDurations(){
     queueSave();
   }
 }
+function conditionMarkerStorageKey(){
+  const safeCid = String(CID || CHAR?.id || '').trim();
+  return safeCid ? `noe_condition_marker:${safeCid}` : '';
+}
+function normalizeConditionMarker(raw){
+  const marker = raw || {};
+  const round = Number(marker.round ?? marker.rounded ?? 0);
+  const token = Number(marker.token ?? marker.turn_token ?? 0);
+  return {
+    round: Number.isFinite(round) ? Math.max(0, round) : 0,
+    token: Number.isFinite(token) ? Math.max(0, token) : 0,
+  };
+}
+function readConditionMarkerStorage(){
+  const key = conditionMarkerStorageKey();
+  if (!key || typeof localStorage === 'undefined') return { round: 0, token: 0 };
+  try{
+    const raw = localStorage.getItem(key);
+    if (!raw) return { round: 0, token: 0 };
+    const parsed = JSON.parse(raw);
+    return normalizeConditionMarker(parsed);
+  }catch{
+    return { round: 0, token: 0 };
+  }
+}
+function writeConditionMarkerStorage(marker){
+  const key = conditionMarkerStorageKey();
+  if (!key || typeof localStorage === 'undefined') return;
+  try{
+    localStorage.setItem(key, JSON.stringify(marker));
+  }catch{}
+}
+function conditionMarkerHasAdvanced(server, stored){
+  if (!server) return false;
+  if (server.round > stored.round) return true;
+  if (server.round === stored.round && server.token > stored.token) return true;
+  return false;
+}
+function maybeProcessConditionMarkers(){
+  if (!CHAR) return;
+  CONDITION_MARKER_STATE = readConditionMarkerStorage();
+  const serverMarker = normalizeConditionMarker({
+    round: CHAR.condition_last_round,
+    token: CHAR.condition_last_token,
+  });
+  if (!serverMarker.round) return;
+  if (!conditionMarkerHasAdvanced(serverMarker, CONDITION_MARKER_STATE)) return;
+  applyAllConditionEffects();
+  advanceConditionDurations();
+  CONDITION_MARKER_STATE = serverMarker;
+  writeConditionMarkerStorage(CONDITION_MARKER_STATE);
+}
+
 function getCombatConditionFlags(){
   const active = activeConditionSet();
   return {
@@ -16261,6 +16315,7 @@ async function loadCharacter(){
   wirePersonal();
   renderCombatTab();
   updateDerived();
+  maybeProcessConditionMarkers();
   INITIAL_LOAD = false;
   applyReadOnlyState();
   INITIAL_CURRENT_PRESET = null;

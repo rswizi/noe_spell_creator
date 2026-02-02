@@ -441,12 +441,20 @@
         notes: document.getElementById('combat-notes').value.trim(),
       };
       try {
-        const res = await api(`/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/combats`, {
+        const campaignId = encodeURIComponent(state.selectedCampaign.id);
+        const res = await api(`/campaigns/${campaignId}/combats`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        state.activeCombat = res.combat || null;
+        const combatId = encodeURIComponent(res.combat?.id || '');
+        if (!combatId) {
+          throw new Error('Combat creation failed');
+        }
+        const startRes = await api(`/campaigns/${campaignId}/combats/${combatId}/start`, {
+          method: 'POST',
+        });
+        state.activeCombat = startRes.combat || res.combat || null;
         state.lastTurnToken = state.activeCombat?.turn_token || 0;
         hideModal();
         renderCombatPanel();
