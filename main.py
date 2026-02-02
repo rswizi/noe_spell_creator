@@ -78,14 +78,13 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
         d["is_owner"] = d.get("owner") == user
         d["is_member"] = user in (d.get("members") or [])
         d["is_admin"] = (role or "").lower() == "admin"
-        if not (d["is_owner"] or d["is_admin"]):
-            visible_chars = []
-            for c in (d.get("characters") or []):
-                assigned_to = (c.get("assigned_to") or "").strip()
-                visible_to_others = c.get("visible_to_others", True)
-                if assigned_to == user or visible_to_others:
-                    visible_chars.append(c)
-            d["characters"] = visible_chars
+    if user and not (d.get("is_owner") or d.get("is_admin")):
+        visible_chars = []
+        for c in (d.get("characters") or []):
+            perm = _resolve_campaign_character_permission(c, user, d.get("is_owner", False), d.get("is_admin", False))
+            if perm != DEFAULT_CAMPAIGN_PERMISSION:
+                visible_chars.append(c)
+        d["characters"] = visible_chars
     chars = d.get("characters") or []
     if chars:
         ids = []
@@ -111,6 +110,41 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
     if d.get("avatar"):
         d["avatar_url"] = f"/campaigns/{d['id']}/avatar"
     return d
+
+PERMISSION_VALUES = {"none", "limited", "viewer", "owner"}
+DEFAULT_CAMPAIGN_PERMISSION = "none"
+
+def _normalize_campaign_permission(value: Any) -> str:
+    raw = (str(value) if value is not None else "").strip().lower()
+    if raw == "observer":
+        raw = "viewer"
+    return raw if raw in PERMISSION_VALUES else DEFAULT_CAMPAIGN_PERMISSION
+
+def _fallback_campaign_permission(entry: dict) -> str:
+    if not isinstance(entry, dict):
+        return DEFAULT_CAMPAIGN_PERMISSION
+    if entry.get("permission_all"):
+        return _normalize_campaign_permission(entry.get("permission_all"))
+    if entry.get("permission"):
+        return _normalize_campaign_permission(entry.get("permission"))
+    if entry.get("visible_to_others"):
+        return "viewer"
+    return DEFAULT_CAMPAIGN_PERMISSION
+
+def _resolve_campaign_character_permission(entry: dict, username: str, is_owner: bool, is_admin: bool) -> str:
+    if not username:
+        return DEFAULT_CAMPAIGN_PERMISSION
+    if is_owner or is_admin:
+        return "owner"
+    owner = (entry.get("owner") or "").strip()
+    assigned_to = (entry.get("assigned_to") or "").strip()
+    if owner == username or assigned_to == username:
+        return "owner"
+    perms = entry.get("permissions") or entry.get("permission_map") or {}
+    direct = (perms.get(username) or "").strip()
+    if direct:
+        return _normalize_campaign_permission(direct)
+    return _fallback_campaign_permission(entry)
 
 def _gen_join_code():
     alphabet = string.ascii_uppercase + string.digits
@@ -413,6 +447,7 @@ async def assign_campaign_character(cid: str, req: Request):
     folder = (body.get("folder") or "").strip()
     editable = bool(body.get("editable_by_gm"))
     visible_to_others = True if body.get("visible_to_others") is None else bool(body.get("visible_to_others"))
+    permission_all = _normalize_campaign_permission(body.get("permission_all") or DEFAULT_CAMPAIGN_PERMISSION)
     chars = [c for c in (doc.get("characters") or []) if c.get("character_id") != char_id]
     chars.append({
         "character_id": char_id,
@@ -420,7 +455,9 @@ async def assign_campaign_character(cid: str, req: Request):
         "folder": folder,
         "editable_by_gm": editable,
         "edit_requests": [],
-        "visible_to_others": visible_to_others
+        "visible_to_others": visible_to_others,
+        "permission_all": permission_all,
+        "permissions": {}
     })
     CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": chars}})
     doc["characters"] = chars
@@ -443,6 +480,24 @@ async def update_campaign_character(cid: str, char_id: str, req: Request):
             if "folder" in body: c["folder"] = (body.get("folder") or "").strip()
             if "editable_by_gm" in body: c["editable_by_gm"] = bool(body.get("editable_by_gm"))
             if "visible_to_others" in body: c["visible_to_others"] = bool(body.get("visible_to_others"))
+            if "permission_all" in body:
+                c["permission_all"] = _normalize_campaign_permission(body.get("permission_all"))
+            if "permissions" in body:
+                perms = dict(c.get("permissions") or {})
+                updates = body.get("permissions") or {}
+                for key, value in (updates or {}).items():
+                    key = (key or "").strip()
+                    if not key:
+                        continue
+                    level = str(value or "").strip().lower()
+                    if level == "default":
+                        perms.pop(key, None)
+                    else:
+                        perms[key] = _normalize_campaign_permission(level)
+                if perms:
+                    c["permissions"] = perms
+                else:
+                    c.pop("permissions", None)
         updated.append(c)
     if not found:
         raise HTTPException(404, "Character not in campaign")
@@ -503,7 +558,9 @@ async def duplicate_campaign_character(cid: str, char_id: str, req: Request):
         "folder": (src_entry.get("folder") or ""),
         "editable_by_gm": True,
         "edit_requests": [],
-        "visible_to_others": True
+        "visible_to_others": True,
+        "permission_all": DEFAULT_CAMPAIGN_PERMISSION,
+        "permissions": {}
     })
     CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"characters": chars}})
     doc["characters"] = chars

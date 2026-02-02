@@ -358,6 +358,48 @@
     const permClose = document.getElementById('perm-close');
     const permStatus = document.getElementById('perm-status');
 
+    function getCharacterFallbackPermission(){
+      if (!ACTIVE_CHAR_FOR_PERM) return CAMPAIGN_DEFAULT_PERMISSION;
+      const fallback = ACTIVE_CHAR_FOR_PERM.permission_all || ACTIVE_CHAR_FOR_PERM.permission || (ACTIVE_CHAR_FOR_PERM.visible_to_others ? 'viewer' : CAMPAIGN_DEFAULT_PERMISSION);
+      return normalizeCampaignPermission(fallback);
+    }
+
+    function getPermissionForTarget(target){
+      if (!ACTIVE_CHAR_FOR_PERM) return CAMPAIGN_DEFAULT_PERMISSION;
+      if (target === '__all__') return getCharacterFallbackPermission();
+      const map = ACTIVE_CHAR_FOR_PERM.permissions || ACTIVE_CHAR_FOR_PERM.permission_map || {};
+      const direct = map[target];
+      if (direct) return normalizeCampaignPermission(direct);
+      return getCharacterFallbackPermission();
+    }
+
+    function hasCustomPermission(target){
+      if (!ACTIVE_CHAR_FOR_PERM) return false;
+      const map = ACTIVE_CHAR_FOR_PERM.permissions || ACTIVE_CHAR_FOR_PERM.permission_map || {};
+      return Object.prototype.hasOwnProperty.call(map, target);
+    }
+
+    function buildPermLevelOptions(includeDefault){
+      const html = [];
+      if (includeDefault){
+        html.push('<option value="default">Default (global)</option>');
+      }
+      CAMPAIGN_PERMISSION_LEVELS.forEach(level=>{
+        html.push(`<option value="${level.value}">${level.label}</option>`);
+      });
+      return html.join('');
+    }
+
+    permTarget.addEventListener('change', ()=>{
+      const includeDefault = permTarget.value !== '__all__';
+      permLevel.innerHTML = buildPermLevelOptions(includeDefault);
+      if (includeDefault){
+        permLevel.value = hasCustomPermission(permTarget.value) ? getPermissionForTarget(permTarget.value) : 'default';
+      }else{
+        permLevel.value = getPermissionForTarget('__all__');
+      }
+    });
+
     const CHAT_VIS_KEY = `campaign_chat_visibility:${CID}`;
     const CHAT_STORAGE_KEY = `campaign_chat_local:${CID}`;
 
@@ -412,6 +454,27 @@
       }
     }
 
+    const CAMPAIGN_PERMISSION_LEVELS = [
+      { value: 'none', label: 'None' },
+      { value: 'limited', label: 'Limited' },
+      { value: 'viewer', label: 'Observer' },
+      { value: 'owner', label: 'Owner' },
+    ];
+    const CAMPAIGN_DEFAULT_PERMISSION = 'none';
+
+    function normalizeCampaignPermission(value){
+      let raw = String(value || '').trim().toLowerCase();
+      if (raw === 'observer') raw = 'viewer';
+      if (CAMPAIGN_PERMISSION_LEVELS.some(level => level.value === raw)) return raw;
+      return CAMPAIGN_DEFAULT_PERMISSION;
+    }
+
+    function permissionLabel(value){
+      const normalized = normalizeCampaignPermission(value);
+      const match = CAMPAIGN_PERMISSION_LEVELS.find(level => level.value === normalized);
+      return match ? match.label : 'Unknown';
+    }
+
     function isGm(){
       if (!CAMPAIGN || !ME) return false;
       const role = (ME.role || '').toLowerCase();
@@ -420,13 +483,14 @@
 
     function resolvePermission(c, username){
       if (isGm()) return 'owner';
-      const directOwner = (c.owner || c.assigned_to || '') === username;
-      if (directOwner) return 'owner';
+      const owner = (c.owner || '').trim();
+      const assigned = (c.assigned_to || '').trim();
+      if (owner === username || assigned === username) return 'owner';
       const map = c.permissions || c.permission_map || {};
       const direct = map[username];
-      if (direct) return String(direct).toLowerCase();
-      const fallback = c.permission_all || c.permission || 'viewer';
-      return String(fallback).toLowerCase();
+      if (direct) return normalizeCampaignPermission(direct);
+      const fallback = c.permission_all || c.permission || (c.visible_to_others ? 'viewer' : CAMPAIGN_DEFAULT_PERMISSION);
+      return normalizeCampaignPermission(fallback);
     }
 
     function charDisplayName(c){
@@ -498,7 +562,7 @@
           <div class="char-info">
             <div><strong>${name}</strong></div>
             <div class="char-meta">Owner: ${owner}</div>
-            ${isGm() ? `<div class="char-meta">Permission: ${perm}</div>` : ''}
+            ${isGm() ? `<div class="char-meta">Permission: ${permissionLabel(perm)}</div>` : ''}
           </div>
           <div class="char-actions">
             ${isLimited ? '<button class="btn secondary" disabled>Limited</button>' : `<a class="btn" href="${openUrl}">Open</a>`}
@@ -523,6 +587,10 @@
 
     function openPermMenu(x, y){
       permStatus.textContent = '';
+      if (permTarget) {
+        permTarget.value = '__all__';
+        permTarget.dispatchEvent(new Event('change'));
+      }
       permMenu.style.left = `${x}px`;
       permMenu.style.top = `${y}px`;
       permMenu.classList.add('open');
