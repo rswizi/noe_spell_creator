@@ -4110,22 +4110,20 @@ function updateTitleCustomNameUI(){
 }
 function applySpellCustomNameForKey(key, value){
   if (!isSpellColorKey(key)) return;
+  const idKey = normalizeSpellMetaId(key);
+  if (!idKey) return;
   const trimmed = String(value || '').trim();
   const meta = SPELLLIST_META.spell_meta || {};
-  const existingAlt = String(meta[key]?.alt_name || '').trim();
+  const currentEntry = resolveSpellMetaById(idKey, meta);
+  const existingAlt = String(currentEntry.alt_name || '').trim();
   if (existingAlt === trimmed) return;
-  const updatedMeta = { ...meta };
-  const entry = { ... (updatedMeta[key] || {}) };
+  const entry = { ...currentEntry };
   if (trimmed){
     entry.alt_name = trimmed;
   }else{
     delete entry.alt_name;
   }
-  if (Object.keys(entry).length){
-    updatedMeta[key] = entry;
-  }else{
-    delete updatedMeta[key];
-  }
+  const updatedMeta = assignSpellMetaEntry(idKey, entry, meta);
   SPELLLIST_META.spell_meta = updatedMeta;
   saveSpellListMeta({ spell_meta: updatedMeta }).catch(()=>{});
   renderSpellRows();
@@ -10120,7 +10118,10 @@ async function renderSchoolSpellCounters(){
     if (type === 'complex') complexSchools++; else simpleSchools++;
   });
   const metaMap = SPELLLIST_META.spell_meta || {};
-  const isPrepared = (sp)=> ((metaMap[sp.id]?.status || 'known') === 'learnt');
+  const isPrepared = (sp)=> {
+    const meta = resolveSpellMetaById(sp?.id || '', metaMap);
+    return (meta.status || 'known') === 'learnt';
+  };
   const findSchoolByRef = (ref)=>{
     const id = String(ref.id || ref.name || '').toLowerCase();
     return (SCHOOLS||[]).find(s=> String(s.id||'').toLowerCase()===id || String(s.name||'').toLowerCase()===id);
@@ -10670,7 +10671,7 @@ function renderSpellRows(){
   }
   slSpellsBody.innerHTML = '';
   SPELLLIST_SPELLS.forEach(sp=>{
-    const meta = metaMap[sp.id] || {};
+    const meta = resolveSpellMetaById(sp?.id || '', metaMap);
     const alt = meta.alt_name || '';
     const status = meta.status || 'known';
     const nameDisplay = alt || sp.name || 'Spell';
@@ -10693,9 +10694,9 @@ function renderSpellRows(){
   slSpellsBody.querySelectorAll('.sl-status').forEach(sel=>{
     sel.addEventListener('change', ()=>{
       const id = sel.getAttribute('data-id');
-      SPELLLIST_META.spell_meta = SPELLLIST_META.spell_meta || {};
-      const cur = SPELLLIST_META.spell_meta[id] || {};
-      SPELLLIST_META.spell_meta[id] = { ...cur, status: sel.value };
+      const currentMeta = resolveSpellMetaById(id, SPELLLIST_META.spell_meta || {});
+      const updatedMeta = { ...currentMeta, status: sel.value };
+      SPELLLIST_META.spell_meta = assignSpellMetaEntry(id, updatedMeta, SPELLLIST_META.spell_meta);
       saveSpellListMeta({ spell_meta: SPELLLIST_META.spell_meta }).catch(()=>{});
       renderAbilitySpellsBucket();
       renderSchoolSpellCounters();
@@ -10729,7 +10730,11 @@ function renderAbilitySpellsBucket(){
   const onlyLearned = getAbiPreparedOnly();
   const avatarHint = 'Click to upload your own avatar (right-click to reset).';
   const ordered = applySpellSort(SPELLLIST_SPELLS, ABI_SORT_SPELLS, metaMap);
-  const visible = ordered.filter(sp=> !onlyLearned || (metaMap[sp.id]?.status === 'learnt'));
+  const visible = ordered.filter(sp=> {
+    if (!onlyLearned) return true;
+    const meta = resolveSpellMetaById(sp?.id || '', metaMap);
+    return (meta.status || 'known') === 'learnt';
+  });
   const filtered = hideUnpinned
     ? visible.filter(sp=> pinnedSet.has(spellPinKey(sp.id)))
     : visible;
@@ -10760,7 +10765,7 @@ function renderAbilitySpellsBucket(){
     return;
   }
   filtered.forEach(sp=>{
-    const meta = metaMap[sp.id] || {};
+    const meta = resolveSpellMetaById(sp?.id || '', metaMap);
     const nameDisplay = spellDisplayName(sp, metaMap);
     const desc = meta.description || sp.description || sp.description_long || sp.desc || '';
     const flavor = sp.flavor || sp.flavour || '';
@@ -12720,7 +12725,7 @@ function renderCombatEtUsage(){
   (SPELLLIST_SPELLS || []).forEach(sp=>{
     const id = String(sp?.id || '');
     if (!spellIds.has(id)) return;
-    const meta = metaMap[id] || {};
+    const meta = resolveSpellMetaById(id, metaMap);
     if (!spellHasActiveCost(sp, meta)) return;
     const enCost = Number(sp?.en_cost || 0);
     if (Number.isFinite(enCost)) used += enCost;
@@ -12742,7 +12747,7 @@ function renderCombatActiveAbilities(){
   const metaMap = SPELLLIST_META.spell_meta || {};
   const activeEligibilityReady = Object.keys(EFFECTS_BY_ID).length
     || (SPELLLIST_SPELLS || []).some(sp=>{
-      const meta = metaMap[String(sp?.id || '')] || {};
+      const meta = resolveSpellMetaById(sp?.id || '', metaMap);
       return (Array.isArray(sp?.effects_detail) && sp.effects_detail.length)
         || sp.effects_desc || sp.effect || sp.effects_description
         || (Array.isArray(meta?.effects_detail) && meta.effects_detail.length)
@@ -12750,7 +12755,7 @@ function renderCombatActiveAbilities(){
     });
   const eligibleSpellIds = activeEligibilityReady
     ? new Set((SPELLLIST_SPELLS || []).filter(sp=>{
-      const meta = metaMap[String(sp?.id || '')] || {};
+      const meta = resolveSpellMetaById(sp?.id || '', metaMap);
       return spellHasActiveCost(sp, meta);
     }).map(sp=> String(sp?.id || '')))
     : null;
@@ -14591,7 +14596,7 @@ function renderCombatSpellList(){
   const validIds = new Set(SPELLLIST_SPELLS.map(sp=> String(sp?.id || '')));
   const activeEligibilityReady = Object.keys(EFFECTS_BY_ID).length
     || SPELLLIST_SPELLS.some(sp=>{
-      const meta = metaMap[String(sp?.id || '')] || {};
+        const meta = resolveSpellMetaById(sp?.id || '', metaMap);
       return (Array.isArray(sp?.effects_detail) && sp.effects_detail.length)
         || sp.effects_desc || sp.effect || sp.effects_description
         || (Array.isArray(meta?.effects_detail) && meta.effects_detail.length)
@@ -14599,7 +14604,7 @@ function renderCombatSpellList(){
     });
   const eligibleIds = activeEligibilityReady
     ? new Set(SPELLLIST_SPELLS.filter(sp=>{
-      const meta = metaMap[String(sp?.id || '')] || {};
+        const meta = resolveSpellMetaById(sp?.id || '', metaMap);
       return spellHasActiveCost(sp, meta);
     }).map(sp=> String(sp?.id || '')))
     : new Set();
@@ -14614,7 +14619,7 @@ function renderCombatSpellList(){
   st.duration_spells = Array.from(durationSet);
   let rendered = 0;
   SPELLLIST_SPELLS.forEach(sp=>{
-    const meta = metaMap[String(sp?.id || '')] || {};
+    const meta = resolveSpellMetaById(sp?.id || '', metaMap);
     const name = spellDisplayName(sp, metaMap);
     if (search && !String(name).toLowerCase().includes(search)) return;
     rendered += 1;
@@ -17747,9 +17752,37 @@ function assignedAbilityTypeMap(){
   return map;
 }
 
+function resolveSpellMetaById(id, metaMap){
+  if (!metaMap) return {};
+  const key = String(id || '').trim();
+  if (!key) return {};
+  if (metaMap[key]) return metaMap[key];
+  const prefixed = metaMap[`spell:${key}`];
+  if (prefixed) return prefixed;
+  return {};
+}
+function normalizeSpellMetaId(key){
+  const raw = String(key || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('spell:')) return raw.slice(6);
+  return raw;
+}
+function assignSpellMetaEntry(id, entry, metaMap){
+  const key = String(id || '').trim();
+  if (!key) return metaMap || {};
+  const base = { ...(metaMap || {}) };
+  if (entry && Object.keys(entry).length){
+    base[key] = entry;
+    base[`spell:${key}`] = entry;
+  }else{
+    delete base[key];
+    delete base[`spell:${key}`];
+  }
+  return base;
+}
 function spellDisplayName(sp, metaMap){
-  const meta = metaMap[String(sp?.id || '')] || {};
-  return meta.alt_name || sp?.name || sp?.id || 'Spell';
+  const curMeta = resolveSpellMetaById(sp?.id || '', metaMap);
+  return curMeta.alt_name || sp?.name || sp?.id || 'Spell';
 }
 
 function abilityOrderKey(bucket){
@@ -17825,7 +17858,7 @@ function getSpellOrderIds(list, metaMap){
   (list || []).forEach((sp, idx)=>{
     const id = String(sp?.id || '').trim();
     if (!id) return;
-    const rawOrder = metaMap[id]?.order;
+    const rawOrder = resolveSpellMetaById(id, metaMap).order;
     const order = Number(rawOrder);
     if (Number.isFinite(order)){
       withOrder.push({ id, order, idx });
@@ -17863,13 +17896,13 @@ function applySpellSort(list, mode, metaMap){
 
 function setSpellOrder(orderIds){
   if (!Array.isArray(orderIds) || !orderIds.length) return;
-  const metaMap = SPELLLIST_META.spell_meta || {};
-  const updated = { ...metaMap };
+  let updated = { ...(SPELLLIST_META.spell_meta || {}) };
   orderIds.forEach((id, idx)=>{
     const key = String(id || '').trim();
     if (!key) return;
-    const cur = metaMap[key] || {};
-    updated[key] = { ...cur, order: idx };
+    const cur = resolveSpellMetaById(key, updated);
+    const next = { ...cur, order: idx };
+    updated = assignSpellMetaEntry(key, next, updated);
   });
   SPELLLIST_META.spell_meta = updated;
   saveSpellListMeta({ spell_meta: updated }).catch(()=>{});
@@ -17881,7 +17914,8 @@ function moveSpellOrder(id, direction, { onlyLearned = false } = {}){
   const orderIds = getSpellOrderIds(SPELLLIST_SPELLS, metaMap);
   const subsetIds = orderIds.filter(spId => {
     if (!onlyLearned) return true;
-    return (metaMap[spId]?.status || 'known') === 'learnt';
+    const meta = resolveSpellMetaById(spId, metaMap);
+    return (meta.status || 'known') === 'learnt';
   });
   const updated = moveSubsetOrder(orderIds, subsetIds, id, direction);
   if (!updated || updated === orderIds) return;
