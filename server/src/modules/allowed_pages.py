@@ -16,6 +16,7 @@ ALLOWED_PAGES = {
     "browse_effects",
     "browse_schools",
     "campaign_manager",
+    "campaign_combat",
     "campaigns_create",
     "campaigns_join",
     "campaigns_my",

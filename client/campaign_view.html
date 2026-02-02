@@ -211,6 +211,7 @@
               <div class="muted" id="camp-code" style="display:none;">Code: --</div>
             </div>
             <div class="row" id="gm-actions" style="display:none;">
+              <button class="btn" id="gm-combat-btn">Create Combat</button>
               <button class="btn" id="gm-add-char">Add Character</button>
               <button class="btn secondary" id="gm-create-char">Create Character</button>
             </div>
@@ -327,6 +328,7 @@
     const campCode = document.getElementById('camp-code');
     const campAvatar = document.getElementById('camp-avatar');
     const gmActions = document.getElementById('gm-actions');
+    const gmCombatBtn = document.getElementById('gm-combat-btn');
     const charList = document.getElementById('char-list');
 
     const chatLog = document.getElementById('chat-log');
@@ -1430,6 +1432,12 @@
     });
 
     chatVisibility.addEventListener('change', ()=> setChatVisibilityPref(chatVisibility.value));
+
+    gmCombatBtn?.addEventListener('click', ()=>{
+      const targetCid = CAMPAIGN?.id || CID;
+      if (!targetCid) return;
+      window.location.assign(`campaign_combat.html?cid=${encodeURIComponent(targetCid)}`);
+    });
 
     document.getElementById('gm-add-char').addEventListener('click', ()=>{
       addCharStatus.textContent = '';

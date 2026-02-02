@@ -86,7 +86,7 @@
       <a class="btn" href="portal.html">Portal</a>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="campaigns-panel">
       <div class="panel-header">
         <div>
           <h2>Campaigns</h2>
@@ -197,6 +197,10 @@
       lastTurnToken: 0,
     };
 
+    const queryParams = new URLSearchParams(location.search);
+    const PRESELECTED_CAMPAIGN_ID = (queryParams.get('cid') || '').trim();
+    const campaignsPanel = document.getElementById('campaigns-panel');
+
     function api(path, options = {}) {
       const opts = { credentials: 'include', ...options };
       return fetch(path, opts).then(async (resp) => {
@@ -231,6 +235,11 @@
     function renderCampaigns() {
       const list = document.getElementById('campaigns-list');
       const empty = document.getElementById('no-campaigns');
+      if (PRESELECTED_CAMPAIGN_ID) {
+        list.innerHTML = '';
+        empty.style.display = 'none';
+        return;
+      }
       list.innerHTML = '';
       if (!state.campaigns.length) {
         empty.style.display = '';
@@ -260,10 +269,23 @@
     }
 
     async function loadCampaigns() {
+      if (PRESELECTED_CAMPAIGN_ID) return;
       try {
         const res = await api('/campaigns');
         state.campaigns = res.campaigns || [];
         renderCampaigns();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function loadCampaignById(id) {
+      if (!id) return;
+      try {
+        const res = await api(`/campaigns/${encodeURIComponent(id)}`);
+        if (res && res.campaign) {
+          selectCampaign(res.campaign);
+        }
       } catch (err) {
         console.error(err);
       }
@@ -641,7 +663,16 @@
 
     window.addEventListener('beforeunload', () => stopPolling());
 
-    checkMe().then(loadCampaigns);
+    async function initCombatPage(){
+      await checkMe();
+      if (PRESELECTED_CAMPAIGN_ID){
+        if (campaignsPanel) campaignsPanel.style.display = 'none';
+        await loadCampaignById(PRESELECTED_CAMPAIGN_ID);
+      }else{
+        await loadCampaigns();
+      }
+    }
+    initCombatPage().catch(err=>{ console.error(err); });
   </script>
 </body>
 </html>
