@@ -209,6 +209,9 @@
     .color-palette { display:grid; grid-template-columns: repeat(auto-fit, minmax(26px, 1fr)); gap:6px; margin-top:8px; }
     .color-swatch { width:26px; height:26px; border-radius:8px; border:1px solid #2a2a3a; background:var(--swatch, #333); cursor:pointer; }
     .color-swatch:focus { outline:2px solid var(--accent); outline-offset:2px; }
+    .title-custom-name-field { display:none; flex-direction:column; gap:4px; margin-top:14px; }
+    .title-custom-name-field input { padding:8px 10px; border-radius:10px; border:1px solid #2a2f3a; background:#0d0f16; color:var(--text); font:inherit; }
+    .title-custom-name-field input:focus { outline:none; border-color:#5b7fff; box-shadow:0 0 0 1px rgba(91,127,255,0.45); }
     .abi-item button { padding:6px 10px; font-size:.85rem; }
     .prereq-warn { color:#f66; font-size:.85rem; }
     .abi-add { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
@@ -2461,6 +2464,11 @@
       <button class="color-swatch" data-color="#ec4899" data-name="Pink" style="--swatch:#ec4899" aria-label="Pink"></button>
       <button class="color-swatch" data-color="#a0aec0" data-name="Gray" style="--swatch:#a0aec0" aria-label="Gray"></button>
     </div>
+    <div class="title-custom-name-field" id="title-custom-name-field">
+      <label for="title-custom-name">Custom spell name</label>
+      <input type="text" id="title-custom-name" maxlength="64" placeholder="Optional alias when casting this spell">
+      <div class="muted" style="font-size:.75rem;">This name will be used when rolling or displaying the spell.</div>
+    </div>
     <div class="row" style="justify-content:flex-end; gap:8px; margin-top:12px;">
       <button class="btn btn-secondary" id="title-color-clear">Clear</button>
       <button class="btn btn-secondary" id="title-color-cancel">Cancel</button>
@@ -3723,6 +3731,8 @@ const titleColorPreview = document.getElementById('title-color-preview');
 const titleColorPreviewText = document.getElementById('title-color-preview-text');
 const titleColorPreviewValue = document.getElementById('title-color-preview-value');
 const titleColorPalette = document.getElementById('title-color-palette');
+const titleCustomNameField = document.getElementById('title-custom-name-field');
+const titleCustomNameInput = document.getElementById('title-custom-name');
 const rollModal = document.getElementById('roll-modal');
 const rollBackdrop = document.getElementById('roll-backdrop');
 const rollClose = document.getElementById('roll-close');
@@ -4082,12 +4092,59 @@ function entryColorKey(kind, entry){
   const id = String(entry?.id || '').trim();
   return id ? `${kind}:${id}` : '';
 }
+function isSpellColorKey(key){
+  return String(key || '').startsWith('spell:');
+}
+function updateTitleCustomNameUI(){
+  if (!titleCustomNameField) return;
+  const visible = isSpellColorKey(TITLE_COLOR_ACTIVE_KEY);
+  titleCustomNameField.style.display = visible ? 'flex' : 'none';
+  if (!titleCustomNameInput) return;
+  if (visible){
+    const meta = SPELLLIST_META.spell_meta || {};
+    titleCustomNameInput.value = String((meta[TITLE_COLOR_ACTIVE_KEY]?.alt_name) || '').trim();
+  }else{
+    titleCustomNameInput.value = '';
+  }
+}
+function applySpellCustomNameForKey(key, value){
+  if (!isSpellColorKey(key)) return;
+  const trimmed = String(value || '').trim();
+  const meta = SPELLLIST_META.spell_meta || {};
+  const existingAlt = String(meta[key]?.alt_name || '').trim();
+  if (existingAlt === trimmed) return;
+  const updatedMeta = { ...meta };
+  const entry = { ... (updatedMeta[key] || {}) };
+  if (trimmed){
+    entry.alt_name = trimmed;
+  }else{
+    delete entry.alt_name;
+  }
+  if (Object.keys(entry).length){
+    updatedMeta[key] = entry;
+  }else{
+    delete updatedMeta[key];
+  }
+  SPELLLIST_META.spell_meta = updatedMeta;
+  saveSpellListMeta({ spell_meta: updatedMeta }).catch(()=>{});
+  renderSpellRows();
+  renderAbilitySpellsBucket();
+  renderCombatSpellList();
+  renderCombatActiveAbilities();
+  renderCombatDurationSpells();
+}
 function registerTitleColorTarget(el, key, label){
   if (!el || !key) return;
   el.classList.add('title-color-target');
   el.dataset.colorKey = key;
   if (label) el.dataset.colorLabel = label;
-  if (!el.title) el.title = 'Double-click to set title color';
+  if (!el.title){
+    el.title = isSpellColorKey(key)
+      ? 'Double-click to set title color and custom spell name'
+      : 'Double-click to set title color';
+  }else if (isSpellColorKey(key) && el.title === 'Double-click to set title color'){
+    el.title = 'Double-click to set title color and custom spell name';
+  }
   applyTitleColor(el, key);
   el.addEventListener('dblclick', (e)=>{
     e.preventDefault();
@@ -4153,6 +4210,7 @@ function openTitleColorModal(key, label){
   TITLE_COLOR_ACTIVE_LABEL = label || 'Title';
   if (titleColorPreviewText) titleColorPreviewText.textContent = TITLE_COLOR_ACTIVE_LABEL;
   setTitleColorSelection(getTitleColor(TITLE_COLOR_ACTIVE_KEY), { syncSlider: true });
+  updateTitleCustomNameUI();
   titleColorModal.classList.remove('hidden');
   titleColorModal.classList.add('open');
   titleColorBackdrop.classList.add('open');
@@ -4164,6 +4222,7 @@ function closeTitleColorModal(){
   titleColorBackdrop.classList.remove('open');
   TITLE_COLOR_ACTIVE_KEY = '';
   TITLE_COLOR_ACTIVE_LABEL = '';
+  updateTitleCustomNameUI();
 }
 function wireTitleColorPicker(){
   if (titleColorClose) titleColorClose.addEventListener('click', closeTitleColorModal);
@@ -4194,6 +4253,7 @@ function wireTitleColorPicker(){
       if (!TITLE_COLOR_ACTIVE_KEY) return;
       setTitleColor(TITLE_COLOR_ACTIVE_KEY, TITLE_COLOR_SELECTED);
       applyTitleColorByKey(TITLE_COLOR_ACTIVE_KEY);
+      applySpellCustomNameForKey(TITLE_COLOR_ACTIVE_KEY, titleCustomNameInput?.value || '');
       closeTitleColorModal();
     });
   }
