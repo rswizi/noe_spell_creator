@@ -49,6 +49,7 @@
     .card strong{display:block;font-size:1rem;}
     .muted{color:var(--muted);}
     .hidden{display:none;}
+    .combat-characters .card.active{border-color:var(--accent);box-shadow:0 18px 40px rgba(0,0,0,0.45);}
     .pill.badge{border-color:var(--accent);color:var(--accent);}
     .carousel{display:flex;gap:8px;overflow-x:auto;padding:6px 4px;}
     .initiative-pill{padding:6px 12px;border-radius:999px;background:#1d2130;border:1px solid #2c3140;white-space:nowrap;font-size:.85rem;}
@@ -122,6 +123,7 @@
         <div class="actions">
           <button class="btn" id="combat-prev" title="Previous turn">◀</button>
           <button class="btn" id="combat-next" title="Next turn">▶</button>
+          <button class="btn" id="combat-end-btn" style="margin-left:8px;">End Combat</button>
         </div>
       </div>
       <div class="carousel-wrapper" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
@@ -134,10 +136,32 @@
       </div>
       <div id="participant-tabs" class="tabs"></div>
       <div id="combat-characters" class="cards"></div>
+      <div id="participant-detail" class="panel hidden">
+        <div class="panel-header">
+          <div>
+            <h2 id="participant-detail-title">Participant</h2>
+            <p class="muted" id="participant-detail-meta"></p>
+          </div>
+        </div>
+        <div id="participant-detail-body"></div>
+      </div>
       <div id="combat-chat" class="chat-panel">
-        <div class="muted">Campaign Chat</div>
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <strong>Campaign Chat</strong>
+          <span class="muted" id="combat-chat-status"></span>
+        </div>
         <div id="chat-log" class="chat-log"></div>
         <div class="chat-controls">
+          <div class="row" style="gap:8px;flex-wrap:wrap;">
+            <label class="muted" for="chat-speaker">Speaker</label>
+            <select id="chat-speaker"></select>
+            <label class="muted" for="chat-visibility">Visibility</label>
+            <select id="chat-visibility">
+              <option value="public">Public</option>
+              <option value="self">Self</option>
+              <option value="whisper">Whisper</option>
+            </select>
+          </div>
           <textarea id="chat-input" rows="2" placeholder="Share a message with the group..."></textarea>
           <button class="btn" id="chat-send">Send</button>
         </div>
@@ -164,7 +188,10 @@
         </label>
       </div>
       <div style="margin-top:16px;">
-        <strong>Characters</strong>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <strong>Characters</strong>
+          <button class="btn small" id="roll-initiative-btn" type="button">Roll initiatives</button>
+        </div>
         <div id="start-character-list" style="margin-top:10px;"></div>
       </div>
       <div style="margin-top:16px;">
@@ -191,15 +218,29 @@
       selectedCampaign: null,
       activeCombat: null,
       chatMessages: [],
+      chatMessageIds: new Set(),
+      chatApiOk: true,
       dummyEntries: [],
       chatInterval: null,
       combatInterval: null,
       lastTurnToken: 0,
+      activeParticipantId: null,
     };
 
     const queryParams = new URLSearchParams(location.search);
     const PRESELECTED_CAMPAIGN_ID = (queryParams.get('cid') || '').trim();
     const campaignsPanel = document.getElementById('campaigns-panel');
+    const chatLogEl = document.getElementById('chat-log');
+    const chatStatusEl = document.getElementById('combat-chat-status');
+    const chatInputEl = document.getElementById('chat-input');
+    const chatSendBtn = document.getElementById('chat-send');
+    const chatVisibilityEl = document.getElementById('chat-visibility');
+    const chatSpeakerEl = document.getElementById('chat-speaker');
+    const rollInitiativeBtn = document.getElementById('roll-initiative-btn');
+    const participantDetailPanel = document.getElementById('participant-detail');
+    const participantDetailTitle = document.getElementById('participant-detail-title');
+    const participantDetailMeta = document.getElementById('participant-detail-meta');
+    const participantDetailBody = document.getElementById('participant-detail-body');
 
     function api(path, options = {}) {
       const opts = { credentials: 'include', ...options };
@@ -219,6 +260,277 @@
 
     function setText(el, text) {
       if (el) el.textContent = text;
+    }
+
+    function chatVisibilityKey() {
+      const cid = (state.selectedCampaign && state.selectedCampaign.id) || PRESELECTED_CAMPAIGN_ID;
+      return cid ? `combat_chat_visibility:${cid}` : '';
+    }
+
+    function setChatVisibilityPref(val) {
+      const key = chatVisibilityKey();
+      if (!key) return;
+      localStorage.setItem(key, val);
+    }
+
+    function getChatVisibilityPref() {
+      const key = chatVisibilityKey();
+      if (!key) return 'public';
+      return localStorage.getItem(key) || 'public';
+    }
+
+    function normalizeMessage(raw) {
+      if (!raw) return null;
+      const ts = raw.ts || raw.timestamp || raw.created_at || raw.time || Date.now();
+      const stamp = typeof ts === 'number' ? ts : (ts ? new Date(ts).getTime() : Date.now());
+      return {
+        id: raw.id || `${stamp}_${Math.random().toString(16).slice(2)}`,
+        ts: stamp,
+        visibility: (raw.visibility || raw.scope || 'public').toLowerCase(),
+        type: raw.type || raw.kind || 'message',
+        user: raw.user || raw.username || raw.sender || 'Unknown',
+        character_id: raw.character_id || raw.character?.id || '',
+        character_name: raw.character_name || raw.character?.name || raw.character_id || 'Character',
+        character_avatar: raw.character_avatar || raw.avatar_url || raw.character?.avatar_url || '',
+        text: raw.text || raw.message || raw.content || '',
+        lines: Array.isArray(raw.lines) ? raw.lines : (Array.isArray(raw.detail_lines) ? raw.detail_lines : []),
+        image: raw.image || raw.image_url || '',
+      };
+    }
+
+    function setChatMessages(list) {
+      state.chatMessages = list || [];
+      state.chatMessageIds = new Set((state.chatMessages || []).map((msg) => msg.id));
+    }
+
+    function addChatMessage(raw) {
+      const msg = normalizeMessage(raw);
+      if (!msg || state.chatMessageIds.has(msg.id)) return false;
+      state.chatMessageIds.add(msg.id);
+      state.chatMessages.push(msg);
+      return true;
+    }
+
+    function cleanChatLines(lines) {
+      return (lines || []).map((line) => String(line || '').trim()).filter(Boolean);
+    }
+
+    function messageVisible(msg) {
+      if (!msg) return false;
+      const username = (state.me?.username || '').toLowerCase();
+      if (msg.visibility === 'public') return true;
+      if (msg.visibility === 'self') return msg.user.toLowerCase() === username;
+      if (msg.visibility === 'whisper') return isCurrentUserGM(state.selectedCampaign);
+      return true;
+    }
+
+    function imageFromMessage(msg) {
+      if (!msg) return '';
+      if (msg.image) return String(msg.image);
+      const line = (msg.lines || []).find((l) => /^Image:/i.test(l));
+      if (line) return line.replace(/^Image:\s*/i, '').trim();
+      return '';
+    }
+
+    function scrollChatToBottom() {
+      if (!chatLogEl) return;
+      requestAnimationFrame(() => {
+        chatLogEl.scrollTop = chatLogEl.scrollHeight;
+      });
+    }
+
+    function renderChat() {
+      if (!chatLogEl) return;
+      chatLogEl.innerHTML = '';
+      const visible = (state.chatMessages || []).filter(messageVisible).sort((a, b) => a.ts - b.ts);
+      if (!visible.length) {
+        chatLogEl.innerHTML = '<div class="muted">No messages yet.</div>';
+        return;
+      }
+      let lastGroup = null;
+      visible.forEach((msg) => {
+        const key = `${msg.user}|${msg.character_id}`;
+        const within = lastGroup && lastGroup.key === key && (msg.ts - lastGroup.lastTs) <= 5 * 60 * 1000;
+        let groupEl = lastGroup?.el;
+        if (!within) {
+          groupEl = document.createElement('div');
+          groupEl.className = 'chat-group';
+          const head = document.createElement('div');
+          head.className = 'chat-head';
+          const avatar = document.createElement('div');
+          avatar.className = 'avatar';
+          const img = document.createElement('img');
+          img.src = msg.character_avatar || (msg.character_id ? `/characters/${encodeURIComponent(msg.character_id)}/avatar` : '');
+          img.onerror = () => {
+            img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';
+          };
+          avatar.appendChild(img);
+          const info = document.createElement('div');
+          info.innerHTML = `<div class="chat-user">${msg.character_name}</div><div class="muted">${msg.user}</div>`;
+          head.appendChild(avatar);
+          head.appendChild(info);
+          groupEl.appendChild(head);
+          const linesWrap = document.createElement('div');
+          linesWrap.className = 'chat-lines';
+          groupEl.appendChild(linesWrap);
+          chatLogEl.appendChild(groupEl);
+          lastGroup = { key, el: groupEl, lastTs: msg.ts };
+        }
+        const linesWrap = groupEl.querySelector('.chat-lines');
+        const lineEl = document.createElement('div');
+        lineEl.className = `chat-line ${msg.visibility}`;
+        const textEl = document.createElement('div');
+        textEl.textContent = msg.text || (msg.type === 'roll' ? 'Roll' : 'Message');
+        lineEl.appendChild(textEl);
+        cleanChatLines(msg.lines).forEach((line) => {
+          const detail = document.createElement('div');
+          detail.className = 'muted';
+          detail.textContent = line;
+          lineEl.appendChild(detail);
+        });
+        const meta = document.createElement('div');
+        meta.className = 'muted';
+        meta.textContent = `${new Date(msg.ts).toLocaleTimeString()} · ${msg.visibility}`;
+        lineEl.appendChild(meta);
+        linesWrap.appendChild(lineEl);
+        if (lastGroup) lastGroup.lastTs = msg.ts;
+      });
+      scrollChatToBottom();
+    }
+
+    function renderChatSpeaker() {
+      if (!chatSpeakerEl) return;
+      const chars = (state.selectedCampaign?.characters || []).slice();
+      const username = (state.me?.username || '').toLowerCase();
+      const controlled = chars.filter((c) => {
+        const owner = (c.owner || '').toLowerCase();
+        const assigned = (c.assigned_to || '').toLowerCase();
+        return owner === username || assigned === username;
+      });
+      const list = controlled.length ? controlled : chars;
+      if (!list.length) {
+        chatSpeakerEl.innerHTML = '<option value="">Character</option>';
+        return;
+      }
+      chatSpeakerEl.innerHTML = list.map((c) => {
+        const id = c.character_id || c.id || '';
+        const label = c.name || c.character_name || 'Character';
+        return `<option value="${id}">${label}</option>`;
+      }).join('');
+      if (!chatSpeakerEl.value) {
+        const first = list[0];
+        chatSpeakerEl.value = first.character_id || first.id || '';
+      }
+    }
+
+    function pickSpeaker() {
+      if (!chatSpeakerEl) return { character_id: '', character_name: 'Character', character_avatar: '' };
+      const charId = chatSpeakerEl.value || '';
+      const chars = state.selectedCampaign?.characters || [];
+      const target = chars.find((c) => (c.character_id || c.id || '') === charId);
+      if (!target) {
+        return { character_id: '', character_name: 'Character', character_avatar: '' };
+      }
+      const idValue = target.character_id || target.id || '';
+      return {
+        character_id: idValue,
+        character_name: target.name || target.character_name || 'Character',
+        character_avatar: idValue ? `/characters/${encodeURIComponent(idValue)}/avatar` : '',
+      };
+    }
+
+    function rollDice(count, sides) {
+      const rolls = [];
+      for (let i = 0; i < count; i++) rolls.push(Math.floor(Math.random() * sides) + 1);
+      const total = rolls.reduce((a, b) => a + b, 0);
+      return { rolls, total };
+    }
+
+    function parseRoll(expr) {
+      const raw = expr.trim();
+      if (!raw) return null;
+      const adv = /\badv\b/i.test(raw);
+      const dis = /\bdis\b/i.test(raw);
+      const cleaned = raw.replace(/\badv\b/ig, '').replace(/\bdis\b/ig, '').trim();
+      const match = cleaned.match(/^(\d+)?d(\d+)([+-]\d+)?$/i);
+      if (!match) return null;
+      const count = Math.max(1, Number(match[1] || 1));
+      const sides = Math.max(2, Number(match[2] || 6));
+      const mod = Number(match[3] || 0);
+      return { count, sides, mod, adv, dis, label: `${count}d${sides}${mod ? (mod > 0 ? `+${mod}` : mod) : ''}` };
+    }
+
+    function buildRollMessage(expr, visibility) {
+      const parsed = parseRoll(expr);
+      if (!parsed) return { error: 'Invalid roll format. Use /r XdY +Z adv|dis.' };
+      const attempt = () => {
+        const dice = rollDice(parsed.count, parsed.sides);
+        return { rolls: dice.rolls, subtotal: dice.total, total: dice.total + parsed.mod };
+      };
+      let picked = attempt();
+      let alt = null;
+      if ((parsed.adv || parsed.dis) && !(parsed.adv && parsed.dis)) {
+        alt = attempt();
+        picked = parsed.adv ? (picked.total >= alt.total ? picked : alt) : (picked.total <= alt.total ? picked : alt);
+      }
+      const lines = [];
+      lines.push(`Expression: ${parsed.label}${parsed.adv ? ' adv' : ''}${parsed.dis ? ' dis' : ''}`.trim());
+      lines.push(`Rolls: ${picked.rolls.join(' + ')} = ${picked.subtotal} ${parsed.mod ? (parsed.mod > 0 ? `+ ${parsed.mod}` : `- ${Math.abs(parsed.mod)}`) : ''}`.trim());
+      lines.push(`Total: ${picked.total}`);
+      if (alt) {
+        lines.push(`Other: ${alt.rolls.join(' + ')} = ${alt.subtotal} ${parsed.mod ? (parsed.mod > 0 ? `+ ${parsed.mod}` : `- ${Math.abs(parsed.mod)}`) : ''}`.trim());
+      }
+      return { text: `Roll ${parsed.label}`, lines, visibility };
+    }
+
+    async function postChatMessage(payload) {
+      if (!state.selectedCampaign) return;
+      const campaignId = encodeURIComponent(state.selectedCampaign.id);
+      await api(`/campaigns/${campaignId}/chat`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    }
+
+    async function handleChatSend() {
+      if (!chatInputEl) return;
+      const raw = (chatInputEl.value || '').trim();
+      if (!raw) return;
+      let visibility = chatVisibilityEl ? chatVisibilityEl.value : 'public';
+      let content = raw;
+      if (content.startsWith('/w')) {
+        visibility = 'whisper';
+        content = content.slice(2).trim();
+      } else if (content.startsWith('/s')) {
+        visibility = 'self';
+        content = content.slice(2).trim();
+      }
+      const speaker = pickSpeaker();
+      const payloadBase = {
+        visibility,
+        ts: Date.now(),
+        user: state.me?.username || 'Unknown',
+        ...speaker,
+      };
+      try {
+        if (content.startsWith('/r')) {
+          const expr = content.slice(2).trim();
+          const roll = buildRollMessage(expr, visibility);
+          if (roll.error) {
+            alert(roll.error);
+            return;
+          }
+          await postChatMessage({ type: 'roll', text: roll.text, lines: roll.lines, ...payloadBase });
+        } else {
+          await postChatMessage({ type: 'message', text: content, lines: [], ...payloadBase });
+        }
+        loadCampaignChat();
+        if (chatInputEl) chatInputEl.value = '';
+      } catch (err) {
+        console.error(err);
+        if (chatStatusEl) chatStatusEl.textContent = err.message || 'Chat send failed.';
+      }
     }
 
     async function checkMe() {
@@ -298,14 +610,26 @@
       setText(document.getElementById('campaign-name'), camp.name || 'Campaign');
       setText(document.getElementById('campaign-info'), `Owner: ${camp.owner || 'Unknown'} · ${camp.description || 'No description'}`);
       renderCharacterList();
+      renderChatSpeaker();
+      if (chatVisibilityEl) chatVisibilityEl.value = getChatVisibilityPref();
       updateStartButton();
       loadActiveCombat();
       startPolling();
     }
 
+    function isCurrentUserGM(camp) {
+      if (!state.me) return false;
+      const role = (state.me.role || '').toLowerCase();
+      const owner = (camp?.owner || '').toLowerCase();
+      const username = (state.me.username || '').toLowerCase();
+      if (role === 'admin') return true;
+      if (owner && owner === username) return true;
+      return false;
+    }
+
     function updateStartButton() {
       const startBtn = document.getElementById('start-combat-btn');
-      const isGM = state.me && (((state.selectedCampaign?.owner || '').toLowerCase() === (state.me?.username || '').toLowerCase()) || (state.me?.role === 'admin'));
+      const isGM = isCurrentUserGM(state.selectedCampaign);
       const hasCombat = !!state.activeCombat;
       startBtn.disabled = !isGM || hasCombat;
       if (!state.me) {
@@ -469,6 +793,7 @@
       try {
         const res = await api(`/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/combats/active`);
         state.activeCombat = res.combat;
+        state.activeParticipantId = null;
         state.lastTurnToken = state.activeCombat?.turn_token || 0;
         renderCombatPanel();
       } catch {
@@ -479,8 +804,10 @@
 
     function renderCombatPanel() {
       const panel = document.getElementById('combat-panel');
+      const endBtn = document.getElementById('combat-end-btn');
       if (!state.activeCombat) {
         panel.classList.add('hidden');
+        participantDetailPanel?.classList.add('hidden');
         updateStartButton();
         setText(document.getElementById('combat-status'), 'No combat running.');
         return;
@@ -502,6 +829,10 @@
       const joined = (state.activeCombat.joined_users || []).includes(state.me?.username);
       joinBtn.disabled = joined;
       joinBtn.textContent = joined ? 'Joined' : 'Join Combat';
+      if (endBtn) {
+        endBtn.disabled = !isGM;
+        endBtn.style.display = isGM ? '' : 'none';
+      }
       loadCampaignChat();
     }
 
@@ -524,23 +855,43 @@
       const tabs = document.getElementById('participant-tabs');
       tabs.innerHTML = '';
       const participants = state.activeCombat?.participants || [];
-      const isGM = state.me && (state.me.role === 'admin' || (state.selectedCampaign && state.selectedCampaign.owner === state.me.username));
+      const isGM = isCurrentUserGM(state.selectedCampaign);
       const visible = isGM ? participants : participants.filter((p) => p.assigned_to && state.me && p.assigned_to.toLowerCase() === state.me.username.toLowerCase());
       if (!visible.length) {
         tabs.innerHTML = '<span class="muted">Join the combat to view your characters.</span>';
+        participantDetailPanel?.classList.add('hidden');
         return;
+      }
+      if (!state.activeParticipantId || !visible.some((p) => p.id === state.activeParticipantId)) {
+        state.activeParticipantId = visible[0]?.id || null;
       }
       visible.forEach((part) => {
         const tab = document.createElement('button');
-        tab.className = 'tab';
+        tab.className = `tab${part.id === state.activeParticipantId ? ' active' : ''}`;
         tab.innerHTML = `<span>${part.name || part.character_id || 'Combatant'}</span><small>${part.type || part.assigned_to ? `Player: ${part.assigned_to || 'NPC'}` : 'NPC'}</small>`;
         tab.addEventListener('click', () => {
-          if (part.character_id) {
-            window.open(`character_edit.html?id=${encodeURIComponent(part.character_id)}#combat`, '_blank');
-          }
+          state.activeParticipantId = part.id;
+          renderParticipantTabs();
+          renderParticipantCards();
         });
         tabs.appendChild(tab);
       });
+    }
+
+    function renderParticipantDetail(part) {
+      if (!participantDetailPanel) return;
+      if (!part) {
+        participantDetailPanel.classList.add('hidden');
+        return;
+      }
+      participantDetailPanel.classList.remove('hidden');
+      participantDetailTitle.textContent = part.name || 'Participant';
+      participantDetailMeta.textContent = `Initiative ${part.initiative || 0} · ${part.type || 'Combatant'}`;
+      const lines = [];
+      lines.push(`Assigned: ${part.assigned_to || 'Unassigned'}`);
+      if (part.notes) lines.push(`Notes: ${part.notes}`);
+      if (part.character_id) lines.push(`Character: ${part.character_id}`);
+      participantDetailBody.innerHTML = lines.map(line => `<div class="muted" style="margin-bottom:4px;">${line}</div>`).join('');
     }
 
     function renderParticipantCards() {
@@ -549,18 +900,28 @@
       const participants = state.activeCombat?.participants || [];
       if (!participants.length) {
         container.innerHTML = '<p class="muted">No participants yet.</p>';
+        renderParticipantDetail(null);
         return;
       }
+      const active = participants.find((part) => part.id === state.activeParticipantId) || null;
+      renderParticipantDetail(active);
       participants.forEach((part) => {
+        const isActive = part.id === state.activeParticipantId;
         const card = document.createElement('div');
-        card.className = 'card';
+        card.className = `card${isActive ? ' active' : ''}`;
         card.innerHTML = `
           <div>
             <strong>${part.name || 'Combatant'}</strong>
             <span class="muted">Initiative ${part.initiative || 0}</span><br>
             <span class="muted">${part.character_id ? 'Linked character' : 'Dummy'}</span>
+            ${part.notes ? `<div class="muted" style="font-size:.82rem; margin-top:6px;">${part.notes}</div>` : ''}
           </div>
         `;
+        card.addEventListener('click', () => {
+          state.activeParticipantId = part.id;
+          renderParticipantTabs();
+          renderParticipantCards();
+        });
         container.appendChild(card);
       });
     }
@@ -592,6 +953,23 @@
         loadActiveCombat();
       } catch (err) {
         console.error(err);
+      }
+    });
+    document.getElementById('combat-end-btn').addEventListener('click', async () => {
+      if (!state.activeCombat || !state.selectedCampaign) return;
+      const btn = document.getElementById('combat-end-btn');
+      const campaignId = encodeURIComponent(state.selectedCampaign.id);
+      const combatId = encodeURIComponent(state.activeCombat.id);
+      try {
+        if (btn) btn.disabled = true;
+        await api(`/campaigns/${campaignId}/combats/${combatId}/end`, { method: 'POST' });
+        state.activeCombat = null;
+        renderCombatPanel();
+        updateStartButton();
+      } catch (err) {
+        console.error(err);
+        if (btn) btn.disabled = false;
+        alert(err.message || 'Failed to end combat.');
       }
     });
 
