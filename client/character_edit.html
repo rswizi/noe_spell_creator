@@ -8308,6 +8308,7 @@ function renderCraftSearchResults(){
 
 async function addCraftomancyFromSpell(sp){
   if (!CRAFT_TARGET_ITEM) return;
+  const targetItemId = CRAFT_TARGET_ITEM?.item_id || ACTIVE_INV_ITEM_ID;
   const crafts = CRAFT_TARGET_ITEM.craftomancies || [];
   if (crafts.length >= 2){
     craftAddStatus.textContent = 'This item already has 2 craftomancies.';
@@ -8337,6 +8338,7 @@ async function addCraftomancyFromSpell(sp){
     renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
     renderAbilitySpellsBucket();
     closeCraftomancyModal();
+    refreshActiveInventoryItemModal(targetItemId);
   }catch(e){
     craftAddStatus.textContent = `Failed: ${e.message}`;
   }
@@ -9611,6 +9613,12 @@ function closeInvItemModal(){
   invItemModal.classList.add('hidden');
   invItemModal.classList.remove('open');
   invItemBackdrop.classList.remove('open');
+}
+
+function refreshActiveInventoryItemModal(itemId){
+  if (!itemId || !invItemModal || !invItemModal.classList.contains('open')) return;
+  const updated = (LINKED_INV?.items || []).find(it => it.item_id === itemId);
+  if (updated) openInvItemModal(updated);
 }
 
 function invQualityPrice(base, target){
