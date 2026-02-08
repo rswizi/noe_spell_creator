@@ -5989,6 +5989,19 @@ async def create_character(request: Request):
 
     cid = next_id_str("characters", padding=4)
     public_flag = _bool_from(body.get("public"))
+    xp_val = 0
+    try:
+        xp_val = max(0, int(math.floor(float(body.get("xp") or 0))))
+    except Exception:
+        xp_val = 0
+    level_val = 1
+    try:
+        level_val = max(1, int(body.get("level") or 1))
+    except Exception:
+        level_val = 1
+    xp_ledger = body.get("xp_ledger") or []
+    if not isinstance(xp_ledger, list):
+        xp_ledger = []
     doc = {
         "id": cid,
         "owner": owner,
@@ -5996,6 +6009,9 @@ async def create_character(request: Request):
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
         "public": public_flag,
+        "level": level_val,
+        "xp": xp_val,
+        "xp_ledger": xp_ledger,
         "sublimations": body.get("sublimations") or [],
         "avatar_id": "",
         "archetype_id": (body.get("archetype_id") or "").strip(),
@@ -6071,6 +6087,20 @@ async def update_character(cid: str, request: Request):
         ic = body.get("item_choices") or {}
         if isinstance(ic, dict):
             updates["item_choices"] = ic
+    if "xp" in body:
+        xp_val = 0
+        try:
+            xp_val = max(0, int(math.floor(float(body.get("xp") or 0))))
+        except Exception:
+            xp_val = 0
+        updates["xp"] = xp_val
+    if "level" in body:
+        lvl_val = 1
+        try:
+            lvl_val = max(1, int(body.get("level") or 1))
+        except Exception:
+            lvl_val = 1
+        updates["level"] = lvl_val
     if "xp_ledger" in body:
         ledger = body.get("xp_ledger") or []
         if isinstance(ledger, list):
