@@ -1242,6 +1242,9 @@
             <div class="panel-body">
               <div class="row" style="gap:8px; flex-wrap:wrap;">
                 <select id="boon-select" class="grow"></select>
+                <button id="boon-config" type="button" class="btn small mod-config" style="display:none;" title="Configure boon choices">
+                  <i class="fa-solid fa-gear" aria-hidden="true"></i>
+                </button>
                 <span id="boon-status" class="muted"></span>
               </div>
               <div id="boon-desc" class="arc-desc" style="display:none;"></div>
@@ -3795,6 +3798,7 @@ const speciesSelectEl = document.getElementById('species-select');
 const speciesStatusEl = document.getElementById('species-status');
 const speciesDescEl = document.getElementById('species-desc');
 const boonSelectEl = document.getElementById('boon-select');
+const boonConfigBtn = document.getElementById('boon-config');
 const boonStatusEl = document.getElementById('boon-status');
 const boonDescEl = document.getElementById('boon-desc');
 const arcSelectEl     = document.getElementById('arc-select');
@@ -11288,6 +11292,33 @@ function updateBoonDesc(id){
     boonDescEl.innerHTML = '';
     boonDescEl.style.display = 'none';
   }
+  updateBoonChoiceConfigUI(id);
+}
+
+function updateBoonChoiceConfigUI(id){
+  if (!boonConfigBtn) return;
+  const target = String(id ?? getBoonAbilityId() || '').trim();
+  if (!target){
+    boonConfigBtn.style.display = 'none';
+    return;
+  }
+  const assigned = ASSIGNED.find(a=> String(a.id) === target);
+  const abilityDoc = assigned || BOON_ABILITIES.find(a=> String(a.id) === target);
+  const hasChoice = abilityDoc ? abilityHasChoice(abilityDoc) : false;
+  if (!hasChoice || !assigned){
+    boonConfigBtn.style.display = 'none';
+    return;
+  }
+  boonConfigBtn.style.display = '';
+}
+
+async function openBoonChoiceConfig(){
+  const id = getBoonAbilityId();
+  if (!id) return;
+  const ability = ASSIGNED.find(a=> String(a.id) === id);
+  if (!ability) return;
+  await openChoiceModal(ability);
+  updateBoonChoiceConfigUI(id);
 }
 async function loadBoonList(){
   if (!boonSelectEl) return;
@@ -15739,7 +15770,16 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   // Initiative tracks MO after modifiers (base + mods).
   out.initiative = out.mo;
   const moBreakdown = (notes.mo || []).filter(n=>!/^Base\s*=/.test(n));
-  notes.initiative = [`Base = ${base.initiative ?? base.mo ?? 0}`, 'Synced to MO (modifiers included)', ...moBreakdown];
+  const initiativeBase = base.initiative ?? base.mo ?? 0;
+  const initiativeDelta = out.initiative - initiativeBase;
+  const initiativeNotesDetail = (notes.initiative || []).slice(1);
+  out.initiative = out.mo + initiativeDelta;
+  notes.initiative = [
+    `Base = ${initiativeBase}`,
+    ...initiativeNotesDetail,
+    'Synced to MO (modifiers included)',
+    ...moBreakdown,
+  ];
 
   // Tooltips with breakdown
   hpEl.title = notes.hp.join('\n');   setNotesList('mods-derived-hp', notes.hp);
@@ -16624,6 +16664,7 @@ document.querySelectorAll('.abi-hide-toggle').forEach(btn=>{
 });
 speciesSelectEl?.addEventListener('change', ()=> applySpeciesSelection(speciesSelectEl.value));
 boonSelectEl?.addEventListener('change', ()=> applyBoonSelection(boonSelectEl.value));
+boonConfigBtn?.addEventListener('click', openBoonChoiceConfig);
 abiOpenAddBtn?.addEventListener('click', openAbilityAddModal);
 expOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('expertise'));
 dimaOpenAddBtn?.addEventListener('click', ()=> openSourceAddModal('dima'));
@@ -18512,6 +18553,7 @@ function renderAbilitiesTab(){
   updateCraftomancyCounter();
   renderCombatAbilityList();
   renderCombatEtUsage();
+  updateBoonChoiceConfigUI();
 }
 
 function fillPersonal(){

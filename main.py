@@ -6083,6 +6083,10 @@ async def update_character(cid: str, request: Request):
         ac = body.get("ability_choices") or {}
         if isinstance(ac, dict):
             updates["ability_choices"] = ac
+    if "ability_choice_keys" in body:
+        keys_in = body.get("ability_choice_keys") or []
+        if isinstance(keys_in, list):
+            updates["ability_choice_keys"] = [str(k or "") for k in keys_in]
     if "item_choices" in body:
         ic = body.get("item_choices") or {}
         if isinstance(ic, dict):
