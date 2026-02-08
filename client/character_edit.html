@@ -138,6 +138,8 @@
     .arc-row { flex-wrap:nowrap; }
     .abi-list { display:grid; gap:8px; }
     .abi-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #2b2b3b; border-radius:12px; background:linear-gradient(145deg, #14141d, #0f0f16); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
+    .abi-item.abi-already-added { border-color:#3c6cf4; background:linear-gradient(145deg, #0c1a3c, #0a1129); box-shadow: inset 0 0 0 1px rgba(60,108,244,0.2); }
+    .abi-item.abi-already-added button { background:rgba(60,108,244,0.12); color:#b5d5ff; border-color:transparent; }
     .abi-item.abi-block { flex-direction: column; align-items: stretch; }
     .abi-item.abi-card { display:grid; grid-template-columns: minmax(0, 1fr) auto; align-items:start; gap:12px; }
     .abi-item.abi-card .abi-body {
@@ -16747,6 +16749,7 @@ craftAddBackdrop?.addEventListener('click', (e)=>{ if (e.target===craftAddBackdr
 function renderSearchResults(arr){
   abiResultsEl.innerHTML = '';
   if (!arr.length){ abiResultsEl.innerHTML = '<div class="muted">No results.</div>'; return; }
+  const assignedIds = new Set((CHAR?.abilities || []).map(id=> String(id||'').trim()).filter(Boolean));
   for (const a of arr){
     const div = document.createElement('div');
     div.className = 'abi-item';
@@ -16771,9 +16774,36 @@ function renderSearchResults(arr){
       ${tagsHtml}
       <button>Add</button>
     `;
-    div.querySelector('button').addEventListener('click', ()=> addAbilityToChar(a.id));
+    const button = div.querySelector('button');
+    const aid = String(a.id || '').trim();
+    div.dataset.abilityId = aid;
+    const isAssigned = aid && assignedIds.has(aid);
+    if (isAssigned){
+      div.classList.add('abi-already-added');
+      button.textContent = 'Added';
+      button.disabled = true;
+    }else{
+      const targetId = aid || String(a.id || '').trim();
+      button.addEventListener('click', ()=> addAbilityToChar(targetId));
+    }
     abiResultsEl.appendChild(div);
   }
+}
+
+function markAbilityResultAsAdded(aid){
+  if (!aid) return;
+  const normalized = String(aid || '').trim();
+  if (!normalized) return;
+  const rows = abiResultsEl?.querySelectorAll('.abi-item') || [];
+  rows.forEach(div=>{
+    if (div.dataset.abilityId !== normalized) return;
+    div.classList.add('abi-already-added');
+    const button = div.querySelector('button');
+    if (button){
+      button.textContent = 'Added';
+      button.disabled = true;
+    }
+  });
 }
 
 async function resolveAssignedAbilities(){
@@ -17654,6 +17684,7 @@ async function addAbilityToChar(aid){
   if (ab && abilityHasChoice(ab)){
     await openChoiceModal(ab);
   }
+  markAbilityResultAsAdded(key);
   recomputePassiveAgg();
   renderAbilitiesTab();
   renderStatistics();
