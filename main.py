@@ -6404,6 +6404,14 @@ def get_character_computed(cid: str, request: Request):
 # -------------------- Abilities & Traits --------------------
 from fastapi import Body, Query
 
+def _normalize_bool_payload(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    raw = str(value).strip().lower()
+    return raw in {"1", "true", "yes", "y", "on"}
+
 def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
     name = (payload.get("name") or "Unnamed Ability").strip()
     if not name:
@@ -6417,6 +6425,7 @@ def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
     source_ref      = (payload.get("source_ref") or "").strip()
     tags = [str(t).strip() for t in (payload.get("tags") or []) if str(t).strip()]
     description = (payload.get("description") or "").strip()
+    allow_multiple = _normalize_bool_payload(payload.get("allow_multiple"))
 
     active_in  = payload.get("active") or {}
     passive_in = payload.get("passive") or {}
@@ -6540,6 +6549,7 @@ def _ability_doc_from_payload(payload: dict, creator: str) -> dict:
         "source_ref": source_ref,
         "tags": tags,
         "description": description,
+        "allow_multiple": allow_multiple,
         "active": active_block,
         "passive": passive_block,
         "creator": creator,
@@ -6656,6 +6666,7 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
     archetype_version = int(payload.get("archetype_version") or existing.get("archetype_version") or 1)
     archetype_original_rank = int(payload.get("archetype_original_rank") or existing.get("archetype_original_rank") or 0)
     archetype_replaces = (payload.get("archetype_replaces") or existing.get("archetype_replaces") or "").strip()
+    allow_multiple = _normalize_bool_payload(payload.get("allow_multiple", existing.get("allow_multiple", False)))
 
     active_block = None
     if ab_type in ("active","mixed"):
@@ -6769,6 +6780,7 @@ async def update_ability(aid: str, request: Request, payload: dict = Body(...)):
         "description": description,
         "active": active_block,
         "passive": passive_block,
+        "allow_multiple": allow_multiple,
         "updated_at": now,
         "archetype_version": archetype_version,
         "archetype_original_rank": archetype_original_rank,

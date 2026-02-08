@@ -212,6 +212,16 @@
             </select>
           </div>
 
+          <div class="row" style="align-items:center;">
+            <label for="ab-allow-multiple">Repeatable</label>
+            <div class="grow" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <input id="ab-allow-multiple" type="checkbox" />
+              <span class="muted" style="font-size:.8rem;">
+                Allow this ability to be taken multiple times by a character.
+              </span>
+            </div>
+          </div>
+
         <div class="row">
           <label for="ab-avatar">Avatar</label>
           <select id="ab-avatar" class="grow">
@@ -501,10 +511,11 @@ const abIdEl       = document.getElementById('ab-id');
 const nameEl       = document.getElementById('ab-name');
 const typeEl       = document.getElementById('ab-type');
 const sourceCatEl  = document.getElementById('ab-source-cat');
-const sourceRefEl  = document.getElementById('ab-source-ref');
+const sourceRefEl    = document.getElementById('ab-source-ref');
 const avatarSelectEl = document.getElementById('ab-avatar');
-const tagsEl       = document.getElementById('ab-tags');
-const descEditor   = setupRichTextEditor('ab-description-editor', 'Lore + global explanation of what this ability does.');
+const allowMultipleEl= document.getElementById('ab-allow-multiple');
+const tagsEl         = document.getElementById('ab-tags');
+const descEditor     = setupRichTextEditor('ab-description-editor', 'Lore + global explanation of what this ability does.');
 const statusLine   = document.getElementById('status-line');
 const btnClearDup  = document.getElementById('btn-clear-dup');
 
@@ -1138,6 +1149,7 @@ async function buildPayloadFromForm(){
     source_ref: sourceRefEl.value || '',
     tags,
     description: descEditor.getHTML(),
+    allow_multiple: !!allowMultipleEl?.checked,
   };
 
   let active = null;
@@ -1235,6 +1247,7 @@ function populateForm(a){
   tagsEl.value       = (a.tags || []).join(', ');
   if (avatarSelectEl) avatarSelectEl.value = a.default_avatar || 'auto';
   descEditor.setHTML(a.description || '');
+  if (allowMultipleEl) allowMultipleEl.checked = !!a.allow_multiple;
   arcVersionEl.value = a.archetype_version || 1;
   arcOrigRankEl.value= a.archetype_original_rank || 1;
   arcReplSel.value   = a.archetype_replaces || '';

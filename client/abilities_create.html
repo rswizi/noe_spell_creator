@@ -114,6 +114,16 @@
             </select>
           </div>
 
+          <div class="row" style="align-items:center;">
+            <label for="ab-allow-multiple">Repeatable</label>
+            <div class="grow" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <input id="ab-allow-multiple" type="checkbox" />
+              <span class="muted" style="font-size:.8rem;">
+                Allow this ability to be taken multiple times by a character.
+              </span>
+            </div>
+          </div>
+
       <div class="row">
         <label for="ab-avatar">Avatar</label>
         <select id="ab-avatar" class="grow">
@@ -361,10 +371,11 @@ const arcOrigRankEl= document.getElementById('ab-arc-orig-rank');
 const arcReplSel   = document.getElementById('ab-arc-repl');
 const arcReplSearch= document.getElementById('ab-arc-repl-search');
 const arcReplSource= document.getElementById('ab-arc-repl-source');
-const sourceRefEl  = document.getElementById('ab-source-ref');
+const sourceRefEl    = document.getElementById('ab-source-ref');
 const avatarSelectEl = document.getElementById('ab-avatar');
-const tagsEl       = document.getElementById('ab-tags');
-const descEditor   = setupRichTextEditor('ab-description-editor', 'Lore + global explanation of what this ability does.');
+const allowMultipleEl= document.getElementById('ab-allow-multiple');
+const tagsEl         = document.getElementById('ab-tags');
+const descEditor     = setupRichTextEditor('ab-description-editor', 'Lore + global explanation of what this ability does.');
 
 const panelActive  = document.getElementById('panel-active');
 const panelPassive = document.getElementById('panel-passive');
@@ -837,6 +848,7 @@ async function buildPayload(){
     source_ref: sourceRefEl.value || '',
     tags,
     description: descEditor.getHTML(),
+    allow_multiple: !!allowMultipleEl?.checked,
   };
 
   let active = null;
