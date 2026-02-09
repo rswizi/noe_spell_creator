@@ -11297,7 +11297,7 @@ function updateBoonDesc(id){
 
 function updateBoonChoiceConfigUI(id){
   if (!boonConfigBtn) return;
-  const target = String(id ?? getBoonAbilityId() || '').trim();
+  const target = String((id ?? getBoonAbilityId()) || '').trim();
   if (!target){
     boonConfigBtn.style.display = 'none';
     return;
