@@ -15767,19 +15767,22 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
 
   TALENT_MAX = out.talent_max ?? base.talent_max ?? TALENT_MAX;
 
-  // Initiative tracks MO after modifiers (base + mods).
-  out.initiative = out.mo;
-  const moBreakdown = (notes.mo || []).filter(n=>!/^Base\s*=/.test(n));
+  // Initiative tracks MO (plus intersection modifiers).
   const initiativeBase = base.initiative ?? base.mo ?? 0;
-  const initiativeDelta = out.initiative - initiativeBase;
+  const initiativeBeforeSync = out.initiative;
+  const initiativeDelta = initiativeBeforeSync - initiativeBase;
   const initiativeNotesDetail = (notes.initiative || []).slice(1);
-  out.initiative = out.mo + initiativeDelta;
+  const reflexMilestoneBonus = milestone('reflex');
+  const moBreakdown = (notes.mo || []).filter(n=>!/^Base\s*=/.test(n));
+  out.initiative = (out.mo ?? 0) + (reflexMilestoneBonus || 0) + initiativeDelta;
   notes.initiative = [
     `Base = ${initiativeBase}`,
     ...initiativeNotesDetail,
-    'Synced to MO (modifiers included)',
-    ...moBreakdown,
   ];
+  if (reflexMilestoneBonus){
+    notes.initiative.push(`+${reflexMilestoneBonus} Initiative from REF milestone(s)`);
+  }
+  notes.initiative.push('Synced to MO (modifiers included)', ...moBreakdown);
 
   // Tooltips with breakdown
   hpEl.title = notes.hp.join('\n');   setNotesList('mods-derived-hp', notes.hp);

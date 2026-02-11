@@ -36,8 +36,16 @@ from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect, recompute_all_spells
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER, craftomancy_row_for_quality, craftomancy_category_index, craftomancy_next_category
+from server.src.modules.campaign_chat_helpers import (
+    CAMPAIGN_CHAT_COL,
+    CAMPAIGN_CHAT_WS,
+    build_chat_doc,
+    broadcast_campaign_chat,
+    insert_chat_doc,
+)
 from server.src.modules.wiki_api import router as wiki_router
 from server.src.modules.assets_api import router as assets_router
+from server.src.modules.quests_api import router as quests_router
 from server.src.modules.campaign_combat import (
     create_combat_doc,
     get_active_combat,
@@ -66,8 +74,6 @@ def _avatar_field(payload: dict, field_name: str = "default_avatar") -> tuple[st
         return key, False
     return None, True
 CAMPAIGN_COL = get_col("campaigns")
-CAMPAIGN_CHAT_COL = get_col("campaign_chat")
-CAMPAIGN_CHAT_WS: dict[str, set[WebSocket]] = {}
 def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) -> dict:
     if not doc:
         return {}
@@ -202,6 +208,7 @@ app.add_middleware(
 
 app.include_router(wiki_router, prefix="")
 app.include_router(assets_router, prefix="")
+app.include_router(quests_router, prefix="")
 
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
@@ -625,70 +632,6 @@ async def get_campaign_avatar(cid: str):
     return Response(content=doc["avatar"], media_type="image/png")
 
 # ---------- Campaign Chat ----------
-def _chat_visibility(val: Any) -> str:
-    v = str(val or "public").lower()
-    return v if v in ("public", "whisper", "self") else "public"
-
-def _chat_type(val: Any) -> str:
-    v = str(val or "message").lower()
-    return v if v in ("message", "roll", "system") else "message"
-
-def _chat_lines(val: Any) -> list[str]:
-    if not isinstance(val, list):
-        return []
-    out = []
-    for item in val:
-        s = str(item or "").strip()
-        if s:
-            out.append(s[:400])
-    return out[:40]
-
-def _next_chat_id() -> str:
-    try:
-        return f"msg_{next_id_str('campaign_chat', padding=6)}"
-    except Exception:
-        return f"msg_{secrets.token_hex(4)}"
-
-def _chat_doc(cid: str, user: str, body: dict) -> dict:
-    ts = body.get("ts")
-    try:
-        ts_val = int(ts)
-    except Exception:
-        ts_val = int(datetime.datetime.utcnow().timestamp() * 1000)
-    doc = {
-        "id": _next_chat_id(),
-        "campaign_id": cid,
-        "ts": ts_val,
-        "visibility": _chat_visibility(body.get("visibility")),
-        "type": _chat_type(body.get("type")),
-        "text": str(body.get("text") or "").strip()[:800],
-        "lines": _chat_lines(body.get("lines")),
-        "user": user,
-        "character_id": str(body.get("character_id") or "").strip(),
-        "character_name": str(body.get("character_name") or "").strip(),
-        "character_avatar": str(body.get("character_avatar") or "").strip(),
-        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-    }
-    return doc
-
-async def _broadcast_campaign_chat(cid: str, msg: dict) -> None:
-    if "_id" in msg:
-        msg = {k: v for k, v in msg.items() if k != "_id"}
-    sockets = list(CAMPAIGN_CHAT_WS.get(cid, set()))
-    if not sockets:
-        return
-    payload = {"type": "chat", "message": msg}
-    dead: list[WebSocket] = []
-    for ws in sockets:
-        try:
-            await ws.send_json(payload)
-        except Exception:
-            dead.append(ws)
-    for ws in dead:
-        CAMPAIGN_CHAT_WS.get(cid, set()).discard(ws)
-    if not CAMPAIGN_CHAT_WS.get(cid):
-        CAMPAIGN_CHAT_WS.pop(cid, None)
-
 @app.get("/campaigns/{cid}/chat")
 async def get_campaign_chat(cid: str, req: Request, limit: int = Query(200, ge=1, le=400), before: int | None = Query(None)):
     user, role = require_auth(req)
@@ -707,14 +650,10 @@ async def post_campaign_chat(cid: str, req: Request):
         body = await req.json()
     except Exception:
         body = {}
-    doc = _chat_doc(cid, user, body or {})
-    try:
-        CAMPAIGN_CHAT_COL.insert_one(doc)
-    except DuplicateKeyError:
-        doc["id"] = f"msg_{secrets.token_hex(4)}"
-        CAMPAIGN_CHAT_COL.insert_one(doc)
+    doc = build_chat_doc(cid, user, body or {})
+    doc = insert_chat_doc(doc)
     doc.pop("_id", None)
-    await _broadcast_campaign_chat(cid, doc)
+    await broadcast_campaign_chat(cid, doc)
     return {"status": "success", "message": doc}
 
 @app.websocket("/campaigns/{cid}/chat/ws")
@@ -748,9 +687,9 @@ async def campaign_chat_ws(websocket: WebSocket, cid: str):
             payload = data.get("message") if isinstance(data, dict) else None
             if not isinstance(payload, dict):
                 continue
-            doc = _chat_doc(cid, user, payload)
-            CAMPAIGN_CHAT_COL.insert_one(doc)
-            await _broadcast_campaign_chat(cid, doc)
+            doc = build_chat_doc(cid, user, payload)
+            insert_chat_doc(doc)
+            await broadcast_campaign_chat(cid, doc)
     except WebSocketDisconnect:
         pass
     finally:

@@ -1,0 +1,985 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Campaign Quest Hub</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f6f2ea;
+      --muted: #b7b2a8;
+      --bg: #0b0c10;
+      --panel: #161924;
+      --border: #2a2f3a;
+      --accent: #c9a227;
+      --accent-2: #4a8b8f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Source Sans 3", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 500px at 0% -10%, rgba(201,162,39,0.18), transparent 55%),
+        radial-gradient(700px 420px at 100% 0%, rgba(74,139,143,0.2), transparent 50%),
+        linear-gradient(180deg, var(--bg), #090a0f 60%, #07080c);
+      min-height: 100vh;
+    }
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 30px 16px 70px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .topbar h1 {
+      margin: 0;
+      font-family: "Cinzel", "Times New Roman", serif;
+      font-size: 1.9rem;
+      letter-spacing: 0.05em;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .muted {
+      color: var(--muted);
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #3a3f49;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .spacer { flex: 1 1 auto; }
+    .btn {
+      border-radius: 999px;
+      border: 1px solid #3a3f49;
+      padding: 8px 16px;
+      background: #121521;
+      color: var(--ink);
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .btn:hover { border-color: #5c626f; }
+    .btn.secondary { background: #0f111b; }
+    .btn.ghost {
+      background: transparent;
+      border-color: var(--border);
+    }
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      background: linear-gradient(150deg, rgba(22,25,36,0.96), rgba(10,11,16,0.92));
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .filters {
+      gap: 12px;
+    }
+    .filters label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      flex: 1;
+      min-width: 220px;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0f111b;
+      color: var(--ink);
+      font-family: inherit;
+    }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .tab {
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      padding: 10px 16px;
+      background: #10131d;
+      color: var(--ink);
+      cursor: pointer;
+      display: inline-flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 150px;
+    }
+    .tab.active {
+      border-color: var(--accent);
+      background: rgba(201,162,39,0.08);
+    }
+    .tab small {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+    .tab-count {
+      align-self: flex-end;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .tab-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 20px;
+    }
+    .tab-content {
+      display: grid;
+      gap: 14px;
+      max-height: 760px;
+      overflow: auto;
+    }
+    .detail-panel {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 16px;
+      background: #10131d;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 300px;
+    }
+    .detail-panel h3 {
+      margin: 0;
+      font-family: "Cinzel", "Times New Roman", serif;
+      font-size: 1.4rem;
+    }
+    .detail-panel .muted {
+      color: var(--muted);
+    }
+    .quest-create-panel {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 16px;
+      background: #0f111b;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .quest-create-panel.visible {
+      display: flex;
+    }
+    .quest-create-form {
+      display: grid;
+      gap: 10px;
+    }
+    .quest-create-form label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .form-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .quest-create-form textarea {
+      min-height: 80px;
+    }
+    .quest-card, .proposal-card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      background: #0f111b;
+      display: grid;
+      gap: 8px;
+      cursor: pointer;
+    }
+    .quest-card:hover, .proposal-card:hover {
+      border-color: var(--accent);
+    }
+    .quest-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      border: 1px solid transparent;
+      text-transform: capitalize;
+    }
+    .status-pill.pending { border-color: #6c6c6c; color: #d7d7d7; }
+    .status-pill.succeeded { border-color: #3b7c61; color: #7dd19c; }
+    .status-pill.failed { border-color: #862f2f; color: #f09b8f; }
+    .status-pill.archived { border-color: #444654; color: #9094a7; }
+    .visibility-badge {
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #3a3f49;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .quest-description { margin: 0; color: #d3d0cc; }
+    .objective-progress {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .quest-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .objective-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+    }
+    .objective-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.2);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+    }
+    .objective-icon.todo { color: var(--ink); border-color: rgba(255,255,255,0.2); }
+    .objective-icon.succeeded { color: #7dd19c; border-color: rgba(125,209,156,0.7); }
+    .objective-icon.failed { color: #f0826f; border-color: rgba(240,130,111,0.7); }
+    .objective-icon span { font-weight: 700; }
+    .proposal-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .vote-pill {
+      border-radius: 12px;
+      padding: 2px 10px;
+      border: 1px solid #3a3f49;
+      font-size: 0.78rem;
+    }
+    .vote-pill.agree { border-color: #3b7c61; color: #7dd19c; }
+    .vote-pill.disagree { border-color: #862f2f; color: #f0a79f; }
+    .votes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .votes-list .muted { font-size: 0.8rem; }
+    .empty-state {
+      color: var(--muted);
+      padding: 30px;
+      border-radius: 12px;
+      border: 1px dashed var(--border);
+      text-align: center;
+      font-size: 0.9rem;
+    }
+    #proposal-feedback {
+      min-height: 24px;
+      padding-top: 6px;
+      color: var(--muted);
+    }
+    @media (max-width: 960px) {
+      .tab-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <h1>Campaign Quest Hub</h1>
+      <span id="campaign-pill" class="pill">Preparing quest log...</span>
+      <span class="spacer"></span>
+      <a class="btn" id="back-to-combat" href="campaign_combat.html">Back to Combat</a>
+      <a class="btn secondary" id="back-to-campaign" href="campaign_view.html">Campaign Page</a>
+    </div>
+
+    <div class="panel hero-panel">
+      <div>
+        <div class="muted">Quest Hub</div>
+        <h2 id="hero-title">Campaign Quest Hub</h2>
+        <p id="hero-desc" class="muted">Track group missions, personal goals, and proposals in one place.</p>
+      </div>
+      <div class="row" style="gap:10px;flex-wrap:wrap;">
+        <button class="btn" type="button" id="create-quest-btn">Create Personal Quest</button>
+        <button class="btn secondary" type="button" id="sync-btn">Refresh Overview</button>
+      </div>
+    </div>
+
+    <div class="panel filters" id="filter-panel">
+      <div class="row" style="gap:12px;flex-wrap:wrap;">
+        <label>
+          Search quests
+          <input type="search" id="quest-search" placeholder="Filter by name, tag, objective..." />
+        </label>
+        <label>
+          Filter status
+          <select id="quest-status-filter">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="succeeded">Succeeded</option>
+            <option value="failed">Failed</option>
+            <option value="archived">Archived</option>
+          </select>
+        </label>
+      </div>
+      <div class="tabs" id="quest-tabs"></div>
+    </div>
+
+    <div class="panel quest-create-panel" id="quest-create-section">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>Create Personal Quest</strong>
+        <span class="muted">Private until you propose it to the party.</span>
+      </div>
+      <form id="quest-create-form" class="quest-create-form">
+        <label>
+          Quest name
+          <input type="text" id="quest-name" maxlength="120" placeholder="Name of the mission" />
+        </label>
+        <label>
+          Description
+          <textarea id="quest-description" rows="3" placeholder="Describe the goal or narrative hook"></textarea>
+        </label>
+        <label>
+          Objectives
+          <textarea id="quest-objectives" rows="3" placeholder="One objective per line"></textarea>
+        </label>
+        <label>
+          Tags
+          <input type="text" id="quest-tags" placeholder="Separate tags with commas" />
+        </label>
+        <div class="form-actions">
+          <button class="btn" type="submit" id="quest-create-submit">Save quest</button>
+          <span id="quest-create-feedback" class="muted"></span>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel quests-panel">
+      <div class="tab-grid">
+        <div class="tab-content" id="tab-content">
+          <p class="muted">Loading quests...</p>
+        </div>
+        <div class="detail-panel" id="quest-detail-panel">
+          <p class="muted">Select a quest or proposal to see the full snapshot.</p>
+        </div>
+      </div>
+      <div id="proposal-feedback" aria-live="polite" class="muted"></div>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const CAMPAIGN_ID = (params.get('cid') || '').trim();
+    const heroTitle = document.getElementById('hero-title');
+    const heroDesc = document.getElementById('hero-desc');
+    const heroChip = document.getElementById('campaign-pill');
+    const questTabs = document.getElementById('quest-tabs');
+    const tabContent = document.getElementById('tab-content');
+    const detailPanel = document.getElementById('quest-detail-panel');
+    const backCombat = document.getElementById('back-to-combat');
+    const backCampaign = document.getElementById('back-to-campaign');
+    const searchInput = document.getElementById('quest-search');
+    const statusSelect = document.getElementById('quest-status-filter');
+    const createQuestBtn = document.getElementById('create-quest-btn');
+    const syncBtn = document.getElementById('sync-btn');
+    const questCreateSection = document.getElementById('quest-create-section');
+    const questCreateForm = document.getElementById('quest-create-form');
+    const questCreateFeedback = document.getElementById('quest-create-feedback');
+    const questNameInput = document.getElementById('quest-name');
+    const questDescriptionInput = document.getElementById('quest-description');
+    const questObjectivesInput = document.getElementById('quest-objectives');
+    const questTagsInput = document.getElementById('quest-tags');
+    const proposalFeedback = document.getElementById('proposal-feedback');
+
+    if (CAMPAIGN_ID) {
+      heroChip.textContent = `Campaign ID: ${CAMPAIGN_ID}`;
+      backCombat.href = `campaign_combat.html?cid=${encodeURIComponent(CAMPAIGN_ID)}`;
+      backCampaign.href = `campaign_view.html?cid=${encodeURIComponent(CAMPAIGN_ID)}`;
+    }
+
+    const TAB_CONFIG = [
+      { id: 'group', label: 'Group Quests', helper: 'Shared, visible to the party' },
+      { id: 'personal', label: 'My Personal Quests', helper: 'Private goals before sharing' },
+      { id: 'proposals', label: 'Proposals', helper: 'Personal quests pending approval' },
+      { id: 'archive', label: 'Archive', helper: 'Completed or retired missions' },
+    ];
+
+    const EMPTY_QUEST_DATA = {
+      group: [],
+      personal: [],
+      proposals: [],
+      archive: [],
+    };
+
+    const state = {
+      activeTab: 'group',
+      search: '',
+      statusFilter: '',
+      preview: null,
+      data: { ...EMPTY_QUEST_DATA },
+      error: '',
+      user: null,
+      campaignOwner: '',
+    };
+
+    const normalizeQuestPayload = (payload = {}) => ({
+      group: Array.isArray(payload.group) ? payload.group : [],
+      personal: Array.isArray(payload.personal) ? payload.personal : [],
+      proposals: Array.isArray(payload.proposals) ? payload.proposals : [],
+      archive: Array.isArray(payload.archive) ? payload.archive : [],
+    });
+
+    const parseObjectivesFromLines = (text = "") => {
+      return (text || "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((label, idx) => ({ label, state: "todo", order: idx + 1 }));
+    };
+
+    const showQuestCreateFeedback = (message = "", isError = false) => {
+      if (!questCreateFeedback) return;
+      questCreateFeedback.textContent = message;
+      questCreateFeedback.style.color = !message ? "var(--muted)" : isError ? "#f0826f" : "#7dd19c";
+    };
+
+    const resetQuestCreateForm = () => {
+      if (questNameInput) questNameInput.value = "";
+      if (questDescriptionInput) questDescriptionInput.value = "";
+      if (questObjectivesInput) questObjectivesInput.value = "";
+      if (questTagsInput) questTagsInput.value = "";
+    };
+
+    const closeQuestCreatePanel = () => {
+      if (!questCreateSection) return;
+      questCreateSection.classList.remove("visible");
+      if (createQuestBtn) {
+        createQuestBtn.textContent = "Create Personal Quest";
+      }
+      showQuestCreateFeedback("");
+    };
+
+    const showProposalFeedback = (message = "", isError = false) => {
+      if (!proposalFeedback) return;
+      proposalFeedback.textContent = message;
+      proposalFeedback.style.color = !message ? "var(--muted)" : isError ? "#f0826f" : "#7dd19c";
+    };
+
+    const userIsGM = () => {
+      if (!state.user) return false;
+      const role = (state.user.role || "").toLowerCase();
+      if (role === "admin") return true;
+      const owner = (state.campaignOwner || "").toLowerCase();
+      const username = (state.user.username || "").toLowerCase();
+      return owner && username && owner === username;
+    };
+
+    const getFriendlyVisibility = (value) => {
+      if (!value) return 'Visibility: Unknown';
+      if (value.startsWith('group')) return 'Group';
+      if (value.startsWith('personal')) return 'Personal';
+      return value;
+    };
+
+    const filterQuests = (list) => {
+      const search = (state.search || '').trim().toLowerCase();
+      const statusFilter = (state.statusFilter || '').trim().toLowerCase();
+      return (list || []).filter((quest) => {
+        const normalizedStatus = (quest.status || '').toLowerCase();
+        const statusMatches = !statusFilter || normalizedStatus === statusFilter;
+        const textFields = [quest.name, quest.description, quest.createdBy].filter(Boolean);
+        const searchMatches =
+          !search ||
+          textFields.some((field) => field.toLowerCase().includes(search)) ||
+          (quest.tags || []).some((tag) => String(tag).toLowerCase().includes(search));
+        return statusMatches && searchMatches;
+      });
+    };
+
+    const filterProposals = (list) => {
+      const search = (state.search || '').trim().toLowerCase();
+      if (!search) return list || [];
+      return (list || []).filter((proposal) => {
+        const snapshot = proposal.snapshot || {};
+        const textFields = [snapshot.name, snapshot.description, proposal.authorId, proposal.sourceQuestId]
+          .filter(Boolean);
+        return textFields.some((field) => String(field).toLowerCase().includes(search));
+      });
+    };
+
+    const setActivePreview = (item, type) => {
+      state.preview = { item, type };
+      renderQuestDetail();
+    };
+
+    const renderQuestDetail = () => {
+      if (!state.preview) {
+        detailPanel.innerHTML = state.error
+          ? `<p class="muted">Unable to load quests: ${state.error}</p>`
+          : '<p class="muted">Select a quest or proposal to see its timeline.</p>';
+        return;
+      }
+      if (state.preview.type === 'proposal') {
+        const proposal = state.preview.item;
+        const votes = Array.isArray(proposal.votes) ? proposal.votes : [];
+        const agree = votes.filter((v) => (v.vote || '').toLowerCase() === 'agree').length;
+        const disagree = votes.filter((v) => (v.vote || '').toLowerCase() === 'disagree').length;
+        const snapshot = proposal.snapshot || {};
+        const review = proposal.review || {};
+        const reviewer = review.by || 'GM';
+        const decisionLabel = review.action ? `${review.action.replace('_', ' ')} by ${reviewer}` : 'Pending review';
+        const decisionMessage = review.message ? ` · ${review.message}` : '';
+        const isGM = userIsGM();
+        detailPanel.innerHTML = `
+          <div class="muted">Proposal snapshot</div>
+          <h3>${snapshot.name || 'Proposal'}</h3>
+          <p class="muted">${snapshot.description || ''}</p>
+          <div>
+            <div class="objective-row"><span class="objective-icon succeeded">✔</span> Proposed objectives</div>
+            <ul style="margin:0;padding-left:18px;">
+              ${Array.isArray(snapshot.objectives)
+                ? snapshot.objectives.map((obj) => `<li class="muted">${obj.label || ''}</li>`).join('')
+                : ''}
+            </ul>
+          </div>
+          <div class="proposal-meta">
+            <span class="vote-pill agree">Agree ${agree}</span>
+            <span class="vote-pill disagree">Disagree ${disagree}</span>
+            <span class="muted">Status: ${proposal.status || 'open'}</span>
+          </div>
+          <div class="muted">Decision: ${decisionLabel}${decisionMessage}</div>
+          <div class="votes-list">
+            ${votes
+              .map(
+                (vote) =>
+                  `<div class="muted"><strong>${vote.userId}</strong>: ${vote.vote}${vote.comment ? ` · ${vote.comment}` : ''}</div>`
+              )
+              .join('')}
+          </div>
+          <div class="quest-actions">
+            <button class="btn ghost" type="button" data-vote="agree">Agree</button>
+            <button class="btn ghost" type="button" data-vote="disagree">Disagree</button>
+            ${isGM ? '<button class="btn ghost" type="button" data-review="approve">Approve</button>' : ''}
+            ${isGM ? '<button class="btn ghost" type="button" data-review="reject">Reject</button>' : ''}
+            ${isGM ? '<button class="btn ghost" type="button" data-review="request_changes">Request changes</button>' : ''}
+          </div>
+        `;
+        detailPanel.querySelectorAll('[data-vote]').forEach((button) => {
+          button.addEventListener('click', () => voteOnProposal(proposal, button.dataset.vote));
+        });
+        detailPanel.querySelectorAll('[data-review]').forEach((button) => {
+          button.addEventListener('click', () => gmReviewProposal(proposal, button.dataset.review));
+        });
+        return;
+      }
+      const quest = state.preview.item;
+      const done = (quest.objectives || []).filter((obj) => obj.state === 'succeeded').length;
+      const total = (quest.objectives || []).length;
+      detailPanel.innerHTML = `
+        <div class="muted">${getFriendlyVisibility(quest.visibility)}</div>
+        <h3>${quest.name}</h3>
+        <p class="muted">${quest.description}</p>
+        <div class="objective-progress">
+          <span>${done} / ${total} objectives done</span>
+          <span>Created by ${quest.createdBy || 'Unknown'}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          ${(quest.objectives || []).map((obj) => `
+            <div class="objective-row">
+              <span class="objective-icon ${obj.state}">${obj.state === 'todo' ? '○' : obj.state === 'succeeded' ? '✔' : '✕'}</span>
+              <span class="muted">${obj.label}</span>
+            </div>`).join('')}
+        </div>
+        <div class="quest-actions">
+          <button class="btn ghost" disabled>Mark ${quest.status}</button>
+          <button class="btn ghost" disabled>Assign / Reassign</button>
+          ${state.activeTab === 'personal' ? '<button class="btn ghost" disabled>Propose to Group</button>' : ''}
+        </div>
+      `;
+    };
+
+    const renderQuestCardList = (list, tabId) => {
+      const filtered = filterQuests(list);
+      tabContent.innerHTML = '';
+      if (!filtered.length) {
+        tabContent.innerHTML = '<div class="empty-state">No quests match the current filters.</div>';
+        state.preview = null;
+        renderQuestDetail();
+        return;
+      }
+      filtered.forEach((quest) => {
+        const card = document.createElement('div');
+        card.className = 'quest-card';
+        const objectives = Array.isArray(quest.objectives) ? quest.objectives : [];
+        const completed = objectives.filter((obj) => obj.state === 'succeeded').length;
+        const total = objectives.length;
+        const statusValue = (quest.status || 'pending').toLowerCase();
+        const assigned = Array.isArray(quest.assignedTo)
+          ? quest.assignedTo.join(', ')
+          : quest.assignedTo || '';
+        const assignedLabel = assigned ? `Assigned to ${assigned}` : 'Unassigned';
+        card.innerHTML = `
+          <div class="quest-card-header">
+            <span class="status-pill ${statusValue}">${statusValue}</span>
+            <span class="visibility-badge">${getFriendlyVisibility(quest.visibility)}</span>
+          </div>
+          <h3 style="margin:0;">${quest.name || 'Quest'}</h3>
+          <p class="quest-description">${quest.description || ''}</p>
+          <div class="objective-progress">
+            <span>${completed} / ${total} objectives</span>
+            <span>${assignedLabel}</span>
+          </div>
+          <div class="quest-actions">
+            <button class="btn ghost" type="button">Preview</button>
+            ${tabId === 'personal' ? '<button class="btn ghost" type="button" data-action="propose">Propose to Group</button>' : ''}
+          </div>
+        `;
+        card.addEventListener('click', () => setActivePreview(quest, 'quest'));
+        card.querySelectorAll('.quest-actions button').forEach((btn) => {
+          btn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            if (btn.dataset.action === 'propose') {
+              proposeQuest(quest);
+            }
+          });
+        });
+        tabContent.appendChild(card);
+      });
+      setActivePreview(filtered[0], 'quest');
+    };
+
+    const renderProposalList = () => {
+      const proposals = filterProposals(state.data.proposals);
+      tabContent.innerHTML = '';
+      if (!proposals.length) {
+        tabContent.innerHTML = '<div class="empty-state">No proposals yet.</div>';
+        state.preview = null;
+        renderQuestDetail();
+        return;
+      }
+      proposals.forEach((proposal) => {
+        const card = document.createElement('div');
+        card.className = 'proposal-card';
+        const votes = Array.isArray(proposal.votes) ? proposal.votes : [];
+        const agree = votes.filter((v) => (v.vote || '').toLowerCase() === 'agree').length;
+        const disagree = votes.filter((v) => (v.vote || '').toLowerCase() === 'disagree').length;
+        const snapshot = proposal.snapshot || {};
+        card.innerHTML = `
+          <div class="quest-card-header">
+            <span class="status-pill pending">${proposal.status || 'pending'}</span>
+            <span class="visibility-badge">Proposal</span>
+          </div>
+          <h3 style="margin:0;">${snapshot.name || 'Proposal'}</h3>
+          <p class="muted">${snapshot.description || ''}</p>
+          <div class="proposal-meta">
+            <span class="vote-pill agree">Agree ${agree}</span>
+            <span class="vote-pill disagree">Disagree ${disagree}</span>
+            <span class="muted">Source: ${proposal.authorId}</span>
+          </div>
+          <div class="quest-actions">
+            <button class="btn ghost" type="button">Agree</button>
+            <button class="btn ghost" type="button">Disagree</button>
+          </div>
+        `;
+        card.addEventListener('click', () => setActivePreview(proposal, 'proposal'));
+        card.querySelectorAll('.quest-actions button').forEach((btn) => {
+          btn.addEventListener('click', (event) => event.stopPropagation());
+        });
+        tabContent.appendChild(card);
+      });
+      setActivePreview(proposals[0], 'proposal');
+    };
+
+    const proposeQuest = async (quest) => {
+      if (!CAMPAIGN_ID || !quest?.id) return;
+      const message = window.prompt('Add a note for the GM (optional):', '');
+      if (message === null) return;
+      try {
+        const response = await fetch(
+          `/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/quests/${encodeURIComponent(quest.id)}/proposals`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ message: message.trim() }),
+          }
+        );
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || 'Unable to submit proposal');
+        }
+        await response.json();
+        state.activeTab = 'proposals';
+        await loadQuestData();
+        showProposalFeedback('Proposal submitted', false);
+      } catch (error) {
+        showProposalFeedback(error.message || 'Proposal failed', true);
+      }
+    };
+
+    const voteOnProposal = async (proposal, vote) => {
+      if (!CAMPAIGN_ID || !proposal?.proposalId || !vote) return;
+      if (!['agree', 'disagree'].includes(vote)) return;
+      const comment = window.prompt('Optional note to the GM:', '') || '';
+      try {
+        const payload = { vote };
+        if (comment.trim()) payload.comment = comment.trim();
+        const response = await fetch(
+          `/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/proposals/${encodeURIComponent(proposal.proposalId)}/vote`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || 'Unable to submit vote');
+        }
+        await response.json();
+        showProposalFeedback('Vote recorded', false);
+        await loadQuestData();
+      } catch (error) {
+        showProposalFeedback(error.message || 'Vote failed', true);
+      }
+    };
+
+    const gmReviewProposal = async (proposal, action) => {
+      if (!CAMPAIGN_ID || !proposal?.proposalId || !action) return;
+      if (!userIsGM()) {
+        showProposalFeedback('Only the GM can review proposals.', true);
+        return;
+      }
+      const message = window.prompt('Add a note (optional):', '') || '';
+      try {
+        const payload = { action };
+        if (message.trim()) payload.message = message.trim();
+        const response = await fetch(
+          `/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/proposals/${encodeURIComponent(proposal.proposalId)}/review`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || 'Unable to take action');
+        }
+        await response.json();
+        showProposalFeedback(`Proposal ${action.replace('_', ' ')}d`, false);
+        state.activeTab = 'proposals';
+        await loadQuestData();
+      } catch (error) {
+        showProposalFeedback(error.message || 'Review failed', true);
+      }
+    };
+
+    const renderTabs = () => {
+      questTabs.innerHTML = '';
+      TAB_CONFIG.forEach((tab) => {
+        const button = document.createElement('button');
+        button.className = `tab ${state.activeTab === tab.id ? 'active' : ''}`;
+        button.innerHTML = `<span>${tab.label}</span><small>${tab.helper}</small>`;
+        const count = document.createElement('span');
+        count.className = 'tab-count';
+        count.textContent = tab.id === 'proposals' ? state.data.proposals.length : state.data[tab.id].length;
+        button.appendChild(count);
+        button.addEventListener('click', () => {
+          state.activeTab = tab.id;
+          renderTabs();
+          renderActiveTab();
+        });
+        questTabs.appendChild(button);
+      });
+    };
+
+    const renderActiveTab = () => {
+      if (state.activeTab === 'proposals') {
+        renderProposalList();
+        return;
+      }
+      renderQuestCardList(state.data[state.activeTab], state.activeTab);
+    };
+
+    const loadQuestData = async () => {
+      showProposalFeedback('');
+      if (!CAMPAIGN_ID) {
+        state.data = normalizeQuestPayload();
+        state.error = 'Open this hub from a campaign link (campaign id is required).';
+        renderTabs();
+        renderActiveTab();
+        return;
+      }
+      try {
+        const response = await fetch(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/quests`, {
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || 'Unable to load quests');
+        }
+        const payload = await response.json();
+        if (payload.status === 'error') {
+          throw new Error(payload.message || 'Failed to load quests');
+        }
+        state.data = normalizeQuestPayload(payload.quests);
+        state.error = '';
+      } catch (error) {
+        state.data = normalizeQuestPayload();
+        state.error = error.message || 'Failed to load quests';
+      }
+      renderTabs();
+      renderActiveTab();
+    };
+
+    searchInput.addEventListener('input', (event) => {
+      state.search = event.target.value || '';
+      renderActiveTab();
+    });
+
+    statusSelect.addEventListener('change', (event) => {
+      state.statusFilter = event.target.value;
+      renderActiveTab();
+    });
+
+    if (questCreateForm) {
+      questCreateForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!CAMPAIGN_ID) {
+          showQuestCreateFeedback('Open this hub from a campaign first.', true);
+          return;
+        }
+        const name = (questNameInput?.value || '').trim();
+        if (!name) {
+          showQuestCreateFeedback('Quest name is required.', true);
+          return;
+        }
+        const description = (questDescriptionInput?.value || '').trim();
+        const objectives = parseObjectivesFromLines(questObjectivesInput?.value || '');
+        const tagsRaw = (questTagsInput?.value || '')
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+        const payload = {
+          name,
+          description,
+          objectives,
+          tags: tagsRaw,
+          assignedTo: state.user?.username ? [state.user.username] : [],
+        };
+        showQuestCreateFeedback('Saving quest...');
+        try {
+          const response = await fetch(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/quests`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text || 'Unable to create quest');
+          }
+          await response.json();
+          showQuestCreateFeedback('Quest created', false);
+          resetQuestCreateForm();
+          closeQuestCreatePanel();
+          await loadQuestData();
+        } catch (error) {
+          showQuestCreateFeedback(error.message || 'Quest creation failed', true);
+        }
+      });
+    }
+
+    if (createQuestBtn) {
+      createQuestBtn.addEventListener('click', () => {
+        if (!CAMPAIGN_ID) {
+          showProposalFeedback('Open this hub from a campaign first.', true);
+          return;
+        }
+        if (!questCreateSection) return;
+        const isOpen = questCreateSection.classList.toggle('visible');
+        createQuestBtn.textContent = isOpen ? 'Cancel' : 'Create Personal Quest';
+        if (isOpen) {
+          showQuestCreateFeedback('');
+        }
+      });
+    }
+
+    syncBtn.addEventListener('click', () => {
+      loadQuestData();
+      loadCampaignDetails();
+    });
+
+    const loadCampaignDetails = async () => {
+      if (!CAMPAIGN_ID) return;
+      try {
+        const response = await fetch(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}`, {
+          credentials: 'include',
+        });
+        if (!response.ok) throw new Error('Unable to reach the campaign API');
+        const data = await response.json();
+        const campaign = data.campaign || {};
+        heroTitle.textContent = campaign.name || 'Campaign Quest Hub';
+        heroDesc.textContent = campaign.description || 'Track quests and proposals for this campaign.';
+        heroChip.textContent = `Campaign: ${campaign.name || CAMPAIGN_ID}`;
+        state.campaignOwner = campaign.owner || '';
+      } catch (error) {
+        heroDesc.textContent = 'Unable to load campaign metadata. You can still work with the quest templates.';
+      }
+    };
+
+    const loadCurrentUser = async () => {
+      try {
+        const response = await fetch('/auth/me', { credentials: 'include' });
+        if (!response.ok) {
+          state.user = null;
+          return;
+        }
+        state.user = await response.json();
+      } catch {
+        state.user = null;
+      }
+      renderQuestDetail();
+    };
+
+    renderTabs();
+    renderActiveTab();
+    renderQuestDetail();
+    loadCampaignDetails();
+    loadQuestData();
+    loadCurrentUser();
+  </script>
+</body>
+</html>
