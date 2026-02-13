@@ -107,7 +107,6 @@
         </div>
         <div class="actions">
           <button class="btn" id="start-combat-btn">Start Combat</button>
-          <button class="btn" id="open-quest-log-btn" disabled title="Open the campaign quest hub">Open Quest Log</button>
           <button class="btn" id="load-active-btn">Refresh Combat</button>
         </div>
       </div>
@@ -242,7 +241,6 @@
     const participantDetailTitle = document.getElementById('participant-detail-title');
     const participantDetailMeta = document.getElementById('participant-detail-meta');
     const participantDetailBody = document.getElementById('participant-detail-body');
-    const openQuestLogBtn = document.getElementById('open-quest-log-btn');
 
     function api(path, options = {}) {
       const opts = { credentials: 'include', ...options };
@@ -638,12 +636,6 @@
       if (!state.me) {
         startBtn.disabled = true;
       }
-      updateQuestLogButton();
-    }
-
-    function updateQuestLogButton() {
-      if (!openQuestLogBtn) return;
-      openQuestLogBtn.disabled = !state.selectedCampaign?.id;
     }
 
     function renderCharacterList() {
@@ -744,15 +736,6 @@
       if (!state.selectedCampaign) return;
       showModal();
     });
-
-    if (openQuestLogBtn) {
-      openQuestLogBtn.addEventListener('click', () => {
-        if (!state.selectedCampaign?.id) return;
-        const cid = encodeURIComponent(state.selectedCampaign.id);
-        const query = cid ? `?cid=${cid}` : '';
-        window.location.assign(`campaign_quest_log.html${query}`);
-      });
-    }
 
     document.getElementById('combat-modal-cancel').addEventListener('click', hideModal);
 

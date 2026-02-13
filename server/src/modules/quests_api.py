@@ -331,6 +331,12 @@ async def review_proposal(
         QUEST_COL.insert_one(group_doc)
         update_fields["groupQuestId"] = group_quest_id
         group_quest_doc = group_doc
+        source_quest_id = proposal.get("sourceQuestId")
+        if source_quest_id:
+            QUEST_COL.update_one(
+                {"campaignId": cid, "id": source_quest_id},
+                {"$set": {"status": "archived", "updatedAt": now}},
+            )
     PROPOSAL_COL.update_one(
         {"campaignId": cid, "proposalId": proposal_id}, {"$set": update_fields}
     )

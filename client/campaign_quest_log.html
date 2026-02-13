@@ -451,6 +451,11 @@
       campaignOwner: '',
     };
 
+    const PROPOSAL_OPEN_STATUSES = new Set(['open', 'changes_requested']);
+    const proposalIsActive = (proposal = {}) =>
+      PROPOSAL_OPEN_STATUSES.has(((proposal.status || 'open').toString() || 'open').toLowerCase());
+    const countActiveProposals = () => (state.data.proposals || []).filter(proposalIsActive).length;
+
     const normalizeQuestPayload = (payload = {}) => ({
       group: Array.isArray(payload.group) ? payload.group : [],
       personal: Array.isArray(payload.personal) ? payload.personal : [],
@@ -526,9 +531,10 @@
     };
 
     const filterProposals = (list) => {
+      const normalized = (list || []).filter((proposal) => proposalIsActive(proposal));
       const search = (state.search || '').trim().toLowerCase();
-      if (!search) return list || [];
-      return (list || []).filter((proposal) => {
+      if (!search) return normalized;
+      return normalized.filter((proposal) => {
         const snapshot = proposal.snapshot || {};
         const textFields = [snapshot.name, snapshot.description, proposal.authorId, proposal.sourceQuestId]
           .filter(Boolean);
@@ -558,7 +564,15 @@
         const reviewer = review.by || 'GM';
         const decisionLabel = review.action ? `${review.action.replace('_', ' ')} by ${reviewer}` : 'Pending review';
         const decisionMessage = review.message ? ` · ${review.message}` : '';
+        const statusValue = (proposal.status || 'open').toLowerCase();
+        const statusLabel = statusValue.replace(/_/g, ' ');
+        const prettyStatus = statusLabel
+          .split(' ')
+          .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : ''))
+          .join(' ');
+        const isOpenProposal = PROPOSAL_OPEN_STATUSES.has(statusValue);
         const isGM = userIsGM();
+        const closedNotice = isOpenProposal ? '' : '<p class="muted">This proposal is no longer accepting votes.</p>';
         detailPanel.innerHTML = `
           <div class="muted">Proposal snapshot</div>
           <h3>${snapshot.name || 'Proposal'}</h3>
@@ -574,8 +588,9 @@
           <div class="proposal-meta">
             <span class="vote-pill agree">Agree ${agree}</span>
             <span class="vote-pill disagree">Disagree ${disagree}</span>
-            <span class="muted">Status: ${proposal.status || 'open'}</span>
+            <span class="muted">Status: ${prettyStatus}</span>
           </div>
+          ${closedNotice}
           <div class="muted">Decision: ${decisionLabel}${decisionMessage}</div>
           <div class="votes-list">
             ${votes
@@ -586,11 +601,23 @@
               .join('')}
           </div>
           <div class="quest-actions">
-            <button class="btn ghost" type="button" data-vote="agree">Agree</button>
-            <button class="btn ghost" type="button" data-vote="disagree">Disagree</button>
-            ${isGM ? '<button class="btn ghost" type="button" data-review="approve">Approve</button>' : ''}
-            ${isGM ? '<button class="btn ghost" type="button" data-review="reject">Reject</button>' : ''}
-            ${isGM ? '<button class="btn ghost" type="button" data-review="request_changes">Request changes</button>' : ''}
+            <button class="btn ghost" type="button" data-vote="agree" ${isOpenProposal ? '' : 'disabled'}>Agree</button>
+            <button class="btn ghost" type="button" data-vote="disagree" ${isOpenProposal ? '' : 'disabled'}>Disagree</button>
+            ${
+              isGM && isOpenProposal
+                ? '<button class="btn ghost" type="button" data-review="approve">Approve</button>'
+                : ''
+            }
+            ${
+              isGM && isOpenProposal
+                ? '<button class="btn ghost" type="button" data-review="reject">Reject</button>'
+                : ''
+            }
+            ${
+              isGM && isOpenProposal
+                ? '<button class="btn ghost" type="button" data-review="request_changes">Request changes</button>'
+                : ''
+            }
           </div>
         `;
         detailPanel.querySelectorAll('[data-vote]').forEach((button) => {
@@ -659,7 +686,7 @@
             <span>${assignedLabel}</span>
           </div>
           <div class="quest-actions">
-            <button class="btn ghost" type="button">Preview</button>
+            <button class="btn ghost" type="button" data-action="preview">Preview</button>
             ${tabId === 'personal' ? '<button class="btn ghost" type="button" data-action="propose">Propose to Group</button>' : ''}
           </div>
         `;
@@ -667,6 +694,10 @@
         card.querySelectorAll('.quest-actions button').forEach((btn) => {
           btn.addEventListener('click', (event) => {
             event.stopPropagation();
+            if (btn.dataset.action === 'preview') {
+              setActivePreview(quest, 'quest');
+              return;
+            }
             if (btn.dataset.action === 'propose') {
               proposeQuest(quest);
             }
@@ -681,7 +712,7 @@
       const proposals = filterProposals(state.data.proposals);
       tabContent.innerHTML = '';
       if (!proposals.length) {
-        tabContent.innerHTML = '<div class="empty-state">No proposals yet.</div>';
+        tabContent.innerHTML = '<div class="empty-state">No open proposals at the moment.</div>';
         state.preview = null;
         renderQuestDetail();
         return;
@@ -693,9 +724,12 @@
         const agree = votes.filter((v) => (v.vote || '').toLowerCase() === 'agree').length;
         const disagree = votes.filter((v) => (v.vote || '').toLowerCase() === 'disagree').length;
         const snapshot = proposal.snapshot || {};
+        const statusValue = (proposal.status || 'open').toLowerCase();
+        const statusLabel = statusValue.replace(/_/g, ' ');
+        const statusClass = statusValue.replace(/_/g, '-');
         card.innerHTML = `
           <div class="quest-card-header">
-            <span class="status-pill pending">${proposal.status || 'pending'}</span>
+            <span class="status-pill ${statusClass}">${statusLabel}</span>
             <span class="visibility-badge">Proposal</span>
           </div>
           <h3 style="margin:0;">${snapshot.name || 'Proposal'}</h3>
@@ -749,6 +783,11 @@
     const voteOnProposal = async (proposal, vote) => {
       if (!CAMPAIGN_ID || !proposal?.proposalId || !vote) return;
       if (!['agree', 'disagree'].includes(vote)) return;
+      const statusValue = (proposal.status || '').toLowerCase();
+      if (!PROPOSAL_OPEN_STATUSES.has(statusValue)) {
+        showProposalFeedback('This proposal is no longer open for voting.', true);
+        return;
+      }
       const comment = window.prompt('Optional note to the GM:', '') || '';
       try {
         const payload = { vote };
@@ -776,6 +815,11 @@
 
     const gmReviewProposal = async (proposal, action) => {
       if (!CAMPAIGN_ID || !proposal?.proposalId || !action) return;
+      const statusValue = (proposal.status || '').toLowerCase();
+      if (!PROPOSAL_OPEN_STATUSES.has(statusValue)) {
+        showProposalFeedback('This proposal is already closed.', true);
+        return;
+      }
       if (!userIsGM()) {
         showProposalFeedback('Only the GM can review proposals.', true);
         return;
@@ -814,7 +858,9 @@
         button.innerHTML = `<span>${tab.label}</span><small>${tab.helper}</small>`;
         const count = document.createElement('span');
         count.className = 'tab-count';
-        count.textContent = tab.id === 'proposals' ? state.data.proposals.length : state.data[tab.id].length;
+        const tabCount =
+          tab.id === 'proposals' ? countActiveProposals() : (state.data[tab.id] || []).length;
+        count.textContent = tabCount;
         button.appendChild(count);
         button.addEventListener('click', () => {
           state.activeTab = tab.id;

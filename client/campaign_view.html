@@ -212,6 +212,7 @@
             </div>
             <div class="row" id="gm-actions" style="display:none;">
               <button class="btn" id="gm-combat-btn">Create Combat</button>
+              <button class="btn" id="open-quest-log-btn">Open Quest Hub</button>
               <button class="btn" id="gm-add-char">Add Character</button>
               <button class="btn secondary" id="gm-create-char">Create Character</button>
             </div>
@@ -329,6 +330,7 @@
     const campAvatar = document.getElementById('camp-avatar');
     const gmActions = document.getElementById('gm-actions');
     const gmCombatBtn = document.getElementById('gm-combat-btn');
+    const openQuestLogBtn = document.getElementById('open-quest-log-btn');
     const charList = document.getElementById('char-list');
 
     const chatLog = document.getElementById('chat-log');
@@ -357,6 +359,10 @@
     const permApply = document.getElementById('perm-apply');
     const permClose = document.getElementById('perm-close');
     const permStatus = document.getElementById('perm-status');
+
+    if (openQuestLogBtn) {
+      openQuestLogBtn.disabled = !CID;
+    }
 
     function getCharacterFallbackPermission(){
       if (!ACTIVE_CHAR_FOR_PERM) return CAMPAIGN_DEFAULT_PERMISSION;
@@ -516,6 +522,9 @@
       gmActions.style.display = gm ? '' : 'none';
       campCode.style.display = gm ? '' : 'none';
       if (gm) campCode.textContent = `Code: ${CAMPAIGN.join_code || '--'}`;
+      if (openQuestLogBtn) {
+        openQuestLogBtn.disabled = !CAMPAIGN?.id;
+      }
 
       const members = [CAMPAIGN.owner].concat(CAMPAIGN.members || []).filter(Boolean);
       permTarget.innerHTML = '<option value="__all__">All members</option>' + members.map(m=>`<option value="${m}">${m}</option>`).join('');
@@ -1505,6 +1514,15 @@
       const targetCid = CAMPAIGN?.id || CID;
       if (!targetCid) return;
       window.location.assign(`campaign_combat.html?cid=${encodeURIComponent(targetCid)}`);
+    });
+
+    openQuestLogBtn?.addEventListener('click', ()=>{
+      const targetCid = CAMPAIGN?.id || CID;
+      if (!targetCid) {
+        statusEl.textContent = 'Select a campaign before opening the quest hub.';
+        return;
+      }
+      window.location.assign(`campaign_quest_log.html?cid=${encodeURIComponent(targetCid)}`);
     });
 
     document.getElementById('gm-add-char').addEventListener('click', ()=>{
