@@ -6560,8 +6560,9 @@ function addCampaignChatMessage(raw){
 function campaignMessageVisible(msg){
   if (!msg) return false;
   if (msg.visibility === 'public') return true;
-  const username = CURRENT_USER?.username || '';
-  if (msg.visibility === 'self') return msg.user === username;
+  const username = (CURRENT_USER?.username || '').toLowerCase();
+  const msgUser = (msg.user || '').toLowerCase();
+  if (msg.visibility === 'self') return msgUser && username && msgUser === username;
   if (msg.visibility === 'whisper') return isCampaignGm();
   return true;
 }
@@ -16117,25 +16118,48 @@ function applyResourceAction(){
     sp: numOr(DERIVED_CACHE?.spcap, 0),
     tx: numOr(DERIVED_CACHE?.tx, 0),
   };
-  const currentVal = resource === 'nen' ? Number(combatState().nen || 0) : Number(CURRENT[resource] || 0);
+  const currentVal = resource === 'nen'
+    ? Number(combatState().nen || 0)
+    : Math.max(0, Number(CURRENT[resource] || 0));
   let delta = 0;
+  const tensionCap = tensionCapForLevel(CHAR?.level || 1);
   if (kind === 'set'){
     let target = Math.max(0, rawValue);
-    if (resource !== 'tx' && resource !== 'nen'){
+    if (resource === 'tension'){
+      target = Math.min(tensionCap, target);
+    }else if (resource !== 'tx' && resource !== 'nen'){
       const baseMax = maxVals[resource] || 0;
       target = Math.min(baseMax, target);
     }
     delta = target - currentVal;
   }else if (kind === 'add'){
-    delta = rawValue;
+    if (resource === 'tension'){
+      const remaining = Math.max(0, tensionCap - currentVal);
+      delta = Math.max(0, Math.min(rawValue, remaining));
+    }else{
+      delta = rawValue;
+    }
   }else if (kind === 'subtract'){
-    delta = -rawValue;
+    if (resource === 'tension'){
+      const available = Math.max(0, currentVal);
+      delta = -Math.max(0, Math.min(rawValue, available));
+    }else{
+      delta = -rawValue;
+    }
   }
   if (resource === 'nen' && delta){
     const st = combatState();
     const prev = Math.max(0, Number(st.nen || 0));
     st.nen = Math.max(0, prev + delta);
     updateNenDisplay();
+    pushResourceLedgerEntries([{
+      resource,
+      delta,
+      label: `${labelBase} (${kind})`,
+      source: 'Manual',
+      note,
+    }]);
+  }else if (resource === 'tension' && delta){
     pushResourceLedgerEntries([{
       resource,
       delta,

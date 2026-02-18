@@ -639,7 +639,8 @@ async def get_campaign_chat(cid: str, req: Request, limit: int = Query(200, ge=1
     query = {"campaign_id": cid}
     if before:
         query["ts"] = {"$lt": int(before)}
-    docs = list(CAMPAIGN_CHAT_COL.find(query, {"_id": 0}).sort("ts", 1).limit(limit))
+    docs = list(CAMPAIGN_CHAT_COL.find(query, {"_id": 0}).sort("ts", -1).limit(limit))
+    docs.reverse()
     return {"status": "success", "messages": docs}
 
 @app.post("/campaigns/{cid}/chat")
