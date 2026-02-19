@@ -18913,6 +18913,11 @@ const autoBuildSelections = {
   worstSkills: [],
 };
 let autoBuildProposal = null;
+const SKILL_CONFLICTS = {
+  Dodge: ['Evasion','Blocking'],
+  Evasion: ['Dodge','Blocking'],
+  Blocking: ['Dodge','Evasion'],
+};
 
 function setAutoBuildError(msg){
   if (!autoBuildErrorEl) return;
@@ -19127,7 +19132,7 @@ function generateAutoBuildProposal(){
   let statRemaining = statBudget;
   const mainAssigned = assignStats(autoBuildSelections.main, statCapPer, statRemaining, charAlloc, statCapPer);
   statRemaining = mainAssigned.statRemaining;
-  const secondaryTarget = Math.max(mainAssigned.maxAssigned - 2, 0);
+  const secondaryTarget = Math.max(Math.min(mainAssigned.maxAssigned, statCapPer) - 2, 0);
   const secondaryAssigned = assignStats(autoBuildSelections.secondary, secondaryTarget, statRemaining, charAlloc, statCapPer);
   statRemaining = secondaryAssigned.statRemaining;
   const restChars = CHARACS.map((ch)=> ch.key).filter((key)=> !selectedChars.has(key));
@@ -19147,21 +19152,36 @@ function generateAutoBuildProposal(){
   }
   const statUsed = statBudget - Math.max(0, statRemaining);
 
+  const bestSkills = [...new Set(autoBuildSelections.bestSkills)];
+  const goodSkills = [...new Set(autoBuildSelections.goodSkills)];
+  const combinedHighSet = new Set([...bestSkills, ...goodSkills]);
+  const worstSkillSet = new Set(autoBuildSelections.worstSkills);
+  combinedHighSet.forEach((skill)=>{
+    const conflicts = SKILL_CONFLICTS[skill];
+    if (!conflicts) return;
+    conflicts.forEach((conflict)=>{
+      if (!combinedHighSet.has(conflict)){
+        worstSkillSet.add(conflict);
+      }
+    });
+  });
+  const computedWorstSkills = Array.from(worstSkillSet);
+
   const skillAlloc = {};
   AUTO_SKILL_OPTIONS.forEach((skill)=> { skillAlloc[skill] = 0; });
   let skillRemaining = skillBudget;
-  const bestAssigned = assignSkills(autoBuildSelections.bestSkills, skillCapPer, skillRemaining, skillAlloc, skillCapPer);
+  const bestAssigned = assignSkills(bestSkills, skillCapPer, skillRemaining, skillAlloc, skillCapPer);
   skillRemaining = bestAssigned.skillRemaining;
   const goodTarget = Math.max(bestAssigned.maxAssigned - 2, 0);
-  const goodAssigned = assignSkills(autoBuildSelections.goodSkills, goodTarget, skillRemaining, skillAlloc, skillCapPer);
+  const goodAssigned = assignSkills(goodSkills, goodTarget, skillRemaining, skillAlloc, skillCapPer);
   skillRemaining = goodAssigned.skillRemaining;
-  assignSkills(autoBuildSelections.worstSkills, 0, skillRemaining, skillAlloc, skillCapPer);
-  const usedSkillSet = new Set([...autoBuildSelections.bestSkills, ...autoBuildSelections.goodSkills, ...autoBuildSelections.worstSkills]);
-  const restSkills = AUTO_SKILL_OPTIONS.filter((skill)=> !usedSkillSet.has(skill));
+  assignSkills(computedWorstSkills, 0, skillRemaining, skillAlloc, skillCapPer);
+  const usedSkillSet = new Set([...combinedHighSet, ...computedWorstSkills]);
+  const restSkills = AUTO_SKILL_OPTIONS.filter((skill)=> !usedSkillSet.has(skill) && !isNatureSkill(skill));
   const restSkillAssigned = assignSkills(restSkills, Math.max(goodTarget - 2, 0), skillRemaining, skillAlloc, skillCapPer);
   skillRemaining = restSkillAssigned.skillRemaining;
   if (skillRemaining > 0){
-    const toppingOrder = [...autoBuildSelections.bestSkills, ...autoBuildSelections.goodSkills, ...restSkills];
+    const toppingOrder = [...bestSkills, ...goodSkills, ...restSkills];
     toppingOrder.forEach((skill)=>{
       if (skillRemaining <= 0) return;
       const current = skillAlloc[skill] || 0;
