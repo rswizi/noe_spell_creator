@@ -80,10 +80,34 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
     d = dict(doc)
     d.pop("_id", None)
     d.pop("avatar", None)
+    owner = (d.get("owner") or "").strip()
+    owner_lower = owner.lower()
+    assistant_raw = d.get("assistant_gms") or []
+    assistant_processed = []
+    assistant_lower = set()
+    for entry in assistant_raw:
+        name = (str(entry or "")).strip()
+        if not name:
+            continue
+        if name.lower() == owner_lower:
+            continue
+        if name.lower() in assistant_lower:
+            continue
+        assistant_lower.add(name.lower())
+        assistant_processed.append(name)
+    d["assistant_gms"] = assistant_processed
     if user:
-        d["is_owner"] = d.get("owner") == user
+        target_lower = user.lower()
+        d["is_owner"] = owner and owner == user
         d["is_member"] = user in (d.get("members") or [])
         d["is_admin"] = (role or "").lower() == "admin"
+        if d["is_owner"]:
+            d["user_role"] = "gm"
+        elif target_lower in assistant_lower:
+            d["user_role"] = "assistant"
+        else:
+            d["user_role"] = "player"
+        d["is_assistant_gm"] = d["user_role"] == "assistant"
     if user and not (d.get("is_owner") or d.get("is_admin")):
         visible_chars = []
         for c in (d.get("characters") or []):
@@ -112,7 +136,6 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
                     if nm:
                         c["name"] = nm
                         c["character_name"] = nm
-    # compute avatar url if stored
     if d.get("avatar"):
         d["avatar_url"] = f"/campaigns/{d['id']}/avatar"
     return d
@@ -372,6 +395,7 @@ async def create_campaign(req: Request):
         "owner": user,
         "join_code": _ensure_join_code(),
         "members": [],
+        "assistant_gms": [],
         "characters": [],
         "folders": [],
         "created_at": datetime.datetime.utcnow().isoformat()+"Z",
@@ -439,6 +463,51 @@ async def update_campaign(cid: str, req: Request):
         CAMPAIGN_COL.update_one({"id": cid}, {"$set": updates})
         doc.update(updates)
     return {"status":"success", "campaign": _campaign_view(doc, user, role)}
+
+@app.post("/campaigns/{cid}/assistant_gms")
+async def add_assistant_gm(cid: str, req: Request):
+    user, role = require_auth(req)
+    doc = _require_campaign_access(cid, user, role)
+    if doc.get("owner") != user and (role or "").lower() != "admin":
+        raise HTTPException(403, "Only the GM can manage assistant GMs")
+    body = await req.json()
+    target_raw = (body.get("username") or "").strip()
+    if not target_raw:
+        raise HTTPException(400, "Username required")
+    target_lower = target_raw.lower()
+    owner_lower = (doc.get("owner") or "").strip().lower()
+    if target_lower == owner_lower:
+        raise HTTPException(400, "Owner is already GM")
+    members = [m for m in (doc.get("members") or []) if m]
+    match_member = next((m for m in members if m.lower() == target_lower), None)
+    if not match_member:
+        raise HTTPException(400, "Target must be a campaign member")
+    assistant_raw = [a for a in (doc.get("assistant_gms") or []) if a]
+    assistant_lower = {a.lower() for a in assistant_raw}
+    if match_member.lower() not in assistant_lower:
+        assistant_raw = [a for a in assistant_raw if a.lower() != match_member.lower()]
+        assistant_raw.append(match_member)
+        CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"assistant_gms": assistant_raw}})
+    updated = _require_campaign_access(cid, user, role)
+    return {"status":"success", "campaign": _campaign_view(updated, user, role)}
+
+@app.delete("/campaigns/{cid}/assistant_gms/{username}")
+async def remove_assistant_gm(cid: str, username: str, req: Request):
+    user, role = require_auth(req)
+    doc = _require_campaign_access(cid, user, role)
+    if doc.get("owner") != user and (role or "").lower() != "admin":
+        raise HTTPException(403, "Only the GM can manage assistant GMs")
+    target = (username or "").strip()
+    target_lower = target.lower()
+    assistant_raw = [a for a in (doc.get("assistant_gms") or []) if a]
+    if not assistant_raw:
+        updated = _require_campaign_access(cid, user, role)
+        return {"status":"success", "campaign": _campaign_view(updated, user, role)}
+    normalized = [a for a in assistant_raw if a.lower() != target_lower]
+    if len(normalized) != len(assistant_raw):
+        CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"assistant_gms": normalized}})
+    updated = _require_campaign_access(cid, user, role)
+    return {"status":"success", "campaign": _campaign_view(updated, user, role)}
 
 @app.post("/campaigns/{cid}/assign_character")
 async def assign_campaign_character(cid: str, req: Request):

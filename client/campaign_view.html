@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer" />
   <style>
     :root{
       color-scheme: dark;
@@ -188,16 +189,27 @@
     .menu.open{display:block;}
     .menu label{font-size:.85rem;color:var(--muted);}
     .menu .row{margin-top:6px;}
+    #role-list{display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:280px;overflow:auto;}
+    .role-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:10px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);}
+    .role-row strong{font-size:.95rem;}
+    .role-row .muted{font-size:.75rem;}
+    .role-row .role-actions{display:flex;gap:6px;align-items:center;}
   </style>
 </head>
 <body>
   <div class="page">
     <div class="topbar">
       <h1 id="camp-title">Campaign</h1>
-      <span id="login-chip" class="pill">Checking login...</span>
-      <a class="btn" href="campaigns_my.html">My Campaigns</a>
-      <a class="btn" href="campaign_manager.html">Back</a>
-      <span id="status" class="muted"></span>
+      <div class="row" style="margin-left:auto;align-items:center;gap:8px;">
+        <span id="role-chip" class="pill" style="display:none;">Role: --</span>
+        <span id="login-chip" class="pill">Checking login...</span>
+        <button class="btn secondary" id="role-config-btn" title="Manage campaign roles" style="display:none;">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+        <a class="btn" href="campaigns_my.html">My Campaigns</a>
+        <a class="btn" href="campaign_manager.html">Back</a>
+        <span id="status" class="muted"></span>
+      </div>
     </div>
 
     <div class="panel">
@@ -318,6 +330,18 @@
     <div class="muted" id="perm-status"></div>
   </div>
 
+  <div class="menu" id="role-menu">
+    <div><strong>Role configuration</strong></div>
+    <div class="row">
+      <span class="muted">Owner is GM. Promote players to Assistant GM to share responsibilities.</span>
+    </div>
+    <div id="role-list"></div>
+    <div class="row" style="justify-content:flex-end;">
+      <button class="btn secondary" id="role-menu-close">Close</button>
+    </div>
+    <div class="muted" id="role-menu-status"></div>
+  </div>
+
   <script>
     const params = new URLSearchParams(location.search);
     const CID = params.get('cid') || '';
@@ -359,6 +383,12 @@
     const permApply = document.getElementById('perm-apply');
     const permClose = document.getElementById('perm-close');
     const permStatus = document.getElementById('perm-status');
+    const roleChip = document.getElementById('role-chip');
+    const roleConfigBtn = document.getElementById('role-config-btn');
+    const roleMenu = document.getElementById('role-menu');
+    const roleMenuList = document.getElementById('role-list');
+    const roleMenuClose = document.getElementById('role-menu-close');
+    const roleMenuStatus = document.getElementById('role-menu-status');
 
     if (openQuestLogBtn) {
       openQuestLogBtn.disabled = !CID;
@@ -484,7 +514,10 @@
     function isGm(){
       if (!CAMPAIGN || !ME) return false;
       const role = (ME.role || '').toLowerCase();
-      return !!CAMPAIGN.is_owner || role === 'admin';
+      if (role === 'admin') return true;
+      const username = (ME.username || '').toLowerCase();
+      if (CAMPAIGN.is_owner) return true;
+      return assistantNameSet().has(username);
     }
 
     function resolvePermission(c, username){
@@ -515,6 +548,8 @@
     function renderCampaign(){
       if (!CAMPAIGN) return;
       const gm = isGm();
+      updateRoleChip();
+      updateRoleConfigButton();
       campTitle.textContent = CAMPAIGN.name || 'Campaign';
       campName.textContent = CAMPAIGN.name || 'Campaign';
       campDesc.textContent = (CAMPAIGN.description || '').trim() || 'No description.';
@@ -531,6 +566,34 @@
 
       renderCharacters();
       renderChatSpeaker();
+    }
+
+    function assistantNameSet(){
+      const values = Array.isArray(CAMPAIGN?.assistant_gms) ? CAMPAIGN.assistant_gms : [];
+      return new Set(values.filter(Boolean).map((name)=> String(name).toLowerCase()));
+    }
+    function userIsAssistant(){
+      const username = (ME?.username || '').toLowerCase();
+      if (!username) return false;
+      return assistantNameSet().has(username);
+    }
+    function updateRoleChip(){
+      if (!roleChip) return;
+      if (!CAMPAIGN || !ME) {
+        roleChip.style.display = 'none';
+        return;
+      }
+      let label = 'Player';
+      if (CAMPAIGN.is_owner) label = 'GM';
+      else if (userIsAssistant()) label = 'Assistant GM';
+      roleChip.textContent = `Role: ${label}`;
+      roleChip.style.display = '';
+    }
+    function updateRoleConfigButton(){
+      if (!roleConfigBtn) return;
+      const admin = (ME?.role || '').toLowerCase() === 'admin';
+      const visible = CAMPAIGN && (CAMPAIGN.is_owner || admin);
+      roleConfigBtn.style.display = visible ? '' : 'none';
     }
 
     async function unlinkCampaignCharacter(charId){
@@ -639,6 +702,121 @@
       }catch(e){
         permStatus.textContent = e.message;
       }
+    });
+
+    function renderRoleMenu(){
+      if (!roleMenuList) return;
+      if (!CAMPAIGN){
+        roleMenuList.innerHTML = '<div class="muted">Loading campaign...</div>';
+        return;
+      }
+      const members = Array.isArray(CAMPAIGN.members) ? CAMPAIGN.members : [];
+      const entries = [CAMPAIGN.owner || '', ...members].filter(Boolean);
+      const unique = [];
+      const seen = new Set();
+      entries.forEach((entry)=>{
+        const lower = entry.toLowerCase();
+        if (seen.has(lower)) return;
+        seen.add(lower);
+        unique.push(entry);
+      });
+      if (!unique.length){
+        roleMenuList.innerHTML = '<div class="muted">No members in this campaign yet.</div>';
+        return;
+      }
+      roleMenuList.innerHTML = '';
+      const assistantSet = assistantNameSet();
+      unique.forEach((entry)=>{
+        const normalized = entry.toLowerCase();
+        const isOwner = CAMPAIGN.owner === entry;
+        const isAssistant = assistantSet.has(normalized);
+        const row = document.createElement('div');
+        row.className = 'row role-row';
+        const details = document.createElement('div');
+        details.style.display = 'flex';
+        details.style.flexDirection = 'column';
+        details.style.minWidth = '0';
+        const nameEl = document.createElement('span');
+        nameEl.textContent = entry;
+        const label = document.createElement('span');
+        label.className = 'muted';
+        label.textContent = isOwner ? 'GM' : isAssistant ? 'Assistant GM' : 'Player';
+        details.appendChild(nameEl);
+        details.appendChild(label);
+        row.appendChild(details);
+        if (!isOwner){
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'btn small';
+          button.dataset.username = entry;
+          button.dataset.action = isAssistant ? 'demote' : 'promote';
+          button.textContent = isAssistant ? 'Demote' : 'Promote';
+          row.appendChild(button);
+        }
+        roleMenuList.appendChild(row);
+      });
+    }
+
+    function openRoleMenu(x, y){
+      if (!roleMenu) return;
+      renderRoleMenu();
+      if (roleMenuStatus) roleMenuStatus.textContent = '';
+      const left = Math.min(Math.max(x, 8), Math.max(8, window.innerWidth - 280));
+      const top = Math.max(y, 8);
+      roleMenu.style.left = `${left}px`;
+      roleMenu.style.top = `${top}px`;
+      roleMenu.classList.add('open');
+    }
+
+    function closeRoleMenu(){
+      if (!roleMenu) return;
+      roleMenu.classList.remove('open');
+      if (roleMenuStatus) roleMenuStatus.textContent = '';
+    }
+
+    async function toggleAssistantRole(username, promote){
+      if (!CID || !username) return;
+      if (roleMenuStatus) roleMenuStatus.textContent = promote ? 'Promoting...' : 'Updating...';
+      const url = promote
+        ? `/campaigns/${encodeURIComponent(CID)}/assistant_gms`
+        : `/campaigns/${encodeURIComponent(CID)}/assistant_gms/${encodeURIComponent(username)}`;
+      const options = promote
+        ? { method:'POST', headers:{ 'content-type':'application/json' }, body: JSON.stringify({ username }) }
+        : { method:'DELETE' };
+      try{
+        const res = await api(url, options);
+        CAMPAIGN = res.campaign;
+        renderCampaign();
+        renderRoleMenu();
+        if (roleMenuStatus) roleMenuStatus.textContent = promote ? 'Promoted.' : 'Demoted.';
+      }catch(e){
+        if (roleMenuStatus) roleMenuStatus.textContent = e.message || 'Action failed';
+      }
+    }
+
+    roleConfigBtn?.addEventListener('click', (event)=>{
+      event.stopPropagation();
+      const rect = roleConfigBtn.getBoundingClientRect();
+      openRoleMenu(rect.left, rect.bottom + 6);
+    });
+    roleMenuClose?.addEventListener('click', (event)=>{
+      event.stopPropagation();
+      closeRoleMenu();
+    });
+    roleMenuList?.addEventListener('click', (event)=>{
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      event.stopPropagation();
+      const username = button.dataset.username;
+      const action = button.dataset.action;
+      if (!username || !action) return;
+      toggleAssistantRole(username, action === 'promote');
+    });
+    document.addEventListener('click', (event)=>{
+      if (!roleMenu?.classList.contains('open')) return;
+      if (roleMenu.contains(event.target)) return;
+      if (roleConfigBtn?.contains(event.target)) return;
+      closeRoleMenu();
     });
 
     function renderChatSpeaker(){

@@ -37,8 +37,17 @@ def _is_campaign_gm(campaign: dict[str, Any], user: str, role: str | None) -> bo
     normalized_role = (role or "").lower()
     if normalized_role == "admin":
         return True
+    username = user.lower()
     owner = (campaign.get("owner") or "").lower()
-    return owner and owner == user.lower()
+    if owner and owner == username:
+        return True
+    assistants = campaign.get("assistant_gms") or []
+    for helper in assistants:
+        if not helper:
+            continue
+        if helper.lower() == username:
+            return True
+    return False
 
 
 def _sanitize_docs(docs: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
