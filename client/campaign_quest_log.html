@@ -206,6 +206,22 @@
     .quest-create-form textarea {
       min-height: 80px;
     }
+    .quest-gm-options {
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: rgba(255,255,255,0.04);
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .quest-gm-options.visible {
+      display: flex;
+    }
+    .quest-gm-options label {
+      font-size: 0.8rem;
+    }
     .quest-card, .proposal-card {
       border: 1px solid var(--border);
       border-radius: 16px;
@@ -274,6 +290,14 @@
     .objective-icon.succeeded { color: #7dd19c; border-color: rgba(125,209,156,0.7); }
     .objective-icon.failed { color: #f0826f; border-color: rgba(240,130,111,0.7); }
     .objective-icon span { font-weight: 700; }
+    .objective-icon.button {
+      cursor: pointer;
+      background: rgba(255,255,255,0.05);
+    }
+    .objective-icon.button:focus-visible {
+      outline: 2px solid rgba(125,209,156,0.9);
+      outline-offset: 2px;
+    }
     .proposal-meta {
       display: flex;
       justify-content: space-between;
@@ -330,6 +354,7 @@
       </div>
       <div class="row" style="gap:10px;flex-wrap:wrap;">
         <button class="btn" type="button" id="create-quest-btn">Create Personal Quest</button>
+        <button class="btn ghost" type="button" id="create-quest-admin-btn" style="display:none;">Create GM Quest</button>
         <button class="btn secondary" type="button" id="sync-btn">Refresh Overview</button>
       </div>
     </div>
@@ -376,6 +401,37 @@
           Tags
           <input type="text" id="quest-tags" placeholder="Separate tags with commas" />
         </label>
+        <div class="quest-gm-options" id="quest-gm-options">
+          <div class="row" style="gap:12px;flex-wrap:wrap;">
+            <label>
+              Quest type
+              <select id="quest-type">
+                <option value="personal">Personal</option>
+                <option value="group">Group</option>
+              </select>
+            </label>
+            <label>
+              Visibility
+              <select id="quest-visibility">
+                <option value="personal.private">Personal private</option>
+                <option value="personal.visible">Personal visible</option>
+                <option value="group.visible">Group visible</option>
+              </select>
+            </label>
+            <label>
+              Status
+              <select id="quest-status-select">
+                <option value="pending">Pending</option>
+                <option value="succeeded">Succeeded</option>
+                <option value="failed">Failed</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            Assigned to
+            <input type="text" id="quest-assigned-to" placeholder="Comma separated (party, username)" />
+          </label>
+        </div>
         <div class="form-actions">
           <button class="btn" type="submit" id="quest-create-submit">Save quest</button>
           <span id="quest-create-feedback" class="muted"></span>
@@ -418,6 +474,12 @@
     const questDescriptionInput = document.getElementById('quest-description');
     const questObjectivesInput = document.getElementById('quest-objectives');
     const questTagsInput = document.getElementById('quest-tags');
+    const createQuestAdminBtn = document.getElementById('create-quest-admin-btn');
+    const questGMOptions = document.getElementById('quest-gm-options');
+    const questTypeSelect = document.getElementById('quest-type');
+    const questVisibilitySelect = document.getElementById('quest-visibility');
+    const questAssignedInput = document.getElementById('quest-assigned-to');
+    const questStatusSelect = document.getElementById('quest-status-select');
     const proposalFeedback = document.getElementById('proposal-feedback');
 
     if (CAMPAIGN_ID) {
@@ -450,6 +512,8 @@
       user: null,
       campaignOwner: '',
     };
+    let pendingPreviewQuestId = null;
+    const questFormContext = { mode: 'personal', questId: null };
 
     const PROPOSAL_OPEN_STATUSES = new Set(['open', 'changes_requested']);
     const proposalIsActive = (proposal = {}) =>
@@ -463,6 +527,58 @@
       archive: Array.isArray(payload.archive) ? payload.archive : [],
     });
 
+    const OBJECTIVE_STATE_ORDER = ['todo', 'succeeded', 'failed'];
+    const OBJECTIVE_SYMBOLS = {
+      todo: '○',
+      succeeded: '✔',
+      failed: '✕',
+    };
+    const VALID_VISIBILITY = new Set(['personal.private', 'personal.visible', 'group.visible', 'group.hidden']);
+
+    const findQuestInData = (questId) => {
+      if (!questId) return null;
+      for (const tab of ['group', 'personal', 'archive']) {
+        const list = state.data?.[tab] || [];
+        const match = list.find((entry) => entry?.id === questId);
+        if (match) return { tab, item: match };
+      }
+      return null;
+    };
+
+    const queueQuestPreviewRestore = (questId) => {
+      if (questId) pendingPreviewQuestId = questId;
+    };
+
+    const restorePendingPreview = () => {
+      if (!pendingPreviewQuestId) return;
+      const found = findQuestInData(pendingPreviewQuestId);
+      if (!found) {
+        pendingPreviewQuestId = null;
+        return;
+      }
+      state.activeTab = found.tab;
+      state.preview = { item: { id: pendingPreviewQuestId }, type: 'quest' };
+      pendingPreviewQuestId = null;
+    };
+
+    const nextObjectiveState = (current = 'todo') => {
+      const idx = OBJECTIVE_STATE_ORDER.indexOf((current || '').toLowerCase());
+      const next = OBJECTIVE_STATE_ORDER[(idx < 0 ? 0 : idx + 1) % OBJECTIVE_STATE_ORDER.length];
+      return next;
+    };
+
+    const parseAssignedList = (raw = '') =>
+      (raw || '')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+
+    const normalizeVisibilityForType = (type = 'group', value = '') => {
+      const normalized = (value || '').trim().toLowerCase();
+      if (VALID_VISIBILITY.has(normalized)) return normalized;
+      if ((type || '').toLowerCase() === 'personal') return 'personal.private';
+      return 'group.visible';
+    };
     const parseObjectivesFromLines = (text = "") => {
       return (text || "")
         .split("\n")
@@ -482,16 +598,102 @@
       if (questDescriptionInput) questDescriptionInput.value = "";
       if (questObjectivesInput) questObjectivesInput.value = "";
       if (questTagsInput) questTagsInput.value = "";
+      if (questAssignedInput) questAssignedInput.value = "";
+    };
+
+    const resetCreateButtonText = () => {
+      if (createQuestBtn) createQuestBtn.textContent = "Create Personal Quest";
+      if (createQuestAdminBtn) createQuestAdminBtn.textContent = "Create GM Quest";
+    };
+
+    const applyCreateButtonTextForMode = (mode) => {
+      if (mode === "personal") {
+        if (createQuestBtn) createQuestBtn.textContent = "Cancel";
+        if (createQuestAdminBtn) createQuestAdminBtn.textContent = "Create GM Quest";
+        return;
+      }
+      if (mode === "gm") {
+        if (createQuestBtn) createQuestBtn.textContent = "Create Personal Quest";
+        if (createQuestAdminBtn) createQuestAdminBtn.textContent = "Cancel GM Quest";
+        return;
+      }
+      if (mode === "edit") {
+        if (createQuestBtn) createQuestBtn.textContent = "Cancel";
+        if (createQuestAdminBtn) createQuestAdminBtn.textContent = "Cancel Edit";
+      }
     };
 
     const closeQuestCreatePanel = () => {
       if (!questCreateSection) return;
       questCreateSection.classList.remove("visible");
-      if (createQuestBtn) {
-        createQuestBtn.textContent = "Create Personal Quest";
+      questFormContext.mode = "personal";
+      questFormContext.questId = null;
+      questGMOptions?.classList.remove("visible");
+      showQuestCreateFeedback("");
+      resetCreateButtonText();
+    };
+
+    const updateGMControls = () => {
+      const isGM = userIsGM();
+      if (createQuestAdminBtn) {
+        createQuestAdminBtn.style.display = isGM ? "" : "none";
       }
+    };
+
+    const openQuestForm = (mode, quest = null) => {
+      if (!questCreateSection) return;
+      const showOptions = mode !== "personal";
+      if (showOptions && !userIsGM()) {
+        showProposalFeedback("Only GMs can access the advanced form.", true);
+        return;
+      }
+      questFormContext.mode = mode;
+      questFormContext.questId = quest?.id || null;
+      questCreateSection.classList.add("visible");
+      questGMOptions?.classList.toggle("visible", showOptions);
+      if (mode === "personal") {
+        resetQuestCreateForm();
+        if (questTypeSelect) questTypeSelect.value = "personal";
+        if (questVisibilitySelect) questVisibilitySelect.value = "personal.private";
+        if (questStatusSelect) questStatusSelect.value = "pending";
+        if (questAssignedInput) questAssignedInput.value = state.user?.username || "";
+      } else if (mode === "gm") {
+        resetQuestCreateForm();
+        if (questTypeSelect) questTypeSelect.value = "group";
+        if (questVisibilitySelect) questVisibilitySelect.value = "group.visible";
+        if (questStatusSelect) questStatusSelect.value = "pending";
+        if (questAssignedInput) questAssignedInput.value = "";
+      } else if (mode === "edit" && quest) {
+        if (questNameInput) questNameInput.value = quest.name || "";
+        if (questDescriptionInput) questDescriptionInput.value = quest.description || "";
+        if (questTagsInput) questTagsInput.value = (quest.tags || []).join(", ");
+        if (questAssignedInput) {
+          const assigned = Array.isArray(quest.assignedTo)
+            ? quest.assignedTo
+            : quest.assignedTo
+              ? [quest.assignedTo]
+              : [];
+          questAssignedInput.value = assigned.join(", ");
+        }
+        const qType = (quest.type || "group").toLowerCase();
+        if (questTypeSelect) questTypeSelect.value = qType;
+        if (questVisibilitySelect) {
+          questVisibilitySelect.value = quest.visibility || normalizeVisibilityForType(qType, "");
+        }
+        if (questStatusSelect) questStatusSelect.value = quest.status || "pending";
+        if (questObjectivesInput) questObjectivesInput.value = "";
+      }
+      applyCreateButtonTextForMode(mode);
       showQuestCreateFeedback("");
     };
+
+    if (questTypeSelect) {
+      questTypeSelect.addEventListener("change", () => {
+        if (!questVisibilitySelect) return;
+        const type = (questTypeSelect.value || "group").toLowerCase();
+        questVisibilitySelect.value = normalizeVisibilityForType(type, questVisibilitySelect.value);
+      });
+    }
 
     const showProposalFeedback = (message = "", isError = false) => {
       if (!proposalFeedback) return;

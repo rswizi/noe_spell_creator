@@ -19123,9 +19123,9 @@ function assignSkills(keys, target, skillRemaining, skillAlloc, cap){
 
 function generateAutoBuildProposal(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const statBudget = statInvestCap(lvl);
+  const statBudget = effectiveStatPointPool(lvl);
   const statCapPer = statTotalCap(lvl);
-  const skillBudget = skillPointPool(lvl);
+  const skillBudget = effectiveSkillPointPool(lvl);
   const skillCapPer = skillMaxForLevel(lvl);
   const charAlloc = CHARACS.reduce((acc, ch)=> { acc[ch.key] = 0; return acc; }, {});
   const selectedChars = new Set([...autoBuildSelections.main, ...autoBuildSelections.secondary, ...autoBuildSelections.worst]);
