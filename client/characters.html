@@ -273,10 +273,18 @@
           <span class="muted field-status">Applies to head, accessory, arms, legs, chest.</span>
         </div>
         <div class="field">
-          <label for="qc-weapon">Starting Weapon Quality</label>
-          <select id="qc-weapon">
+          <label for="qc-weapon-select">Starting Weapon</label>
+          <select id="qc-weapon-select">
             <option value="">None</option>
           </select>
+          <span id="qc-weapon-status" class="muted field-status"></span>
+        </div>
+        <div class="field">
+          <label for="qc-weapon-quality">Weapon Quality</label>
+          <select id="qc-weapon-quality">
+            <option value="">Same as armor</option>
+          </select>
+          <span class="muted field-status">Leave blank to mirror armor quality.</span>
         </div>
       </div>
       <div id="quick-status" class="muted"></div>
@@ -391,10 +399,16 @@ const qcBoonStatusEl = document.getElementById('qc-boon-status');
 const qcNatureSelect = document.getElementById('qc-nature');
 const qcMoneyEl = document.getElementById('qc-money');
 const qcArmorSelect = document.getElementById('qc-armor');
-const qcWeaponSelect = document.getElementById('qc-weapon');
+const qcWeaponSelect = document.getElementById('qc-weapon-select');
+const qcWeaponStatusEl = document.getElementById('qc-weapon-status');
+const qcWeaponQualityEl = document.getElementById('qc-weapon-quality');
 
 const QUALITY_ORDER = ["Adequate","Good","Very Good","Excellent","Legendary","Mythical","Epic","Divine","Unreal"];
 let quickLoadPromise = null;
+const ARMOR_SLOTS = ['head','accessory','arms','legs','chest'];
+const INVENTORY_SELF_CONTAINER = 'self';
+let quickWeaponCache = null;
+let quickArmorCatalog = null;
 
 function toggleCreateOptions(event) {
   event.stopPropagation();
@@ -406,7 +420,7 @@ function closeCreateOptions() {
 }
 
 function populateQualitySelects() {
-  [qcArmorSelect, qcWeaponSelect].forEach(select => {
+  [qcArmorSelect, qcWeaponQualityEl].forEach(select => {
     if (!select) return;
     QUALITY_ORDER.forEach(q => {
       const opt = document.createElement('option');
@@ -423,7 +437,9 @@ function ensureQuickLists() {
     await Promise.all([
       loadQuickAbilities('Specie', qcSpeciesSelect, qcSpeciesStatusEl),
       loadQuickAbilities('Boon', qcBoonSelect, qcBoonStatusEl),
-      loadQuickArchetypes()
+      loadQuickArchetypes(),
+      loadQuickWeapons(),
+      loadQuickArmorCatalog()
     ]);
   })().catch(error => {
     quickLoadPromise = null;
@@ -478,6 +494,50 @@ async function loadQuickArchetypes() {
   }
 }
 
+async function loadQuickWeapons() {
+  if (!qcWeaponSelect) return;
+  if (qcWeaponSelect.dataset.loaded === '1') return;
+  if (qcWeaponStatusEl) qcWeaponStatusEl.textContent = 'Loading weapons...';
+  qcWeaponSelect.innerHTML = '<option value="">-- Select weapon --</option>';
+  try {
+    const res = await api('/catalog/weapons?limit=200');
+    const weapons = (res.weapons || []).slice().sort((a, b) => String(a.name || a.id || '').localeCompare(String(b.name || b.id || '')));
+    quickWeaponCache = weapons;
+    weapons.forEach(entry => {
+      const opt = document.createElement('option');
+      opt.value = entry.id;
+      opt.textContent = entry.name || entry.id;
+      qcWeaponSelect.appendChild(opt);
+    });
+    qcWeaponSelect.dataset.loaded = '1';
+    if (qcWeaponStatusEl) qcWeaponStatusEl.textContent = '';
+  } catch (error) {
+    if (qcWeaponStatusEl) qcWeaponStatusEl.textContent = `Load failed: ${error.message}`;
+    throw error;
+  }
+}
+
+async function loadQuickArmorCatalog() {
+  if (quickArmorCatalog) return quickArmorCatalog;
+  try {
+    const res = await api('/catalog/equipment?limit=300');
+    const equipment = res.equipment || [];
+    const map = {};
+    equipment.forEach(entry => {
+      const slot = String(entry?.slot || '').trim().toLowerCase();
+      if (!slot) return;
+      if (ARMOR_SLOTS.includes(slot) && !map[slot]) {
+        map[slot] = entry;
+      }
+    });
+    quickArmorCatalog = map;
+    return map;
+  } catch (error) {
+    quickArmorCatalog = {};
+    throw error;
+  }
+}
+
 function openQuickModal() {
   if (!quickModal) return;
   quickForm?.reset();
@@ -512,18 +572,66 @@ function buildQuickAbilities(species, boon) {
   return Array.from(abilities);
 }
 
-function buildQuickGear(armor, weapon) {
+function resolveWeaponQuality(weaponQuality, armorQuality) {
+  return weaponQuality || armorQuality || 'Adequate';
+}
+
+function buildQuickGear(armorQuality, weaponId, weaponQuality) {
   const gear = {};
-  if (armor) {
+  if (armorQuality) {
     gear.armor = {
-      quality: armor,
-      slots: ['head', 'accessory', 'arms', 'legs', 'chest']
+      quality: armorQuality,
+      slots: [...ARMOR_SLOTS]
     };
   }
-  if (weapon) {
-    gear.weapon = { quality: weapon };
+  if (weaponId) {
+    gear.weapon = {
+      ref_id: weaponId,
+      quality: weaponQuality || 'Adequate'
+    };
   }
   return gear;
+}
+
+async function addQuickInventoryItem(invId, payload, label) {
+  if (!invId) return;
+  if (quickStatusEl) quickStatusEl.textContent = label || 'Adding gear to inventory...';
+  await api(`/inventories/${encodeURIComponent(invId)}/purchase`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+}
+
+async function addQuickArmorPiecesToInventory(invId, quality) {
+  if (!invId || !quality) return;
+  const catalog = quickArmorCatalog || await loadQuickArmorCatalog();
+  if (!catalog) return;
+  for (const slot of ARMOR_SLOTS) {
+    const entry = catalog[slot];
+    if (!entry || !entry.id) continue;
+    await addQuickInventoryItem(invId, {
+      kind: 'equipment',
+      ref_id: entry.id,
+      quantity: 1,
+      quality,
+      pricing_mode: 'take',
+      equipped: true
+    }, `Adding ${entry.name || slot} (armor)...`);
+  }
+}
+
+async function addQuickWeaponToInventory(invId, weaponId, quality) {
+  if (!invId || !weaponId) return;
+  const weaponEntry = quickWeaponCache?.find((w) => (w?.id || '') === weaponId);
+  await addQuickInventoryItem(invId, {
+    kind: 'weapon',
+    ref_id: weaponId,
+    quantity: 1,
+    quality: quality || 'Adequate',
+    pricing_mode: 'take',
+    equipped: true
+  }, `Adding ${weaponEntry?.name || 'selected weapon'}...`);
 }
 
 async function handleQuickCreate(event) {
@@ -538,13 +646,19 @@ async function handleQuickCreate(event) {
   const nature = qcNatureSelect?.value || '';
   const startingMoney = Math.max(0, Math.floor(Number(qcMoneyEl?.value) || 0));
   const armorQuality = qcArmorSelect?.value || '';
-  const weaponQuality = qcWeaponSelect?.value || '';
+  const weaponRefId = qcWeaponSelect?.value || '';
+  const weaponQualityChoice = qcWeaponQualityEl?.value || '';
+  const resolvedWeaponQuality = resolveWeaponQuality(weaponQualityChoice, armorQuality);
+  const wantsArmor = Boolean(armorQuality);
+  const wantsWeapon = Boolean(weaponRefId);
+  const needsInventory = startingMoney > 0 || wantsArmor || wantsWeapon;
 
   submitBtn?.setAttribute('disabled', 'disabled');
-  quickStatusEl.textContent = 'Creating character...';
+  quickStatusEl.textContent = 'Preparing quick build...';
   let inventoryId = '';
   try {
-    if (startingMoney > 0) {
+    await ensureQuickLists();
+    if (needsInventory) {
       quickStatusEl.textContent = 'Creating inventory...';
       const invRes = await api('/inventories', {
         method:'POST',
@@ -552,6 +666,12 @@ async function handleQuickCreate(event) {
         body: JSON.stringify({ name: `${name} Inventory`, currencies: { Jelly: startingMoney } })
       });
       inventoryId = (invRes.inventory || invRes).id;
+      if (inventoryId && wantsArmor) {
+        await addQuickArmorPiecesToInventory(inventoryId, armorQuality);
+      }
+      if (inventoryId && wantsWeapon) {
+        await addQuickWeaponToInventory(inventoryId, weaponRefId, resolvedWeaponQuality);
+      }
     }
     quickStatusEl.textContent = 'Creating character...';
     const createRes = await api('/characters', {
@@ -561,7 +681,7 @@ async function handleQuickCreate(event) {
     });
     const cid = createRes.id || (createRes.character && createRes.character.id);
     if (!cid) throw new Error('Character creation failed');
-    const gearPayload = buildQuickGear(armorQuality, weaponQuality);
+    const gearPayload = buildQuickGear(armorQuality, weaponRefId, resolvedWeaponQuality);
     const payload = {
       name,
       level: chosenLevel,

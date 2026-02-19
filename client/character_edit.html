@@ -230,6 +230,133 @@
     .mod-toggle { cursor:pointer; }
     .stat-counter { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0; }
     .stat-counter .pill { border-color:#2f2f2f; }
+    .auto-build-modal {
+      position:fixed;
+      inset:0;
+      background:rgba(5,5,8,0.85);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px 16px;
+      z-index:110;
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .2s ease;
+    }
+    .auto-build-modal.open {
+      opacity:1;
+      pointer-events:auto;
+    }
+    .auto-build-panel {
+      width:min(760px, 100%);
+      max-height:calc(100vh - 48px);
+      overflow-y:auto;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:22px;
+      padding:28px 32px 32px;
+      box-shadow:0 20px 50px rgba(0,0,0,0.65);
+      position:relative;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .auto-build-panel .modal-close {
+      position:absolute;
+      top:12px;
+      right:12px;
+      font-size:24px;
+      border:none;
+      color:var(--text);
+      background:transparent;
+      cursor:pointer;
+    }
+    .auto-build-panel h2 {
+      margin:0;
+      font-size:22px;
+    }
+    .auto-build-panel .muted {
+      margin:0;
+    }
+    .auto-build-section {
+      border-top:1px solid rgba(255,255,255,0.08);
+      padding-top:16px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .auto-build-section:first-of-type {
+      border-top:none;
+      padding-top:0;
+    }
+    .auto-build-section .section-header {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .selection-controls {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .selection-controls select {
+      flex:1;
+    }
+    .selection-table {
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin-top:4px;
+    }
+    .selection-row {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:6px 10px;
+      border-radius:10px;
+      background:#15151c;
+      border:1px solid rgba(255,255,255,0.08);
+      font-size:.95rem;
+    }
+    .selection-row button {
+      background:none;
+      border:none;
+      color:var(--accent);
+      font-weight:600;
+      cursor:pointer;
+      padding:0;
+    }
+    .auto-build-summary {
+      border-top:1px solid rgba(255,255,255,0.08);
+      padding-top:12px;
+      display:grid;
+      gap:8px;
+    }
+    .auto-proposal-section {
+      display:grid;
+      gap:4px;
+    }
+    .auto-proposal-line {
+      display:flex;
+      justify-content:space-between;
+      font-size:.9rem;
+      gap:8px;
+    }
+    .auto-proposal-line span:first-child { font-weight:600; }
+    .auto-build-budget {
+      font-size:.85rem;
+      color:rgba(255,255,255,0.7);
+    }
+    .auto-build-buttons {
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:8px;
+    }
     .current-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:8px; margin-top:8px; }
     .current-row label { display:flex; align-items:center; gap:6px; }
     .current-row input { width:100%; }
@@ -1076,6 +1203,7 @@
           <span class="pill" id="stat-counter">Characteristics: -- / --</span>
           <span class="pill" id="skill-cap">Max per skill: --</span>
           <span class="pill" id="stat-cap">Max per characteristic: --</span>
+          <button type="button" id="auto-build-btn" class="btn small">Auto Build</button>
         </div>
 
         <div class="stats-grid" id="stats-grid"><!-- injected --></div>
@@ -2262,6 +2390,103 @@
     <div class="row" style="justify-content:flex-end; gap:8px; margin-top:10px;">
       <button class="btn" id="nature-cancel">Cancel</button>
       <button class="btn" id="nature-confirm">Use Selected</button>
+    </div>
+  </div>
+</div>
+
+<div id="auto-build-modal" class="auto-build-modal" role="dialog" aria-modal="true" aria-labelledby="auto-build-title">
+  <div class="auto-build-panel">
+    <button type="button" class="modal-close" id="auto-build-close" aria-label="Close">&times;</button>
+    <h2 id="auto-build-title">Auto Build</h2>
+    <p class="muted">Define which characteristics and skills matter most, then propose an automated investment split. Worst stats are sacrificed when points are tight.</p>
+    <div class="auto-build-section">
+      <div class="section-header">
+        <strong>Main Characteristics</strong>
+        <span class="muted">(min 1, max 2)</span>
+      </div>
+      <div class="selection-controls">
+        <select id="auto-main-char-select"></select>
+        <button type="button" class="btn small" data-add="main">Add</button>
+      </div>
+      <span class="muted limit-note" id="auto-main-note"></span>
+      <div class="selection-table" id="auto-main-table"></div>
+    </div>
+    <div class="auto-build-section">
+      <div class="section-header">
+        <strong>Secondary Characteristics</strong>
+        <span class="muted">(min 1, max 2)</span>
+      </div>
+      <div class="selection-controls">
+        <select id="auto-secondary-char-select"></select>
+        <button type="button" class="btn small" data-add="secondary">Add</button>
+      </div>
+      <span class="muted limit-note" id="auto-secondary-note"></span>
+      <div class="selection-table" id="auto-secondary-table"></div>
+    </div>
+    <div class="auto-build-section">
+      <div class="section-header">
+        <strong>Worst Characteristics</strong>
+        <span class="muted">(min 1, max 3)</span>
+      </div>
+      <div class="selection-controls">
+        <select id="auto-worst-char-select"></select>
+        <button type="button" class="btn small" data-add="worst">Add</button>
+      </div>
+      <span class="muted limit-note" id="auto-worst-note"></span>
+      <div class="selection-table" id="auto-worst-table"></div>
+    </div>
+    <div class="auto-build-section">
+      <div class="section-header">
+        <strong>Best Skills</strong>
+        <span class="muted">(min 2, max 8)</span>
+      </div>
+      <div class="selection-controls">
+        <select id="auto-best-skill-select"></select>
+        <button type="button" class="btn small" data-add="bestSkills">Add</button>
+      </div>
+      <span class="muted limit-note" id="auto-best-skill-note"></span>
+      <div class="selection-table" id="auto-best-skill-table"></div>
+      <span class="muted limit-note" id="auto-nature-limit"></span>
+    </div>
+    <div class="auto-build-section">
+      <div class="section-header">
+        <strong>Good Skills</strong>
+        <span class="muted">(min 2, max 8)</span>
+      </div>
+      <div class="selection-controls">
+        <select id="auto-good-skill-select"></select>
+        <button type="button" class="btn small" data-add="goodSkills">Add</button>
+      </div>
+      <span class="muted limit-note" id="auto-good-skill-note"></span>
+      <div class="selection-table" id="auto-good-skill-table"></div>
+    </div>
+    <div class="auto-build-section">
+      <div class="section-header">
+        <strong>Worst Skills</strong>
+        <span class="muted">(min 2, max 10)</span>
+      </div>
+      <div class="selection-controls">
+        <select id="auto-worst-skill-select"></select>
+        <button type="button" class="btn small" data-add="worstSkills">Add</button>
+      </div>
+      <span class="muted limit-note" id="auto-worst-skill-note"></span>
+      <div class="selection-table" id="auto-worst-skill-table"></div>
+    </div>
+    <div class="auto-build-summary">
+      <div class="auto-proposal-section">
+        <strong>Characteristic Proposal</strong>
+        <div id="auto-build-proposal-stats"></div>
+      </div>
+      <div class="auto-proposal-section">
+        <strong>Skill Proposal</strong>
+        <div id="auto-build-proposal-skills"></div>
+      </div>
+      <div id="auto-build-budget" class="auto-build-budget"></div>
+      <div id="auto-build-error" class="muted"></div>
+    </div>
+    <div class="auto-build-buttons">
+      <button type="button" id="auto-propose-btn" class="btn">Propose Build</button>
+      <button type="button" id="auto-apply-btn" class="btn primary" disabled>Apply Build</button>
     </div>
   </div>
 </div>
@@ -18614,6 +18839,473 @@ function wirePersonal(){
   bind(pBackstoryEl, 'backstory', { rich:true });
 }
 
+/* auto build helpers */
+const autoBuildBtn = document.getElementById('auto-build-btn');
+const autoBuildModal = document.getElementById('auto-build-modal');
+const autoBuildCloseBtn = document.getElementById('auto-build-close');
+const autoProposeBtn = document.getElementById('auto-propose-btn');
+const autoApplyBtn = document.getElementById('auto-apply-btn');
+const autoBuildErrorEl = document.getElementById('auto-build-error');
+const autoBuildBudgetEl = document.getElementById('auto-build-budget');
+const autoBuildStatsEl = document.getElementById('auto-build-proposal-stats');
+const autoBuildSkillsEl = document.getElementById('auto-build-proposal-skills');
+const autoNatureLimitEl = document.getElementById('auto-nature-limit');
+const autoBuildSelectors = {
+  main: document.getElementById('auto-main-char-select'),
+  secondary: document.getElementById('auto-secondary-char-select'),
+  worst: document.getElementById('auto-worst-char-select'),
+  bestSkills: document.getElementById('auto-best-skill-select'),
+  goodSkills: document.getElementById('auto-good-skill-select'),
+  worstSkills: document.getElementById('auto-worst-skill-select'),
+};
+const autoBuildTables = {
+  main: document.getElementById('auto-main-table'),
+  secondary: document.getElementById('auto-secondary-table'),
+  worst: document.getElementById('auto-worst-table'),
+  bestSkills: document.getElementById('auto-best-skill-table'),
+  goodSkills: document.getElementById('auto-good-skill-table'),
+  worstSkills: document.getElementById('auto-worst-skill-table'),
+};
+const GROUP_LIMITS = {
+  main: { min:1, max:2 },
+  secondary: { min:1, max:2 },
+  worst: { min:1, max:3 },
+  bestSkills: { min:2, max:8 },
+  goodSkills: { min:2, max:8 },
+  worstSkills: { min:2, max:10 },
+};
+const charGroups = ['main','secondary','worst'];
+const skillGroups = ['bestSkills','goodSkills','worstSkills'];
+const noteIdMap = {
+  main: 'auto-main-note',
+  secondary: 'auto-secondary-note',
+  worst: 'auto-worst-note',
+  bestSkills: 'auto-best-skill-note',
+  goodSkills: 'auto-good-skill-note',
+  worstSkills: 'auto-worst-skill-note',
+};
+const charNameByKey = {};
+const skillCharMap = {};
+CHARACS.forEach((ch)=> {
+  charNameByKey[ch.key] = ch.name || ch.key;
+  (ch.skills || []).forEach((skill)=> {
+    skillCharMap[skill] = ch.key;
+  });
+});
+const AUTO_SKILL_OPTIONS = (()=> {
+  const seen = new Set();
+  CHARACS.forEach((ch)=> {
+    (ch.skills || []).forEach((skill)=> {
+      if (skill) seen.add(skill);
+    });
+  });
+  NATURES.forEach((nature)=> {
+    if (nature) seen.add(nature);
+  });
+  return Array.from(seen).sort((a,b)=> String(a||'').localeCompare(String(b||'')));
+})();
+const autoBuildSelections = {
+  main: [],
+  secondary: [],
+  worst: [],
+  bestSkills: [],
+  goodSkills: [],
+  worstSkills: [],
+};
+let autoBuildProposal = null;
+
+function setAutoBuildError(msg){
+  if (!autoBuildErrorEl) return;
+  autoBuildErrorEl.textContent = msg || '';
+}
+
+function resetProposalSummary(){
+  if (autoBuildStatsEl) autoBuildStatsEl.innerHTML = '<div class="muted">Propose to preview the recommended investments.</div>';
+  if (autoBuildSkillsEl) autoBuildSkillsEl.innerHTML = '<div class="muted">Propose to preview the recommended investments.</div>';
+  if (autoBuildBudgetEl) autoBuildBudgetEl.textContent = '';
+  if (autoApplyBtn) autoApplyBtn.setAttribute('disabled','disabled');
+  autoBuildProposal = null;
+}
+
+function invalidateAutoBuildProposal(){
+  resetProposalSummary();
+}
+
+function updateGroupNote(group){
+  const noteId = noteIdMap[group];
+  const noteEl = noteId ? document.getElementById(noteId) : null;
+  if (!noteEl) return;
+  const limit = GROUP_LIMITS[group] || { min:0, max:0 };
+  const count = autoBuildSelections[group]?.length || 0;
+  noteEl.textContent = `${count} selected (${limit.min}-${limit.max})`;
+}
+
+function displaySelectionLabel(group, value){
+  if (charGroups.includes(group)){
+    return charNameByKey[value] || value;
+  }
+  return value;
+}
+
+function renderSelectionTable(group){
+  const table = autoBuildTables[group];
+  if (!table) return;
+  table.innerHTML = '';
+  const values = autoBuildSelections[group] || [];
+  if (!values.length){
+    table.innerHTML = '<div class="muted">No selections yet.</div>';
+  }else{
+    values.forEach((value)=>{
+      const row = document.createElement('div');
+      row.className = 'selection-row';
+      const label = document.createElement('span');
+      label.textContent = displaySelectionLabel(group, value);
+      row.appendChild(label);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.remove = group;
+      btn.dataset.value = value;
+      btn.textContent = 'Remove';
+      row.appendChild(btn);
+      table.appendChild(row);
+    });
+  }
+  updateGroupNote(group);
+  invalidateAutoBuildProposal();
+}
+
+function updateNatureLimitNote(){
+  if (!autoNatureLimitEl) return;
+  const limit = natureSlotLimit();
+  const used = [...autoBuildSelections.bestSkills, ...autoBuildSelections.goodSkills, ...autoBuildSelections.worstSkills].filter(isNatureSkill).length;
+  autoNatureLimitEl.textContent = `Nature picks: ${used}/${limit}.`;
+}
+
+function isNatureSkill(value){
+  return INTENSITIES.includes(value || '');
+}
+
+function populateAutoBuildSelects(){
+  charGroups.forEach((group)=>{
+    const select = autoBuildSelectors[group];
+    if (!select) return;
+    select.innerHTML = '<option value="">-- Select characteristic --</option>';
+    CHARACS.forEach((ch)=>{
+      const opt = document.createElement('option');
+      opt.value = ch.key;
+      opt.textContent = ch.name || ch.key;
+      select.appendChild(opt);
+    });
+  });
+  skillGroups.forEach((group)=>{
+    const select = autoBuildSelectors[group];
+    if (!select) return;
+    select.innerHTML = '<option value="">-- Select skill --</option>';
+    AUTO_SKILL_OPTIONS.forEach((skill)=>{
+      const opt = document.createElement('option');
+      opt.value = skill;
+      opt.textContent = skill;
+      select.appendChild(opt);
+    });
+  });
+}
+
+function addSelection(group){
+  const select = autoBuildSelectors[group];
+  if (!select) return;
+  const value = (select.value || '').trim();
+  if (!value){
+    setAutoBuildError('Choose an option before adding.');
+    return;
+  }
+  const limit = GROUP_LIMITS[group];
+  if (!limit){
+    setAutoBuildError('Unknown group.');
+    return;
+  }
+  if (autoBuildSelections[group].includes(value)){
+    setAutoBuildError('Already selected.');
+    return;
+  }
+  if (autoBuildSelections[group].length >= limit.max){
+    setAutoBuildError(`Cannot add more than ${limit.max} entries.`);
+    return;
+  }
+  if (charGroups.includes(group)){
+    const conflict = charGroups.some((other)=> other !== group && autoBuildSelections[other].includes(value));
+    if (conflict){
+      setAutoBuildError('That characteristic is already in another bucket.');
+      return;
+    }
+  }else{
+    const conflict = skillGroups.some((other)=> other !== group && autoBuildSelections[other].includes(value));
+    if (conflict){
+      setAutoBuildError('That skill is already part of another bucket.');
+      return;
+    }
+    if (isNatureSkill(value)){
+      const limitSize = natureSlotLimit();
+      const used = [...autoBuildSelections.bestSkills, ...autoBuildSelections.goodSkills, ...autoBuildSelections.worstSkills].filter(isNatureSkill).length;
+      if (used >= limitSize){
+        setAutoBuildError(`Nature slots capped at ${limitSize}.`);
+        return;
+      }
+    }
+  }
+  autoBuildSelections[group].push(value);
+  select.value = '';
+  setAutoBuildError('');
+  renderSelectionTable(group);
+  updateNatureLimitNote();
+}
+
+function removeSelection(group, value){
+  const list = autoBuildSelections[group];
+  if (!list) return;
+  const idx = list.indexOf(value);
+  if (idx < 0) return;
+  list.splice(idx, 1);
+  setAutoBuildError('');
+  renderSelectionTable(group);
+  updateNatureLimitNote();
+}
+
+function getValidationErrors(){
+  const errors = [];
+  charGroups.forEach((group)=>{
+    const count = autoBuildSelections[group].length;
+    if (count < GROUP_LIMITS[group].min){
+      errors.push(`Choose at least ${GROUP_LIMITS[group].min} ${group} characteristic${GROUP_LIMITS[group].min > 1 ? 's' : ''}.`);
+    }
+  });
+  skillGroups.forEach((group)=>{
+    const count = autoBuildSelections[group].length;
+    if (count < GROUP_LIMITS[group].min){
+      errors.push(`Choose at least ${GROUP_LIMITS[group].min} ${group.replace(/([A-Z])/g, ' $1')} skill${GROUP_LIMITS[group].min > 1 ? 's' : ''}.`);
+    }
+  });
+  const limit = natureSlotLimit();
+  const used = [...autoBuildSelections.bestSkills, ...autoBuildSelections.goodSkills, ...autoBuildSelections.worstSkills].filter(isNatureSkill).length;
+  if (used > limit){
+    errors.push(`Nature slots limited to ${limit} picks.`);
+  }
+  return errors;
+}
+
+function assignStats(keys, target, statRemaining, charAlloc, cap){
+  let maxAssigned = 0;
+  keys.forEach((key)=>{
+    if (!key || statRemaining <= 0) return;
+    const amount = Math.min(target, cap, statRemaining);
+    charAlloc[key] = amount;
+    statRemaining -= amount;
+    if (amount > maxAssigned) maxAssigned = amount;
+  });
+  return { statRemaining, maxAssigned };
+}
+
+function assignSkills(keys, target, skillRemaining, skillAlloc, cap){
+  let maxAssigned = 0;
+  keys.forEach((skill)=>{
+    if (!skill || skillRemaining <= 0) return;
+    const amount = Math.min(target, cap, skillRemaining);
+    skillAlloc[skill] = amount;
+    skillRemaining -= amount;
+    if (amount > maxAssigned) maxAssigned = amount;
+  });
+  return { skillRemaining, maxAssigned };
+}
+
+function generateAutoBuildProposal(){
+  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const statBudget = statInvestCap(lvl);
+  const statCapPer = statTotalCap(lvl);
+  const skillBudget = skillPointPool(lvl);
+  const skillCapPer = skillMaxForLevel(lvl);
+  const charAlloc = CHARACS.reduce((acc, ch)=> { acc[ch.key] = 0; return acc; }, {});
+  const selectedChars = new Set([...autoBuildSelections.main, ...autoBuildSelections.secondary, ...autoBuildSelections.worst]);
+  let statRemaining = statBudget;
+  const mainAssigned = assignStats(autoBuildSelections.main, statCapPer, statRemaining, charAlloc, statCapPer);
+  statRemaining = mainAssigned.statRemaining;
+  const secondaryTarget = Math.max(mainAssigned.maxAssigned - 2, 0);
+  const secondaryAssigned = assignStats(autoBuildSelections.secondary, secondaryTarget, statRemaining, charAlloc, statCapPer);
+  statRemaining = secondaryAssigned.statRemaining;
+  const restChars = CHARACS.map((ch)=> ch.key).filter((key)=> !selectedChars.has(key));
+  const restTarget = Math.max(secondaryTarget - 2, 0);
+  const restAssigned = assignStats(restChars, restTarget, statRemaining, charAlloc, statCapPer);
+  statRemaining = restAssigned.statRemaining;
+  if (statRemaining > 0){
+    const toppingOrder = [...autoBuildSelections.main, ...autoBuildSelections.secondary, ...restChars];
+    toppingOrder.forEach((key)=>{
+      if (statRemaining <= 0) return;
+      const current = charAlloc[key] || 0;
+      const extra = Math.min(statCapPer - current, statRemaining);
+      if (extra <= 0) return;
+      charAlloc[key] = current + extra;
+      statRemaining -= extra;
+    });
+  }
+  const statUsed = statBudget - Math.max(0, statRemaining);
+
+  const skillAlloc = {};
+  AUTO_SKILL_OPTIONS.forEach((skill)=> { skillAlloc[skill] = 0; });
+  let skillRemaining = skillBudget;
+  const bestAssigned = assignSkills(autoBuildSelections.bestSkills, skillCapPer, skillRemaining, skillAlloc, skillCapPer);
+  skillRemaining = bestAssigned.skillRemaining;
+  const goodTarget = Math.max(bestAssigned.maxAssigned - 2, 0);
+  const goodAssigned = assignSkills(autoBuildSelections.goodSkills, goodTarget, skillRemaining, skillAlloc, skillCapPer);
+  skillRemaining = goodAssigned.skillRemaining;
+  assignSkills(autoBuildSelections.worstSkills, 0, skillRemaining, skillAlloc, skillCapPer);
+  const usedSkillSet = new Set([...autoBuildSelections.bestSkills, ...autoBuildSelections.goodSkills, ...autoBuildSelections.worstSkills]);
+  const restSkills = AUTO_SKILL_OPTIONS.filter((skill)=> !usedSkillSet.has(skill));
+  const restAssigned = assignSkills(restSkills, Math.max(goodTarget - 2, 0), skillRemaining, skillAlloc, skillCapPer);
+  skillRemaining = restAssigned.skillRemaining;
+  if (skillRemaining > 0){
+    const toppingOrder = [...autoBuildSelections.bestSkills, ...autoBuildSelections.goodSkills, ...restSkills];
+    toppingOrder.forEach((skill)=>{
+      if (skillRemaining <= 0) return;
+      const current = skillAlloc[skill] || 0;
+      const extra = Math.min(skillCapPer - current, skillRemaining);
+      if (extra <= 0) return;
+      skillAlloc[skill] = current + extra;
+      skillRemaining -= extra;
+    });
+  }
+  const skillUsed = skillBudget - Math.max(0, skillRemaining);
+
+  return {
+    level: lvl,
+    statBudget,
+    statUsed,
+    statAlloc: charAlloc,
+    skillBudget,
+    skillUsed,
+    skillAlloc,
+  };
+}
+
+function renderProposalTable(container, entries){
+  if (!container) return;
+  container.innerHTML = '';
+  if (!entries.length){
+    container.innerHTML = '<div class="muted">Nothing to show.</div>';
+    return;
+  }
+  entries.forEach((entry)=>{
+    const row = document.createElement('div');
+    row.className = 'auto-proposal-line';
+    const label = document.createElement('span');
+    label.textContent = entry.label;
+    const value = document.createElement('span');
+    value.textContent = entry.value;
+    row.appendChild(label);
+    row.appendChild(value);
+    container.appendChild(row);
+  });
+}
+
+function renderAutoBuildProposal(proposal){
+  if (!proposal){
+    resetProposalSummary();
+    return;
+  }
+  const charEntries = Object.entries(proposal.statAlloc)
+    .sort((a,b)=> b[1] - a[1])
+    .map(([key,val])=> ({ label: charNameByKey[key] || key, value: val }));
+  renderProposalTable(autoBuildStatsEl, charEntries);
+  const skillEntries = Object.entries(proposal.skillAlloc)
+    .sort((a,b)=> b[1] - a[1])
+    .filter(([,val])=> val > 0)
+    .map(([key,val])=> ({ label: key, value: val }));
+  renderProposalTable(autoBuildSkillsEl, skillEntries);
+  if (autoBuildBudgetEl){
+    autoBuildBudgetEl.textContent = `Using ${proposal.statUsed}/${proposal.statBudget} char points and ${proposal.skillUsed}/${proposal.skillBudget} skill points.`;
+  }
+  if (autoApplyBtn) autoApplyBtn.removeAttribute('disabled');
+  autoBuildProposal = proposal;
+}
+
+function applyAutoBuildProposal(){
+  if (!autoBuildProposal || !CHAR) return;
+  CHAR.stats = normalizeStats(CHAR.stats || {});
+  Object.entries(autoBuildProposal.statAlloc).forEach(([key,val])=>{
+    if (!CHAR.stats[key]){
+      CHAR.stats[key] = { invest:0, skills:{} };
+    }
+    CHAR.stats[key].invest = val;
+  });
+  Object.entries(autoBuildProposal.skillAlloc).forEach(([skill,val])=>{
+    if (!skill) return;
+    if (INTENSITIES.includes(skill)){
+      CHAR.stats.intensities = CHAR.stats.intensities || {};
+      CHAR.stats.intensities[skill] = val;
+      return;
+    }
+    const charKey = skillCharMap[skill];
+    if (!charKey) return;
+    if (!CHAR.stats[charKey]){
+      CHAR.stats[charKey] = { invest:0, skills:{} };
+    }
+    CHAR.stats[charKey].skills = CHAR.stats[charKey].skills || {};
+    CHAR.stats[charKey].skills[skill] = val;
+  });
+  renderStatistics();
+  recomputePassiveAgg();
+  renderAddedSchools();
+  updateDerived();
+  queueSave();
+  setAutoBuildError('Auto build applied.');
+  closeAutoBuildModal();
+}
+
+function openAutoBuildModal(){
+  if (!autoBuildModal) return;
+  autoBuildModal.classList.add('open');
+  updateNatureLimitNote();
+  resetProposalSummary();
+  setAutoBuildError('');
+}
+
+function closeAutoBuildModal(){
+  if (!autoBuildModal) return;
+  autoBuildModal.classList.remove('open');
+  invalidateAutoBuildProposal();
+  setAutoBuildError('');
+}
+
+autoBuildBtn?.addEventListener('click', openAutoBuildModal);
+autoBuildCloseBtn?.addEventListener('click', closeAutoBuildModal);
+autoBuildModal?.addEventListener('click', (event)=>{
+  if (event.target === autoBuildModal) closeAutoBuildModal();
+});
+autoProposeBtn?.addEventListener('click', ()=>{
+  const errors = getValidationErrors();
+  if (errors.length){
+    setAutoBuildError(errors.join(' '));
+    return;
+  }
+  try{
+    const proposal = generateAutoBuildProposal();
+    renderAutoBuildProposal(proposal);
+    setAutoBuildError('');
+  }catch(e){
+    setAutoBuildError(e?.message || 'Proposal generation failed.');
+  }
+});
+autoApplyBtn?.addEventListener('click', applyAutoBuildProposal);
+document.querySelectorAll('button[data-add]').forEach((button)=>{
+  button.addEventListener('click',(event)=>{
+    const group = event.currentTarget.dataset.add;
+    addSelection(group);
+  });
+});
+document.addEventListener('click',(event)=>{
+  const target = event.target.closest('button[data-remove]');
+  if (!target) return;
+  removeSelection(target.dataset.remove, target.dataset.value);
+});
+populateAutoBuildSelects();
+Object.keys(autoBuildSelections).forEach(renderSelectionTable);
 /* boot */
 resourceActionApply?.addEventListener('click', applyResourceAction);
 resourceActionCancel?.addEventListener('click', closeResourceActionModal);
