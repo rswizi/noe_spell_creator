@@ -19158,8 +19158,8 @@ function generateAutoBuildProposal(){
   assignSkills(autoBuildSelections.worstSkills, 0, skillRemaining, skillAlloc, skillCapPer);
   const usedSkillSet = new Set([...autoBuildSelections.bestSkills, ...autoBuildSelections.goodSkills, ...autoBuildSelections.worstSkills]);
   const restSkills = AUTO_SKILL_OPTIONS.filter((skill)=> !usedSkillSet.has(skill));
-  const restAssigned = assignSkills(restSkills, Math.max(goodTarget - 2, 0), skillRemaining, skillAlloc, skillCapPer);
-  skillRemaining = restAssigned.skillRemaining;
+  const restSkillAssigned = assignSkills(restSkills, Math.max(goodTarget - 2, 0), skillRemaining, skillAlloc, skillCapPer);
+  skillRemaining = restSkillAssigned.skillRemaining;
   if (skillRemaining > 0){
     const toppingOrder = [...autoBuildSelections.bestSkills, ...autoBuildSelections.goodSkills, ...restSkills];
     toppingOrder.forEach((skill)=>{
