@@ -1,33 +1,29 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Campaign Quest Hub</title>
   <link rel="stylesheet" href="/static/style.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet" />
   <style>
     :root {
       color-scheme: dark;
-      --ink: #f6f2ea;
-      --muted: #b7b2a8;
       --bg: #0b0c10;
-      --panel: #161924;
-      --border: #2a2f3a;
+      --panel: #12161d;
+      --border: #232a35;
+      --muted: #b7b2a8;
       --accent: #c9a227;
       --accent-2: #4a8b8f;
+      --text: #f6f2ea;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Source Sans 3", "Trebuchet MS", sans-serif;
-      color: var(--ink);
-      background:
-        radial-gradient(900px 500px at 0% -10%, rgba(201,162,39,0.18), transparent 55%),
+      font-family: "Source Sans 3", "Inter", sans-serif;
+      background: radial-gradient(900px 500px at 0% -10%, rgba(201,162,39,0.18), transparent 55%),
         radial-gradient(700px 420px at 100% 0%, rgba(74,139,143,0.2), transparent 50%),
-        linear-gradient(180deg, var(--bg), #090a0f 60%, #07080c);
+        linear-gradient(180deg, var(--bg) 0%, #07080c 70%);
+      color: var(--text);
       min-height: 100vh;
     }
     .page {
@@ -38,1196 +34,1018 @@
       flex-direction: column;
       gap: 18px;
     }
-    .topbar {
+    .hero {
       display: flex;
+      justify-content: space-between;
+      gap: 16px;
       align-items: center;
-      gap: 12px;
       flex-wrap: wrap;
     }
-    .topbar h1 {
+    .hero h1 {
       margin: 0;
       font-family: "Cinzel", "Times New Roman", serif;
-      font-size: 1.9rem;
-      letter-spacing: 0.05em;
+      font-size: 2rem;
     }
-    .row {
+    .hero-actions {
       display: flex;
-      gap: 10px;
+      gap: 12px;
       align-items: center;
       flex-wrap: wrap;
     }
-    .muted {
+    .hero-search {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.85rem;
       color: var(--muted);
     }
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid #3a3f49;
-      font-size: 0.82rem;
-      color: var(--muted);
+    .hero-search input {
+      margin-top: 4px;
+      width: 220px;
     }
-    .spacer { flex: 1 1 auto; }
-    .btn {
-      border-radius: 999px;
-      border: 1px solid #3a3f49;
-      padding: 8px 16px;
-      background: #121521;
-      color: var(--ink);
-      font-family: inherit;
-      cursor: pointer;
+    .filters-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
     }
-    .btn:hover { border-color: #5c626f; }
-    .btn.secondary { background: #0f111b; }
-    .btn.ghost {
-      background: transparent;
-      border-color: var(--border);
+    .filters-row select {
+      width: 100%;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(0, 1.2fr);
+      gap: 16px;
     }
     .panel {
       border: 1px solid var(--border);
       border-radius: 18px;
-      padding: 20px;
-      background: linear-gradient(150deg, rgba(22,25,36,0.96), rgba(10,11,16,0.92));
+      padding: 18px;
+      background: var(--panel);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.45);
+    }
+    .list-panel {
       display: flex;
       flex-direction: column;
-      gap: 14px;
-    }
-    .filters {
       gap: 12px;
-    }
-    .filters label {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      font-size: 0.85rem;
-      color: var(--muted);
-      flex: 1;
-      min-width: 220px;
-    }
-    input, select {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: #0f111b;
-      color: var(--ink);
-      font-family: inherit;
-    }
-    .tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .tab {
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      padding: 10px 16px;
-      background: #10131d;
-      color: var(--ink);
-      cursor: pointer;
-      display: inline-flex;
-      flex-direction: column;
-      gap: 4px;
-      min-width: 150px;
-    }
-    .tab.active {
-      border-color: var(--accent);
-      background: rgba(201,162,39,0.08);
-    }
-    .tab small {
-      color: var(--muted);
-      font-size: 0.78rem;
-    }
-    .tab-count {
-      align-self: flex-end;
-      font-size: 0.75rem;
-      color: var(--muted);
-    }
-    .tab-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 320px;
-      gap: 20px;
-    }
-    .tab-content {
-      display: grid;
-      gap: 14px;
-      max-height: 760px;
-      overflow: auto;
+      max-height: 70vh;
     }
     .detail-panel {
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 16px;
-      padding: 16px;
-      background: #10131d;
+      min-height: 70vh;
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      min-height: 300px;
+      gap: 12px;
     }
-    .detail-panel h3 {
-      margin: 0;
-      font-family: "Cinzel", "Times New Roman", serif;
-      font-size: 1.4rem;
-    }
-    .detail-panel .muted {
-      color: var(--muted);
-    }
-    .quest-create-panel {
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 16px;
-      padding: 16px;
-      background: #0f111b;
-      display: none;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .quest-create-panel.visible {
-      display: flex;
-    }
-    .quest-create-form {
-      display: grid;
-      gap: 10px;
-    }
-    .quest-create-form label {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      font-size: 0.85rem;
-      color: var(--muted);
-    }
-    .form-actions {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .quest-create-form textarea {
-      min-height: 80px;
-    }
-    .quest-gm-options {
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 10px;
-      background: rgba(255,255,255,0.04);
-      display: none;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .quest-gm-options.visible {
-      display: flex;
-    }
-    .quest-gm-options label {
-      font-size: 0.8rem;
-    }
-    .quest-card, .proposal-card {
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 14px;
-      background: #0f111b;
-      display: grid;
-      gap: 8px;
-      cursor: pointer;
-    }
-    .quest-card:hover, .proposal-card:hover {
-      border-color: var(--accent);
-    }
-    .quest-card-header {
+    .list-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 6px;
+    }
+    .quest-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .quest-card {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 12px;
+      background: #0d1016;
+      cursor: pointer;
+      transition: border 0.2s ease, transform 0.2s ease;
+    }
+    .quest-card.active {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .quest-card .titles {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 8px;
     }
+    .quest-card h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
     .status-pill {
-      padding: 4px 10px;
+      padding: 2px 10px;
       border-radius: 999px;
       font-size: 0.75rem;
       border: 1px solid transparent;
       text-transform: capitalize;
     }
-    .status-pill.pending { border-color: #6c6c6c; color: #d7d7d7; }
-    .status-pill.succeeded { border-color: #3b7c61; color: #7dd19c; }
-    .status-pill.failed { border-color: #862f2f; color: #f09b8f; }
-    .status-pill.archived { border-color: #444654; color: #9094a7; }
-    .visibility-badge {
-      padding: 2px 8px;
+    .status-pill.pending { border-color: #c9a227; color: #c9a227; }
+    .status-pill.active { border-color: #4ac68f; color: #4ac68f; }
+    .status-pill.on_hold { border-color: #7795f6; color: #7795f6; }
+    .status-pill.completed { border-color: #6cc991; color: #6cc991; }
+    .status-pill.failed { border-color: #e06666; color: #e06666; }
+    .status-pill.abandoned { border-color: #ad6fdc; color: #ad6fdc; }
+    .status-pill.hidden { border-color: #6c6c6c; color: #6c6c6c; }
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .badge {
       border-radius: 999px;
-      border: 1px solid #3a3f49;
-      font-size: 0.72rem;
-      color: var(--muted);
+      padding: 2px 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 0.75rem;
     }
-    .quest-description { margin: 0; color: #d3d0cc; }
-    .objective-progress {
+    .detail-empty {
+      color: var(--muted);
+      border: 1px dashed rgba(255,255,255,0.2);
+      border-radius: 14px;
+      padding: 24px;
+      text-align: center;
+    }
+    .detail-header {
       display: flex;
+      align-items: flex-start;
       justify-content: space-between;
-      font-size: 0.8rem;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .detail-header h2 {
+      margin: 0;
+      font-size: 1.7rem;
+    }
+    .detail-subtitle {
+      font-size: 0.95rem;
       color: var(--muted);
     }
-    .quest-actions {
+    .detail-section {
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding-top: 12px;
       display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .objectives-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .objective-card {
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 10px;
+      background: #0c0f15;
+      display: grid;
+      gap: 6px;
+    }
+    .objective-card strong {
+      font-size: 0.95rem;
+    }
+    .objective-card .objective-meta {
+      display: flex;
+      align-items: center;
       gap: 8px;
       flex-wrap: wrap;
     }
-    .objective-row {
+    .objective-card select {
+      width: 140px;
+    }
+    .notes-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .note-card {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 10px;
+      background: #0c0f15;
+    }
+    .muted {
+      color: var(--muted);
+    }
+    .row {
       display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
-      font-size: 0.9rem;
     }
-    .objective-icon {
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      border: 1px solid rgba(255,255,255,0.2);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.85rem;
+    textarea {
+      width: 100%;
+      min-height: 80px;
     }
-    .objective-icon.todo { color: var(--ink); border-color: rgba(255,255,255,0.2); }
-    .objective-icon.succeeded { color: #7dd19c; border-color: rgba(125,209,156,0.7); }
-    .objective-icon.failed { color: #f0826f; border-color: rgba(240,130,111,0.7); }
-    .objective-icon span { font-weight: 700; }
-    .objective-icon.button {
+    .btn {
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      background: #12161d;
+      color: var(--text);
       cursor: pointer;
+    }
+    .btn.primary {
+      background: linear-gradient(135deg, rgba(197,53,53,0.35), rgba(20,20,29,0.95));
+      border-color: var(--accent);
+    }
+    .btn.secondary {
+      background: transparent;
+      border-color: rgba(255,255,255,0.3);
+    }
+    .btn.ghost {
       background: rgba(255,255,255,0.05);
     }
-    .objective-icon.button:focus-visible {
-      outline: 2px solid rgba(125,209,156,0.9);
-      outline-offset: 2px;
+    .create-panel.hidden { display: none; }
+    .create-panel .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
     }
-    .proposal-meta {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
-    .vote-pill {
-      border-radius: 12px;
-      padding: 2px 10px;
-      border: 1px solid #3a3f49;
-      font-size: 0.78rem;
-    }
-    .vote-pill.agree { border-color: #3b7c61; color: #7dd19c; }
-    .vote-pill.disagree { border-color: #862f2f; color: #f0a79f; }
-    .votes-list {
+    .create-panel label {
       display: flex;
       flex-direction: column;
-      gap: 6px;
-    }
-    .votes-list .muted { font-size: 0.8rem; }
-    .empty-state {
-      color: var(--muted);
-      padding: 30px;
-      border-radius: 12px;
-      border: 1px dashed var(--border);
-      text-align: center;
+      gap: 4px;
       font-size: 0.9rem;
-    }
-    #proposal-feedback {
-      min-height: 24px;
-      padding-top: 6px;
       color: var(--muted);
     }
-    @media (max-width: 960px) {
-      .tab-grid { grid-template-columns: 1fr; }
+    .section-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .hero-search input {
+        width: 100%;
+      }
     }
   </style>
 </head>
 <body>
   <div class="page">
-    <div class="topbar">
-      <h1>Campaign Quest Hub</h1>
-      <span id="campaign-pill" class="pill">Preparing quest log...</span>
-      <span class="spacer"></span>
-      <a class="btn" id="back-to-combat" href="campaign_combat.html">Back to Combat</a>
-      <a class="btn secondary" id="back-to-campaign" href="campaign_view.html">Campaign Page</a>
-    </div>
-
-    <div class="panel hero-panel">
+    <header class="hero">
       <div>
-        <div class="muted">Quest Hub</div>
-        <h2 id="hero-title">Campaign Quest Hub</h2>
-        <p id="hero-desc" class="muted">Track group missions, personal goals, and proposals in one place.</p>
+        <h1 id="page-title">Campaign Quest Hub</h1>
+        <p id="page-subtitle" class="muted">Manage every quest, objective, and theory for this campaign.</p>
       </div>
-      <div class="row" style="gap:10px;flex-wrap:wrap;">
-        <button class="btn" type="button" id="create-quest-btn">Create Personal Quest</button>
-        <button class="btn ghost" type="button" id="create-quest-admin-btn" style="display:none;">Create GM Quest</button>
-        <button class="btn secondary" type="button" id="sync-btn">Refresh Overview</button>
-      </div>
-    </div>
-
-    <div class="panel filters" id="filter-panel">
-      <div class="row" style="gap:12px;flex-wrap:wrap;">
-        <label>
-          Search quests
-          <input type="search" id="quest-search" placeholder="Filter by name, tag, objective..." />
+      <div class="hero-actions">
+        <label class="hero-search muted">
+          <span>Search</span>
+          <input id="search-input" type="search" placeholder="Title, tags, assigned, faction..." autocomplete="off" />
         </label>
-        <label>
-          Filter status
-          <select id="quest-status-filter">
-            <option value="">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="succeeded">Succeeded</option>
-            <option value="failed">Failed</option>
-            <option value="archived">Archived</option>
-          </select>
-        </label>
+        <button class="btn ghost" id="toggle-hidden">Show Hidden</button>
+        <button class="btn primary" id="open-create-btn" style="display:none;">New Quest</button>
       </div>
-      <div class="tabs" id="quest-tabs"></div>
+    </header>
+    <section class="filters-row">
+      <select id="filter-type">
+        <option value="">Type</option>
+      </select>
+      <select id="filter-status">
+        <option value="">Status</option>
+      </select>
+      <select id="filter-assigned">
+        <option value="">Assigned</option>
+      </select>
+      <select id="filter-faction">
+        <option value="">Faction</option>
+      </select>
+      <select id="filter-session">
+        <option value="">Session</option>
+      </select>
+    </section>
+    <div class="layout">
+      <aside class="panel list-panel">
+        <div class="list-header">
+          <strong>Quest List</strong>
+          <span class="muted" id="quest-count">0 quests</span>
+        </div>
+        <div id="quest-list" class="quest-list"></div>
+      </aside>
+      <main class="panel detail-panel">
+        <div id="quest-detail" class="detail-empty">
+          Select a quest from the list to inspect its objectives, notes, and theories.
+        </div>
+      </main>
     </div>
-
-    <div class="panel quest-create-panel" id="quest-create-section">
+    <section id="create-panel" class="panel create-panel hidden">
       <div class="row" style="justify-content:space-between;align-items:center;">
-        <strong>Create Personal Quest</strong>
-        <span class="muted">Private until you propose it to the party.</span>
+        <strong>Create Quest</strong>
+        <button class="btn secondary" id="close-create">Close</button>
       </div>
-      <form id="quest-create-form" class="quest-create-form">
-        <label>
-          Quest name
-          <input type="text" id="quest-name" maxlength="120" placeholder="Name of the mission" />
-        </label>
-        <label>
-          Description
-          <textarea id="quest-description" rows="3" placeholder="Describe the goal or narrative hook"></textarea>
-        </label>
-        <label>
-          Objectives
-          <textarea id="quest-objectives" rows="3" placeholder="One objective per line"></textarea>
-        </label>
-        <label>
-          Tags
-          <input type="text" id="quest-tags" placeholder="Separate tags with commas" />
-        </label>
-        <div class="quest-gm-options" id="quest-gm-options">
-          <div class="row" style="gap:12px;flex-wrap:wrap;">
-            <label>
-              Quest type
-              <select id="quest-type">
-                <option value="personal">Personal</option>
-                <option value="group">Group</option>
-              </select>
-            </label>
-            <label>
-              Visibility
-              <select id="quest-visibility">
-                <option value="personal.private">Personal private</option>
-                <option value="personal.visible">Personal visible</option>
-                <option value="group.visible">Group visible</option>
-              </select>
-            </label>
-            <label>
-              Status
-              <select id="quest-status-select">
-                <option value="pending">Pending</option>
-                <option value="succeeded">Succeeded</option>
-                <option value="failed">Failed</option>
-              </select>
-            </label>
-          </div>
+      <form id="create-form">
+        <div class="form-grid">
           <label>
-            Assigned to
-            <input type="text" id="quest-assigned-to" placeholder="Comma separated (party, username)" />
+            Title
+            <input name="title" required />
+          </label>
+          <label>
+            Subtitle
+            <input name="subtitle" />
+          </label>
+          <label>
+            Quest Kind
+            <select name="questKind">
+              <option value="main">Main Quest</option>
+              <option value="side">Side Quest</option>
+              <option value="personal">Personal Quest</option>
+              <option value="faction">Faction Quest</option>
+              <option value="secret">Secret Quest</option>
+              <option value="time_limited">Time-Limited Quest</option>
+              <option value="dynamic">Dynamic/Event Quest</option>
+            </select>
+          </label>
+          <label>
+            Scope
+            <select name="scope">
+              <option value="group">Group</option>
+              <option value="personal">Personal</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select name="status">
+              <option value="pending">Pending</option>
+              <option value="active">Active</option>
+              <option value="on_hold">On Hold</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="abandoned">Abandoned</option>
+              <option value="hidden">Hidden</option>
+            </select>
+          </label>
+          <label>
+            Visibility
+            <select name="visibility">
+              <option value="gm_only">GM Only</option>
+              <option value="party_visible">Party Visible</option>
+              <option value="character_specific">Character Specific</option>
+              <option value="role_restricted">Role Restricted</option>
+            </select>
+          </label>
+          <label>
+            Priority
+            <select name="priority">
+              <option value="main">Main</option>
+              <option value="secondary">Secondary</option>
+              <option value="tertiary">Tertiary</option>
+            </select>
+          </label>
+          <label>
+            Assigned Characters (comma-separated)
+            <input name="assignedTo" placeholder="player1, player2" />
+          </label>
+          <label>
+            Tags (comma separated)
+            <input name="tags" placeholder="exploration, mystery" />
+          </label>
+          <label>
+            Faction
+            <input name="faction" />
+          </label>
+          <label>
+            Session
+            <input name="session" />
           </label>
         </div>
-        <div class="form-actions">
-          <button class="btn" type="submit" id="quest-create-submit">Save quest</button>
-          <span id="quest-create-feedback" class="muted"></span>
+        <label>
+          Description
+          <textarea name="description"></textarea>
+        </label>
+        <label>
+          Objectives (one per line)
+          <textarea name="objectives" placeholder="Objective one\nObjective two"></textarea>
+        </label>
+        <div class="row">
+          <label style="flex-direction:row;align-items:center;gap:6px;">
+            <input type="checkbox" name="tracked" />
+            Track for me
+          </label>
+          <label style="flex-direction:row;align-items:center;gap:6px;">
+            <input type="checkbox" name="pinned" />
+            Pin to HUD
+          </label>
+        </div>
+        <div class="row" style="justify-content:flex-end;">
+          <button class="btn primary" type="submit">Create Quest</button>
+          <span id="create-feedback" class="muted"></span>
         </div>
       </form>
-    </div>
-
-    <div class="panel quests-panel">
-      <div class="tab-grid">
-        <div class="tab-content" id="tab-content">
-          <p class="muted">Loading quests...</p>
-        </div>
-        <div class="detail-panel" id="quest-detail-panel">
-          <p class="muted">Select a quest or proposal to see the full snapshot.</p>
-        </div>
-      </div>
-      <div id="proposal-feedback" aria-live="polite" class="muted"></div>
-    </div>
+    </section>
   </div>
-
   <script>
     const params = new URLSearchParams(location.search);
-    const CAMPAIGN_ID = (params.get('cid') || '').trim();
-    const heroTitle = document.getElementById('hero-title');
-    const heroDesc = document.getElementById('hero-desc');
-    const heroChip = document.getElementById('campaign-pill');
-    const questTabs = document.getElementById('quest-tabs');
-    const tabContent = document.getElementById('tab-content');
-    const detailPanel = document.getElementById('quest-detail-panel');
-    const backCombat = document.getElementById('back-to-combat');
-    const backCampaign = document.getElementById('back-to-campaign');
-    const searchInput = document.getElementById('quest-search');
-    const statusSelect = document.getElementById('quest-status-filter');
-    const createQuestBtn = document.getElementById('create-quest-btn');
-    const syncBtn = document.getElementById('sync-btn');
-    const questCreateSection = document.getElementById('quest-create-section');
-    const questCreateForm = document.getElementById('quest-create-form');
-    const questCreateFeedback = document.getElementById('quest-create-feedback');
-    const questNameInput = document.getElementById('quest-name');
-    const questDescriptionInput = document.getElementById('quest-description');
-    const questObjectivesInput = document.getElementById('quest-objectives');
-    const questTagsInput = document.getElementById('quest-tags');
-    const createQuestAdminBtn = document.getElementById('create-quest-admin-btn');
-    const questGMOptions = document.getElementById('quest-gm-options');
-    const questTypeSelect = document.getElementById('quest-type');
-    const questVisibilitySelect = document.getElementById('quest-visibility');
-    const questAssignedInput = document.getElementById('quest-assigned-to');
-    const questStatusSelect = document.getElementById('quest-status-select');
-    const proposalFeedback = document.getElementById('proposal-feedback');
+    const CID = (params.get('cid') || '').trim();
 
-    if (CAMPAIGN_ID) {
-      heroChip.textContent = `Campaign ID: ${CAMPAIGN_ID}`;
-      backCombat.href = `campaign_combat.html?cid=${encodeURIComponent(CAMPAIGN_ID)}`;
-      backCampaign.href = `campaign_view.html?cid=${encodeURIComponent(CAMPAIGN_ID)}`;
-    }
+    const searchInput = document.getElementById('search-input');
+    const filterTypeEl = document.getElementById('filter-type');
+    const filterStatusEl = document.getElementById('filter-status');
+    const filterAssignedEl = document.getElementById('filter-assigned');
+    const filterFactionEl = document.getElementById('filter-faction');
+    const filterSessionEl = document.getElementById('filter-session');
+    const toggleHiddenBtn = document.getElementById('toggle-hidden');
+    const questListEl = document.getElementById('quest-list');
+    const questDetailEl = document.getElementById('quest-detail');
+    const questCountEl = document.getElementById('quest-count');
+    const openCreateBtn = document.getElementById('open-create-btn');
+    const createPanel = document.getElementById('create-panel');
+    const closeCreateBtn = document.getElementById('close-create');
+    const createForm = document.getElementById('create-form');
+    const createFeedback = document.getElementById('create-feedback');
+    const pageStatus = document.getElementById('page-subtitle');
 
-    const TAB_CONFIG = [
-      { id: 'group', label: 'Group Quests', helper: 'Shared, visible to the party' },
-      { id: 'personal', label: 'My Personal Quests', helper: 'Private goals before sharing' },
-      { id: 'proposals', label: 'Proposals', helper: 'Personal quests pending approval' },
-      { id: 'archive', label: 'Archive', helper: 'Completed or retired missions' },
+    const OBJECTIVE_STATUS_OPTIONS = [
+      { value: 'not_started', label: 'Not started' },
+      { value: 'ongoing', label: 'Ongoing' },
+      { value: 'succeeded', label: 'Succeeded' },
+      { value: 'failed', label: 'Failed' },
     ];
 
-    const EMPTY_QUEST_DATA = {
-      group: [],
-      personal: [],
-      proposals: [],
-      archive: [],
+    const QUEST_STATUS_LABELS = {
+      pending: 'Pending',
+      active: 'Active',
+      on_hold: 'On Hold',
+      completed: 'Completed',
+      failed: 'Failed',
+      abandoned: 'Abandoned',
+      hidden: 'Hidden',
+    };
+
+    const QUEST_KIND_LABELS = {
+      main: 'Main Quest',
+      side: 'Side Quest',
+      personal: 'Personal Quest',
+      faction: 'Faction Quest',
+      secret: 'Secret Quest',
+      time_limited: 'Time-Limited Quest',
+      dynamic: 'Dynamic/Event Quest',
     };
 
     const state = {
-      activeTab: 'group',
-      search: '',
-      statusFilter: '',
-      preview: null,
-      data: { ...EMPTY_QUEST_DATA },
-      error: '',
       user: null,
-      campaignOwner: '',
-    };
-    let pendingPreviewQuestId = null;
-    const questFormContext = { mode: 'personal', questId: null };
-
-    const PROPOSAL_OPEN_STATUSES = new Set(['open', 'changes_requested']);
-    const proposalIsActive = (proposal = {}) =>
-      PROPOSAL_OPEN_STATUSES.has(((proposal.status || 'open').toString() || 'open').toLowerCase());
-    const countActiveProposals = () => (state.data.proposals || []).filter(proposalIsActive).length;
-
-    const normalizeQuestPayload = (payload = {}) => ({
-      group: Array.isArray(payload.group) ? payload.group : [],
-      personal: Array.isArray(payload.personal) ? payload.personal : [],
-      proposals: Array.isArray(payload.proposals) ? payload.proposals : [],
-      archive: Array.isArray(payload.archive) ? payload.archive : [],
-    });
-
-    const OBJECTIVE_STATE_ORDER = ['todo', 'succeeded', 'failed'];
-    const OBJECTIVE_SYMBOLS = {
-      todo: '○',
-      succeeded: '✔',
-      failed: '✕',
-    };
-    const VALID_VISIBILITY = new Set(['personal.private', 'personal.visible', 'group.visible', 'group.hidden']);
-
-    const findQuestInData = (questId) => {
-      if (!questId) return null;
-      for (const tab of ['group', 'personal', 'archive']) {
-        const list = state.data?.[tab] || [];
-        const match = list.find((entry) => entry?.id === questId);
-        if (match) return { tab, item: match };
-      }
-      return null;
+      campaign: null,
+      quests: [],
+      filters: {
+        search: '',
+        type: '',
+        status: '',
+        assigned: '',
+        faction: '',
+        session: '',
+        showHidden: false,
+      },
+      activeQuest: null,
+      isGm: false,
     };
 
-    const queueQuestPreviewRestore = (questId) => {
-      if (questId) pendingPreviewQuestId = questId;
-    };
-
-    const restorePendingPreview = () => {
-      if (!pendingPreviewQuestId) return;
-      const found = findQuestInData(pendingPreviewQuestId);
-      if (!found) {
-        pendingPreviewQuestId = null;
-        return;
-      }
-      state.activeTab = found.tab;
-      state.preview = { item: { id: pendingPreviewQuestId }, type: 'quest' };
-      pendingPreviewQuestId = null;
-    };
-
-    const nextObjectiveState = (current = 'todo') => {
-      const idx = OBJECTIVE_STATE_ORDER.indexOf((current || '').toLowerCase());
-      const next = OBJECTIVE_STATE_ORDER[(idx < 0 ? 0 : idx + 1) % OBJECTIVE_STATE_ORDER.length];
-      return next;
-    };
-
-    const parseAssignedList = (raw = '') =>
-      (raw || '')
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-
-    const normalizeVisibilityForType = (type = 'group', value = '') => {
-      const normalized = (value || '').trim().toLowerCase();
-      if (VALID_VISIBILITY.has(normalized)) return normalized;
-      if ((type || '').toLowerCase() === 'personal') return 'personal.private';
-      return 'group.visible';
-    };
-    const parseObjectivesFromLines = (text = "") => {
-      return (text || "")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((label, idx) => ({ label, state: "todo", order: idx + 1 }));
-    };
-
-    const showQuestCreateFeedback = (message = "", isError = false) => {
-      if (!questCreateFeedback) return;
-      questCreateFeedback.textContent = message;
-      questCreateFeedback.style.color = !message ? "var(--muted)" : isError ? "#f0826f" : "#7dd19c";
-    };
-
-    const resetQuestCreateForm = () => {
-      if (questNameInput) questNameInput.value = "";
-      if (questDescriptionInput) questDescriptionInput.value = "";
-      if (questObjectivesInput) questObjectivesInput.value = "";
-      if (questTagsInput) questTagsInput.value = "";
-      if (questAssignedInput) questAssignedInput.value = "";
-    };
-
-    const resetCreateButtonText = () => {
-      if (createQuestBtn) createQuestBtn.textContent = "Create Personal Quest";
-      if (createQuestAdminBtn) createQuestAdminBtn.textContent = "Create GM Quest";
-    };
-
-    const applyCreateButtonTextForMode = (mode) => {
-      if (mode === "personal") {
-        if (createQuestBtn) createQuestBtn.textContent = "Cancel";
-        if (createQuestAdminBtn) createQuestAdminBtn.textContent = "Create GM Quest";
-        return;
-      }
-      if (mode === "gm") {
-        if (createQuestBtn) createQuestBtn.textContent = "Create Personal Quest";
-        if (createQuestAdminBtn) createQuestAdminBtn.textContent = "Cancel GM Quest";
-        return;
-      }
-      if (mode === "edit") {
-        if (createQuestBtn) createQuestBtn.textContent = "Cancel";
-        if (createQuestAdminBtn) createQuestAdminBtn.textContent = "Cancel Edit";
-      }
-    };
-
-    const closeQuestCreatePanel = () => {
-      if (!questCreateSection) return;
-      questCreateSection.classList.remove("visible");
-      questFormContext.mode = "personal";
-      questFormContext.questId = null;
-      questGMOptions?.classList.remove("visible");
-      showQuestCreateFeedback("");
-      resetCreateButtonText();
-    };
-
-    const updateGMControls = () => {
-      const isGM = userIsGM();
-      if (createQuestAdminBtn) {
-        createQuestAdminBtn.style.display = isGM ? "" : "none";
-      }
-    };
-
-    const openQuestForm = (mode, quest = null) => {
-      if (!questCreateSection) return;
-      const showOptions = mode !== "personal";
-      if (showOptions && !userIsGM()) {
-        showProposalFeedback("Only GMs can access the advanced form.", true);
-        return;
-      }
-      questFormContext.mode = mode;
-      questFormContext.questId = quest?.id || null;
-      questCreateSection.classList.add("visible");
-      questGMOptions?.classList.toggle("visible", showOptions);
-      if (mode === "personal") {
-        resetQuestCreateForm();
-        if (questTypeSelect) questTypeSelect.value = "personal";
-        if (questVisibilitySelect) questVisibilitySelect.value = "personal.private";
-        if (questStatusSelect) questStatusSelect.value = "pending";
-        if (questAssignedInput) questAssignedInput.value = state.user?.username || "";
-      } else if (mode === "gm") {
-        resetQuestCreateForm();
-        if (questTypeSelect) questTypeSelect.value = "group";
-        if (questVisibilitySelect) questVisibilitySelect.value = "group.visible";
-        if (questStatusSelect) questStatusSelect.value = "pending";
-        if (questAssignedInput) questAssignedInput.value = "";
-      } else if (mode === "edit" && quest) {
-        if (questNameInput) questNameInput.value = quest.name || "";
-        if (questDescriptionInput) questDescriptionInput.value = quest.description || "";
-        if (questTagsInput) questTagsInput.value = (quest.tags || []).join(", ");
-        if (questAssignedInput) {
-          const assigned = Array.isArray(quest.assignedTo)
-            ? quest.assignedTo
-            : quest.assignedTo
-              ? [quest.assignedTo]
-              : [];
-          questAssignedInput.value = assigned.join(", ");
-        }
-        const qType = (quest.type || "group").toLowerCase();
-        if (questTypeSelect) questTypeSelect.value = qType;
-        if (questVisibilitySelect) {
-          questVisibilitySelect.value = quest.visibility || normalizeVisibilityForType(qType, "");
-        }
-        if (questStatusSelect) questStatusSelect.value = quest.status || "pending";
-        if (questObjectivesInput) questObjectivesInput.value = "";
-      }
-      applyCreateButtonTextForMode(mode);
-      showQuestCreateFeedback("");
-    };
-
-    if (questTypeSelect) {
-      questTypeSelect.addEventListener("change", () => {
-        if (!questVisibilitySelect) return;
-        const type = (questTypeSelect.value || "group").toLowerCase();
-        questVisibilitySelect.value = normalizeVisibilityForType(type, questVisibilitySelect.value);
-      });
+    function escapeHtml(val) {
+      if (!val) return '';
+      return String(val)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+        .replace(/\n/g, '<br>');
     }
 
-    const showProposalFeedback = (message = "", isError = false) => {
-      if (!proposalFeedback) return;
-      proposalFeedback.textContent = message;
-      proposalFeedback.style.color = !message ? "var(--muted)" : isError ? "#f0826f" : "#7dd19c";
-    };
+    function canUpdateObjectives(quest) {
+      if (state.isGm) return true;
+      const visibility = (quest.visibility || '').toLowerCase();
+      if (visibility === 'gm_only') return false;
+      const userLower = (state.user?.username || '').toLowerCase();
+      const assigned = (quest.assignedTo || []).map((name) => (name || '').toLowerCase());
+      const creator = (quest.createdBy || '').toLowerCase();
+      return assigned.includes(userLower) || creator === userLower;
+    }
 
-    const userIsGM = () => {
-      if (!state.user) return false;
-      const role = (state.user.role || "").toLowerCase();
-      if (role === "admin") return true;
-      const owner = (state.campaignOwner || "").toLowerCase();
-      const username = (state.user.username || "").toLowerCase();
-      return owner && username && owner === username;
-    };
-
-    const getFriendlyVisibility = (value) => {
-      if (!value) return 'Visibility: Unknown';
-      if (value.startsWith('group')) return 'Group';
-      if (value.startsWith('personal')) return 'Personal';
-      return value;
-    };
-
-    const filterQuests = (list) => {
-      const search = (state.search || '').trim().toLowerCase();
-      const statusFilter = (state.statusFilter || '').trim().toLowerCase();
-      return (list || []).filter((quest) => {
-        const normalizedStatus = (quest.status || '').toLowerCase();
-        const statusMatches = !statusFilter || normalizedStatus === statusFilter;
-        const textFields = [quest.name, quest.description, quest.createdBy].filter(Boolean);
-        const searchMatches =
-          !search ||
-          textFields.some((field) => field.toLowerCase().includes(search)) ||
-          (quest.tags || []).some((tag) => String(tag).toLowerCase().includes(search));
-        return statusMatches && searchMatches;
+    function getFilteredQuests() {
+      const list = [];
+      (state.quests || []).forEach((quest) => {
+        if (!state.filters.showHidden && (quest.status || '').toLowerCase() === 'hidden') {
+          return;
+        }
+        if (state.filters.type && quest.quest_kind !== state.filters.type) {
+          return;
+        }
+        if (state.filters.status && quest.status !== state.filters.status) {
+          return;
+        }
+        if (state.filters.assigned) {
+          const assigned = (quest.assignedTo || []).map((value) => (value || '').toLowerCase());
+          if (!assigned.includes(state.filters.assigned.toLowerCase())) return;
+        }
+        if (state.filters.faction) {
+          if ((quest.faction || '').toLowerCase() !== state.filters.faction.toLowerCase()) return;
+        }
+        if (state.filters.session) {
+          if ((quest.session || '').toLowerCase() !== state.filters.session.toLowerCase()) return;
+        }
+        const search = (state.filters.search || '').toLowerCase();
+        if (search) {
+          const haystack = [
+            quest.title,
+            quest.subtitle,
+            quest.description,
+            ...(quest.tags || []),
+            ...(quest.assignedTo || []),
+            quest.faction,
+            quest.session,
+          ]
+            .filter(Boolean)
+            .map((value) => value.toLowerCase())
+            .join(' ');
+          if (!haystack.includes(search)) return;
+        }
+        list.push(quest);
       });
-    };
+      return list;
+    }
 
-    const filterProposals = (list) => {
-      const normalized = (list || []).filter((proposal) => proposalIsActive(proposal));
-      const search = (state.search || '').trim().toLowerCase();
-      if (!search) return normalized;
-      return normalized.filter((proposal) => {
-        const snapshot = proposal.snapshot || {};
-        const textFields = [snapshot.name, snapshot.description, proposal.authorId, proposal.sourceQuestId]
-          .filter(Boolean);
-        return textFields.some((field) => String(field).toLowerCase().includes(search));
+    function renderFilters() {
+      const types = new Set(['main']);
+      const statuses = new Set(['pending']);
+      const assigned = new Set();
+      const factions = new Set();
+      const sessions = new Set();
+      state.quests.forEach((quest) => {
+        if (quest.quest_kind) types.add(quest.quest_kind);
+        if (quest.status) statuses.add(quest.status);
+        (quest.assignedTo || []).forEach((name) => {
+          if (name) assigned.add(name);
+        });
+        if (quest.faction) factions.add(quest.faction);
+        if (quest.session) sessions.add(quest.session);
       });
-    };
-
-    const setActivePreview = (item, type) => {
-      state.preview = { item, type };
-      renderQuestDetail();
-    };
-
-    const renderQuestDetail = () => {
-      if (!state.preview) {
-        detailPanel.innerHTML = state.error
-          ? `<p class="muted">Unable to load quests: ${state.error}</p>`
-          : '<p class="muted">Select a quest or proposal to see its timeline.</p>';
-        return;
+      function pushOptions(el, values) {
+        const current = el.value;
+        el.innerHTML = `<option value="">${el === filterTypeEl ? 'Type' : el === filterStatusEl ? 'Status' : el === filterAssignedEl ? 'Assigned' : el === filterFactionEl ? 'Faction' : 'Session'}</option>`;
+        Array.from(values)
+          .sort()
+          .forEach((value) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = el === filterStatusEl ? QUEST_STATUS_LABELS[value] || value : value;
+            el.appendChild(option);
+          });
+        if (current) el.value = current;
       }
-      if (state.preview.type === 'proposal') {
-        const proposal = state.preview.item;
-        const votes = Array.isArray(proposal.votes) ? proposal.votes : [];
-        const agree = votes.filter((v) => (v.vote || '').toLowerCase() === 'agree').length;
-        const disagree = votes.filter((v) => (v.vote || '').toLowerCase() === 'disagree').length;
-        const snapshot = proposal.snapshot || {};
-        const review = proposal.review || {};
-        const reviewer = review.by || 'GM';
-        const decisionLabel = review.action ? `${review.action.replace('_', ' ')} by ${reviewer}` : 'Pending review';
-        const decisionMessage = review.message ? ` · ${review.message}` : '';
-        const statusValue = (proposal.status || 'open').toLowerCase();
-        const statusLabel = statusValue.replace(/_/g, ' ');
-        const prettyStatus = statusLabel
-          .split(' ')
-          .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : ''))
-          .join(' ');
-        const isOpenProposal = PROPOSAL_OPEN_STATUSES.has(statusValue);
-        const isGM = userIsGM();
-        const closedNotice = isOpenProposal ? '' : '<p class="muted">This proposal is no longer accepting votes.</p>';
-        detailPanel.innerHTML = `
-          <div class="muted">Proposal snapshot</div>
-          <h3>${snapshot.name || 'Proposal'}</h3>
-          <p class="muted">${snapshot.description || ''}</p>
-          <div>
-            <div class="objective-row"><span class="objective-icon succeeded">✔</span> Proposed objectives</div>
-            <ul style="margin:0;padding-left:18px;">
-              ${Array.isArray(snapshot.objectives)
-                ? snapshot.objectives.map((obj) => `<li class="muted">${obj.label || ''}</li>`).join('')
-                : ''}
-            </ul>
-          </div>
-          <div class="proposal-meta">
-            <span class="vote-pill agree">Agree ${agree}</span>
-            <span class="vote-pill disagree">Disagree ${disagree}</span>
-            <span class="muted">Status: ${prettyStatus}</span>
-          </div>
-          ${closedNotice}
-          <div class="muted">Decision: ${decisionLabel}${decisionMessage}</div>
-          <div class="votes-list">
-            ${votes
-              .map(
-                (vote) =>
-                  `<div class="muted"><strong>${vote.userId}</strong>: ${vote.vote}${vote.comment ? ` · ${vote.comment}` : ''}</div>`
-              )
-              .join('')}
-          </div>
-          <div class="quest-actions">
-            <button class="btn ghost" type="button" data-vote="agree" ${isOpenProposal ? '' : 'disabled'}>Agree</button>
-            <button class="btn ghost" type="button" data-vote="disagree" ${isOpenProposal ? '' : 'disabled'}>Disagree</button>
-            ${
-              isGM && isOpenProposal
-                ? '<button class="btn ghost" type="button" data-review="approve">Approve</button>'
-                : ''
-            }
-            ${
-              isGM && isOpenProposal
-                ? '<button class="btn ghost" type="button" data-review="reject">Reject</button>'
-                : ''
-            }
-            ${
-              isGM && isOpenProposal
-                ? '<button class="btn ghost" type="button" data-review="request_changes">Request changes</button>'
-                : ''
-            }
-          </div>
-        `;
-        detailPanel.querySelectorAll('[data-vote]').forEach((button) => {
-          button.addEventListener('click', () => voteOnProposal(proposal, button.dataset.vote));
-        });
-        detailPanel.querySelectorAll('[data-review]').forEach((button) => {
-          button.addEventListener('click', () => gmReviewProposal(proposal, button.dataset.review));
-        });
-        return;
-      }
-      const quest = state.preview.item;
-      const done = (quest.objectives || []).filter((obj) => obj.state === 'succeeded').length;
-      const total = (quest.objectives || []).length;
-      detailPanel.innerHTML = `
-        <div class="muted">${getFriendlyVisibility(quest.visibility)}</div>
-        <h3>${quest.name}</h3>
-        <p class="muted">${quest.description}</p>
-        <div class="objective-progress">
-          <span>${done} / ${total} objectives done</span>
-          <span>Created by ${quest.createdBy || 'Unknown'}</span>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          ${(quest.objectives || []).map((obj) => `
-            <div class="objective-row">
-              <span class="objective-icon ${obj.state}">${obj.state === 'todo' ? '○' : obj.state === 'succeeded' ? '✔' : '✕'}</span>
-              <span class="muted">${obj.label}</span>
-            </div>`).join('')}
-        </div>
-        <div class="quest-actions">
-          <button class="btn ghost" disabled>Mark ${quest.status}</button>
-          <button class="btn ghost" disabled>Assign / Reassign</button>
-          ${state.activeTab === 'personal' ? '<button class="btn ghost" disabled>Propose to Group</button>' : ''}
-        </div>
-      `;
-    };
+      pushOptions(filterTypeEl, types);
+      pushOptions(filterStatusEl, statuses);
+      pushOptions(filterAssignedEl, assigned);
+      pushOptions(filterFactionEl, factions);
+      pushOptions(filterSessionEl, sessions);
+    }
 
-    const renderQuestCardList = (list, tabId) => {
-      const filtered = filterQuests(list);
-      tabContent.innerHTML = '';
-      if (!filtered.length) {
-        tabContent.innerHTML = '<div class="empty-state">No quests match the current filters.</div>';
-        state.preview = null;
-        renderQuestDetail();
-        return;
-      }
+    function renderQuestList() {
+      questListEl.innerHTML = '';
+      const filtered = getFilteredQuests();
+      questCountEl.textContent = `${filtered.length} quest${filtered.length === 1 ? '' : 's'}`;
       filtered.forEach((quest) => {
         const card = document.createElement('div');
         card.className = 'quest-card';
-        const objectives = Array.isArray(quest.objectives) ? quest.objectives : [];
-        const completed = objectives.filter((obj) => obj.state === 'succeeded').length;
-        const total = objectives.length;
-        const statusValue = (quest.status || 'pending').toLowerCase();
-        const assigned = Array.isArray(quest.assignedTo)
-          ? quest.assignedTo.join(', ')
-          : quest.assignedTo || '';
-        const assignedLabel = assigned ? `Assigned to ${assigned}` : 'Unassigned';
+        if (state.activeQuest && state.activeQuest.id === quest.id) {
+          card.classList.add('active');
+        }
         card.innerHTML = `
-          <div class="quest-card-header">
-            <span class="status-pill ${statusValue}">${statusValue}</span>
-            <span class="visibility-badge">${getFriendlyVisibility(quest.visibility)}</span>
+          <div class="titles">
+            <h3>${escapeHtml(quest.title || 'Untitled Quest')}</h3>
+            <span class="status-pill ${quest.status || 'pending'}">${QUEST_STATUS_LABELS[quest.status] || quest.status || 'Pending'}</span>
           </div>
-          <h3 style="margin:0;">${quest.name || 'Quest'}</h3>
-          <p class="quest-description">${quest.description || ''}</p>
-          <div class="objective-progress">
-            <span>${completed} / ${total} objectives</span>
-            <span>${assignedLabel}</span>
+          <div class="badges">
+            <span class="badge">${QUEST_KIND_LABELS[quest.quest_kind] || 'Main Quest'}</span>
+            <span class="badge">${(quest.priority || 'Main').replace('_', ' ')}</span>
           </div>
-          <div class="quest-actions">
-            <button class="btn ghost" type="button" data-action="preview">Preview</button>
-            ${tabId === 'personal' ? '<button class="btn ghost" type="button" data-action="propose">Propose to Group</button>' : ''}
-          </div>
+          <div class="muted">${(quest.assignedTo || []).join(', ') || 'Unassigned'}</div>
         `;
-        card.addEventListener('click', () => setActivePreview(quest, 'quest'));
-        card.querySelectorAll('.quest-actions button').forEach((btn) => {
-          btn.addEventListener('click', (event) => {
-            event.stopPropagation();
-            if (btn.dataset.action === 'preview') {
-              setActivePreview(quest, 'quest');
-              return;
-            }
-            if (btn.dataset.action === 'propose') {
-              proposeQuest(quest);
-            }
-          });
+        card.addEventListener('click', () => {
+          state.activeQuest = quest;
+          renderQuestDetail();
+          document.querySelectorAll('.quest-card').forEach((el) => el.classList.remove('active'));
+          card.classList.add('active');
         });
-        tabContent.appendChild(card);
+        questListEl.appendChild(card);
       });
-      setActivePreview(filtered[0], 'quest');
-    };
+      if (!filtered.length) {
+        questListEl.innerHTML = '<div class="muted">No quests match the current filters.</div>';
+      }
+    }
 
-    const renderProposalList = () => {
-      const proposals = filterProposals(state.data.proposals);
-      tabContent.innerHTML = '';
-      if (!proposals.length) {
-        tabContent.innerHTML = '<div class="empty-state">No open proposals at the moment.</div>';
-        state.preview = null;
-        renderQuestDetail();
+    function renderQuestDetail() {
+      const quest = state.activeQuest;
+      if (!quest) {
+        questDetailEl.innerHTML = '<div class="detail-empty">Select a quest to inspect its objectives, notes, and theories.</div>';
         return;
       }
-      proposals.forEach((proposal) => {
-        const card = document.createElement('div');
-        card.className = 'proposal-card';
-        const votes = Array.isArray(proposal.votes) ? proposal.votes : [];
-        const agree = votes.filter((v) => (v.vote || '').toLowerCase() === 'agree').length;
-        const disagree = votes.filter((v) => (v.vote || '').toLowerCase() === 'disagree').length;
-        const snapshot = proposal.snapshot || {};
-        const statusValue = (proposal.status || 'open').toLowerCase();
-        const statusLabel = statusValue.replace(/_/g, ' ');
-        const statusClass = statusValue.replace(/_/g, '-');
-        card.innerHTML = `
-          <div class="quest-card-header">
-            <span class="status-pill ${statusClass}">${statusLabel}</span>
-            <span class="visibility-badge">Proposal</span>
+      const header = `
+        <div class="detail-header">
+          <div>
+            <h2>${escapeHtml(quest.title || 'Untitled Quest')}</h2>
+            ${quest.subtitle ? `<div class="detail-subtitle">${escapeHtml(quest.subtitle)}</div>` : ''}
           </div>
-          <h3 style="margin:0;">${snapshot.name || 'Proposal'}</h3>
-          <p class="muted">${snapshot.description || ''}</p>
-          <div class="proposal-meta">
-            <span class="vote-pill agree">Agree ${agree}</span>
-            <span class="vote-pill disagree">Disagree ${disagree}</span>
-            <span class="muted">Source: ${proposal.authorId}</span>
+          <div class="badges">
+            <span class="badge">${QUEST_KIND_LABELS[quest.quest_kind] || 'Main Quest'}</span>
+            <span class="badge">${(quest.priority || 'Main').replace('_', ' ')}</span>
+            <span class="badge">${quest.faction || 'No faction'}</span>
           </div>
-          <div class="quest-actions">
-            <button class="btn ghost" type="button">Agree</button>
-            <button class="btn ghost" type="button">Disagree</button>
+        </div>
+      `;
+      const meta = `
+        <div class="row">
+          <span class="muted">Status: ${QUEST_STATUS_LABELS[quest.status] || quest.status || 'Pending'}</span>
+          <span class="muted">Visibility: ${(quest.visibility || 'party_visible').replace('_', ' ')}</span>
+          <span class="muted">Assigned: ${(quest.assignedTo || []).join(', ') || 'Unassigned'}</span>
+          <span class="muted">Session: ${quest.session || 'N/A'}</span>
+          <span class="muted">Tracked by you: ${isTracked(quest) ? 'Yes' : 'No'}</span>
+        </div>
+      `;
+      const description = `
+        <div class="detail-section">
+          <strong>Description</strong>
+          <div>${escapeHtml(quest.description)}</div>
+        </div>
+      `;
+      const objectives = (quest.objectives || []).sort((a, b) => (a.order || 0) - (b.order || 0));
+      const objectivesHtml = objectives.length
+        ? objectives.map((obj) => {
+            const typeLabel = obj.type ? obj.type.replace('_', ' ') : 'mandatory';
+            const priorityLabel = (obj.priority || 'secondary').replace('_', ' ');
+            const select = canUpdateObjectives(quest) ? `<select data-objective-id="${obj.id}" class="objective-select">
+              ${OBJECTIVE_STATUS_OPTIONS.map((option) => `<option value="${option.value}" ${option.value === obj.status ? 'selected' : ''}>${option.label}</option>`).join('')}
+            </select>` : `<span class="muted">${OBJECTIVE_STATUS_OPTIONS.find((option) => option.value === obj.status)?.label || 'Not started'}</span>`;
+            return `
+              <div class="objective-card">
+                <div class="row">
+                  <strong>${escapeHtml(obj.title)}</strong>
+                  ${select}
+                </div>
+                <div class="objective-meta muted">
+                  <span>Type: ${typeLabel}</span>
+                  <span>Priority: ${priorityLabel}</span>
+                  <span>Status: ${obj.status}</span>
+                </div>
+                <div>${escapeHtml(obj.description)}</div>
+              </div>
+            `;
+          }).join('')
+        : '<div class="muted">No objectives yet.</div>';
+      const notesHtml = `
+        <div class="detail-section">
+          <div class="row" style="justify-content:space-between;">
+            <strong>Personal Notes</strong>
+            <button class="btn secondary" id="note-add-btn">Add Note</button>
           </div>
-        `;
-        card.addEventListener('click', () => setActivePreview(proposal, 'proposal'));
-        card.querySelectorAll('.quest-actions button').forEach((btn) => {
-          btn.addEventListener('click', (event) => event.stopPropagation());
+          <div id="notes-list" class="notes-grid">
+            ${(quest.personalNotes || []).map((note) => `
+              <div class="note-card">
+                <div class="row" style="justify-content:space-between;">
+                  <span><strong>${note.author}</strong></span>
+                  <span class="muted" style="font-size:0.8rem;">${note.createdAt}</span>
+                </div>
+                <div>${escapeHtml(note.text)}</div>
+              </div>`).join('') || '<div class="muted">No notes yet.</div>'}
+          </div>
+          <div id="note-form-container" class="hidden">
+            <textarea id="note-text" placeholder="Add a note..."></textarea>
+            <div class="section-actions">
+              <button class="btn primary" id="note-submit">Save note</button>
+              <button class="btn secondary" id="note-cancel">Cancel</button>
+            </div>
+          </div>
+        </div>
+      `;
+      const theoriesHtml = `
+        <div class="detail-section">
+          <div class="row" style="justify-content:space-between;">
+            <strong>Theories</strong>
+            <button class="btn secondary" id="theory-add-btn">Add Theory</button>
+          </div>
+          <div id="theories-list" class="notes-grid">
+            ${(quest.theories || []).map((entry) => `
+              <div class="note-card">
+                <div class="row" style="justify-content:space-between;">
+                  <span><strong>${entry.author}</strong></span>
+                  <span class="muted" style="font-size:0.8rem;">${entry.createdAt}</span>
+                </div>
+                <div>${escapeHtml(entry.text)}</div>
+              </div>`).join('') || '<div class="muted">No theories yet.</div>'}
+          </div>
+          <div id="theory-form-container" class="hidden">
+            <textarea id="theory-text" placeholder="Draft a theory..."></textarea>
+            <div class="section-actions">
+              <button class="btn primary" id="theory-submit">Save theory</button>
+              <button class="btn secondary" id="theory-cancel">Cancel</button>
+            </div>
+          </div>
+        </div>
+      `;
+      const trackingControls = `
+        <div class="detail-section">
+          <div class="section-actions">
+            <button class="btn ghost" id="track-btn">${isTracked(quest) ? 'Untrack' : 'Track'} Quest</button>
+            <button class="btn ghost" id="pin-btn">${isPinned(quest) ? 'Unpin' : 'Pin'} to HUD</button>
+            ${state.isGm ? `<select id="status-update">
+              ${Object.entries(QUEST_STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === quest.status ? 'selected' : ''}>${label}</option>`).join('')}
+            </select>` : ''}
+          </div>
+        </div>
+      `;
+      questDetailEl.innerHTML = header + meta + description + `
+        <div class="detail-section">
+          <strong>Objectives</strong>
+          <div class="objectives-grid">${objectivesHtml}</div>
+        </div>` + notesHtml + theoriesHtml + trackingControls;
+      attachObjectiveListeners();
+      attachNoteButtons();
+      attachTheoryButtons();
+      attachTrackingButtons();
+      attachStatusUpdate();
+    }
+
+    function isTracked(quest) {
+      const user = (state.user?.username || '').toLowerCase();
+      return (quest.tracked_by || []).map((name) => (name || '').toLowerCase()).includes(user);
+    }
+
+    function isPinned(quest) {
+      const user = (state.user?.username || '').toLowerCase();
+      return (quest.pinned_by || []).map((name) => (name || '').toLowerCase()).includes(user);
+    }
+
+    function attachObjectiveListeners() {
+      document.querySelectorAll('.objective-card select').forEach((select) => {
+        select.addEventListener('change', () => {
+          const objectiveId = select.dataset.objectiveId;
+          const questId = state.activeQuest?.id;
+          if (questId && objectiveId) {
+            updateObjectiveStatus(questId, objectiveId, select.value);
+          }
         });
-        tabContent.appendChild(card);
-      });
-      setActivePreview(proposals[0], 'proposal');
-    };
-
-    const proposeQuest = async (quest) => {
-      if (!CAMPAIGN_ID || !quest?.id) return;
-      const message = window.prompt('Add a note for the GM (optional):', '');
-      if (message === null) return;
-      try {
-        const response = await fetch(
-          `/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/quests/${encodeURIComponent(quest.id)}/proposals`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ message: message.trim() }),
-          }
-        );
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(text || 'Unable to submit proposal');
-        }
-        await response.json();
-        state.activeTab = 'proposals';
-        await loadQuestData();
-        showProposalFeedback('Proposal submitted', false);
-      } catch (error) {
-        showProposalFeedback(error.message || 'Proposal failed', true);
-      }
-    };
-
-    const voteOnProposal = async (proposal, vote) => {
-      if (!CAMPAIGN_ID || !proposal?.proposalId || !vote) return;
-      if (!['agree', 'disagree'].includes(vote)) return;
-      const statusValue = (proposal.status || '').toLowerCase();
-      if (!PROPOSAL_OPEN_STATUSES.has(statusValue)) {
-        showProposalFeedback('This proposal is no longer open for voting.', true);
-        return;
-      }
-      const comment = window.prompt('Optional note to the GM:', '') || '';
-      try {
-        const payload = { vote };
-        if (comment.trim()) payload.comment = comment.trim();
-        const response = await fetch(
-          `/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/proposals/${encodeURIComponent(proposal.proposalId)}/vote`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(payload),
-          }
-        );
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(text || 'Unable to submit vote');
-        }
-        await response.json();
-        showProposalFeedback('Vote recorded', false);
-        await loadQuestData();
-      } catch (error) {
-        showProposalFeedback(error.message || 'Vote failed', true);
-      }
-    };
-
-    const gmReviewProposal = async (proposal, action) => {
-      if (!CAMPAIGN_ID || !proposal?.proposalId || !action) return;
-      const statusValue = (proposal.status || '').toLowerCase();
-      if (!PROPOSAL_OPEN_STATUSES.has(statusValue)) {
-        showProposalFeedback('This proposal is already closed.', true);
-        return;
-      }
-      if (!userIsGM()) {
-        showProposalFeedback('Only the GM can review proposals.', true);
-        return;
-      }
-      const message = window.prompt('Add a note (optional):', '') || '';
-      try {
-        const payload = { action };
-        if (message.trim()) payload.message = message.trim();
-        const response = await fetch(
-          `/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/proposals/${encodeURIComponent(proposal.proposalId)}/review`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(payload),
-          }
-        );
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(text || 'Unable to take action');
-        }
-        await response.json();
-        showProposalFeedback(`Proposal ${action.replace('_', ' ')}d`, false);
-        state.activeTab = 'proposals';
-        await loadQuestData();
-      } catch (error) {
-        showProposalFeedback(error.message || 'Review failed', true);
-      }
-    };
-
-    const renderTabs = () => {
-      questTabs.innerHTML = '';
-      TAB_CONFIG.forEach((tab) => {
-        const button = document.createElement('button');
-        button.className = `tab ${state.activeTab === tab.id ? 'active' : ''}`;
-        button.innerHTML = `<span>${tab.label}</span><small>${tab.helper}</small>`;
-        const count = document.createElement('span');
-        count.className = 'tab-count';
-        const tabCount =
-          tab.id === 'proposals' ? countActiveProposals() : (state.data[tab.id] || []).length;
-        count.textContent = tabCount;
-        button.appendChild(count);
-        button.addEventListener('click', () => {
-          state.activeTab = tab.id;
-          renderTabs();
-          renderActiveTab();
-        });
-        questTabs.appendChild(button);
-      });
-    };
-
-    const renderActiveTab = () => {
-      if (state.activeTab === 'proposals') {
-        renderProposalList();
-        return;
-      }
-      renderQuestCardList(state.data[state.activeTab], state.activeTab);
-    };
-
-    const loadQuestData = async () => {
-      showProposalFeedback('');
-      if (!CAMPAIGN_ID) {
-        state.data = normalizeQuestPayload();
-        state.error = 'Open this hub from a campaign link (campaign id is required).';
-        renderTabs();
-        renderActiveTab();
-        return;
-      }
-      try {
-        const response = await fetch(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/quests`, {
-          credentials: 'include',
-        });
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(text || 'Unable to load quests');
-        }
-        const payload = await response.json();
-        if (payload.status === 'error') {
-          throw new Error(payload.message || 'Failed to load quests');
-        }
-        state.data = normalizeQuestPayload(payload.quests);
-        state.error = '';
-      } catch (error) {
-        state.data = normalizeQuestPayload();
-        state.error = error.message || 'Failed to load quests';
-      }
-      renderTabs();
-      renderActiveTab();
-    };
-
-    searchInput.addEventListener('input', (event) => {
-      state.search = event.target.value || '';
-      renderActiveTab();
-    });
-
-    statusSelect.addEventListener('change', (event) => {
-      state.statusFilter = event.target.value;
-      renderActiveTab();
-    });
-
-    if (questCreateForm) {
-      questCreateForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        if (!CAMPAIGN_ID) {
-          showQuestCreateFeedback('Open this hub from a campaign first.', true);
-          return;
-        }
-        const name = (questNameInput?.value || '').trim();
-        if (!name) {
-          showQuestCreateFeedback('Quest name is required.', true);
-          return;
-        }
-        const description = (questDescriptionInput?.value || '').trim();
-        const objectives = parseObjectivesFromLines(questObjectivesInput?.value || '');
-        const tagsRaw = (questTagsInput?.value || '')
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter(Boolean);
-        const payload = {
-          name,
-          description,
-          objectives,
-          tags: tagsRaw,
-          assignedTo: state.user?.username ? [state.user.username] : [],
-        };
-        showQuestCreateFeedback('Saving quest...');
-        try {
-          const response = await fetch(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/quests`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(payload),
-          });
-          if (!response.ok) {
-            const text = await response.text();
-            throw new Error(text || 'Unable to create quest');
-          }
-          await response.json();
-          showQuestCreateFeedback('Quest created', false);
-          resetQuestCreateForm();
-          closeQuestCreatePanel();
-          await loadQuestData();
-        } catch (error) {
-          showQuestCreateFeedback(error.message || 'Quest creation failed', true);
-        }
       });
     }
 
-    if (createQuestBtn) {
-      createQuestBtn.addEventListener('click', () => {
-        if (!CAMPAIGN_ID) {
-          showProposalFeedback('Open this hub from a campaign first.', true);
-          return;
-        }
-        if (!questCreateSection) return;
-        const isOpen = questCreateSection.classList.toggle('visible');
-        createQuestBtn.textContent = isOpen ? 'Cancel' : 'Create Personal Quest';
-        if (isOpen) {
-          showQuestCreateFeedback('');
-        }
+    function attachNoteButtons() {
+      const noteAdd = document.getElementById('note-add-btn');
+      const noteForm = document.getElementById('note-form-container');
+      const noteCancel = document.getElementById('note-cancel');
+      const noteSubmit = document.getElementById('note-submit');
+      const noteText = document.getElementById('note-text');
+      if (!noteAdd || !noteForm) return;
+      noteAdd.addEventListener('click', () => {
+        noteForm.classList.remove('hidden');
+        noteText.value = '';
+        noteText.focus();
+      });
+      noteCancel.addEventListener('click', () => noteForm.classList.add('hidden'));
+      noteSubmit.addEventListener('click', async () => {
+        const text = noteText.value.trim();
+        if (!text) return;
+        await postNote(text);
       });
     }
 
-    syncBtn.addEventListener('click', () => {
-      loadQuestData();
-      loadCampaignDetails();
-    });
+    function attachTheoryButtons() {
+      const theoryAdd = document.getElementById('theory-add-btn');
+      const theoryForm = document.getElementById('theory-form-container');
+      const theoryCancel = document.getElementById('theory-cancel');
+      const theorySubmit = document.getElementById('theory-submit');
+      const theoryText = document.getElementById('theory-text');
+      if (!theoryAdd || !theoryForm) return;
+      theoryAdd.addEventListener('click', () => {
+        theoryForm.classList.remove('hidden');
+        theoryText.value = '';
+        theoryText.focus();
+      });
+      theoryCancel.addEventListener('click', () => theoryForm.classList.add('hidden'));
+      theorySubmit.addEventListener('click', async () => {
+        const text = theoryText.value.trim();
+        if (!text) return;
+        await postTheory(text);
+      });
+    }
 
-    const loadCampaignDetails = async () => {
-      if (!CAMPAIGN_ID) return;
-      try {
-        const response = await fetch(`/campaigns/${encodeURIComponent(CAMPAIGN_ID)}`, {
-          credentials: 'include',
+    function attachTrackingButtons() {
+      const trackBtn = document.getElementById('track-btn');
+      const pinBtn = document.getElementById('pin-btn');
+      if (trackBtn) {
+        trackBtn.addEventListener('click', async () => {
+          await toggleTracking('tracked', isTracked(state.activeQuest) ? 'untrack' : 'track');
         });
-        if (!response.ok) throw new Error('Unable to reach the campaign API');
-        const data = await response.json();
-        const campaign = data.campaign || {};
-        heroTitle.textContent = campaign.name || 'Campaign Quest Hub';
-        heroDesc.textContent = campaign.description || 'Track quests and proposals for this campaign.';
-        heroChip.textContent = `Campaign: ${campaign.name || CAMPAIGN_ID}`;
-        state.campaignOwner = campaign.owner || '';
-      } catch (error) {
-        heroDesc.textContent = 'Unable to load campaign metadata. You can still work with the quest templates.';
       }
-    };
+      if (pinBtn) {
+        pinBtn.addEventListener('click', async () => {
+          await toggleTracking('pinned', isPinned(state.activeQuest) ? 'untrack' : 'track');
+        });
+      }
+    }
 
-    const loadCurrentUser = async () => {
+    function attachStatusUpdate() {
+      const statusSelect = document.getElementById('status-update');
+      if (!statusSelect) return;
+      statusSelect.addEventListener('change', async () => {
+        await patchQuest(state.activeQuest.id, { status: statusSelect.value });
+      });
+    }
+
+    async function updateObjectiveStatus(questId, objectiveId, status) {
       try {
-        const response = await fetch('/auth/me', { credentials: 'include' });
-        if (!response.ok) {
-          state.user = null;
-          return;
+        await api(`/campaigns/${encodeURIComponent(CID)}/quests/${encodeURIComponent(questId)}/objectives/${encodeURIComponent(objectiveId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        });
+        await loadQuestData();
+      } catch (error) {
+        console.error('Objective update failed', error);
+      }
+    }
+
+    async function postNote(text) {
+      if (!state.activeQuest) return;
+      await api(`/campaigns/${encodeURIComponent(CID)}/quests/${encodeURIComponent(state.activeQuest.id)}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      await loadQuestData();
+    }
+
+    async function postTheory(text) {
+      if (!state.activeQuest) return;
+      await api(`/campaigns/${encodeURIComponent(CID)}/quests/${encodeURIComponent(state.activeQuest.id)}/theories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      await loadQuestData();
+    }
+
+    async function toggleTracking(type, action) {
+      if (!state.activeQuest) return;
+      await api(`/campaigns/${encodeURIComponent(CID)}/quests/${encodeURIComponent(state.activeQuest.id)}/tracking`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, action }),
+      });
+      await loadQuestData();
+    }
+
+    async function patchQuest(questId, payload) {
+      await api(`/campaigns/${encodeURIComponent(CID)}/quests/${encodeURIComponent(questId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      await loadQuestData();
+    }
+
+    async function loadQuestData() {
+      if (!CID) {
+        pageStatus.textContent = 'Campaign ID missing.';
+        return;
+      }
+      try {
+        const res = await api(`/campaigns/${encodeURIComponent(CID)}/quests`);
+        const payload = res.quests || {};
+        const previousId = state.activeQuest?.id;
+        state.quests = [
+          ...(payload.group || []),
+          ...(payload.personal || []),
+          ...(payload.archive || []),
+        ];
+        if (previousId) {
+          state.activeQuest = state.quests.find((entry) => entry.id === previousId) || null;
+        } else if (!state.activeQuest && state.quests.length) {
+          state.activeQuest = state.quests[0];
         }
-        state.user = await response.json();
+        renderFilters();
+        renderQuestList();
+        if (state.activeQuest) {
+          renderQuestDetail();
+        }
+      } catch (error) {
+        pageStatus.textContent = `Unable to load quests: ${error.message}`;
+      }
+    }
+
+    async function loadUser() {
+      try {
+        const user = await api('/auth/me');
+        state.user = user;
       } catch {
         state.user = null;
       }
-      renderQuestDetail();
-    };
+    }
 
-    renderTabs();
-    renderActiveTab();
-    renderQuestDetail();
-    loadCampaignDetails();
-    loadQuestData();
-    loadCurrentUser();
-  </script>
+    async function loadCampaign() {
+      if (!CID) return;
+      try {
+        const res = await api(`/campaigns/${encodeURIComponent(CID)}`);
+        state.campaign = res.campaign || {};
+        const username = (state.user?.username || '').toLowerCase();
+        const owner = (state.campaign.owner || '').toLowerCase();
+        const assistants = (state.campaign.assistant_gms || []).map((entry) => (entry || '').toLowerCase());
+        state.isGm = username && (username === owner || assistants.includes(username) || (state.user?.role || '').toLowerCase() === 'admin');
+        if (state.isGm) {
+          openCreateBtn.style.display = '';
+        }
+      } catch (error) {
+        console.warn('Failed to load campaign', error);
+      }
+    }
+
+    function updateFiltersFromInputs() {
+      state.filters.search = searchInput.value.trim().toLowerCase();
+      state.filters.type = filterTypeEl.value;
+      state.filters.status = filterStatusEl.value;
+      state.filters.assigned = filterAssignedEl.value;
+      state.filters.faction = filterFactionEl.value;
+      state.filters.session = filterSessionEl.value;
+      renderQuestList();
+    }
+
+    searchInput.addEventListener('input', () => {
+      state.filters.search = searchInput.value.trim().toLowerCase();
+      renderQuestList();
+    });
+    [filterTypeEl, filterStatusEl, filterAssignedEl, filterFactionEl, filterSessionEl].forEach((el) => {
+      el.addEventListener('change', () => {
+        updateFiltersFromInputs();
+      });
+    });
+
+    toggleHiddenBtn.addEventListener('click', () => {
+      state.filters.showHidden = !state.filters.showHidden;
+      toggleHiddenBtn.textContent = state.filters.showHidden ? 'Hide Hidden' : 'Show Hidden';
+      renderQuestList();
+    });
+
+    openCreateBtn.addEventListener('click', () => createPanel.classList.toggle('hidden'));
+    closeCreateBtn.addEventListener('click', () => createPanel.classList.add('hidden'));
+
+    createForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const formData = new FormData(createForm);
+      const payload = {};
+      formData.forEach((value, key) => {
+        payload[key] = value;
+      });
+      if (payload.tags) {
+        payload.tags = payload.tags.split(',').map((value) => value.trim()).filter(Boolean);
+      }
+      if (payload.assignedTo) {
+        payload.assignedTo = payload.assignedTo.split(',').map((value) => value.trim()).filter(Boolean);
+      }
+      if (payload.objectives) {
+        payload.objectives = payload.objectives
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((label) => ({ title: label }));
+      }
+      payload.tracked = formData.get('tracked') === 'on';
+      payload.pinned = formData.get('pinned') === 'on';
+      try {
+        createFeedback.textContent = 'Creating quest...';
+        await api(`/campaigns/${encodeURIComponent(CID)}/quests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        createFeedback.textContent = 'Quest created.';
+        createForm.reset();
+        createPanel.classList.add('hidden');
+        await loadQuestData();
+      } catch (error) {
+        createFeedback.textContent = error.message || 'Creation failed';
+      }
+    });
+
+    async function api(path, options = {}) {
+      const headers = options.headers || {};
+      const resp = await fetch(path, {
+        credentials: 'include',
+        ...options,
+        headers,
+      });
+      const contentType = resp.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await resp.json() : { status: 'error', message: await resp.text() };
+      if (!resp.ok || data.status === 'error') {
+        throw new Error(data.message || `HTTP ${resp.status}`);
+      }
+      return data;
+    }
+
+    async function init() {
+      if (!CID) {
+        pageStatus.textContent = 'This hub must be opened with a campaign id.';
+        return;
+      }
+      await loadUser();
+      await loadCampaign();
+      await loadQuestData();
+    }
+
+    init().catch((error) => {
+      if (pageStatus) pageStatus.textContent = error.message;
+    });
 </body>
 </html>

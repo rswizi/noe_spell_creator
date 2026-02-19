@@ -18,6 +18,78 @@ QUEST_COL = get_col("quests")
 PROPOSAL_COL = get_col("quest_proposals")
 PROPOSAL_EVENT_COL = get_col("proposal_events")
 
+VALID_QUEST_STATUSES = {
+    "pending",
+    "active",
+    "on_hold",
+    "completed",
+    "failed",
+    "abandoned",
+    "hidden",
+}
+VALID_VISIBILITY = {
+    "gm_only",
+    "party_visible",
+    "character_specific",
+    "role_restricted",
+}
+VALID_QUEST_CATEGORIES = {
+    "main",
+    "side",
+    "personal",
+    "faction",
+    "secret",
+    "time_limited",
+    "dynamic",
+}
+VALID_OBJECTIVE_STATUSES = {
+    "not_started",
+    "ongoing",
+    "succeeded",
+    "failed",
+}
+VALID_OBJECTIVE_TYPES = {
+    "mandatory",
+    "optional",
+    "hidden",
+    "branching",
+}
+VALID_OBJECTIVE_PRIORITIES = {"main", "secondary", "tertiary"}
+
+def _sanitize_choice(value: Any, allowed: set[str], default: str) -> str:
+    raw = (str(value or "").strip() or "")
+    lowered = raw.lower()
+    if lowered in allowed:
+        return lowered
+    if default:
+        return default
+    return raw
+
+def _build_note_entry(text: str, author: str) -> dict[str, Any]:
+    return {
+        "id": f"note_{next_id_str('quest_note', padding=5)}",
+        "text": text,
+        "author": author,
+        "createdAt": _current_ts(),
+    }
+
+def _apply_tracking(existing: list[str], username: str, action: str) -> list[str]:
+    clean = [entry for entry in (existing or []) if entry]
+    normalized = []
+    seen = set()
+    for entry in clean:
+        low = entry.lower()
+        if low not in seen:
+            seen.add(low)
+            normalized.append(entry)
+    lower_user = username.lower()
+    if action == "track":
+        if lower_user not in {name.lower() for name in normalized}:
+            normalized.append(username)
+    elif action == "untrack":
+        normalized = [entry for entry in normalized if entry.lower() != lower_user]
+    return normalized
+
 
 def _require_campaign_access(cid: str, user: str, role: str | None) -> dict[str, Any]:
     doc = CAMPAIGN_COL.find_one({"id": cid})
@@ -59,27 +131,56 @@ def _sanitize_docs(docs: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return sanitized
 
 
+def _fetch_quest(cid: str, quest_id: str) -> dict[str, Any]:
+    quest = QUEST_COL.find_one({"campaignId": cid, "id": quest_id})
+    if not quest:
+        raise HTTPException(status_code=404, detail="Quest not found")
+    return quest
+
+
 def _current_ts() -> str:
     return datetime.utcnow().isoformat() + "Z"
 
 
-def _normalize_objectives(raw: Iterable[Any]) -> list[dict[str, Any]]:
+def _normalize_objectives(raw: Iterable[Any], quest_id: str | None = None) -> list[dict[str, Any]]:
     if not raw:
         return []
     normalized: list[dict[str, Any]] = []
     for idx, entry in enumerate(raw, start=1):
-        label = ""
-        state = "todo"
+        title = ""
+        description = ""
+        status = "not_started"
+        obj_type = "mandatory"
+        priority = "secondary"
         order = idx
+        obj_id = ""
         if isinstance(entry, dict):
-            label = (entry.get("label") or entry.get("name") or "").strip()
-            state = (entry.get("state") or "todo").strip().lower()
+            title = (entry.get("title") or entry.get("label") or entry.get("name") or "").strip()
+            description = (entry.get("description") or "").strip()
+            status = _sanitize_choice(entry.get("status") or entry.get("state"), VALID_OBJECTIVE_STATUSES, "not_started")
+            obj_type = _sanitize_choice(entry.get("type") or entry.get("objectiveType"), VALID_OBJECTIVE_TYPES, "mandatory")
+            priority = _sanitize_choice(entry.get("priority") or entry.get("priorityLevel"), VALID_OBJECTIVE_PRIORITIES, "secondary")
             order = entry.get("order") if isinstance(entry.get("order"), int) else idx
+            obj_id = (entry.get("id") or entry.get("objectiveId") or "").strip()
         else:
-            label = str(entry or "").strip()
-        if not label:
+            title = str(entry or "").strip()
+        if not title:
             continue
-        normalized.append({"label": label, "state": state or "todo", "order": order})
+        if not obj_id:
+            if quest_id:
+                obj_id = f"{quest_id}-obj-{idx}"
+            else:
+                obj_id = f"obj_{next_id_str('quest_obj', padding=4)}"
+        normalized.append({
+            "id": obj_id,
+            "title": title,
+            "description": description,
+            "status": status,
+            "state": status,
+            "type": obj_type,
+            "priority": priority,
+            "order": order,
+        })
     return normalized
 
 
@@ -168,40 +269,244 @@ async def list_campaign_quests(req: Request, cid: str):
 
 
 @router.post("/campaigns/{cid}/quests")
-async def create_personal_quest(req: Request, cid: str, payload: dict[str, Any] | None = Body(None)):
+async def create_campaign_quest(req: Request, cid: str, payload: dict[str, Any] | None = Body(None)):
     user, role = require_auth(req)
-    _require_campaign_access(cid, user, role)
+    campaign = _require_campaign_access(cid, user, role)
+    if not _is_campaign_gm(campaign, user, role):
+        raise HTTPException(status_code=403, detail="Only GMs can create quests")
     if not payload:
         raise HTTPException(status_code=400, detail="Missing quest payload")
-    name = (payload.get("name") or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Quest name is required")
+    title = (payload.get("title") or payload.get("name") or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Quest title is required")
+    subtitle = (payload.get("subtitle") or payload.get("tagline") or "").strip()
     description = (payload.get("description") or "").strip()
-    objectives = _normalize_objectives(payload.get("objectives") or [])
-    tags = _normalize_list(payload.get("tags") or [])
+    scope = (payload.get("scope") or payload.get("type") or "group").strip().lower()
+    if scope not in {"group", "personal"}:
+        scope = "group"
+    quest_kind = _sanitize_choice(payload.get("questKind") or payload.get("quest_type") or "main", VALID_QUEST_CATEGORIES, "main")
+    status = _sanitize_choice(payload.get("status") or "pending", VALID_QUEST_STATUSES, "pending")
+    visibility = _sanitize_choice(payload.get("visibility") or "party_visible", VALID_VISIBILITY, "party_visible")
+    priority = _sanitize_choice(payload.get("priority") or "main", VALID_OBJECTIVE_PRIORITIES, "main")
     assigned = _normalize_list(payload.get("assignedTo") or [user])
-    visibility = (payload.get("visibility") or "personal.private").strip().lower()
-    if not visibility.startswith("personal"):
-        visibility = "personal.private"
+    tags = _normalize_list(payload.get("tags") or payload.get("labels") or [])
+    faction = (payload.get("faction") or "").strip()
+    session = (payload.get("session") or "").strip()
+    locked = bool(payload.get("locked"))
+    tracked_by = _normalize_list(payload.get("trackedBy") or payload.get("tracked_by") or [])
+    pinned_by = _normalize_list(payload.get("pinnedBy") or payload.get("pinned_by") or [])
+    if payload.get("tracked"):
+        if user not in tracked_by:
+            tracked_by.append(user)
+    if payload.get("pinned"):
+        if user not in pinned_by:
+            pinned_by.append(user)
+    notes_raw = payload.get("notes") or []
+    personal_notes = []
+    for entry in (notes_raw if isinstance(notes_raw, list) else [notes_raw]):
+        text = str(entry) if isinstance(entry, str) else str(entry.get("text") or "")
+        text = text.strip()
+        if not text:
+            continue
+        note_author = (entry.get("author") if isinstance(entry, dict) else user) or user
+        personal_notes.append(_build_note_entry(text, note_author))
+    theories_raw = payload.get("theories") or []
+    theories = []
+    for entry in (theories_raw if isinstance(theories_raw, list) else [theories_raw]):
+        text = str(entry) if isinstance(entry, str) else str(entry.get("text") or "")
+        text = text.strip()
+        if not text:
+            continue
+        author = (entry.get("author") if isinstance(entry, dict) else user) or user
+        theories.append(_build_note_entry(text, author))
     quest_id = f"quest_{next_id_str('quest', padding=6)}"
+    objectives = _normalize_objectives(payload.get("objectives") or [], quest_id)
     now = _current_ts()
     doc = {
         "id": quest_id,
         "campaignId": cid,
-        "type": "personal",
-        "status": "pending",
-        "name": name,
+        "type": scope,
+        "quest_kind": quest_kind,
+        "status": status,
+        "priority": priority,
+        "title": title,
+        "subtitle": subtitle,
         "description": description,
+        "visibility": visibility,
+        "assignedTo": assigned,
+        "faction": faction,
+        "session": session,
+        "locked": locked,
+        "tracked_by": tracked_by,
+        "pinned_by": pinned_by,
+        "personalNotes": personal_notes,
+        "theories": theories,
+        "tags": tags,
         "objectives": objectives,
         "createdBy": user,
-        "assignedTo": assigned,
-        "visibility": visibility,
-        "tags": tags,
         "createdAt": now,
         "updatedAt": now,
     }
     QUEST_COL.insert_one(doc)
     return {"status": "success", "quest": _sanitize_docs([doc])[0]}
+
+
+@router.patch("/campaigns/{cid}/quests/{quest_id}")
+async def update_campaign_quest(
+    req: Request, cid: str, quest_id: str, payload: dict[str, Any] | None = Body(None)
+):
+    user, role = require_auth(req)
+    campaign = _require_campaign_access(cid, user, role)
+    if not _is_campaign_gm(campaign, user, role):
+        raise HTTPException(status_code=403, detail="Only GMs can edit quests")
+    if not payload:
+        raise HTTPException(status_code=400, detail="Missing payload")
+    quest = _fetch_quest(cid, quest_id)
+    updates: dict[str, Any] = {}
+    override_fields = {
+        "title": payload.get("title"),
+        "subtitle": payload.get("subtitle"),
+        "description": payload.get("description"),
+        "visibility": _sanitize_choice(payload.get("visibility"), VALID_VISIBILITY, quest.get("visibility") or "party_visible"),
+        "status": _sanitize_choice(payload.get("status"), VALID_QUEST_STATUSES, quest.get("status") or "pending"),
+        "quest_kind": _sanitize_choice(payload.get("questKind") or payload.get("quest_type"), VALID_QUEST_CATEGORIES, quest.get("quest_kind") or "main"),
+        "priority": _sanitize_choice(payload.get("priority"), VALID_OBJECTIVE_PRIORITIES, quest.get("priority") or "main"),
+        "faction": payload.get("faction"),
+        "session": payload.get("session"),
+        "locked": payload.get("locked"),
+    }
+    for key, value in override_fields.items():
+        if value is None:
+            continue
+        updates[key] = value
+    if "assignedTo" in payload:
+        updates["assignedTo"] = _normalize_list(payload.get("assignedTo") or [])
+    if "tags" in payload:
+        updates["tags"] = _normalize_list(payload.get("tags") or [])
+    if "objectives" in payload:
+        updates["objectives"] = _normalize_objectives(payload.get("objectives") or [], quest_id)
+    if updates:
+        updates["updatedAt"] = _current_ts()
+        QUEST_COL.update_one({"campaignId": cid, "id": quest_id}, {"$set": updates})
+    updated = QUEST_COL.find_one({"campaignId": cid, "id": quest_id})
+    return {"status": "success", "quest": _sanitize_docs([updated])[0]}
+
+
+@router.delete("/campaigns/{cid}/quests/{quest_id}")
+async def delete_campaign_quest(cid: str, quest_id: str, req: Request):
+    user, role = require_auth(req)
+    campaign = _require_campaign_access(cid, user, role)
+    if not _is_campaign_gm(campaign, user, role):
+        raise HTTPException(status_code=403, detail="Only GMs can delete quests")
+    result = QUEST_COL.delete_one({"campaignId": cid, "id": quest_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Quest not found")
+    return {"status": "success"}
+
+
+@router.patch("/campaigns/{cid}/quests/{quest_id}/objectives/{objective_id}")
+async def update_quest_objective(
+    req: Request, cid: str, quest_id: str, objective_id: str, payload: dict[str, Any] | None = Body(None)
+):
+    user, role = require_auth(req)
+    campaign = _require_campaign_access(cid, user, role)
+    quest = _fetch_quest(cid, quest_id)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Missing payload")
+    gm = _is_campaign_gm(campaign, user, role)
+    if not gm:
+        visibility = (quest.get("visibility") or "").lower()
+        if visibility == "gm_only":
+            raise HTTPException(status_code=403, detail="Quest not visible to you")
+        username = user.lower()
+        assigned = [(c or "").strip().lower() for c in (quest.get("assignedTo") or [])]
+        creator = (quest.get("createdBy") or "").lower()
+        if username not in assigned and creator != username:
+            raise HTTPException(status_code=403, detail="Not allowed to update this objective")
+    objective = None
+    for entry in (quest.get("objectives") or []):
+        if (entry.get("id") or "") == objective_id:
+            objective = entry
+            break
+    if not objective:
+        raise HTTPException(status_code=404, detail="Objective not found")
+    updated = False
+    if "title" in payload and isinstance(payload.get("title"), str):
+        children = payload.get("title").strip()
+        objective["title"] = children
+        updated = True
+    if "description" in payload and isinstance(payload.get("description"), str):
+        objective["description"] = payload.get("description").strip()
+        updated = True
+    if "status" in payload:
+        new_status = _sanitize_choice(payload.get("status"), VALID_OBJECTIVE_STATUSES, objective.get("status") or "not_started")
+        objective["status"] = new_status
+        objective["state"] = new_status
+        updated = True
+    if updated:
+        QUEST_COL.update_one({"campaignId": cid, "id": quest_id}, {"$set": {"objectives": quest.get("objectives"), "updatedAt": _current_ts()}})
+    return {"status": "success", "quest": _sanitize_docs([quest])[0]}
+
+
+@router.post("/campaigns/{cid}/quests/{quest_id}/notes")
+async def add_quest_note(
+    req: Request, cid: str, quest_id: str, payload: dict[str, Any] | None = Body(None)
+):
+    user, role = require_auth(req)
+    _require_campaign_access(cid, user, role)
+    quest = _fetch_quest(cid, quest_id)
+    text = (payload or {}).get("text") if payload else None
+    if not text:
+        raise HTTPException(status_code=400, detail="Note text is required")
+    try:
+        note_text = str(text).strip()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid note text")
+    if not note_text:
+        raise HTTPException(status_code=400, detail="Note text is required")
+    notes = quest.get("personalNotes") or []
+    notes.append(_build_note_entry(note_text, user))
+    QUEST_COL.update_one({"campaignId": cid, "id": quest_id}, {"$set": {"personalNotes": notes, "updatedAt": _current_ts()}})
+    updated = _fetch_quest(cid, quest_id)
+    return {"status": "success", "quest": _sanitize_docs([updated])[0]}
+
+
+@router.post("/campaigns/{cid}/quests/{quest_id}/theories")
+async def add_quest_theory(
+    req: Request, cid: str, quest_id: str, payload: dict[str, Any] | None = Body(None)
+):
+    user, role = require_auth(req)
+    _require_campaign_access(cid, user, role)
+    quest = _fetch_quest(cid, quest_id)
+    text = (payload or {}).get("text") if payload else None
+    if not text:
+        raise HTTPException(status_code=400, detail="Theory text is required")
+    theory_text = str(text).strip()
+    if not theory_text:
+        raise HTTPException(status_code=400, detail="Theory text is required")
+    theories = quest.get("theories") or []
+    theories.append(_build_note_entry(theory_text, user))
+    QUEST_COL.update_one({"campaignId": cid, "id": quest_id}, {"$set": {"theories": theories, "updatedAt": _current_ts()}})
+    updated = _fetch_quest(cid, quest_id)
+    return {"status": "success", "quest": _sanitize_docs([updated])[0]}
+
+
+@router.post("/campaigns/{cid}/quests/{quest_id}/tracking")
+async def update_quest_tracking(
+    req: Request, cid: str, quest_id: str, payload: dict[str, Any] | None = Body(None)
+):
+    user, role = require_auth(req)
+    _require_campaign_access(cid, user, role)
+    quest = _fetch_quest(cid, quest_id)
+    track_type = (payload or {}).get("type", "").strip().lower()
+    action = (payload or {}).get("action", "").strip().lower()
+    if track_type not in {"tracked", "pinned"} or action not in {"track", "untrack"}:
+        raise HTTPException(status_code=400, detail="Invalid tracking request")
+    field = "tracked_by" if track_type == "tracked" else "pinned_by"
+    updated_list = _apply_tracking(quest.get(field) or [], user, "track" if action == "track" else "untrack")
+    QUEST_COL.update_one({"campaignId": cid, "id": quest_id}, {"$set": {field: updated_list, "updatedAt": _current_ts()}})
+    updated = _fetch_quest(cid, quest_id)
+    return {"status": "success", "quest": _sanitize_docs([updated])[0]}
 
 
 @router.post("/campaigns/{cid}/quests/{quest_id}/proposals")
