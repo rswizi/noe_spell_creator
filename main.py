@@ -6110,6 +6110,16 @@ async def update_character(cid: str, request: Request):
         subs = body.get("sublimations") or []
         if isinstance(subs, list):
             updates["sublimations"] = subs
+    if "starting_money" in body:
+        try:
+            money_val = max(0, int(math.floor(float(body.get("starting_money") or 0))))
+        except Exception:
+            money_val = 0
+        updates["starting_money"] = money_val
+    if "starting_gear" in body:
+        gear_val = body.get("starting_gear")
+        if isinstance(gear_val, dict):
+            updates["starting_gear"] = gear_val
     if "avatar_id" in body:
         updates["avatar_id"] = str(body.get("avatar_id") or "").strip()
 

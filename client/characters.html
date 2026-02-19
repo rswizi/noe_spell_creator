@@ -58,6 +58,135 @@
   button:active, a.btn:active { transform: translateY(1px); }
   .primary { background: linear-gradient(135deg, rgba(197,53,53,0.35), rgba(20,20,29,0.9)); border-color: var(--accent); color: #fff; }
   .muted { opacity:.82; font-size:.9rem; }
+  .new-actions {
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .new-button-wrap {
+    position:relative;
+  }
+  .create-options {
+    position:absolute;
+    top:calc(100% + 8px);
+    right:0;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    padding:8px;
+    background: var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    min-width:160px;
+    opacity:0;
+    pointer-events:none;
+    transform: translateY(-6px);
+    transition: opacity .15s ease, transform .15s ease;
+    z-index:10;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.45);
+  }
+  .create-options.open {
+    opacity:1;
+    pointer-events:auto;
+    transform: translateY(0);
+  }
+  .create-options button {
+    border:none;
+    background: transparent;
+    color: var(--text);
+    text-align:left;
+    padding:8px 10px;
+    border-radius:8px;
+    font-weight:600;
+    width:100%;
+    cursor:pointer;
+    transition: background .15s ease, color .15s ease;
+  }
+  .create-options button:hover {
+    background: rgba(255,255,255,0.08);
+  }
+  .create-options button.primary {
+    color:#fff;
+    background: linear-gradient(135deg, rgba(197,53,53,0.5), rgba(20,20,29,0.85));
+    border:1px solid var(--accent);
+  }
+  .quick-modal {
+    position:fixed;
+    inset:0;
+    background:rgba(5,5,8,0.75);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px 16px;
+    z-index:100;
+    opacity:0;
+    pointer-events:none;
+    transition: opacity .2s ease;
+  }
+  .quick-modal.open {
+    opacity:1;
+    pointer-events:auto;
+  }
+  .quick-modal .modal-panel {
+    width:min(560px, 100%);
+    max-height:calc(90vh - 32px);
+    overflow-y:auto;
+    background: var(--panel);
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:24px 28px;
+    box-shadow: 0 20px 45px rgba(0,0,0,0.55);
+  }
+  .quick-modal .modal-panel h2 {
+    margin:0 0 4px;
+    font-size:22px;
+  }
+  .quick-modal .field-grid {
+    display:grid;
+    gap:12px;
+  }
+  .quick-modal .field {
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  .quick-modal label {
+    font-size:0.9rem;
+    font-weight:600;
+  }
+  .quick-modal input,
+  .quick-modal select {
+    background:#1a1a2a;
+    border:1px solid var(--border);
+    border-radius:10px;
+    color:var(--text);
+    padding:10px 12px;
+    font-size:1rem;
+  }
+  .quick-modal .muted.field-status {
+    font-size:0.8rem;
+  }
+  .quick-modal .gear-group {
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(200px,1fr));
+    gap:12px;
+    margin-top:16px;
+  }
+  .quick-modal .modal-footer {
+    margin-top:20px;
+    display:flex;
+    justify-content:flex-end;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .quick-modal .modal-footer .btn {
+    min-width:120px;
+  }
+  .quick-modal #quick-status {
+    margin-top:8px;
+    min-height:1em;
+    font-size:0.9rem;
+  }
 </style>
 
 </head>
@@ -70,14 +199,94 @@
       <a class="btn" id="admin-link" href="character_admin.html" style="display:none">All Characters</a>
     </div>
 
-    <div style="margin-bottom:12px;">
-      <button type="button" id="new-btn" class="primary">+ New Character</button>
+    <div class="new-actions">
+      <div class="new-button-wrap">
+        <button type="button" id="new-btn" class="primary">+ New Character</button>
+        <div id="create-options" class="create-options">
+          <button type="button" data-mode="normal">Normal</button>
+          <button type="button" data-mode="quick" class="primary">Quick Create</button>
+        </div>
+      </div>
       <span class="muted">Click a card to edit.</span>
     </div>
 
     <div id="list" class="grid"></div>
     <p id="empty-msg" class="muted" style="display:none">No characters yet. Click “New Character”.</p>
   </div></div>
+
+<div id="quick-modal" class="quick-modal" role="dialog" aria-modal="true" aria-labelledby="quick-title">
+  <div class="modal-panel">
+    <h2 id="quick-title">Quick Create</h2>
+    <p class="muted" style="margin-top:0;margin-bottom:16px;">Pick a few options and jump straight into editing the new sheet.</p>
+    <form id="quick-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="qc-name">Character Name</label>
+          <input type="text" id="qc-name" placeholder="New Character">
+        </div>
+        <div class="field">
+          <label for="qc-level">Level</label>
+          <input type="number" id="qc-level" min="1" value="1">
+        </div>
+        <div class="field">
+          <label for="qc-archetype">Archetype</label>
+          <select id="qc-archetype"><option value="">-- Select archetype --</option></select>
+          <span id="qc-archetype-status" class="muted field-status"></span>
+        </div>
+        <div class="field">
+          <label for="qc-species">Species</label>
+          <select id="qc-species"><option value="">-- Select species --</option></select>
+          <span id="qc-species-status" class="muted field-status"></span>
+        </div>
+        <div class="field">
+          <label for="qc-boon">Boon</label>
+          <select id="qc-boon"><option value="">-- Select boon --</option></select>
+          <span id="qc-boon-status" class="muted field-status"></span>
+        </div>
+        <div class="field">
+          <label for="qc-nature">Starting Nature</label>
+          <select id="qc-nature">
+            <option value="">-- None --</option>
+            <option value="Fire">Fire</option>
+            <option value="Lightning">Lightning</option>
+            <option value="Water">Water</option>
+            <option value="Earth">Earth</option>
+            <option value="Wind">Wind</option>
+            <option value="Sun">Sun</option>
+            <option value="Moon">Moon</option>
+            <option value="Ki">Ki</option>
+          </select>
+          <span class="muted field-status">Invests 1 point into the chosen intensity.</span>
+        </div>
+        <div class="field">
+          <label for="qc-money">Starting Money</label>
+          <input type="number" id="qc-money" min="0" value="0" step="1">
+          <span class="muted field-status">Amount in Jelly (creates an inventory if > 0).</span>
+        </div>
+      </div>
+      <div class="gear-group">
+        <div class="field">
+          <label for="qc-armor">Full Armor Quality</label>
+          <select id="qc-armor">
+            <option value="">None</option>
+          </select>
+          <span class="muted field-status">Applies to head, accessory, arms, legs, chest.</span>
+        </div>
+        <div class="field">
+          <label for="qc-weapon">Starting Weapon Quality</label>
+          <select id="qc-weapon">
+            <option value="">None</option>
+          </select>
+        </div>
+      </div>
+      <div id="quick-status" class="muted"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn" id="quick-cancel">Cancel</button>
+        <button type="submit" class="btn primary">Create Character</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <script>
 function getToken() {
@@ -165,7 +374,258 @@ async function createNew() {
   // immediately go edit it
   location.href = 'character_edit.html?id=' + encodeURIComponent(res.id);
 }
-document.getElementById('new-btn').addEventListener('click', createNew);
+const newBtn = document.getElementById('new-btn');
+const createOptionsEl = document.getElementById('create-options');
+const quickModal = document.getElementById('quick-modal');
+const quickForm = document.getElementById('quick-form');
+const quickStatusEl = document.getElementById('quick-status');
+const quickCancelBtn = document.getElementById('quick-cancel');
+const qcNameEl = document.getElementById('qc-name');
+const qcLevelEl = document.getElementById('qc-level');
+const qcArchetypeSelect = document.getElementById('qc-archetype');
+const qcArchetypeStatusEl = document.getElementById('qc-archetype-status');
+const qcSpeciesSelect = document.getElementById('qc-species');
+const qcSpeciesStatusEl = document.getElementById('qc-species-status');
+const qcBoonSelect = document.getElementById('qc-boon');
+const qcBoonStatusEl = document.getElementById('qc-boon-status');
+const qcNatureSelect = document.getElementById('qc-nature');
+const qcMoneyEl = document.getElementById('qc-money');
+const qcArmorSelect = document.getElementById('qc-armor');
+const qcWeaponSelect = document.getElementById('qc-weapon');
+
+const QUALITY_ORDER = ["Adequate","Good","Very Good","Excellent","Legendary","Mythical","Epic","Divine","Unreal"];
+let quickLoadPromise = null;
+
+function toggleCreateOptions(event) {
+  event.stopPropagation();
+  createOptionsEl?.classList.toggle('open');
+}
+
+function closeCreateOptions() {
+  createOptionsEl?.classList.remove('open');
+}
+
+function populateQualitySelects() {
+  [qcArmorSelect, qcWeaponSelect].forEach(select => {
+    if (!select) return;
+    QUALITY_ORDER.forEach(q => {
+      const opt = document.createElement('option');
+      opt.value = q;
+      opt.textContent = q;
+      select.appendChild(opt);
+    });
+  });
+}
+
+function ensureQuickLists() {
+  if (quickLoadPromise) return quickLoadPromise;
+  quickLoadPromise = (async () => {
+    await Promise.all([
+      loadQuickAbilities('Specie', qcSpeciesSelect, qcSpeciesStatusEl),
+      loadQuickAbilities('Boon', qcBoonSelect, qcBoonStatusEl),
+      loadQuickArchetypes()
+    ]);
+  })().catch(error => {
+    quickLoadPromise = null;
+    throw error;
+  });
+  return quickLoadPromise;
+}
+
+async function loadQuickAbilities(source, selectEl, statusEl) {
+  if (!selectEl) return;
+  const loaded = selectEl.dataset.loaded === '1';
+  if (loaded) return;
+  const label = source === 'Specie' ? 'species' : source.toLowerCase();
+  if (statusEl) statusEl.textContent = `Loading ${label} list...`;
+  selectEl.innerHTML = `<option value="">-- Select ${label} --</option>`;
+  try {
+    const res = await api(`/abilities?source=${encodeURIComponent(source)}`);
+    const abilities = (res.abilities || []).slice().sort((a, b) => String(a.name || a.id || '').localeCompare(String(b.name || b.id || '')));
+    abilities.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = item.name || item.id;
+      selectEl.appendChild(opt);
+    });
+    if (statusEl) statusEl.textContent = '';
+    selectEl.dataset.loaded = '1';
+  } catch (error) {
+    if (statusEl) statusEl.textContent = `Load failed: ${error.message}`;
+    throw error;
+  }
+}
+
+async function loadQuickArchetypes() {
+  if (!qcArchetypeSelect) return;
+  if (qcArchetypeSelect.dataset.loaded === '1') return;
+  if (qcArchetypeStatusEl) qcArchetypeStatusEl.textContent = 'Loading archetypes...';
+  qcArchetypeSelect.innerHTML = '<option value="">-- Select archetype --</option>';
+  try {
+    const res = await api('/archetypes');
+    const archetypes = (res.archetypes || []).slice().sort((a, b) => String(a.name || a.id || '').localeCompare(String(b.name || b.id || '')));
+    archetypes.forEach(entry => {
+      const opt = document.createElement('option');
+      opt.value = entry.id;
+      opt.textContent = entry.name || entry.id;
+      qcArchetypeSelect.appendChild(opt);
+    });
+    if (qcArchetypeStatusEl) qcArchetypeStatusEl.textContent = '';
+    qcArchetypeSelect.dataset.loaded = '1';
+  } catch (error) {
+    if (qcArchetypeStatusEl) qcArchetypeStatusEl.textContent = `Load failed: ${error.message}`;
+    throw error;
+  }
+}
+
+function openQuickModal() {
+  if (!quickModal) return;
+  quickForm?.reset();
+  quickStatusEl.textContent = '';
+  quickModal.classList.add('open');
+  ensureQuickLists().catch(()=>{});
+}
+
+function closeQuickModal() {
+  if (!quickModal) return;
+  quickModal.classList.remove('open');
+  quickStatusEl.textContent = '';
+}
+
+function buildQuickStats({ level, species, boon, nature }) {
+  const stats = {
+    level,
+    intensities: {},
+    species_ability_id: species || '',
+    boon_ability_id: boon || ''
+  };
+  if (nature) {
+    stats.intensities[nature] = 1;
+  }
+  return stats;
+}
+
+function buildQuickAbilities(species, boon) {
+  const abilities = new Set();
+  if (species) abilities.add(species);
+  if (boon) abilities.add(boon);
+  return Array.from(abilities);
+}
+
+function buildQuickGear(armor, weapon) {
+  const gear = {};
+  if (armor) {
+    gear.armor = {
+      quality: armor,
+      slots: ['head', 'accessory', 'arms', 'legs', 'chest']
+    };
+  }
+  if (weapon) {
+    gear.weapon = { quality: weapon };
+  }
+  return gear;
+}
+
+async function handleQuickCreate(event) {
+  event.preventDefault();
+  if (!quickForm) return;
+  const submitBtn = quickForm.querySelector('button[type="submit"]');
+  const name = (qcNameEl?.value || '').trim() || 'New Character';
+  const chosenLevel = Math.max(1, Math.floor(Number(qcLevelEl?.value) || 1));
+  const species = qcSpeciesSelect?.value || '';
+  const boon = qcBoonSelect?.value || '';
+  const archetypeId = qcArchetypeSelect?.value || '';
+  const nature = qcNatureSelect?.value || '';
+  const startingMoney = Math.max(0, Math.floor(Number(qcMoneyEl?.value) || 0));
+  const armorQuality = qcArmorSelect?.value || '';
+  const weaponQuality = qcWeaponSelect?.value || '';
+
+  submitBtn?.setAttribute('disabled', 'disabled');
+  quickStatusEl.textContent = 'Creating character...';
+  let inventoryId = '';
+  try {
+    if (startingMoney > 0) {
+      quickStatusEl.textContent = 'Creating inventory...';
+      const invRes = await api('/inventories', {
+        method:'POST',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify({ name: `${name} Inventory`, currencies: { Jelly: startingMoney } })
+      });
+      inventoryId = (invRes.inventory || invRes).id;
+    }
+    quickStatusEl.textContent = 'Creating character...';
+    const createRes = await api('/characters', {
+      method:'POST',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const cid = createRes.id || (createRes.character && createRes.character.id);
+    if (!cid) throw new Error('Character creation failed');
+    const gearPayload = buildQuickGear(armorQuality, weaponQuality);
+    const payload = {
+      name,
+      level: chosenLevel,
+      xp: 0,
+      stats: buildQuickStats({ level: chosenLevel, species, boon, nature }),
+      abilities: buildQuickAbilities(species, boon),
+      archetype_id: archetypeId || '',
+      starting_money: startingMoney
+    };
+    if (Object.keys(gearPayload).length) {
+      payload.starting_gear = gearPayload;
+    }
+    if (inventoryId) {
+      payload.inventory_id = inventoryId;
+    }
+    quickStatusEl.textContent = 'Applying quick-build settings...';
+    await api('/characters/' + encodeURIComponent(cid), {
+      method:'PUT',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify(payload)
+    });
+    quickStatusEl.textContent = 'Opening character sheet...';
+    location.href = 'character_edit.html?id=' + encodeURIComponent(cid);
+  } catch (error) {
+    quickStatusEl.textContent = 'Quick create failed: ' + error.message;
+  } finally {
+    submitBtn?.removeAttribute('disabled');
+  }
+}
+
+if (newBtn) {
+  newBtn.addEventListener('click', toggleCreateOptions);
+}
+document.addEventListener('click', (event) => {
+  if (!createOptionsEl?.classList?.contains('open')) return;
+  if (createOptionsEl.contains(event.target) || event.target === newBtn) return;
+  closeCreateOptions();
+});
+
+document.querySelectorAll('#create-options button[data-mode]').forEach(button => {
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    closeCreateOptions();
+    if (button.dataset.mode === 'quick') {
+      openQuickModal();
+    } else {
+      createNew();
+    }
+  });
+});
+
+if (quickCancelBtn) {
+  quickCancelBtn.addEventListener('click', closeQuickModal);
+}
+if (quickModal) {
+  quickModal.addEventListener('click', (event) => {
+    if (event.target === quickModal) closeQuickModal();
+  });
+}
+if (quickForm) {
+  quickForm.addEventListener('submit', handleQuickCreate);
+}
+
+populateQualitySelects();
 
 // boot
 checkMe().then(loadList).catch(()=>{});
