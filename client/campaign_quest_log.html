@@ -940,13 +940,10 @@
       try {
         const res = await api(`/campaigns/${encodeURIComponent(CID)}`);
         state.campaign = res.campaign || {};
-        const username = (state.user?.username || '').toLowerCase();
-        const owner = (state.campaign.owner || '').toLowerCase();
-        const assistants = (state.campaign.assistant_gms || []).map((entry) => (entry || '').toLowerCase());
-        state.isGm = username && (username === owner || assistants.includes(username) || (state.user?.role || '').toLowerCase() === 'admin');
-        if (state.isGm) {
-          openCreateBtn.style.display = '';
-        }
+        const campaignRole = (state.campaign.user_role || '').toLowerCase();
+        const userRole = (state.user?.role || '').toLowerCase();
+        state.isGm = ['gm', 'assistant'].includes(campaignRole) || userRole === 'admin';
+        openCreateBtn.style.display = state.isGm ? '' : 'none';
       } catch (error) {
         console.warn('Failed to load campaign', error);
       }
