@@ -941,8 +941,14 @@
         const res = await api(`/campaigns/${encodeURIComponent(CID)}`);
         state.campaign = res.campaign || {};
         const campaignRole = (state.campaign.user_role || '').toLowerCase();
+        const campaignIsOwner = Boolean(state.campaign.is_owner);
+        const campaignIsAssistant = Boolean(state.campaign.is_assistant_gm);
         const userRole = (state.user?.role || '').toLowerCase();
-        state.isGm = ['gm', 'assistant'].includes(campaignRole) || userRole === 'admin';
+        state.isGm =
+          campaignIsOwner ||
+          campaignIsAssistant ||
+          ['gm', 'assistant'].includes(campaignRole) ||
+          userRole === 'admin';
         openCreateBtn.style.display = state.isGm ? '' : 'none';
       } catch (error) {
         console.warn('Failed to load campaign', error);
