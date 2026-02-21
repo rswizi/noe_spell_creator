@@ -479,22 +479,22 @@
       dynamic: 'Dynamic/Event Quest',
     };
 
-    const state = {
-      user: null,
-      campaign: null,
-      quests: [],
-      filters: {
-        search: '',
-        type: '',
-        status: '',
-        assigned: '',
-        faction: '',
-        session: '',
-        showHidden: false,
-      },
-      activeQuest: null,
-      isGm: false,
-    };
+      const state = {
+        user: null,
+        campaign: null,
+        quests: [],
+        filters: {
+          search: '',
+          type: '',
+          status: '',
+          assigned: '',
+          faction: '',
+          session: '',
+          showHidden: false,
+        },
+        activeQuest: null,
+        isGm: false,
+      };
 
     function escapeHtml(val) {
       if (!val) return '';
@@ -505,6 +505,21 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;')
         .replace(/\n/g, '<br>');
+    }
+
+    function refreshGmVisibility() {
+      const campaignRole = ((state.campaign || {}).user_role || '').toLowerCase();
+      const isOwner = Boolean(state.campaign?.is_owner);
+      const isAssistant = Boolean(state.campaign?.is_assistant_gm);
+      const userRole = (state.user?.role || '').toLowerCase();
+      state.isGm =
+        isOwner ||
+        isAssistant ||
+        ['gm', 'assistant'].includes(campaignRole) ||
+        userRole === 'admin';
+      if (openCreateBtn) {
+        openCreateBtn.style.display = state.isGm ? '' : 'none';
+      }
     }
 
     function canUpdateObjectives(quest) {
@@ -933,6 +948,7 @@
       } catch {
         state.user = null;
       }
+      refreshGmVisibility();
     }
 
     async function loadCampaign() {
@@ -940,16 +956,7 @@
       try {
         const res = await api(`/campaigns/${encodeURIComponent(CID)}`);
         state.campaign = res.campaign || {};
-        const campaignRole = (state.campaign.user_role || '').toLowerCase();
-        const campaignIsOwner = Boolean(state.campaign.is_owner);
-        const campaignIsAssistant = Boolean(state.campaign.is_assistant_gm);
-        const userRole = (state.user?.role || '').toLowerCase();
-        state.isGm =
-          campaignIsOwner ||
-          campaignIsAssistant ||
-          ['gm', 'assistant'].includes(campaignRole) ||
-          userRole === 'admin';
-        openCreateBtn.style.display = state.isGm ? '' : 'none';
+        refreshGmVisibility();
       } catch (error) {
         console.warn('Failed to load campaign', error);
       }
