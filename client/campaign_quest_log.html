@@ -227,6 +227,9 @@
       flex-wrap: wrap;
       align-items: center;
     }
+    body.modal-open {
+      overflow: hidden;
+    }
     textarea {
       width: 100%;
       min-height: 80px;
@@ -250,7 +253,6 @@
     .btn.ghost {
       background: rgba(255,255,255,0.05);
     }
-    .create-panel.hidden { display: none; }
     .create-panel .form-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -268,6 +270,37 @@
       gap: 10px;
       flex-wrap: wrap;
       align-items: center;
+    }
+    .gm-only {
+      display: none;
+    }
+    .gm-only.visible {
+      display: inline-flex;
+    }
+    .overlay-layer {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      z-index: 20;
+    }
+    .overlay-layer.visible {
+      display: flex;
+    }
+    .overlay-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+    }
+    .panel.create-panel {
+      position: relative;
+      width: min(680px, 100%);
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
     }
     @media (max-width: 900px) {
       .layout {
@@ -292,7 +325,7 @@
           <input id="search-input" type="search" placeholder="Title, tags, assigned, faction..." autocomplete="off" />
         </label>
         <button class="btn ghost" id="toggle-hidden">Show Hidden</button>
-        <button class="btn primary" id="open-create-btn" style="display:none;">New Quest</button>
+        <button class="btn primary gm-only" id="open-create-btn">New Quest</button>
       </div>
     </header>
     <section class="filters-row">
@@ -326,11 +359,13 @@
         </div>
       </main>
     </div>
-    <section id="create-panel" class="panel create-panel hidden">
-      <div class="row" style="justify-content:space-between;align-items:center;">
-        <strong>Create Quest</strong>
-        <button class="btn secondary" id="close-create">Close</button>
-      </div>
+    <div id="create-layer" class="overlay-layer">
+      <div class="overlay-backdrop" id="create-backdrop"></div>
+      <section id="create-panel" class="panel create-panel create-modal-content">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <strong>Create Quest</strong>
+          <button class="btn secondary" id="close-create">Close</button>
+        </div>
       <form id="create-form">
         <div class="form-grid">
           <label>
@@ -429,7 +464,8 @@
           <span id="create-feedback" class="muted"></span>
         </div>
       </form>
-    </section>
+      </section>
+    </div>
   </div>
   <script>
     const params = new URLSearchParams(location.search);
@@ -447,6 +483,8 @@
     const questCountEl = document.getElementById('quest-count');
     const openCreateBtn = document.getElementById('open-create-btn');
     const createPanel = document.getElementById('create-panel');
+    const createLayer = document.getElementById('create-layer');
+    const createBackdrop = document.getElementById('create-backdrop');
     const closeCreateBtn = document.getElementById('close-create');
     const createForm = document.getElementById('create-form');
     const createFeedback = document.getElementById('create-feedback');
@@ -518,8 +556,14 @@
         ['gm', 'assistant'].includes(campaignRole) ||
         userRole === 'admin';
       if (openCreateBtn) {
-        openCreateBtn.style.display = state.isGm ? '' : 'none';
+        openCreateBtn.classList.toggle('visible', state.isGm);
       }
+    }
+
+    function setCreateModalVisible(visible) {
+      if (!createLayer) return;
+      createLayer.classList.toggle('visible', visible);
+      document.body.classList.toggle('modal-open', visible);
     }
 
     function canUpdateObjectives(quest) {
@@ -988,8 +1032,9 @@
       renderQuestList();
     });
 
-    openCreateBtn.addEventListener('click', () => createPanel.classList.toggle('hidden'));
-    closeCreateBtn.addEventListener('click', () => createPanel.classList.add('hidden'));
+    openCreateBtn?.addEventListener('click', () => setCreateModalVisible(true));
+    closeCreateBtn?.addEventListener('click', () => setCreateModalVisible(false));
+    createBackdrop?.addEventListener('click', () => setCreateModalVisible(false));
 
     createForm.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -1022,7 +1067,7 @@
         });
         createFeedback.textContent = 'Quest created.';
         createForm.reset();
-        createPanel.classList.add('hidden');
+        setCreateModalVisible(false);
         await loadQuestData();
       } catch (error) {
         createFeedback.textContent = error.message || 'Creation failed';
