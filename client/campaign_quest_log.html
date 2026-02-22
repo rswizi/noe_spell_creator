@@ -557,6 +557,7 @@
         userRole === 'admin';
       if (openCreateBtn) {
         openCreateBtn.classList.toggle('visible', state.isGm);
+        openCreateBtn.style.display = state.isGm ? 'inline-flex' : 'none';
       }
     }
 
