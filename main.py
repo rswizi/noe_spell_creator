@@ -24,9 +24,12 @@ from server.src.modules.authentification_helpers import (
     _ALLOWED_ROLES,
     AUTH_TOKEN_COOKIE,
     SESSIONS,
+    clear_session,
     find_user,
+    get_session_identity,
     require_auth,
     make_token,
+    set_session_admin_privileges,
     verify_password,
     get_auth_token,
     normalize_email,
@@ -74,6 +77,24 @@ def _avatar_field(payload: dict, field_name: str = "default_avatar") -> tuple[st
         return key, False
     return None, True
 CAMPAIGN_COL = get_col("campaigns")
+
+
+def _campaign_character_id(entry: Any) -> str:
+    if isinstance(entry, dict):
+        return str(entry.get("character_id") or entry.get("id") or "").strip()
+    return str(entry or "").strip()
+
+
+def _campaign_character_entry(entry: Any) -> dict[str, Any]:
+    if isinstance(entry, dict):
+        return dict(entry)
+    cid = _campaign_character_id(entry)
+    if not cid:
+        return {}
+    # Legacy data may store bare ids instead of objects.
+    return {"character_id": cid}
+
+
 def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) -> dict:
     if not doc:
         return {}
@@ -110,16 +131,24 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
         d["is_assistant_gm"] = d["user_role"] == "assistant"
     if user and not (d.get("is_owner") or d.get("is_admin")):
         visible_chars = []
-        for c in (d.get("characters") or []):
+        for raw in (d.get("characters") or []):
+            c = _campaign_character_entry(raw)
+            if not c:
+                continue
             perm = _resolve_campaign_character_permission(c, user, d.get("is_owner", False), d.get("is_admin", False))
             if perm != DEFAULT_CAMPAIGN_PERMISSION:
                 visible_chars.append(c)
         d["characters"] = visible_chars
-    chars = d.get("characters") or []
+    chars = []
+    for raw in (d.get("characters") or []):
+        c = _campaign_character_entry(raw)
+        if c:
+            chars.append(c)
+    d["characters"] = chars
     if chars:
         ids = []
         for c in chars:
-            cid = str(c.get("character_id") or c.get("id") or "").strip()
+            cid = _campaign_character_id(c)
             if cid:
                 ids.append(cid)
         if ids:
@@ -128,7 +157,7 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
                 for c in get_col("characters").find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1})
             }
             for c in chars:
-                cid = str(c.get("character_id") or c.get("id") or "").strip()
+                cid = _campaign_character_id(c)
                 if not cid:
                     continue
                 if not c.get("name") and not c.get("character_name"):
@@ -161,16 +190,20 @@ def _fallback_campaign_permission(entry: dict) -> str:
     return DEFAULT_CAMPAIGN_PERMISSION
 
 def _resolve_campaign_character_permission(entry: dict, username: str, is_owner: bool, is_admin: bool) -> str:
+    if not isinstance(entry, dict):
+        return DEFAULT_CAMPAIGN_PERMISSION
     if not username:
         return DEFAULT_CAMPAIGN_PERMISSION
     if is_owner or is_admin:
         return "owner"
-    owner = (entry.get("owner") or "").strip()
-    assigned_to = (entry.get("assigned_to") or "").strip()
+    owner = str(entry.get("owner") or "").strip()
+    assigned_to = str(entry.get("assigned_to") or "").strip()
     if owner == username or assigned_to == username:
         return "owner"
-    perms = entry.get("permissions") or entry.get("permission_map") or {}
-    direct = (perms.get(username) or "").strip()
+    perms_raw = entry.get("permissions") or entry.get("permission_map") or {}
+    perms = perms_raw if isinstance(perms_raw, dict) else {}
+    direct_value = perms.get(username)
+    direct = str(direct_value).strip() if direct_value is not None else ""
     if direct:
         return _normalize_campaign_permission(direct)
     return _fallback_campaign_permission(entry)
@@ -428,7 +461,7 @@ async def join_campaign(req: Request):
         doc["members"] = (doc.get("members") or []) + [user]
     # Optional: join with a character
     if char_id:
-        chars = [c for c in (doc.get("characters") or []) if c.get("character_id") != char_id]
+        chars = [c for c in (doc.get("characters") or []) if _campaign_character_id(c) != char_id]
         chars.append({
             "character_id": char_id,
             "assigned_to": user,
@@ -524,7 +557,7 @@ async def assign_campaign_character(cid: str, req: Request):
     editable = bool(body.get("editable_by_gm"))
     visible_to_others = True if body.get("visible_to_others") is None else bool(body.get("visible_to_others"))
     permission_all = _normalize_campaign_permission(body.get("permission_all") or DEFAULT_CAMPAIGN_PERMISSION)
-    chars = [c for c in (doc.get("characters") or []) if c.get("character_id") != char_id]
+    chars = [c for c in (doc.get("characters") or []) if _campaign_character_id(c) != char_id]
     chars.append({
         "character_id": char_id,
         "assigned_to": assigned_to,
@@ -731,10 +764,11 @@ async def campaign_chat_ws(websocket: WebSocket, cid: str):
     token = websocket.query_params.get("token") or websocket.query_params.get("auth") or ""
     if not token:
         token = websocket.cookies.get(AUTH_TOKEN_COOKIE)
-    if not token or token not in SESSIONS:
+    identity = get_session_identity(token or "")
+    if not identity:
         await websocket.close(code=1008)
         return
-    user, role = SESSIONS[token]
+    user, _base_role, role = identity
     try:
         _require_campaign_access(cid, user, role)
     except HTTPException:
@@ -993,7 +1027,16 @@ async def auth_reset_required(request: Request):
 @app.get("/auth/me/details")
 async def my_account(req: Request):
     username, role = require_auth(req)
+    token = get_auth_token(req)
+    identity = get_session_identity(token or "")
+    base_role = identity[1] if identity else role
     u = get_col("users").find_one({"username": username}, {"_id":0, "username":1, "email":1, "role":1, "created_at":1})
+    u = dict(u or {})
+    u["role"] = role
+    u["base_role"] = base_role
+    u["effective_role"] = role
+    u["can_toggle_admin_privileges"] = base_role == "admin"
+    u["admin_privileges_enabled"] = role == "admin" if base_role == "admin" else False
     return {"status":"success", "user": u}
 
 @app.put("/auth/me")
@@ -1021,16 +1064,53 @@ async def update_account(req: Request):
 @app.get("/auth/me")
 async def auth_me(request: Request):
     token = get_auth_token(request)
-    if not token or token not in SESSIONS:
+    identity = get_session_identity(token or "")
+    if not identity:
         return {"status": "error", "message": "Not authenticated"}
-    username, role = SESSIONS[token]
-    return {"status": "success", "username": username, "role": role}
+    username, base_role, role = identity
+    return {
+        "status": "success",
+        "username": username,
+        "role": role,
+        "base_role": base_role,
+        "can_toggle_admin_privileges": base_role == "admin",
+        "admin_privileges_enabled": role == "admin" if base_role == "admin" else False,
+    }
+
+
+@app.post("/auth/me/admin-privileges")
+async def auth_toggle_admin_privileges(request: Request):
+    token = get_auth_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    raw_enabled = body.get("enabled")
+    if isinstance(raw_enabled, bool):
+        enabled = raw_enabled
+    elif isinstance(raw_enabled, str):
+        enabled = raw_enabled.strip().lower() in {"1", "true", "yes", "y", "on"}
+    elif isinstance(raw_enabled, (int, float)):
+        enabled = bool(raw_enabled)
+    else:
+        raise HTTPException(status_code=400, detail="'enabled' boolean is required")
+    username, base_role, role = set_session_admin_privileges(token, enabled)
+    return {
+        "status": "success",
+        "username": username,
+        "role": role,
+        "base_role": base_role,
+        "can_toggle_admin_privileges": True,
+        "admin_privileges_enabled": role == "admin",
+    }
 
 @app.post("/auth/logout")
 async def auth_logout(request: Request, response: Response):
     token = get_auth_token(request)
-    if token and token in SESSIONS:
-        del SESSIONS[token]
+    if token:
+        clear_session(token)
     response.delete_cookie(AUTH_TOKEN_COOKIE, path="/")
     return {"status": "success"}
 
@@ -1908,9 +1988,10 @@ async def dedupe_spells_by_sig(request: Request):
 
 def require_user_doc(request: Request):
     token = get_auth_token(request)
-    if not token or token not in SESSIONS:
+    identity = get_session_identity(token or "")
+    if not identity:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    username, role = SESSIONS[token]
+    username, _base_role, role = identity
     user = get_col("users").find_one({"username": username})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
@@ -5933,8 +6014,10 @@ def _bool_from(val):
 
 def _optional_auth(request: Request):
     token = get_auth_token(request)
-    if token and token in SESSIONS:
-        return SESSIONS[token]
+    identity = get_session_identity(token or "")
+    if identity:
+        username, _base_role, role = identity
+        return username, role
     return None, None
 
 def _public_character_ref(field: str, value: str) -> bool:

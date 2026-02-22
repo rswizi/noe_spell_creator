@@ -11,6 +11,7 @@
     .wrap{width:100%; max-width:720px; padding:28px 16px 60px;}
     .panel{border:1px solid var(--border); border-radius:14px; padding:16px; background:var(--panel); box-shadow:0 8px 24px rgba(0,0,0,0.25);}
     .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    .admin-toggle{margin-top:12px; padding-top:12px; border-top:1px solid var(--border);}
     label{display:grid; gap:4px;}
     input{padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#181821; color:var(--text);}
     button{padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#181821; color:var(--text);}
@@ -26,6 +27,12 @@
     </div>
     <div class="panel">
       <div class="muted" id="acct-info"></div>
+      <div class="admin-toggle" id="admin-toggle-wrap" style="display:none;">
+        <div class="row">
+          <button id="admin-toggle-btn">Turn Off Admin Privileges</button>
+          <span class="muted" id="admin-toggle-status"></span>
+        </div>
+      </div>
       <div class="row" style="margin-top:12px;">
         <label class="grow">Email
           <input id="acct-email" placeholder="Enter new email">
@@ -48,6 +55,10 @@
     const emailEl = document.getElementById("acct-email");
     const passEl = document.getElementById("acct-pass");
     const statusEl = document.getElementById("acct-status");
+    const adminToggleWrap = document.getElementById("admin-toggle-wrap");
+    const adminToggleBtn = document.getElementById("admin-toggle-btn");
+    const adminToggleStatus = document.getElementById("admin-toggle-status");
+    let adminPrivilegesEnabled = true;
 
     function authHeaders(){
       const tok = localStorage.getItem("auth_token") || "";
@@ -65,8 +76,23 @@
     async function loadAccount(){
       const res = await api("/auth/me/details");
       const u = res.user || {};
-      infoEl.textContent = `Username: ${u.username || ""} • Role: ${u.role || ""} • Created: ${u.created_at || ""}`;
+      const effectiveRole = (u.effective_role || u.role || "").toLowerCase();
+      const baseRole = (u.base_role || u.role || "").toLowerCase();
+      const canToggle = !!u.can_toggle_admin_privileges;
+      adminPrivilegesEnabled = !!u.admin_privileges_enabled;
+      infoEl.textContent = `Username: ${u.username || ""} | Role: ${effectiveRole || ""} | Base role: ${baseRole || ""} | Created: ${u.created_at || ""}`;
       emailEl.value = u.email || "";
+      if (effectiveRole) localStorage.setItem("auth_role", effectiveRole);
+      if (canToggle) {
+        adminToggleWrap.style.display = "";
+        adminToggleBtn.textContent = adminPrivilegesEnabled ? "Turn Off Admin Privileges" : "Turn On Admin Privileges";
+        adminToggleStatus.textContent = adminPrivilegesEnabled
+          ? "Admin privileges are currently ON."
+          : "Admin privileges are currently OFF (you are treated as user).";
+      } else {
+        adminToggleWrap.style.display = "none";
+        adminToggleStatus.textContent = "";
+      }
     }
 
     async function saveAccount(){
@@ -87,6 +113,27 @@
     }
 
     document.getElementById("acct-save").addEventListener("click", saveAccount);
+    adminToggleBtn.addEventListener("click", async ()=>{
+      const nextEnabled = !adminPrivilegesEnabled;
+      adminToggleStatus.textContent = "Updating...";
+      try{
+        const res = await api("/auth/me/admin-privileges", {
+          method:"POST",
+          headers:{ "content-type":"application/json" },
+          body: JSON.stringify({ enabled: nextEnabled })
+        });
+        const role = (res.role || "").toLowerCase();
+        if (role) localStorage.setItem("auth_role", role);
+        adminPrivilegesEnabled = !!res.admin_privileges_enabled;
+        adminToggleBtn.textContent = adminPrivilegesEnabled ? "Turn Off Admin Privileges" : "Turn On Admin Privileges";
+        adminToggleStatus.textContent = adminPrivilegesEnabled
+          ? "Admin privileges are currently ON."
+          : "Admin privileges are currently OFF (you are treated as user).";
+        await loadAccount();
+      }catch(e){
+        adminToggleStatus.textContent = e.message;
+      }
+    });
     loadAccount().catch(e=>{ statusEl.textContent = e.message; });
   </script>
 </body>
