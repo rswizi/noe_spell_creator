@@ -61,11 +61,24 @@ def sanitize_doc(doc: Any) -> Any:
     return doc
 
 
-def validate_slug(value: str) -> str:
+def _normalize_slug(value: str) -> str:
     slug = (value or "").strip().lower()
+    if not slug:
+        return ""
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    slug = re.sub(r"-{2,}", "-", slug).strip("-")
+    return slug
+
+
+def validate_slug(value: str) -> str:
+    slug = _normalize_slug(value)
     if not slug or not SLUG_RE.match(slug):
         raise HTTPException(status_code=400, detail="Invalid slug")
     return slug
+
+
+def resolve_slug(raw_slug: str, title: str) -> str:
+    return validate_slug(raw_slug or title)
 
 
 def _page_to_dict(page: WikiPage) -> WikiPageOut:
@@ -96,10 +109,10 @@ async def create_page(
     session: AsyncSession = Depends(get_session),
     _auth: dict = Depends(require_wiki_admin),
 ):
-    slug = validate_slug(payload.slug)
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
+    slug = resolve_slug(payload.slug, title)
     doc_json = sanitize_doc(payload.doc_json)
 
     existing = await session.execute(select(WikiPage).where(WikiPage.slug == slug))
@@ -132,10 +145,10 @@ async def update_page(
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
 
-    slug = validate_slug(payload.slug)
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
+    slug = resolve_slug(payload.slug, title)
     doc_json = sanitize_doc(payload.doc_json)
 
     existing = await session.execute(

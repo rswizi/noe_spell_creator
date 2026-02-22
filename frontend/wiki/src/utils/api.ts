@@ -24,7 +24,23 @@ async function fetcher(path: string, options: RequestInit = {}) {
     throw new Error("Unauthorized");
   }
   if (!response.ok) {
-    const message = await response.text();
+    let message = "";
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try {
+        const data = await response.json();
+        if (data && typeof data.detail === "string") {
+          message = data.detail;
+        } else if (data && typeof data.message === "string") {
+          message = data.message;
+        }
+      } catch {
+        message = "";
+      }
+    }
+    if (!message) {
+      message = await response.text();
+    }
     throw new Error(message || response.statusText);
   }
   if (response.status === 204) {
@@ -53,12 +69,12 @@ export async function fetchPages(): Promise<PageListResponse> {
   return fetcher("/api/wiki/pages?limit=100");
 }
 
-export async function createPage(title: string, slug: string): Promise<PagePayload> {
+export async function createPage(title: string, slug?: string): Promise<PagePayload> {
   return fetcher("/api/wiki/pages", {
     method: "POST",
     body: JSON.stringify({
       title,
-      slug,
+      slug: slug || "",
       doc_json: { type: "doc", content: [] },
     }),
   });
