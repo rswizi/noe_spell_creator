@@ -52,11 +52,13 @@
     .combat-characters .card.active{border-color:var(--accent);box-shadow:0 18px 40px rgba(0,0,0,0.45);}
     .pill.badge{border-color:var(--accent);color:var(--accent);}
     .carousel{display:flex;gap:8px;overflow-x:auto;padding:6px 4px;}
-    .initiative-pill{padding:6px 12px;border-radius:999px;background:#1d2130;border:1px solid #2c3140;white-space:nowrap;font-size:.85rem;}
+    .initiative-pill{padding:6px 12px;border-radius:999px;background:#1d2130;border:1px solid #2c3140;white-space:nowrap;font-size:.85rem;display:inline-flex;align-items:center;gap:8px;}
     .initiative-pill.active{border-color:var(--accent);background:rgba(201,162,39,0.1);}
+    .initiative-pill img{width:22px;height:22px;border-radius:999px;object-fit:cover;border:1px solid rgba(255,255,255,0.2);background:#0b0d14;}
     .icon-btn{border-radius:50%;width:36px;height:36px;border:1px solid var(--border);background:#121521;color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:1rem;}
     .tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
     .tab{border:1px solid var(--border);border-radius:12px;padding:8px 12px;background:#10121a;color:var(--ink);cursor:pointer;font-size:.9rem;display:inline-flex;align-items:center;gap:6px;}
+    .tab.active{border-color:var(--accent);background:rgba(201,162,39,0.14);}
     .tab small{color:var(--muted);}
     .chat-panel{border:1px solid var(--border);border-radius:12px;padding:12px;background:#0f1119;display:grid;gap:10px;margin-top:18px;}
     .chat-log{max-height:240px;overflow:auto;border-radius:10px;background:#08090f;padding:10px;border:1px solid #1d1f2a;display:grid;gap:10px;}
@@ -76,6 +78,13 @@
     .character-label{display:flex;flex-direction:column;font-size:.9rem;}
     .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap;}
     .modal .subtle{font-size:.85rem;color:var(--muted);margin-bottom:12px;}
+    .participant-frame-wrap{position:relative;min-height:56vh;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#0c0f16;}
+    .participant-frame{width:100%;height:56vh;border:0;display:block;background:#090c13;}
+    .participant-frame-empty{padding:12px;}
+    .participant-avatar{width:40px;height:40px;border-radius:12px;object-fit:cover;border:1px solid rgba(255,255,255,0.22);background:#0b0d14;}
+    .gm-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;}
+    .gm-tools input[type="number"]{width:84px;border-radius:8px;border:1px solid var(--border);padding:4px;background:#08090f;color:var(--ink);}
+    .small-note{font-size:.8rem;color:var(--muted);}
   </style>
 </head>
 <body>
@@ -84,6 +93,7 @@
       <h1>Campaign Combat</h1>
       <span id="login-chip" class="pill">Checking login...</span>
       <span class="spacer"></span>
+      <a class="btn" id="back-to-campaign-btn" href="campaigns_my.html">Back to Campaign</a>
       <a class="btn" href="portal.html">Portal</a>
     </div>
 
@@ -132,6 +142,7 @@
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
         <button class="btn" id="join-combat-btn">Join Combat</button>
+        <button class="btn hidden" id="add-fighter-btn">Add/Remove Fighters</button>
         <span class="muted" id="combat-token"></span>
       </div>
       <div id="participant-tabs" class="tabs"></div>
@@ -141,6 +152,9 @@
           <div>
             <h2 id="participant-detail-title">Participant</h2>
             <p class="muted" id="participant-detail-meta"></p>
+          </div>
+          <div>
+            <a class="btn" id="participant-open-sheet" target="_blank" rel="noopener noreferrer" style="display:none;">Open Full Sheet</a>
           </div>
         </div>
         <div id="participant-detail-body"></div>
@@ -173,7 +187,7 @@
     <div class="modal-backdrop"></div>
     <div class="modal-content">
       <h3>Start Combat</h3>
-      <p class="subtle">Pick characters to include, set initiatives, add dummy foes, then start the encounter.</p>
+      <p class="subtle">Pick characters to include, initiatives are fetched from sheet values, then add optional dummy foes.</p>
       <div id="modal-error" class="muted" style="color:#e36f6f;"></div>
       <div>
         <label>
@@ -225,6 +239,9 @@
       combatInterval: null,
       lastTurnToken: 0,
       activeParticipantId: null,
+      characterInitiatives: {},
+      characterDocs: {},
+      modalMode: 'create',
     };
 
     const queryParams = new URLSearchParams(location.search);
@@ -241,6 +258,11 @@
     const participantDetailTitle = document.getElementById('participant-detail-title');
     const participantDetailMeta = document.getElementById('participant-detail-meta');
     const participantDetailBody = document.getElementById('participant-detail-body');
+    const participantOpenSheet = document.getElementById('participant-open-sheet');
+    const addFighterBtn = document.getElementById('add-fighter-btn');
+    const modalTitleEl = document.querySelector('#combat-modal h3');
+    const modalStartBtn = document.getElementById('combat-modal-start');
+    const backToCampaignBtn = document.getElementById('back-to-campaign-btn');
 
     function api(path, options = {}) {
       const opts = { credentials: 'include', ...options };
@@ -260,6 +282,63 @@
 
     function setText(el, text) {
       if (el) el.textContent = text;
+    }
+
+    function campaignBackHref(cid) {
+      const id = String(cid || '').trim();
+      return id ? `campaign_view.html?cid=${encodeURIComponent(id)}` : 'campaigns_my.html';
+    }
+
+    function refreshBackToCampaignLink() {
+      if (!backToCampaignBtn) return;
+      const cid = (state.selectedCampaign && state.selectedCampaign.id) || PRESELECTED_CAMPAIGN_ID;
+      backToCampaignBtn.href = campaignBackHref(cid);
+      backToCampaignBtn.textContent = cid ? 'Back to Campaign' : 'Back to My Campaigns';
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function intOr(value, fallback = 0) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+    }
+
+    function extractInitiativeFromCharacterDoc(doc) {
+      if (!doc || typeof doc !== 'object') return 0;
+      const stats = (doc.stats && typeof doc.stats === 'object') ? doc.stats : {};
+      const statsDerived = (stats.derived && typeof stats.derived === 'object') ? stats.derived : {};
+      const statsDerivedStats = (stats.derived_stats && typeof stats.derived_stats === 'object') ? stats.derived_stats : {};
+      const topDerived = (doc.derived && typeof doc.derived === 'object') ? doc.derived : {};
+      const candidates = [
+        doc.initiative,
+        stats.initiative,
+        statsDerived.initiative,
+        statsDerivedStats.initiative,
+        topDerived.initiative,
+      ];
+      for (const candidate of candidates) {
+        const parsed = Number(candidate);
+        if (Number.isFinite(parsed)) return Math.trunc(parsed);
+      }
+      return 0;
+    }
+
+    function canViewParticipantTab(participant) {
+      if (!participant || !state.me) return false;
+      if (isCurrentUserGM(state.selectedCampaign)) return true;
+      const me = (state.me.username || '').trim().toLowerCase();
+      const charId = String(participant.character_id || '').trim();
+      const ownerFromSheet = (state.characterDocs?.[charId]?.owner || '').trim().toLowerCase();
+      if (ownerFromSheet && ownerFromSheet === me) return true;
+      const mine = (participant.assigned_to || '').trim().toLowerCase();
+      return Boolean(mine && me && mine === me);
     }
 
     function chatVisibilityKey() {
@@ -605,6 +684,9 @@
 
     function selectCampaign(camp) {
       state.selectedCampaign = camp;
+      state.characterInitiatives = {};
+      state.characterDocs = {};
+      refreshBackToCampaignLink();
       const detail = document.getElementById('campaign-detail');
       detail.classList.remove('hidden');
       setText(document.getElementById('campaign-name'), camp.name || 'Campaign');
@@ -613,9 +695,32 @@
       renderChatSpeaker();
       if (chatVisibilityEl) chatVisibilityEl.value = getChatVisibilityPref();
       updateStartButton();
-      updateQuestLogButton();
       loadActiveCombat();
       startPolling();
+      loadCharacterSheetData();
+    }
+
+    async function loadCharacterSheetData() {
+      const chars = state.selectedCampaign?.characters || [];
+      const ids = Array.from(new Set(chars.map((entry) => String(entry.character_id || entry.id || '').trim()).filter(Boolean)));
+      if (!ids.length) return;
+      const initiatives = {};
+      const docs = {};
+      await Promise.all(ids.map(async (charId) => {
+        try {
+          const res = await api(`/characters/${encodeURIComponent(charId)}`);
+          const character = res?.character || null;
+          if (!character) return;
+          docs[charId] = character;
+          initiatives[charId] = extractInitiativeFromCharacterDoc(character);
+        } catch (err) {
+          initiatives[charId] = initiatives[charId] ?? 0;
+        }
+      }));
+      state.characterInitiatives = initiatives;
+      state.characterDocs = docs;
+      renderStartCharacterChecklist();
+      renderChatSpeaker();
     }
 
     function isCurrentUserGM(camp) {
@@ -625,6 +730,8 @@
       const username = (state.me.username || '').toLowerCase();
       if (role === 'admin') return true;
       if (owner && owner === username) return true;
+      const assistants = Array.isArray(camp?.assistant_gms) ? camp.assistant_gms : [];
+      if (assistants.some((name) => String(name || '').toLowerCase() === username)) return true;
       return false;
     }
 
@@ -668,27 +775,51 @@
       const list = document.getElementById('start-character-list');
       list.innerHTML = '';
       const chars = state.selectedCampaign?.characters || [];
+      const addMode = state.modalMode === 'add';
+      const combatCharacterIds = new Set(
+        (state.activeCombat?.participants || [])
+          .map((part) => String(part.character_id || '').trim())
+          .filter(Boolean),
+      );
       chars.forEach((char) => {
         const row = document.createElement('div');
         row.className = 'character-row';
-        const charId = char.character_id || '';
+        const charId = String(char.character_id || char.id || '').trim();
+        const defaultInit = intOr(state.characterInitiatives[charId], 0);
+        const alreadyInCombat = addMode && combatCharacterIds.has(charId);
+        const charName = char.name || char.character_name || charId || 'Character';
         row.innerHTML = `
           <label class="character-label">
-            <input type="checkbox" data-character-id="${charId}">
-            ${char.name || char.character_name || charId || 'Character'}
+            <input type="checkbox" data-character-id="${charId}" data-character-name="${escapeHtml(charName)}" ${alreadyInCombat ? 'disabled' : ''}>
+            ${escapeHtml(charName)}
             <small>${char.assigned_to ? `Player: ${char.assigned_to}` : 'Unassigned'}</small>
+            ${alreadyInCombat ? '<small class="small-note">Already in combat</small>' : '<small class="small-note">Initiative fetched from sheet</small>'}
           </label>
-          <input type="number" class="init-input" placeholder="Initiative" min="0" value="0">
+          <input type="number" class="init-input" placeholder="Initiative" min="0" value="${defaultInit}" readonly data-base-init="${defaultInit}">
         `;
         list.appendChild(row);
       });
     }
 
-    function showModal() {
+    function configureModalForMode() {
+      const addMode = state.modalMode === 'add';
+      if (modalTitleEl) modalTitleEl.textContent = addMode ? 'Manage Fighters' : 'Start Combat';
+      if (modalStartBtn) modalStartBtn.textContent = addMode ? 'Apply Changes' : 'Start Combat';
+      const titleInput = document.getElementById('combat-title');
+      const notesInput = document.getElementById('combat-notes');
+      if (titleInput) titleInput.disabled = addMode;
+      if (notesInput) notesInput.disabled = addMode;
+    }
+
+    function showModal(mode = 'create') {
+      state.modalMode = mode;
       state.dummyEntries = [];
-      document.getElementById('combat-title').value = '';
-      document.getElementById('combat-notes').value = '';
+      if (mode !== 'add') {
+        document.getElementById('combat-title').value = '';
+        document.getElementById('combat-notes').value = '';
+      }
       document.getElementById('modal-error').textContent = '';
+      configureModalForMode();
       renderDummyList();
       renderStartCharacterChecklist();
       document.getElementById('combat-modal').classList.add('open');
@@ -696,6 +827,8 @@
 
     function hideModal() {
       document.getElementById('combat-modal').classList.remove('open');
+      state.modalMode = 'create';
+      configureModalForMode();
     }
 
     function renderDummyList() {
@@ -732,9 +865,90 @@
       renderDummyList();
     });
 
-    document.getElementById('start-combat-btn').addEventListener('click', () => {
+    function rollD10() {
+      return Math.floor(Math.random() * 10) + 1;
+    }
+
+    function rollInitiativeSpecial(baseValue) {
+      const base = intOr(baseValue, 0);
+      const rolls = [];
+      const first = rollD10();
+      rolls.push({ v: first, sign: '+' });
+      let total = first;
+      if (first === 10) {
+        let cur = rollD10();
+        rolls.push({ v: cur, sign: '+' });
+        total += cur;
+        while (cur === 10) {
+          cur = rollD10();
+          rolls.push({ v: cur, sign: '+' });
+          total += cur;
+        }
+      } else if (first === 1) {
+        const cur = rollD10();
+        rolls.push({ v: cur, sign: '-' });
+        total -= cur;
+      }
+      const result = base + total;
+      const lines = [
+        'Skill: Initiative',
+        `Result: ${result}`,
+        'Roll type: Simple',
+        `Rolls: ${rolls.map((entry) => `${entry.sign}${entry.v}`).join(' ')} | Base ${base} | Mod 0`,
+      ];
+      return { result, lines };
+    }
+
+    async function rollSelectedInitiativesFromSheet() {
+      const rows = document.querySelectorAll('#start-character-list .character-row');
+      const messages = [];
+      rows.forEach((row) => {
+        const input = row.querySelector('input[type="checkbox"]');
+        if (!input?.checked || input.disabled) return;
+        const charId = input.dataset.characterId || '';
+        const charName = input.dataset.characterName || 'Character';
+        const initInput = row.querySelector('.init-input');
+        const base = intOr(initInput?.dataset.baseInit, intOr(state.characterInitiatives[charId], 0));
+        const rolled = rollInitiativeSpecial(base);
+        if (initInput) initInput.value = String(rolled.result);
+        messages.push({
+          type: 'roll',
+          text: `Initiative Roll - ${charName}`,
+          lines: rolled.lines,
+          visibility: 'public',
+          ts: Date.now(),
+          user: state.me?.username || 'Unknown',
+          character_id: charId,
+          character_name: charName,
+          character_avatar: charId ? `/characters/${encodeURIComponent(charId)}/avatar` : '',
+        });
+      });
+      for (const payload of messages) {
+        try {
+          await postChatMessage(payload);
+        } catch (err) {
+          console.warn('Failed to post initiative roll', err);
+        }
+      }
+      if (messages.length) {
+        await loadCampaignChat();
+      }
+    }
+
+    rollInitiativeBtn?.addEventListener('click', async () => {
+      await rollSelectedInitiativesFromSheet();
+    });
+
+    document.getElementById('start-combat-btn').addEventListener('click', async () => {
       if (!state.selectedCampaign) return;
-      showModal();
+      await loadCharacterSheetData();
+      showModal('create');
+    });
+
+    addFighterBtn?.addEventListener('click', async () => {
+      if (!state.selectedCampaign || !state.activeCombat) return;
+      await loadCharacterSheetData();
+      showModal('add');
     });
 
     document.getElementById('combat-modal-cancel').addEventListener('click', hideModal);
@@ -760,13 +974,24 @@
         document.getElementById('modal-error').textContent = 'Add at least one participant.';
         return;
       }
-      const payload = {
-        participants,
-        title: document.getElementById('combat-title').value.trim(),
-        notes: document.getElementById('combat-notes').value.trim(),
-      };
+      const payload = { participants };
       try {
         const campaignId = encodeURIComponent(state.selectedCampaign.id);
+        if (state.modalMode === 'add' && state.activeCombat?.id) {
+          const combatId = encodeURIComponent(state.activeCombat.id);
+          const addRes = await api(`/campaigns/${campaignId}/combats/${combatId}/participants`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          state.activeCombat = addRes.combat || state.activeCombat;
+          state.lastTurnToken = state.activeCombat?.turn_token || state.lastTurnToken || 0;
+          hideModal();
+          renderCombatPanel();
+          return;
+        }
+        payload.title = document.getElementById('combat-title').value.trim();
+        payload.notes = document.getElementById('combat-notes').value.trim();
         const res = await api(`/campaigns/${campaignId}/combats`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -806,14 +1031,18 @@
     function renderCombatPanel() {
       const panel = document.getElementById('combat-panel');
       const endBtn = document.getElementById('combat-end-btn');
+      const joinBtn = document.getElementById('join-combat-btn');
+      const isGM = isCurrentUserGM(state.selectedCampaign);
       if (!state.activeCombat) {
         panel.classList.add('hidden');
         participantDetailPanel?.classList.add('hidden');
+        if (addFighterBtn) addFighterBtn.classList.add('hidden');
         updateStartButton();
         setText(document.getElementById('combat-status'), 'No combat running.');
         return;
       }
       panel.classList.remove('hidden');
+      if (addFighterBtn) addFighterBtn.classList.toggle('hidden', !isGM);
       setText(document.getElementById('combat-status'), `Combat ${state.activeCombat.id} · status: ${state.activeCombat.status}`);
       updateStartButton();
       renderInitiativeCarousel();
@@ -821,8 +1050,6 @@
       renderParticipantCards();
       setText(document.getElementById('combat-round'), `Round ${state.activeCombat.round || 1}`);
       setText(document.getElementById('combat-token'), `Turn token ${state.activeCombat.turn_token || 0}`);
-      const joinBtn = document.getElementById('join-combat-btn');
-      const isGM = state.me && (state.me.role === 'admin' || (state.selectedCampaign && state.selectedCampaign.owner === state.me.username));
       ['combat-next', 'combat-prev'].forEach((id) => {
         const ctrl = document.getElementById(id);
         if (ctrl) ctrl.disabled = !isGM;
@@ -847,7 +1074,17 @@
         const part = participants.find((p) => p.id === pid) || {};
         const pill = document.createElement('div');
         pill.className = `initiative-pill${idx === index ? ' active' : ''}`;
-        pill.textContent = `${part.name || 'Unknown'} (${part.initiative || 0})`;
+        const avatar = part.avatar || (part.character_id ? `/characters/${encodeURIComponent(part.character_id)}/avatar` : '');
+        pill.innerHTML = `
+          <img src="${avatar}" alt="">
+          <span>${escapeHtml(part.name || 'Unknown')} (${intOr(part.initiative, 0)})</span>
+        `;
+        const img = pill.querySelector('img');
+        if (img) {
+          img.onerror = () => {
+            img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';
+          };
+        }
         tracker.appendChild(pill);
       });
     }
@@ -856,10 +1093,9 @@
       const tabs = document.getElementById('participant-tabs');
       tabs.innerHTML = '';
       const participants = state.activeCombat?.participants || [];
-      const isGM = isCurrentUserGM(state.selectedCampaign);
-      const visible = isGM ? participants : participants.filter((p) => p.assigned_to && state.me && p.assigned_to.toLowerCase() === state.me.username.toLowerCase());
+      const visible = participants.filter((p) => canViewParticipantTab(p));
       if (!visible.length) {
-        tabs.innerHTML = '<span class="muted">Join the combat to view your characters.</span>';
+        tabs.innerHTML = '<span class="muted">Only your own character tabs are visible unless you are GM.</span>';
         participantDetailPanel?.classList.add('hidden');
         return;
       }
@@ -869,7 +1105,9 @@
       visible.forEach((part) => {
         const tab = document.createElement('button');
         tab.className = `tab${part.id === state.activeParticipantId ? ' active' : ''}`;
-        tab.innerHTML = `<span>${part.name || part.character_id || 'Combatant'}</span><small>${part.type || part.assigned_to ? `Player: ${part.assigned_to || 'NPC'}` : 'NPC'}</small>`;
+        const tabName = escapeHtml(part.name || part.character_id || 'Combatant');
+        const tabMeta = part.assigned_to ? `Player: ${escapeHtml(part.assigned_to)}` : 'NPC';
+        tab.innerHTML = `<span>${tabName}</span><small>${tabMeta}</small>`;
         tab.addEventListener('click', () => {
           state.activeParticipantId = part.id;
           renderParticipantTabs();
@@ -883,16 +1121,45 @@
       if (!participantDetailPanel) return;
       if (!part) {
         participantDetailPanel.classList.add('hidden');
+        if (participantOpenSheet) {
+          participantOpenSheet.style.display = 'none';
+          participantOpenSheet.href = '#';
+        }
         return;
       }
       participantDetailPanel.classList.remove('hidden');
       participantDetailTitle.textContent = part.name || 'Participant';
-      participantDetailMeta.textContent = `Initiative ${part.initiative || 0} · ${part.type || 'Combatant'}`;
-      const lines = [];
-      lines.push(`Assigned: ${part.assigned_to || 'Unassigned'}`);
-      if (part.notes) lines.push(`Notes: ${part.notes}`);
-      if (part.character_id) lines.push(`Character: ${part.character_id}`);
-      participantDetailBody.innerHTML = lines.map(line => `<div class="muted" style="margin-bottom:4px;">${line}</div>`).join('');
+      participantDetailMeta.textContent = `Initiative ${intOr(part.initiative, 0)} | ${part.type || 'Combatant'}`;
+      const campaignId = encodeURIComponent(state.selectedCampaign?.id || '');
+      const characterId = String(part.character_id || '').trim();
+      if (!characterId) {
+        if (participantOpenSheet) {
+          participantOpenSheet.style.display = 'none';
+          participantOpenSheet.href = '#';
+        }
+        const lines = [`Assigned: ${part.assigned_to || 'Unassigned'}`, 'Dummy fighter'];
+        if (part.notes) lines.push(`Notes: ${part.notes}`);
+        participantDetailBody.innerHTML = `<div class="participant-frame-empty">${lines.map((line) => `<div class="muted" style="margin-bottom:4px;">${escapeHtml(line)}</div>`).join('')}</div>`;
+        return;
+      }
+      if (!canViewParticipantTab(part)) {
+        if (participantOpenSheet) {
+          participantOpenSheet.style.display = 'none';
+          participantOpenSheet.href = '#';
+        }
+        participantDetailBody.innerHTML = '<div class="participant-frame-empty muted">You cannot view this character.</div>';
+        return;
+      }
+      const iframeSrc = `character_edit.html?id=${encodeURIComponent(characterId)}&cid=${campaignId}&tab=tab-com`;
+      participantDetailBody.innerHTML = `
+        <div class="participant-frame-wrap">
+          <iframe class="participant-frame" src="${iframeSrc}" loading="lazy" title="Character combat view"></iframe>
+        </div>
+      `;
+      if (participantOpenSheet) {
+        participantOpenSheet.style.display = '';
+        participantOpenSheet.href = iframeSrc;
+      }
     }
 
     function renderParticipantCards() {
@@ -908,23 +1175,109 @@
       renderParticipantDetail(active);
       participants.forEach((part) => {
         const isActive = part.id === state.activeParticipantId;
+        const isGM = isCurrentUserGM(state.selectedCampaign);
+        const avatar = part.avatar || (part.character_id ? `/characters/${encodeURIComponent(part.character_id)}/avatar` : '');
+        const gmTools = isGM ? `
+          <div class="gm-tools">
+            <input type="number" class="gm-init-input" value="${intOr(part.initiative, 0)}" min="0">
+            <button class="btn small gm-save-init">Save Init</button>
+            <button class="btn small gm-reroll-init">Reroll</button>
+            <button class="btn small gm-remove-fighter">Remove</button>
+          </div>
+        ` : '';
         const card = document.createElement('div');
         card.className = `card${isActive ? ' active' : ''}`;
         card.innerHTML = `
           <div>
-            <strong>${part.name || 'Combatant'}</strong>
-            <span class="muted">Initiative ${part.initiative || 0}</span><br>
-            <span class="muted">${part.character_id ? 'Linked character' : 'Dummy'}</span>
-            ${part.notes ? `<div class="muted" style="font-size:.82rem; margin-top:6px;">${part.notes}</div>` : ''}
+            <div style="display:flex;gap:10px;align-items:center;">
+              <img class="participant-avatar" src="${avatar}" alt="">
+              <div>
+                <strong>${escapeHtml(part.name || 'Combatant')}</strong>
+                <span class="muted">Initiative ${intOr(part.initiative, 0)}</span><br>
+                <span class="muted">${part.character_id ? 'Linked character' : 'Dummy'}</span>
+              </div>
+            </div>
+            ${part.notes ? `<div class="muted" style="font-size:.82rem; margin-top:6px;">${escapeHtml(part.notes)}</div>` : ''}
+            ${gmTools}
           </div>
         `;
+        const img = card.querySelector('.participant-avatar');
+        if (img) {
+          img.onerror = () => {
+            img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WUZPi8AAAAASUVORK5CYII=';
+          };
+        }
         card.addEventListener('click', () => {
           state.activeParticipantId = part.id;
           renderParticipantTabs();
           renderParticipantCards();
         });
+        card.querySelector('.gm-save-init')?.addEventListener('click', async (event) => {
+          event.stopPropagation();
+          const value = intOr(card.querySelector('.gm-init-input')?.value, intOr(part.initiative, 0));
+          await updateParticipantInitiative(part.id, value);
+        });
+        card.querySelector('.gm-reroll-init')?.addEventListener('click', async (event) => {
+          event.stopPropagation();
+          await rerollParticipantInitiative(part);
+        });
+        card.querySelector('.gm-remove-fighter')?.addEventListener('click', async (event) => {
+          event.stopPropagation();
+          if (!window.confirm(`Remove ${part.name || 'this fighter'} from combat?`)) return;
+          await removeParticipantFromCombat(part.id);
+        });
         container.appendChild(card);
       });
+    }
+
+    async function updateParticipantInitiative(participantId, initiative) {
+      if (!state.selectedCampaign || !state.activeCombat || !participantId) return;
+      const res = await api(
+        `/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/combats/${encodeURIComponent(state.activeCombat.id)}/participants/${encodeURIComponent(participantId)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initiative: intOr(initiative, 0) }),
+        },
+      );
+      state.activeCombat = res.combat || state.activeCombat;
+      renderCombatPanel();
+    }
+
+    async function removeParticipantFromCombat(participantId) {
+      if (!state.selectedCampaign || !state.activeCombat || !participantId) return;
+      const res = await api(
+        `/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/combats/${encodeURIComponent(state.activeCombat.id)}/participants/${encodeURIComponent(participantId)}`,
+        { method: 'DELETE' },
+      );
+      state.activeCombat = res.combat || state.activeCombat;
+      if (state.activeParticipantId === participantId) state.activeParticipantId = null;
+      renderCombatPanel();
+    }
+
+    async function rerollParticipantInitiative(part) {
+      if (!part) return;
+      const base = part.character_id
+        ? intOr(state.characterInitiatives[part.character_id], intOr(part.initiative, 0))
+        : intOr(part.initiative, 0);
+      const rolled = rollInitiativeSpecial(base);
+      await updateParticipantInitiative(part.id, rolled.result);
+      try {
+        await postChatMessage({
+          type: 'roll',
+          text: `Initiative Roll - ${part.name || 'Combatant'}`,
+          lines: rolled.lines,
+          visibility: 'public',
+          ts: Date.now(),
+          user: state.me?.username || 'Unknown',
+          character_id: part.character_id || '',
+          character_name: part.name || 'Combatant',
+          character_avatar: part.avatar || (part.character_id ? `/characters/${encodeURIComponent(part.character_id)}/avatar` : ''),
+        });
+        await loadCampaignChat();
+      } catch (err) {
+        console.warn('Failed to post initiative roll', err);
+      }
     }
 
     document.getElementById('combat-next').addEventListener('click', () => advanceTurn('next'));
@@ -978,45 +1331,28 @@
       if (!state.selectedCampaign) return;
       try {
         const res = await api(`/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/chat?limit=40`);
-        state.chatMessages = res.messages || [];
+        setChatMessages((res.messages || res.chat || []).map(normalizeMessage));
         renderChat();
       } catch (err) {
         console.error(err);
       }
     }
 
-    function renderChat() {
-      const log = document.getElementById('chat-log');
-      log.innerHTML = '';
-      const sorted = (state.chatMessages || []).slice().sort((a, b) => a.ts - b.ts);
-      sorted.forEach((msg) => {
-        const entry = document.createElement('div');
-        entry.className = 'chat-message';
-        const when = new Date(msg.ts || Date.now()).toLocaleTimeString();
-        entry.innerHTML = `
-          <div class="chat-meta">${msg.user || 'Unknown'} · ${when}</div>
-          <div>${(msg.text || '').replace(/\n/g, '<br>')}</div>
-        `;
-        log.appendChild(entry);
-      });
-      log.scrollTop = log.scrollHeight;
-    }
-
     document.getElementById('chat-send').addEventListener('click', async () => {
-      if (!state.selectedCampaign) return;
-      const txt = document.getElementById('chat-input').value.trim();
-      if (!txt) return;
       try {
-        await api(`/campaigns/${encodeURIComponent(state.selectedCampaign.id)}/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: txt }),
-        });
-        document.getElementById('chat-input').value = '';
-        loadCampaignChat();
+        await handleChatSend();
       } catch (err) {
         console.error(err);
       }
+    });
+    chatInputEl?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        handleChatSend();
+      }
+    });
+    chatVisibilityEl?.addEventListener('change', () => {
+      setChatVisibilityPref(chatVisibilityEl.value || 'public');
     });
 
     function startPolling() {
@@ -1052,6 +1388,7 @@
 
     async function initCombatPage(){
       await checkMe();
+      refreshBackToCampaignLink();
       if (PRESELECTED_CAMPAIGN_ID){
         if (campaignsPanel) campaignsPanel.style.display = 'none';
         await loadCampaignById(PRESELECTED_CAMPAIGN_ID);

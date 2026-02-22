@@ -965,9 +965,41 @@
   .roll-grid label { display:grid; gap:4px; }
   .roll-grid input[type="number"]{ width:7ch; max-width:7ch; justify-self:start; }
   .roll-conditions { margin-top:10px; }
-  .roll-cond-grid { display:grid; gap:6px 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-  .roll-conditions label { display:flex; align-items:center; gap:8px; }
-  .roll-conditions input[type="checkbox"]{ width:auto; margin:0; }
+  .roll-cond-table-wrap{
+    border:1px solid #2a2a38;
+    border-radius:12px;
+    overflow:auto;
+    background:#121623;
+  }
+  .roll-cond-table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:.86rem;
+  }
+  .roll-cond-table th,
+  .roll-cond-table td{
+    border-bottom:1px solid rgba(255,255,255,0.08);
+    padding:8px 10px;
+    text-align:left;
+    vertical-align:middle;
+  }
+  .roll-cond-table tr:last-child td{ border-bottom:none; }
+  .roll-cond-table th{
+    font-size:.74rem;
+    text-transform:uppercase;
+    letter-spacing:.07em;
+    opacity:.78;
+  }
+  .roll-cond-table select{
+    min-width:180px;
+    max-width:100%;
+    width:100%;
+    padding:6px 8px;
+    border-radius:10px;
+  }
+  .roll-cond-table .muted{ font-size:.8rem; }
+  .roll-meta-line.roll-outcome-success{ color:#8ed8be; }
+  .roll-meta-line.roll-outcome-failure{ color:#f19e9e; }
     .btn-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     .sl-sch-controls { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:nowrap; }
     .sl-sch-controls .sl-sch-left,
@@ -1190,6 +1222,7 @@
             </summary>
             <div class="panel-body">
               <div class="row" style="justify-content:flex-end; margin-bottom:8px; gap:8px;">
+                <button id="sub-auto-btn" class="btn small" title="Auto Sublimation"><i class="fa-solid fa-wand-magic-sparkles"></i> Auto Sublimation</button>
                 <button id="sub-open-btn" class="btn small" title="Add Sublimation"><i class="fa-solid fa-plus"></i></button>
               </div>
               <div id="sub-list" class="abi-list"></div>
@@ -2084,8 +2117,43 @@
     <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px;">
       <label class="muted">Currency</label>
       <select id="inv-fund-cur"></select>
-      <input id="inv-fund-amt" type="number" step="1" placeholder="Amount (use negative for removal)" style="width:160px;">
+      <label class="muted">Stack</label>
+      <select id="inv-fund-source">
+        <option value="carried">Carried</option>
+        <option value="bank">Bank</option>
+      </select>
+      <input id="inv-fund-amt" type="number" step="0.01" placeholder="Amount (+/-)" style="width:160px;">
       <input id="inv-fund-note" placeholder="Note (optional)" style="flex:1; min-width:220px;">
+    </div>
+    <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:10px; align-items:flex-end;">
+      <label class="muted">Exchange Fee %
+        <input id="inv-exchange-fee" type="number" step="0.1" min="0" max="100" value="3" style="width:120px;">
+      </label>
+      <button id="inv-exchange-fee-save" class="btn small">Save Fee</button>
+    </div>
+    <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px; align-items:flex-end;">
+      <label class="muted">From
+        <select id="inv-exchange-from-cur"></select>
+      </label>
+      <label class="muted">From Stack
+        <select id="inv-exchange-from-source">
+          <option value="carried">Carried</option>
+          <option value="bank">Bank</option>
+        </select>
+      </label>
+      <label class="muted">Amount
+        <input id="inv-exchange-amount" type="number" step="0.01" min="0.01" value="1" style="width:100px;">
+      </label>
+      <label class="muted">To
+        <select id="inv-exchange-to-cur"></select>
+      </label>
+      <label class="muted">To Stack
+        <select id="inv-exchange-to-source">
+          <option value="carried">Carried</option>
+          <option value="bank">Bank</option>
+        </select>
+      </label>
+      <button id="inv-exchange-run" class="btn small">Exchange</button>
     </div>
     <div class="row" style="margin-top:12px; gap:8px;">
       <button id="inv-fund-save" class="btn">Apply</button>
@@ -2130,6 +2198,11 @@
       <select id="inv-global-cont"></select>
       <label class="muted">Currency</label>
       <select id="inv-global-cur"></select>
+      <label class="muted">Payment Stack</label>
+      <select id="inv-global-source">
+        <option value="carried">Carried</option>
+        <option value="bank">Bank</option>
+      </select>
       <label class="muted">Equipped?</label>
       <select id="inv-equpped-flag">
         <option value="0" selected>No</option>
@@ -2745,15 +2818,53 @@
     <div class="muted" id="roll-conditions-note" style="font-size:.82rem; margin-top:8px;">Jinxed/Motivated apply only when a target is provided.</div>
     <div class="roll-conditions" id="roll-conditions">
       <div class="muted" style="font-size:.85rem; margin-bottom:6px;">Conditions</div>
-      <div class="roll-cond-grid">
-        <label><input type="checkbox" id="cond-j1"> Slightly Jinxed (-1 on success)</label>
-        <label><input type="checkbox" id="cond-j2"> Jinxed (-2 on success)</label>
-        <label><input type="checkbox" id="cond-j3"> Severely Jinxed (-3 on success)</label>
-        <label><input type="checkbox" id="cond-m1"> Slightly Motivated (+1 on fail)</label>
-        <label><input type="checkbox" id="cond-m2"> Motivated (+2 on fail)</label>
-        <label><input type="checkbox" id="cond-m3"> Severely Motivated (+3 on fail)</label>
-        <label><input type="checkbox" id="cond-reckless"> Reckless (dice max 5)</label>
-        <label><input type="checkbox" id="cond-meticulous"> Meticulous (dice min 5)</label>
+      <div class="roll-cond-table-wrap">
+        <table class="roll-cond-table" aria-label="Roll conditions">
+          <thead>
+            <tr>
+              <th>Condition</th>
+              <th>Level</th>
+              <th>Effect</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Jinxed</td>
+              <td>
+                <select id="roll-cond-jinxed">
+                  <option value="0">None</option>
+                  <option value="1">Slightly Jinxed</option>
+                  <option value="2">Jinxed</option>
+                  <option value="3">Severely Jinxed</option>
+                </select>
+              </td>
+              <td class="muted">-1/-2/-3 to result on success (requires DC)</td>
+            </tr>
+            <tr>
+              <td>Motivated</td>
+              <td>
+                <select id="roll-cond-motivated">
+                  <option value="0">None</option>
+                  <option value="1">Slightly Motivated</option>
+                  <option value="2">Motivated</option>
+                  <option value="3">Severely Motivated</option>
+                </select>
+              </td>
+              <td class="muted">+1/+2/+3 to result on failure (requires DC)</td>
+            </tr>
+            <tr>
+              <td>Dice Behavior</td>
+              <td>
+                <select id="roll-cond-dice">
+                  <option value="normal">Normal</option>
+                  <option value="reckless">Reckless</option>
+                  <option value="meticulous">Meticulous</option>
+                </select>
+              </td>
+              <td class="muted">Reckless caps die at 5, Meticulous floors die at 5</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
     <div class="btn-row" style="justify-content:flex-end;">
@@ -2902,6 +3013,8 @@ const QUALITY_DIFFS = {
   "Excellent": 5280, "Legendary": 15300, "Mythical": 38760,
   "Epic": 128000, "Divine": 614400, "Unreal": 921600,
 };
+const MONEY_ORDER = ['Jelly','Breath','Web','Kabuto','Jawhar','Baya'];
+const COIN_CURRENCIES = new Set(['Breath','Web','Kabuto','Jawhar','Baya']);
 const CRAFT_CATEGORY_ORDER = ['Novice','Apprentice','Disciple','Adept','Mage','Magister','High Mage','Master','Grand Master','Archmage','Supreme Archmage','Avant-Garde'];
 const CRAFTOMANCY_TABLE = {
   'Very Mediocre': { category:'Novice', skill:5, die:'d4', dc:3, price:200, hours:10 },
@@ -3219,17 +3332,13 @@ function currentFromLedger(resource, maxVals){
   }
   if (resource === 'tension'){
     const cap = tensionCapForLevel(CHAR?.level || 1);
-    const base = Math.max(0, Number(combatState().tension || 0));
-    const computed = base + ledgerSum(resource);
-    return Math.max(0, Math.min(cap, computed));
+    const current = Math.max(0, Number(combatState().tension || 0));
+    return Math.max(0, Math.min(cap, current));
   }
   const base = resourceBaseMax(resource, maxVals);
   const computed = base + ledgerSum(resource);
   if (resource === 'tx'){
     return Math.max(0, computed);
-  }
-  if (resource === 'tension'){
-    return Math.max(0, Math.min(base, computed));
   }
   return Math.max(0, Math.min(base, computed));
 }
@@ -3396,6 +3505,7 @@ function levelFromXp(xp){
 const params = new URLSearchParams(location.search);
 const CID = params.get('id');
 const CAMPAIGN_ID = params.get('cid') || '';
+const INITIAL_TAB_RAW = (params.get('tab') || params.get('pane') || '').trim().toLowerCase();
 const VIEW_ONLY = params.get('view') === '1' || params.get('mode') === 'viewer';
 let ROLE = 'user';
 let CURRENT_USER = null;
@@ -3982,6 +4092,9 @@ const rollModEl = document.getElementById('roll-mod');
 const rollTargetEl = document.getElementById('roll-target');
 const rollAdvEl = document.getElementById('roll-adv');
 const rollResultEl = document.getElementById('roll-result');
+const rollCondJinxedEl = document.getElementById('roll-cond-jinxed');
+const rollCondMotivatedEl = document.getElementById('roll-cond-motivated');
+const rollCondDiceEl = document.getElementById('roll-cond-dice');
 const rollLogEl = document.getElementById('roll-log');
 const rollLogEmptyEl = document.getElementById('roll-log-empty');
 const rollLogCountEl = document.getElementById('roll-log-count');
@@ -4010,14 +4123,6 @@ const campaignChatSpeaker = document.getElementById('campaign-chat-speaker');
 const campaignChatVisibilityEl = document.getElementById('campaign-chat-visibility');
 const campaignChatInput = document.getElementById('campaign-chat-input');
 const campaignChatSend = document.getElementById('campaign-chat-send');
-const condJ1El = document.getElementById('cond-j1');
-const condJ2El = document.getElementById('cond-j2');
-const condJ3El = document.getElementById('cond-j3');
-const condM1El = document.getElementById('cond-m1');
-const condM2El = document.getElementById('cond-m2');
-const condM3El = document.getElementById('cond-m3');
-const condRecklessEl = document.getElementById('cond-reckless');
-const condMeticulousEl = document.getElementById('cond-meticulous');
 const choiceTitle = document.getElementById('choice-title');
 const speciesSelectEl = document.getElementById('species-select');
 const speciesStatusEl = document.getElementById('species-status');
@@ -4055,8 +4160,17 @@ const invTitleEl = document.getElementById('inv-title');
 const invMoneyEl = document.getElementById('inv-money');
 const invEncTotalEl = document.getElementById('inv-enc-total');
 const invFundCurEl = document.getElementById('inv-fund-cur');
+const invFundSourceEl = document.getElementById('inv-fund-source');
 const invFundAmtEl = document.getElementById('inv-fund-amt');
 const invFundNoteEl = document.getElementById('inv-fund-note');
+const invExchangeFeeEl = document.getElementById('inv-exchange-fee');
+const invExchangeFeeSaveBtn = document.getElementById('inv-exchange-fee-save');
+const invExchangeFromCurEl = document.getElementById('inv-exchange-from-cur');
+const invExchangeFromSourceEl = document.getElementById('inv-exchange-from-source');
+const invExchangeAmountEl = document.getElementById('inv-exchange-amount');
+const invExchangeToCurEl = document.getElementById('inv-exchange-to-cur');
+const invExchangeToSourceEl = document.getElementById('inv-exchange-to-source');
+const invExchangeRunBtn = document.getElementById('inv-exchange-run');
 const invContainersEl = document.getElementById('inv-containers');
 const invNewContNameEl = document.getElementById('inv-new-cont-name');
 const invAddContBtn = document.getElementById('inv-add-cont');
@@ -4072,6 +4186,7 @@ const invClearBtn = document.getElementById('inv-clear');
 const invPriceModEl = document.getElementById('inv-price-mod');
 const invGlobalContEl = document.getElementById('inv-global-cont');
 const invGlobalCurEl = document.getElementById('inv-global-cur');
+const invGlobalSourceEl = document.getElementById('inv-global-source');
 const invEquippedFlagEl = document.getElementById('inv-equpped-flag');
 const invResultsEl = document.getElementById('inv-results');
 const invItemModal = document.getElementById('inv-item-modal');
@@ -4513,6 +4628,7 @@ const subSlotPill = document.getElementById('sub-slot-pill');
 const subWarningEl = document.getElementById('sub-warning');
 const subHiddenEl = document.getElementById('sub-hidden');
 const subOpenBtn = document.getElementById('sub-open-btn');
+const subAutoBtn = document.getElementById('sub-auto-btn');
 const subModal = document.getElementById('sub-modal');
 const subBackdrop = document.getElementById('sub-backdrop');
 const subClose = document.getElementById('sub-close');
@@ -4557,6 +4673,13 @@ subOpenBtn?.addEventListener('click', ()=>{
   subBackdrop?.classList.remove('hidden');
   subModal?.classList.add('open');
   subBackdrop?.classList.add('open');
+});
+subAutoBtn?.addEventListener('click', ()=>{
+  openAutoSublimationWizard().catch(err=>{
+    const msg = err?.message || String(err || 'Auto Sublimation failed.');
+    if (subWarningEl) subWarningEl.textContent = msg;
+    alert(msg);
+  });
 });
 const closeSubModal = ()=>{
   subModal?.classList.remove('open');
@@ -4797,9 +4920,11 @@ function updateCombatAbilityTitle(){
     const rawValue = Math.max(0, Number(tensionValueEl.value || 0));
     const cap = tensionCapForLevel(CHAR?.level || 1);
     const desired = Math.min(cap, rawValue);
-    const current = Math.max(0, Number(CURRENT?.tension ?? (combatState().tension || 0)));
+    const st = combatState();
+    const current = Math.max(0, Number(st.tension || 0));
     const delta = desired - current;
     if (!delta) return;
+    st.tension = desired;
     pushResourceLedgerEntries([{
       resource: 'tension',
       delta,
@@ -4850,15 +4975,40 @@ function updateCombatAbilityTitle(){
   });
 
 /* tabs switching */
+function activateCharacterTab(tabId){
+  const targetId = String(tabId || '').trim();
+  const targetTab = document.querySelector(`.tab[data-tab="${targetId}"]`);
+  if (!targetTab) return false;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tabpane').forEach(p=>p.style.display='none');
+  targetTab.classList.add('active');
+  const pane = document.getElementById(targetId);
+  if (pane) pane.style.display = '';
+  return true;
+}
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click', ()=>{
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    document.querySelectorAll('.tabpane').forEach(p=>p.style.display='none');
-    tab.classList.add('active');
-    const id = tab.getAttribute('data-tab');
-    document.getElementById(id).style.display='';
+    activateCharacterTab(tab.getAttribute('data-tab'));
   });
 });
+if (INITIAL_TAB_RAW){
+  const aliases = {
+    combat: 'tab-com',
+    com: 'tab-com',
+    stats: 'tab-stat',
+    stat: 'tab-stat',
+    inventory: 'tab-inv',
+    inv: 'tab-inv',
+    spells: 'tab-spell',
+    spell: 'tab-spell',
+    abilities: 'tab-abi',
+    ability: 'tab-abi',
+    personal: 'tab-per',
+    per: 'tab-per',
+  };
+  const target = aliases[INITIAL_TAB_RAW] || INITIAL_TAB_RAW;
+  activateCharacterTab(target);
+}
 
 /* auth */
 async function checkMe() {
@@ -5146,6 +5296,181 @@ function updateSubTierOptions(){
   if (!currentOpt || currentOpt.disabled){
     if (firstAllowed !== null) subTierEl.value = firstAllowed;
   }
+}
+
+function maxSublimationTierForLevel(lvl){
+  const prof = levelProfile(lvl);
+  const raw = Number(prof?.maxSublimationTier || 1);
+  return Math.max(1, Math.min(4, raw));
+}
+
+function tierCost(tier){
+  return Number(SUB_TIER_SLOTS[Number(tier) || 1] || SUB_TIER_SLOTS[1] || 1);
+}
+
+function highestTierWithinBudget(maxTier, budgetSlots){
+  const maxT = Math.max(1, Math.min(4, Number(maxTier) || 1));
+  const budget = Math.max(0, Math.floor(Number(budgetSlots) || 0));
+  for (let t = maxT; t >= 1; t -= 1){
+    if (tierCost(t) <= budget) return t;
+  }
+  return 0;
+}
+
+function skillLabelFromValue(value){
+  const target = String(value || '').trim();
+  if (!target) return '(none)';
+  const hit = buildSkillOptions().find(opt => String(opt.value || '') === target);
+  return hit?.label || target;
+}
+
+function buildAutoSublimationCore(attSkill, defSkill, preferredType, capSlots, maxTier){
+  const pref = String(preferredType || '').toLowerCase();
+  const cap = Math.max(0, Math.floor(Number(capSlots) || 0));
+  const capTier = Math.max(1, Math.min(4, Number(maxTier) || 1));
+  const ordered = ['lethality', 'speed', 'defense'];
+  const prefType = ordered.includes(pref) ? pref : 'lethality';
+  const secondary = ordered.filter(t => t !== prefType);
+  const required = [
+    { type: 'excellence', skill: attSkill || '' },
+    { type: 'excellence', skill: defSkill || '' },
+    { type: prefType, skill: '' },
+    ...secondary.map(type => ({ type, skill: '' })),
+  ];
+  const chosen = [];
+  let remaining = cap;
+  for (const item of required){
+    const tier = highestTierWithinBudget(capTier, remaining);
+    if (!tier) break;
+    chosen.push({ ...item, tier });
+    remaining -= tierCost(tier);
+  }
+  return {
+    plan: chosen,
+    remainingSlots: Math.max(0, remaining),
+    includedAllCore: chosen.length === required.length,
+    allCoreAtMax: chosen.length === required.length && chosen.every(entry => Number(entry.tier) === capTier),
+  };
+}
+
+function autoSublimationSummary(plan, capSlots){
+  const cap = Math.max(0, Math.floor(Number(capSlots) || 0));
+  const used = slotsUsed(plan);
+  const lines = [`Auto Sublimation proposal (${used}/${cap} slots):`];
+  plan.forEach((entry, idx) => {
+    const skillPart = entry.type === 'excellence' ? ` -> ${skillLabelFromValue(entry.skill)}` : '';
+    lines.push(`${idx + 1}. ${entry.type} Tier ${entry.tier}${skillPart}`);
+  });
+  if (used < cap){
+    lines.push(`Unused slots: ${cap - used}`);
+  }
+  return lines.join('\n');
+}
+
+async function chooseAutoSublimationSkills(promptTitle, promptSubtitle, exclude = new Set()){
+  const options = buildSkillOptions()
+    .filter(opt => !exclude.has(String(opt.value || '').trim()))
+    .map(opt => ({ name: String(opt.value || ''), label: String(opt.label || opt.value || '') }));
+  if (!options.length) return '';
+  return openSkillSelectModal({
+    titleText: promptTitle,
+    subtitleText: promptSubtitle,
+    options,
+  });
+}
+
+async function openAutoSublimationWizard(){
+  const lvl = Math.max(1, Math.floor(Number(levelEl?.value || CHAR?.level || 1)));
+  const capSlots = effectiveSublimationSlots(lvl);
+  if (capSlots <= 0){
+    alert('No sublimation slots available at this level.');
+    return;
+  }
+  const maxTier = maxSublimationTierForLevel(lvl);
+
+  const attackSkill = await chooseAutoSublimationSkills(
+    'Auto Sublimation',
+    'Choose the skill you use for attack.'
+  );
+  if (!attackSkill) return;
+
+  const defenseSkill = await chooseAutoSublimationSkills(
+    'Auto Sublimation',
+    'Choose the skill you use for defense.',
+    new Set([String(attackSkill)])
+  );
+  if (!defenseSkill) return;
+
+  const preferredType = await openSkillSelectModal({
+    titleText: 'Auto Sublimation',
+    subtitleText: 'Choose your preference: Damage, HP, or MO.',
+    options: [
+      { name: 'lethality', label: 'Damage (Lethality)' },
+      { name: 'defense', label: 'HP (Defense)' },
+      { name: 'speed', label: 'MO (Speed)' },
+    ],
+  });
+  if (!preferredType) return;
+
+  const coreBuild = buildAutoSublimationCore(
+    String(attackSkill || ''),
+    String(defenseSkill || ''),
+    String(preferredType || ''),
+    capSlots,
+    maxTier
+  );
+  const proposal = coreBuild.plan.slice();
+  let remainingSlots = Math.max(0, coreBuild.remainingSlots);
+
+  if (coreBuild.allCoreAtMax && remainingSlots > 0){
+    const usedSkills = new Set(
+      proposal
+        .filter(item => item.type === 'excellence' && item.skill)
+        .map(item => String(item.skill || '').trim())
+        .filter(Boolean)
+    );
+    while (remainingSlots > 0){
+      const tier = highestTierWithinBudget(maxTier, remainingSlots);
+      if (!tier) break;
+      const chosenSkill = await chooseAutoSublimationSkills(
+        'Auto Sublimation',
+        `Choose an extra Excellence skill (Tier ${tier}, ${remainingSlots} slots left).`,
+        usedSkills
+      );
+      if (!chosenSkill) break;
+      const cleanSkill = String(chosenSkill || '').trim();
+      if (!cleanSkill || usedSkills.has(cleanSkill)) continue;
+      proposal.push({
+        type: 'excellence',
+        tier,
+        skill: cleanSkill,
+        nature: '',
+      });
+      usedSkills.add(cleanSkill);
+      remainingSlots -= tierCost(tier);
+    }
+  }
+
+  let preview = autoSublimationSummary(proposal, capSlots);
+  if (!coreBuild.includedAllCore){
+    preview += '\n\nNote: Not enough slots to include all core sublimations (both Excellences + Lethality/Speed/Defense).';
+  }
+  if (coreBuild.includedAllCore && !coreBuild.allCoreAtMax){
+    preview += '\n\nNote: Core sublimations were included but not all could stay at max tier due slot limits.';
+  }
+  if (!confirm(`${preview}\n\nApply this build?`)) return;
+
+  SUBLIMATIONS = normalizeSublimations(
+    proposal.map(entry => ({
+      id: `sub_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      type: entry.type,
+      tier: entry.tier,
+      skill: entry.skill || '',
+      nature: '',
+    }))
+  );
+  subWarningEl.textContent = `Auto build applied (${slotsUsed(SUBLIMATIONS)}/${capSlots} slots).`;
+  onSublimationChanged();
 }
 
 function sublimationDescription(sub){
@@ -6164,6 +6489,59 @@ async function duplicateAndLinkInventory(){
   }
 }
 
+function invMoneyCurrencyKeys(){
+  const fromCur = Object.keys((LINKED_INV?.currencies) || {});
+  const fromWallet = Object.keys((LINKED_INV?.currency_details) || {});
+  const all = Array.from(new Set([...MONEY_ORDER, ...fromCur, ...fromWallet]));
+  return all.filter(Boolean);
+}
+function invMoneyEntry(currency){
+  return (LINKED_INV?.currency_details && LINKED_INV.currency_details[currency]) ? LINKED_INV.currency_details[currency] : null;
+}
+function invMoneyAmount(currency, scope='total'){
+  const row = invMoneyEntry(currency);
+  if (row && row[scope] && row[scope].amount != null){
+    return Number(row[scope].amount) || 0;
+  }
+  if (scope === 'total'){
+    return Number((LINKED_INV?.currencies || {})[currency] ?? 0) || 0;
+  }
+  return 0;
+}
+function invMoneyCoinsLabel(currency, scope='total'){
+  const row = invMoneyEntry(currency);
+  const part = row && row[scope] ? row[scope] : null;
+  if (!part) return 'No details';
+  if (!COIN_CURRENCIES.has(currency)){
+    return 'No coin denominations';
+  }
+  const c = part.coins || {};
+  return `pc:${Number(c.pc||0)} gc:${Number(c.gc||0)} sc:${Number(c.sc||0)} bc:${Number(c.bc||0)} (${Number(part.coin_count||0)} coins)`;
+}
+function invMoneyTooltip(currency){
+  return [
+    `${currency}`,
+    `Carried: ${invMoneyAmount(currency, 'carried')} (${invMoneyCoinsLabel(currency, 'carried')})`,
+    `Bank: ${invMoneyAmount(currency, 'bank')} (${invMoneyCoinsLabel(currency, 'bank')})`,
+    `Total: ${invMoneyAmount(currency, 'total')} (${invMoneyCoinsLabel(currency, 'total')})`,
+  ].join('\n');
+}
+function invCurrentMoneySource(){
+  return invGlobalSourceEl?.value || 'carried';
+}
+function invSetSelectOptions(selectEl, values, preferred=''){
+  if (!selectEl) return;
+  const keep = preferred || selectEl.value || '';
+  selectEl.innerHTML = '';
+  values.forEach(v=>{
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    selectEl.appendChild(opt);
+  });
+  if (keep && values.includes(keep)) selectEl.value = keep;
+}
+
 function renderInventoryUI(){
   if (!LINKED_INV){
     invManagerEl.style.display = 'none';
@@ -6183,16 +6561,24 @@ function renderInventoryUI(){
   invCatalogOpenBtn?.removeAttribute('disabled');
   invTitleEl.textContent = LINKED_INV.name || 'Inventory';
   // Money + currency selects
-  const cur = LINKED_INV.currencies || {};
-  invMoneyEl.innerHTML = Object.keys(cur).length
-    ? Object.entries(cur).map(([k,v])=>`<span class="pill">${k}: ${v}</span>`).join(' ')
+  const keys = invMoneyCurrencyKeys();
+  invMoneyEl.innerHTML = keys.length
+    ? keys.map((k)=>{
+      const carried = invMoneyAmount(k, 'carried');
+      const bank = invMoneyAmount(k, 'bank');
+      const total = invMoneyAmount(k, 'total');
+      return `<span class="pill" title="${invEscapeHtml(invMoneyTooltip(k))}">${invEscapeHtml(k)}: ${total} <span class="muted">(C ${carried} | B ${bank})</span></span>`;
+    }).join(' ')
     : '<span class="muted">No funds</span>';
-  invFundCurEl.innerHTML = '';
-  invGlobalCurEl.innerHTML = '';
-  Object.keys(cur).concat(["Jelly"]).filter((v,i,arr)=>arr.indexOf(v)===i).forEach(k=>{
-    const o1=document.createElement('option'); o1.value=k; o1.textContent=k; invFundCurEl.appendChild(o1);
-    const o2=document.createElement('option'); o2.value=k; o2.textContent=k; invGlobalCurEl.appendChild(o2);
-  });
+  const currencyList = keys.length ? keys : ['Jelly'];
+  invSetSelectOptions(invFundCurEl, currencyList, invFundCurEl?.value || invGlobalCurEl?.value || 'Jelly');
+  invSetSelectOptions(invGlobalCurEl, currencyList, invGlobalCurEl?.value || invFundCurEl?.value || 'Jelly');
+  invSetSelectOptions(invExchangeFromCurEl, currencyList, invExchangeFromCurEl?.value || invGlobalCurEl?.value || 'Jelly');
+  invSetSelectOptions(invExchangeToCurEl, currencyList, invExchangeToCurEl?.value || 'Breath');
+  if (invExchangeFeeEl){
+    const fee = Number(LINKED_INV?.exchange_fee_pct ?? 3);
+    invExchangeFeeEl.value = Number.isFinite(fee) ? String(fee) : '3';
+  }
   invEncTotalEl.textContent = Number(LINKED_INV.enc_total||0).toFixed(1);
 
   // Containers & items
@@ -6294,7 +6680,7 @@ function renderInventoryUI(){
 
   // Transactions
   const txs = (LINKED_INV.transactions || []).slice(-12).reverse();
-  invTxEl.innerHTML = txs.length ? txs.map(t=>`<div class="row"><span class="pill">${t.currency||''} ${t.amount||0}</span><span class="muted">${invEscapeHtml(t.note||'')}</span><span class="muted">${t.ts||''}</span></div>`).join('') : '<div class="muted">No transactions.</div>';
+  invTxEl.innerHTML = txs.length ? txs.map(t=>`<div class="row"><span class="pill">${t.currency||''} ${t.amount||0}${t.balance_source ? ` [${invEscapeHtml(t.balance_source)}]` : ''}</span><span class="muted">${invEscapeHtml(t.note||'')}</span><span class="muted">${t.ts||''}</span></div>`).join('') : '<div class="muted">No transactions.</div>';
   if (invTxUndoBtn){
     invTxUndoBtn.disabled = txs.length === 0;
   }
@@ -6500,26 +6886,35 @@ const DAZZLING_SPARK_IMAGE = '/assets/dazzling_spark/dazzling_spark.png';
 const DAZZLING_SPARK_SOUND = '/assets/dazzling_spark/dazzling_spark.mp3';
 
 function resetRollConditions(){
-  if (condJ1El) condJ1El.checked = false;
-  if (condJ2El) condJ2El.checked = false;
-  if (condJ3El) condJ3El.checked = false;
-  if (condM1El) condM1El.checked = false;
-  if (condM2El) condM2El.checked = false;
-  if (condM3El) condM3El.checked = false;
-  if (condRecklessEl) condRecklessEl.checked = false;
-  if (condMeticulousEl) condMeticulousEl.checked = false;
+  if (rollCondJinxedEl) rollCondJinxedEl.value = '0';
+  if (rollCondMotivatedEl) rollCondMotivatedEl.value = '0';
+  if (rollCondDiceEl) rollCondDiceEl.value = 'normal';
 }
 
 function applyRollConditionDefaults(conds){
   if (!conds) return;
-  if (conds.jinxed >= 1 && condJ1El) condJ1El.checked = true;
-  if (conds.jinxed >= 2 && condJ2El) condJ2El.checked = true;
-  if (conds.jinxed >= 3 && condJ3El) condJ3El.checked = true;
-  if (conds.motivated >= 1 && condM1El) condM1El.checked = true;
-  if (conds.motivated >= 2 && condM2El) condM2El.checked = true;
-  if (conds.motivated >= 3 && condM3El) condM3El.checked = true;
-  if (conds.reckless && condRecklessEl) condRecklessEl.checked = true;
-  if (conds.meticulous && condMeticulousEl) condMeticulousEl.checked = true;
+  if (rollCondJinxedEl) rollCondJinxedEl.value = String(Math.max(0, Math.min(3, Number(conds.jinxed) || 0)));
+  if (rollCondMotivatedEl) rollCondMotivatedEl.value = String(Math.max(0, Math.min(3, Number(conds.motivated) || 0)));
+  if (rollCondDiceEl){
+    rollCondDiceEl.value = conds.reckless ? 'reckless' : (conds.meticulous ? 'meticulous' : 'normal');
+  }
+}
+
+function refreshRollConditionTargetState(){
+  const hasTarget = rollTargetEl && rollTargetEl.value !== '' && Number.isFinite(Number(rollTargetEl.value));
+  if (rollCondJinxedEl){
+    if (!hasTarget) rollCondJinxedEl.value = '0';
+    rollCondJinxedEl.disabled = !hasTarget;
+  }
+  if (rollCondMotivatedEl){
+    if (!hasTarget) rollCondMotivatedEl.value = '0';
+    rollCondMotivatedEl.disabled = !hasTarget;
+  }
+  if (rollConditionsNoteEl){
+    rollConditionsNoteEl.textContent = hasTarget
+      ? 'Jinxed/Motivated are active for this roll (DC provided).'
+      : 'Jinxed/Motivated are disabled until you enter a DC.';
+  }
 }
 
 function openRollModal(ctx){
@@ -6559,6 +6954,7 @@ function openRollModal(ctx){
   }
   resetRollConditions();
   applyRollConditionDefaults(ctx?.autoConds || {});
+  refreshRollConditionTargetState();
   invToggleModal(rollModal, rollBackdrop, true);
   if (infoOnly && ctx?.autoLog !== false){
     appendInfoLog(ctx);
@@ -6571,13 +6967,14 @@ function closeRollModal(){
 }
 
 function collectRollConditions(){
-  const jinxed = (condJ1El?.checked ? 1 : 0) + (condJ2El?.checked ? 2 : 0) + (condJ3El?.checked ? 3 : 0);
-  const motivated = (condM1El?.checked ? 1 : 0) + (condM2El?.checked ? 2 : 0) + (condM3El?.checked ? 3 : 0);
+  const jinxed = Math.max(0, Math.min(3, Number(rollCondJinxedEl?.value || 0)));
+  const motivated = Math.max(0, Math.min(3, Number(rollCondMotivatedEl?.value || 0)));
+  const diceMode = String(rollCondDiceEl?.value || 'normal').toLowerCase();
   return {
     jinxed,
     motivated,
-    reckless: !!condRecklessEl?.checked,
-    meticulous: !!condMeticulousEl?.checked
+    reckless: diceMode === 'reckless',
+    meticulous: diceMode === 'meticulous'
   };
 }
 
@@ -6855,6 +7252,7 @@ function parseSkillCard(msg){
   const condLine = lines.find(l=> /^Conditions:/i.test(l));
   const critLine = lines.find(l=> /^Critical/i.test(l));
   const effectLine = lines.find(l=> /^Effect:/i.test(l));
+  const outcomeLine = lines.find(l=> /^Outcome:/i.test(l));
   const breakdownLine = lines.find(l=> /\bBase\b/i.test(l) && /\bMod\b/i.test(l));
   const baseMatch = breakdownLine ? breakdownLine.match(/\bBase\s+(-?\d+)/i) : null;
   const modMatch = breakdownLine ? breakdownLine.match(/\bMod\s+(-?\d+)/i) : null;
@@ -6878,7 +7276,19 @@ function parseSkillCard(msg){
     if (!critClass && (/fail/i.test(critLine) || /-\s*\d+/.test(critLine))) critClass = 'crit-fail';
   }
   const effect = effectLine ? effectLine.replace(/^Effect:\s*/i, '').trim() : '';
-  return { total, sub, formula, critClass, effect };
+  let outcomeText = outcomeLine ? outcomeLine.replace(/^Outcome:\s*/i, '').trim() : '';
+  let outcomeClass = '';
+  if (!outcomeText && resultLine){
+    const resultOutcome = resultLine.match(/target\s*([+-]?\d+).*?(success|fail(?:ure)?)/i);
+    if (resultOutcome){
+      const dc = resultOutcome[1];
+      const status = /success/i.test(resultOutcome[2]) ? 'Success' : 'Failure';
+      outcomeText = `${status} vs DC ${dc}`;
+    }
+  }
+  if (/success/i.test(outcomeText)) outcomeClass = 'roll-outcome-success';
+  else if (/fail/i.test(outcomeText)) outcomeClass = 'roll-outcome-failure';
+  return { total, sub, formula, critClass, effect, outcomeText, outcomeClass };
 }
 
 function templateTagFromLines(lines){
@@ -7175,6 +7585,12 @@ function buildRollCard(msg){
         formula.textContent = abilityRollMeta.skillMeta.formula;
         card.appendChild(formula);
       }
+      if (abilityRollMeta.skillMeta.outcomeText){
+        const outcome = document.createElement('div');
+        outcome.className = `roll-meta-line ${abilityRollMeta.skillMeta.outcomeClass || ''}`.trim();
+        outcome.textContent = abilityRollMeta.skillMeta.outcomeText;
+        card.appendChild(outcome);
+      }
       if (abilityRollMeta.condLine){
         const cond = document.createElement('div');
         cond.className = 'roll-meta-line';
@@ -7248,6 +7664,12 @@ function buildRollCard(msg){
       formula.className = 'roll-formula';
       formula.textContent = skillMeta.formula;
       card.appendChild(formula);
+    }
+    if (skillMeta.outcomeText){
+      const outcome = document.createElement('div');
+      outcome.className = `roll-meta-line ${skillMeta.outcomeClass || ''}`.trim();
+      outcome.textContent = skillMeta.outcomeText;
+      card.appendChild(outcome);
     }
     if (skillMeta.effect){
       const desc = document.createElement('div');
@@ -7869,17 +8291,19 @@ function runRoll(){
 
   const preCondTotal = chosen.total;
   let finalTotal = preCondTotal;
-  let successState = '';
+  let initialState = '';
+  let finalState = '';
   let conditionDelta = 0;
   if (target != null && Number.isFinite(target)){
-    successState = preCondTotal >= target ? 'success' : 'fail';
-    if (successState === 'success' && conds.jinxed){
+    initialState = preCondTotal >= target ? 'success' : 'failure';
+    if (initialState === 'success' && conds.jinxed){
       finalTotal -= conds.jinxed;
       conditionDelta = -conds.jinxed;
-    }else if (successState === 'fail' && conds.motivated){
+    }else if (initialState === 'failure' && conds.motivated){
       finalTotal += conds.motivated;
       conditionDelta = conds.motivated;
     }
+    finalState = finalTotal >= target ? 'success' : 'failure';
   }
 
   const summaryLine = mode === 'normal'
@@ -7887,11 +8311,14 @@ function runRoll(){
     : `Roll A: ${rollSummaryText(first)} | Roll B: ${rollSummaryText(second)} | Chosen: ${chosen === first ? 'A' : 'B'}`;
   const condSummary = formatConditionsSummary(conds);
   const resultText = target != null && Number.isFinite(target)
-    ? `Result: ${finalTotal} (target ${target}, ${successState}${conditionDelta ? `, adjusted ${conditionDelta > 0 ? '+' : ''}${conditionDelta}` : ''})`
+    ? `Result: ${finalTotal} (DC ${target}${conditionDelta ? `, adjusted ${conditionDelta > 0 ? '+' : ''}${conditionDelta}` : ''})`
     : `Result: ${finalTotal}`;
+  const outcomeText = target != null && Number.isFinite(target)
+    ? `Outcome: ${finalState === 'success' ? 'Success' : 'Failure'} vs DC ${target}${initialState && initialState !== finalState ? ' (after condition adjustment)' : ''}`
+    : '';
 
   if (rollResultEl){
-    rollResultEl.textContent = resultText;
+    rollResultEl.textContent = outcomeText ? `${resultText} | ${outcomeText.replace(/^Outcome:\s*/i, '')}` : resultText;
     rollResultEl.style.display = '';
   }
 
@@ -7932,6 +8359,13 @@ function runRoll(){
   const rollLine = document.createElement('div');
   rollLine.textContent = resultText;
   entry.appendChild(rollLine);
+
+  if (outcomeText){
+    const outcomeLine = document.createElement('div');
+    outcomeLine.className = 'muted';
+    outcomeLine.textContent = outcomeText;
+    entry.appendChild(outcomeLine);
+  }
 
   const breakdown = document.createElement('div');
   breakdown.className = 'muted';
@@ -8311,6 +8745,7 @@ function wireRollModal(){
   rollCancel?.addEventListener('click', closeRollModal);
   rollBackdrop?.addEventListener('click', (e)=>{ if (e.target === rollBackdrop) closeRollModal(); });
   rollRun?.addEventListener('click', runRoll);
+  rollTargetEl?.addEventListener('input', refreshRollConditionTargetState);
   rollLogClear?.addEventListener('click', clearRollLog);
 }
 
@@ -8558,10 +8993,11 @@ async function addCraftomancyFromSpell(sp){
   try{
     craftAddStatus.textContent = 'Adding craftomancy...';
     const currency = invGlobalCurEl?.value || 'Jelly';
+    const balance_source = invCurrentMoneySource();
     const r = await fetch(`/inventories/${encodeURIComponent(getInventorySourceId())}/items/${encodeURIComponent(CRAFT_TARGET_ITEM.item_id)}/craftomancy`, {
       method:'POST',
       headers:{ 'Content-Type':'application/json', ...authHeaders() },
-      body: JSON.stringify({ spell_id: sp.id, supreme, currency })
+      body: JSON.stringify({ spell_id: sp.id, supreme, currency, balance_source })
     });
     const j = await r.json().catch(()=>({}));
     if (j.status !== 'success') throw new Error(j.message || 'Add failed');
@@ -8601,10 +9037,11 @@ async function removeCraftomancy(it, cm){
   if (!confirm(`Remove craftomancy ${cm.spell_name || cm.spell_id}? Cost: 500 Jelly.`)) return;
   try{
     const currency = invGlobalCurEl?.value || 'Jelly';
+    const balance_source = invCurrentMoneySource();
     const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/craftomancy/${encodeURIComponent(cm.id)}/remove`, {
       method:'POST',
       headers:{ 'Content-Type':'application/json', ...authHeaders() },
-      body: JSON.stringify({ currency })
+      body: JSON.stringify({ currency, balance_source })
     });
     const j = await r.json().catch(()=>({}));
     if (j.status !== 'success') throw new Error(j.message || 'Remove failed');
@@ -8635,13 +9072,14 @@ async function invAddContainer(){
 
 async function invAddFunds(){
   const currency = invFundCurEl.value || "Jelly";
-  const amountRaw = parseInt(invFundAmtEl.value || "0", 10);
+  const balance_source = invFundSourceEl?.value || "carried";
+  const amountRaw = parseFloat(invFundAmtEl.value || "0");
   const note = (invFundNoteEl.value || (amountRaw >= 0 ? "Top up" : "Withdrawal")).trim();
-  if (!amountRaw){ invFundStatus.textContent = "Enter a non-zero amount."; return; }
+  if (!Number.isFinite(amountRaw) || amountRaw === 0){ invFundStatus.textContent = "Enter a non-zero amount."; return; }
   const sourceId = getInventorySourceId();
   if (!sourceId){ invFundStatus.textContent = "Link an inventory first."; return; }
   if (amountRaw < 0){
-    const balance = Number(LINKED_INV?.currencies?.[currency] ?? 0);
+    const balance = Number(invMoneyAmount(currency, balance_source === 'bank' ? 'bank' : 'carried'));
     if (Math.abs(amountRaw) > balance){
       const proceed = await promptInsufficientFundsWarning(currency, Math.abs(amountRaw), balance);
       if (!proceed){
@@ -8656,7 +9094,7 @@ async function invAddFunds(){
     const r = await fetch(path, {
       method:"POST",
       headers:{ "Content-Type":"application/json", ...authHeaders() },
-      body: JSON.stringify({ currency, amount: amountRaw, note })
+      body: JSON.stringify({ currency, amount: amountRaw, note, balance_source })
     });
     const j = await r.json().catch(()=>({}));
     if (j.status !== "success") throw new Error(j.message || "Update failed");
@@ -8667,6 +9105,60 @@ async function invAddFunds(){
     invToggleModal(invFundModal, invFundBackdrop, false);
   }catch(e){
     invFundStatus.textContent = "Failed: " + e.message;
+  }
+}
+
+async function invSaveExchangeFee(){
+  const sourceId = getInventorySourceId();
+  if (!sourceId){ invFundStatus.textContent = 'Link an inventory first.'; return; }
+  const feePct = parseFloat(invExchangeFeeEl?.value || '3');
+  if (!Number.isFinite(feePct) || feePct < 0 || feePct > 100){
+    invFundStatus.textContent = 'Fee must be between 0 and 100.';
+    return;
+  }
+  invFundStatus.textContent = 'Saving exchange fee...';
+  try{
+    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/exchange_fee`, {
+      method:'PATCH',
+      headers:{ 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ fee_pct: feePct })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== 'success') throw new Error(j.message || 'Save failed');
+    LINKED_INV = j.inventory;
+    renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+    invFundStatus.textContent = 'Exchange fee saved.';
+  }catch(e){
+    invFundStatus.textContent = 'Failed: ' + e.message;
+  }
+}
+
+async function invRunExchange(){
+  const sourceId = getInventorySourceId();
+  if (!sourceId){ invFundStatus.textContent = 'Link an inventory first.'; return; }
+  const from_currency = invExchangeFromCurEl?.value || 'Jelly';
+  const to_currency = invExchangeToCurEl?.value || 'Breath';
+  const from_balance_source = invExchangeFromSourceEl?.value || 'carried';
+  const to_balance_source = invExchangeToSourceEl?.value || 'carried';
+  const amount = parseFloat(invExchangeAmountEl?.value || '0');
+  if (!Number.isFinite(amount) || amount <= 0){
+    invFundStatus.textContent = 'Enter a positive exchange amount.';
+    return;
+  }
+  invFundStatus.textContent = 'Exchanging currency...';
+  try{
+    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/exchange`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ from_currency, to_currency, amount, from_balance_source, to_balance_source })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (j.status !== 'success') throw new Error(j.message || 'Exchange failed');
+    LINKED_INV = j.inventory;
+    renderInventoryUI(); recomputePassiveAgg(); renderStatistics(); updateDerived(); queueSave();
+    invFundStatus.textContent = 'Exchange complete.';
+  }catch(e){
+    invFundStatus.textContent = 'Failed: ' + e.message;
   }
 }
 
@@ -8726,6 +9218,7 @@ function invRenderResults(){
     }
     const container = invGlobalContEl.value;
     const currency  = invGlobalCurEl.value || "Jelly";
+    const balanceSource = invCurrentMoneySource();
   INV_FILTERED.forEach(r=>{
     const line = document.createElement("div");
     line.className = "row";
@@ -8767,15 +9260,7 @@ function invRenderResults(){
       }
       const choice = await invPromptPricingChoice(r);
       if (!choice) return;
-      const unitPrice = invComputeUnitPrice(r, choice);
-      const sanitizedUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
-      const totalCost = sanitizedUnitPrice * (isAmmo ? packCount : qty);
-        const balance = Number(LINKED_INV?.currencies?.[currency] ?? 0) || 0;
-        if (totalCost > balance){
-          const proceed = await promptInsufficientFundsWarning(currency, totalCost, balance);
-          if (!proceed) return;
-        }
-        await invBuyItem(r.__kind || "object", r.id, qty, container, currency, choice);
+        await invBuyItem(r.__kind || "object", r.id, qty, container, currency, balanceSource, choice);
       });
     list.appendChild(line);
   });
@@ -9023,7 +9508,7 @@ function invClearSearch(){
   invRenderResults();
 }
 
-async function invBuyItem(kind, ref_id, quantity, container_id, currency, opts = {}){
+async function invBuyItem(kind, ref_id, quantity, container_id, currency, balance_source, opts = {}){
     const equipFlag = invEquippedFlagEl.value === "1";
     const sourceId = getInventorySourceId();
     if (!sourceId){ alert("Link an inventory first."); return; }
@@ -9034,7 +9519,7 @@ async function invBuyItem(kind, ref_id, quantity, container_id, currency, opts =
     const pricingMode = opts.pricingMode || 'market';
     const priceModifier = (opts.priceModifier != null) ? opts.priceModifier : (parseFloat(invPriceModEl?.value || "1") || 1);
     const customPrice = opts.customPrice;
-    const payload = { kind, ref_id, quantity, container_id, currency, equipped: equipFlag, pricing_mode: pricingMode };
+    const payload = { kind, ref_id, quantity, container_id, currency, balance_source: balance_source || invCurrentMoneySource(), equipped: equipFlag, pricing_mode: pricingMode };
     if (pricingMode === 'custom'){
       if (priceModifier != null) payload.price_modifier = priceModifier;
       if (customPrice != null) payload.custom_price = customPrice;
@@ -9083,10 +9568,11 @@ async function saveInvLinkedNature(item_id, linked_nature){
 async function upgradeQuality(item_id, to, currency){
   const sourceId = getInventorySourceId();
   if (!sourceId) throw new Error("Link an inventory first.");
+  const balance_source = invCurrentMoneySource();
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/upgrade_quality`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(Object.assign({ to }, currency ? { currency } : {}))
+    body: JSON.stringify(Object.assign({ to, balance_source }, currency ? { currency } : {}))
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ throw new Error(j.message || "Upgrade failed"); }
@@ -9096,10 +9582,11 @@ async function upgradeQuality(item_id, to, currency){
 async function downgradeQuality(item_id, to, currency){
   const sourceId = getInventorySourceId();
   if (!sourceId) throw new Error("Link an inventory first.");
+  const balance_source = invCurrentMoneySource();
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/downgrade_quality`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(Object.assign({ to }, currency ? { currency } : {}))
+    body: JSON.stringify(Object.assign({ to, balance_source }, currency ? { currency } : {}))
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ throw new Error(j.message || "Downgrade failed"); }
@@ -9127,10 +9614,12 @@ async function installUpgrade(item_id, upgrade_id, targetOverride=""){
   }
   const sourceId = getInventorySourceId();
   if (!sourceId) throw new Error("Link an inventory first.");
+  const balance_source = invCurrentMoneySource();
+  const currency = invGlobalCurEl?.value || 'Jelly';
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/install_upgrade`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ upgrade_id, target })
+    body: JSON.stringify({ upgrade_id, target, currency, balance_source })
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ throw new Error(j.message || "Install failed"); }
@@ -9161,19 +9650,6 @@ async function removeUpgrade(item_id, upgrade_id, target=""){
   const ups = j.upgrades || [];
   ups.forEach(u=>{ UPGRADE_META[u.id] = u; });
     return ups;
-  }
-
-  async function downgradeQuality(item_id, to){
-    const sourceId = getInventorySourceId();
-    if (!sourceId) throw new Error("Link an inventory first.");
-    const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(item_id)}/downgrade_quality`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ to })
-    });
-    const j = await r.json().catch(()=>({}));
-    if (j.status !== "success"){ throw new Error(j.message || "Downgrade failed"); }
-    return j.inventory;
   }
 
 function normalizeItemKind(it){
@@ -9314,7 +9790,8 @@ function alchemyTierFromPrice(price){
 
 async function sellItemInline(it, price){
   const currency = invGlobalCurEl?.value || "Jelly";
-  const payload = { price, currency };
+  const balance_source = invCurrentMoneySource();
+  const payload = { price, currency, balance_source };
   const sourceId = getInventorySourceId();
   if (!sourceId){ alert("Link an inventory first."); return; }
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/sell`, {
@@ -9329,12 +9806,13 @@ async function sellItemInline(it, price){
 
 async function disposeItemInline(it){
   const currency = invGlobalCurEl?.value || "Jelly";
+  const balance_source = invCurrentMoneySource();
   const sourceId = getInventorySourceId();
   if (!sourceId){ alert("Link an inventory first."); return; }
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/dispose`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
-    body: JSON.stringify({ currency })
+    body: JSON.stringify({ currency, balance_source })
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ alert(j.message || "Dispose failed"); return; }
@@ -9344,6 +9822,7 @@ async function disposeItemInline(it){
 async function useItemInline(it, amount=1){
   const qty = Math.max(1, Math.floor(Number(amount) || 1));
   const currency = invGlobalCurEl?.value || "Jelly";
+  const balance_source = invCurrentMoneySource();
   const sourceId = getInventorySourceId();
   if (!sourceId){ alert("Link an inventory first."); return false; }
   const itemId = String(it?.item_id || it?.id || '').trim();
@@ -9351,7 +9830,7 @@ async function useItemInline(it, amount=1){
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(itemId)}/use`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
-    body: JSON.stringify({ currency, amount: qty })
+    body: JSON.stringify({ currency, amount: qty, balance_source })
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ alert(j.message || "Use failed"); return false; }
@@ -9361,12 +9840,13 @@ async function useItemInline(it, amount=1){
 
 async function refillAlchemyInline(it){
   const currency = invGlobalCurEl?.value || "Jelly";
+  const balance_source = invCurrentMoneySource();
   const sourceId = getInventorySourceId();
   if (!sourceId){ alert("Link an inventory first."); return; }
   const r = await fetch(`/inventories/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(it.item_id)}/refill_alchemy`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", ...authHeaders() },
-    body: JSON.stringify({ currency })
+    body: JSON.stringify({ currency, balance_source })
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ alert(j.message || "Refill failed"); return; }
@@ -16317,6 +16797,37 @@ function applyResourceAction(){
   if (!Number.isFinite(rawValue)) return;
   const note = (resourceActionNote?.value || '').trim();
   const labelBase = resourceActionModal.dataset.resourceLabel || RESOURCE_LABELS[resource] || resource;
+  if (resource === 'tension'){
+    const st = combatState();
+    const cap = tensionCapForLevel(CHAR?.level || 1);
+    const prev = Math.max(0, Math.min(cap, Number(st.tension || 0)));
+    let target = prev;
+    if (kind === 'set'){
+      target = Math.max(0, Math.min(cap, rawValue));
+    }else if (kind === 'add'){
+      target = Math.max(0, Math.min(cap, prev + Math.max(0, rawValue)));
+    }else if (kind === 'subtract'){
+      target = Math.max(0, prev - Math.max(0, rawValue));
+    }
+    const delta = target - prev;
+    if (!delta){
+      closeResourceActionModal();
+      return;
+    }
+    st.tension = target;
+    pushResourceLedgerEntries([{
+      resource,
+      delta,
+      label: `${labelBase} (${kind})`,
+      source: 'Manual',
+      note,
+    }]);
+    if (resourceLedgerModal && !resourceLedgerModal.classList.contains('hidden')){
+      renderResourceLedger();
+    }
+    closeResourceActionModal();
+    return;
+  }
   if (resource === 'max_hp_damage'){
     const st = combatState();
     const prev = Math.max(0, Number(st.max_hp_damage || 0));
@@ -16347,44 +16858,23 @@ function applyResourceAction(){
     ? Number(combatState().nen || 0)
     : Math.max(0, Number(CURRENT[resource] || 0));
   let delta = 0;
-  const tensionCap = tensionCapForLevel(CHAR?.level || 1);
   if (kind === 'set'){
     let target = Math.max(0, rawValue);
-    if (resource === 'tension'){
-      target = Math.min(tensionCap, target);
-    }else if (resource !== 'tx' && resource !== 'nen'){
+    if (resource !== 'tx' && resource !== 'nen'){
       const baseMax = maxVals[resource] || 0;
       target = Math.min(baseMax, target);
     }
     delta = target - currentVal;
   }else if (kind === 'add'){
-    if (resource === 'tension'){
-      const remaining = Math.max(0, tensionCap - currentVal);
-      delta = Math.max(0, Math.min(rawValue, remaining));
-    }else{
-      delta = rawValue;
-    }
+    delta = rawValue;
   }else if (kind === 'subtract'){
-    if (resource === 'tension'){
-      const available = Math.max(0, currentVal);
-      delta = -Math.max(0, Math.min(rawValue, available));
-    }else{
-      delta = -rawValue;
-    }
+    delta = -rawValue;
   }
   if (resource === 'nen' && delta){
     const st = combatState();
     const prev = Math.max(0, Number(st.nen || 0));
     st.nen = Math.max(0, prev + delta);
     updateNenDisplay();
-    pushResourceLedgerEntries([{
-      resource,
-      delta,
-      label: `${labelBase} (${kind})`,
-      source: 'Manual',
-      note,
-    }]);
-  }else if (resource === 'tension' && delta){
     pushResourceLedgerEntries([{
       resource,
       delta,
@@ -16453,7 +16943,7 @@ function renderResourceLedger(){
         <div class="ledger-actions"></div>
       </div>
     `;
-    if (entry.resource !== 'nen'){
+    if (entry.resource !== 'nen' && entry.resource !== 'tension'){
       const actionWrap = row.querySelector('.ledger-actions');
       const btn = document.createElement('button');
       btn.className = 'btn small ledger-remove';
@@ -16947,6 +17437,8 @@ levelRewardCloseBtn?.addEventListener('click', closeLevelRewardModal);
 levelRewardCancelBtn?.addEventListener('click', closeLevelRewardModal);
 levelRewardBackdrop?.addEventListener('click', (e)=>{ if (e.target===levelRewardBackdrop) closeLevelRewardModal(); });
 invFundSave?.addEventListener('click', invAddFunds);
+invExchangeFeeSaveBtn?.addEventListener('click', invSaveExchangeFee);
+invExchangeRunBtn?.addEventListener('click', invRunExchange);
 invCatalogOpenBtn?.addEventListener('click', ()=> invToggleModal(invCatalogModal, invCatalogBackdrop, true));
 invCatalogClose?.addEventListener('click', ()=> invToggleModal(invCatalogModal, invCatalogBackdrop, false));
 invCatalogBackdrop?.addEventListener('click', (e)=>{ if (e.target===invCatalogBackdrop) invToggleModal(invCatalogModal, invCatalogBackdrop, false); });

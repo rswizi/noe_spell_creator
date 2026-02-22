@@ -16,6 +16,44 @@ def _current_ts():
     return datetime.datetime.utcnow().isoformat() + "Z"
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _sorted_participant_ids(participants: list[dict[str, Any]]) -> list[str]:
+    sorted_parts = sorted(
+        participants or [],
+        key=lambda part: (
+            -_safe_int(part.get("initiative")),
+            _safe_int(part.get("added_idx")),
+            str(part.get("id") or ""),
+        ),
+    )
+    return [part.get("id") for part in sorted_parts if part.get("id")]
+
+
+def _current_participant_id(doc: dict[str, Any]) -> str:
+    order = doc.get("initiative_order") or []
+    idx = _safe_int(doc.get("turn_index"))
+    if idx < 0 or idx >= len(order):
+        return ""
+    return str(order[idx] or "")
+
+
+def _normalized_turn_index(order: list[str], current_pid: str, fallback_index: int = 0) -> int:
+    if not order:
+        return 0
+    if current_pid and current_pid in order:
+        return order.index(current_pid)
+    idx = max(0, min(_safe_int(fallback_index), len(order) - 1))
+    return idx
+
+
 def create_combat_doc(
     campaign_id: str,
     gm: str,
@@ -67,14 +105,7 @@ def start_combat(campaign_id: str, combat_id: str) -> dict[str, Any]:
     participants = doc.get("participants") or []
     if not participants:
         return doc
-    sorted_parts = sorted(
-        participants,
-        key=lambda part: (
-            -int(part.get("initiative") or 0),
-            int(part.get("added_idx", 0)),
-        ),
-    )
-    order = [part["id"] for part in sorted_parts if part.get("id")]
+    order = _sorted_participant_ids(participants)
     update = {
         "status": "active",
         "initiative_order": order,
@@ -91,6 +122,36 @@ def start_combat(campaign_id: str, combat_id: str) -> dict[str, Any]:
     if updated:
         process_turn_atomic(updated)
     return updated or {}
+
+
+def rebuild_initiative_order(
+    campaign_id: str,
+    combat_id: str,
+    keep_current: bool = True,
+    bump_turn_token: bool = False,
+) -> dict[str, Any] | None:
+    coll = combat_collection()
+    doc = coll.find_one({"id": combat_id, "campaign_id": campaign_id})
+    if not doc:
+        return None
+    participants = doc.get("participants") or []
+    order = _sorted_participant_ids(participants)
+    current_pid = _current_participant_id(doc) if keep_current else ""
+    turn_index = _normalized_turn_index(order, current_pid, doc.get("turn_index") or 0)
+    update: dict[str, Any] = {
+        "initiative_order": order,
+        "turn_index": turn_index,
+    }
+    if bump_turn_token and (doc.get("status") == "active"):
+        update["turn_token"] = _safe_int(doc.get("turn_token")) + 1
+    updated = coll.find_one_and_update(
+        {"id": combat_id, "campaign_id": campaign_id},
+        {"$set": update},
+        return_document=ReturnDocument.AFTER,
+    )
+    if updated and updated.get("status") == "active":
+        process_turn_atomic(updated)
+    return updated
 
 
 def advance_combat_turn(campaign_id: str, combat_id: str, direction: str = "next") -> dict[str, Any] | None:
@@ -140,6 +201,92 @@ def join_combat(campaign_id: str, combat_id: str, username: str) -> dict[str, An
         {"$addToSet": {"joined_users": username}},
     )
     return coll.find_one({"id": combat_id, "campaign_id": campaign_id})
+
+
+def end_combat(campaign_id: str, combat_id: str) -> dict[str, Any] | None:
+    coll = combat_collection()
+    return coll.find_one_and_update(
+        {"id": combat_id, "campaign_id": campaign_id},
+        {
+            "$set": {
+                "status": "ended",
+                "ended_at": _current_ts(),
+            }
+        },
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+def update_combat_participant(
+    campaign_id: str,
+    combat_id: str,
+    participant_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    coll = combat_collection()
+    doc = coll.find_one({"id": combat_id, "campaign_id": campaign_id})
+    if not doc:
+        return None
+    participants = [dict(part) for part in (doc.get("participants") or [])]
+    changed = False
+    initiative_changed = False
+    for part in participants:
+        if str(part.get("id") or "") != participant_id:
+            continue
+        if "name" in payload:
+            part["name"] = str(payload.get("name") or "").strip() or part.get("name") or "Combatant"
+            changed = True
+        if "initiative" in payload:
+            part["initiative"] = _safe_int(payload.get("initiative"))
+            changed = True
+            initiative_changed = True
+        if "notes" in payload or "note" in payload:
+            part["notes"] = str(payload.get("notes") or payload.get("note") or "").strip()
+            changed = True
+        break
+    if not changed:
+        return doc
+    updated = coll.find_one_and_update(
+        {"id": combat_id, "campaign_id": campaign_id},
+        {"$set": {"participants": participants}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated:
+        return None
+    return rebuild_initiative_order(
+        campaign_id,
+        combat_id,
+        keep_current=True,
+        bump_turn_token=initiative_changed,
+    ) or updated
+
+
+def remove_combat_participant(
+    campaign_id: str,
+    combat_id: str,
+    participant_id: str,
+) -> dict[str, Any] | None:
+    coll = combat_collection()
+    doc = coll.find_one({"id": combat_id, "campaign_id": campaign_id})
+    if not doc:
+        return None
+    participants = [dict(part) for part in (doc.get("participants") or [])]
+    filtered = [part for part in participants if str(part.get("id") or "") != participant_id]
+    if len(filtered) == len(participants):
+        return doc
+    updated = coll.find_one_and_update(
+        {"id": combat_id, "campaign_id": campaign_id},
+        {"$set": {"participants": filtered}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated:
+        return None
+    return rebuild_initiative_order(
+        campaign_id,
+        combat_id,
+        keep_current=True,
+        bump_turn_token=doc.get("status") == "active",
+    ) or updated
 
 
 def process_turn_atomic(doc: dict[str, Any]) -> None:

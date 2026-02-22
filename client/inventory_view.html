@@ -20,7 +20,7 @@
     .list { border:1px solid #222; border-radius:10px; padding:8px; }
     .searchbar { display:grid; gap:8px; grid-template-columns: 1fr; }
     .search-controls { display:grid; gap:8px; grid-template-columns: 1fr 1fr 1fr 1fr; }
-    .purchase-controls { display:grid; gap:8px; grid-template-columns: 1fr 1fr; }
+    .purchase-controls { display:grid; gap:8px; grid-template-columns: 1fr 1fr 1fr; }
     .modal { position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45); z-index:1000; padding:16px; }
     .modal.hidden{ display:none; }
     .modal-card { width:min(760px, 96vw); background:#0b0b0b; border:1px solid #222; border-radius:14px; padding:16px; }
@@ -69,9 +69,47 @@
       <div class="row" style="margin-top:10px;">
         <label class="muted">Add Funds</label>
         <select id="fund-cur" style="min-width:120px;"></select>
-        <input id="fund-amt" type="number" step="1" placeholder="Amount" style="width:140px;">
+        <select id="fund-source" style="min-width:120px;">
+          <option value="carried">Carried</option>
+          <option value="bank">Bank</option>
+        </select>
+        <input id="fund-amt" type="number" step="0.01" placeholder="Amount (+/-)" style="width:140px;">
         <input id="fund-note" placeholder="Note (optional)" style="flex:1; min-width:200px;">
-        <button id="fund-add" class="btn small">+ Add</button>
+        <button id="fund-add" class="btn small">Apply</button>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <label class="muted">Exchange Fee %</label>
+        <input id="exchange-fee" type="number" step="0.1" min="0" max="100" value="3" style="width:120px;">
+        <button id="exchange-fee-save" class="btn small">Save Fee</button>
+      </div>
+      <div class="row" style="margin-top:8px; align-items:flex-end;">
+        <div>
+          <label class="muted">From</label>
+          <select id="exchange-from-cur" style="min-width:120px;"></select>
+        </div>
+        <div>
+          <label class="muted">From Stack</label>
+          <select id="exchange-from-source" style="min-width:120px;">
+            <option value="carried">Carried</option>
+            <option value="bank">Bank</option>
+          </select>
+        </div>
+        <div>
+          <label class="muted">Amount</label>
+          <input id="exchange-amount" type="number" step="0.01" min="0.01" value="1" style="width:110px;">
+        </div>
+        <div>
+          <label class="muted">To</label>
+          <select id="exchange-to-cur" style="min-width:120px;"></select>
+        </div>
+        <div>
+          <label class="muted">To Stack</label>
+          <select id="exchange-to-source" style="min-width:120px;">
+            <option value="carried">Carried</option>
+            <option value="bank">Bank</option>
+          </select>
+        </div>
+        <button id="exchange-run" class="btn small">Exchange</button>
       </div>
     </div>
 
@@ -146,8 +184,15 @@
               <label class="muted">Currency</label>
               <select id="global-cur"></select>
             </div>
+            <div>
+              <label class="muted">Payment Stack</label>
+              <select id="global-source">
+                <option value="carried">Carried</option>
+                <option value="bank">Bank</option>
+              </select>
+            </div>
           </div>
-          <div class="muted" style="margin-top:8px;">Selected container/currency apply to all “Add” actions below.</div>
+          <div class="muted" style="margin-top:8px;">Selected container/currency/stack apply to all “Add” actions below.</div>
         </div>
       </div>
 
@@ -242,6 +287,61 @@ const QUALITY_DIFFS = {
   "Excellent": 5280, "Legendary": 15300, "Mythical": 38760,
   "Epic": 128000, "Divine": 614400, "Unreal": 921600,
 };
+const MONEY_ORDER = ["Jelly","Breath","Web","Kabuto","Jawhar","Baya"];
+const COIN_CURRENCIES = new Set(["Breath","Web","Kabuto","Jawhar","Baya"]);
+
+function moneyCurrencyKeys(){
+  const fromCur = Object.keys((INV?.currencies) || {});
+  const fromWallet = Object.keys((INV?.currency_details) || {});
+  const raw = Array.from(new Set([...MONEY_ORDER, ...fromCur, ...fromWallet]));
+  return raw.filter(Boolean);
+}
+function moneyEntry(currency){
+  return (INV?.currency_details && INV.currency_details[currency]) ? INV.currency_details[currency] : null;
+}
+function moneyAmount(currency, scope = "total"){
+  const row = moneyEntry(currency);
+  if (row && row[scope] && row[scope].amount != null){
+    return Number(row[scope].amount) || 0;
+  }
+  if (scope === "total"){
+    return Number((INV?.currencies || {})[currency] ?? 0) || 0;
+  }
+  return 0;
+}
+function moneyCoinsLabel(currency, scope = "total"){
+  const row = moneyEntry(currency);
+  const part = row && row[scope] ? row[scope] : null;
+  if (!part) return "No details";
+  if (!COIN_CURRENCIES.has(currency)){
+    return "No coin denominations";
+  }
+  const c = part.coins || {};
+  return `pc:${Number(c.pc||0)} gc:${Number(c.gc||0)} sc:${Number(c.sc||0)} bc:${Number(c.bc||0)} (${Number(part.coin_count||0)} coins)`;
+}
+function moneyTooltip(currency){
+  return [
+    `${currency}`,
+    `Carried: ${moneyAmount(currency, "carried")} (${moneyCoinsLabel(currency, "carried")})`,
+    `Bank: ${moneyAmount(currency, "bank")} (${moneyCoinsLabel(currency, "bank")})`,
+    `Total: ${moneyAmount(currency, "total")} (${moneyCoinsLabel(currency, "total")})`,
+  ].join("\n");
+}
+function currentGlobalSource(){
+  return $("#global-source")?.value || "carried";
+}
+function setSelectOptions(selectEl, values, preferred){
+  if (!selectEl) return;
+  const keep = preferred || selectEl.value || "";
+  selectEl.innerHTML = "";
+  values.forEach(v=>{
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    selectEl.appendChild(opt);
+  });
+  if (keep && values.includes(keep)) selectEl.value = keep;
+}
 
 const CHARACS = [
   { key:"reflex",    code:"REF", name:"Reflex",    skills:["Technicity","Dodge","Counter","Reactivity"] },
@@ -1146,17 +1246,17 @@ function updateQualityCostPreview(){
 
 function populateQualityCurrencyOptions(){
   if (!qualityCurrencySelect) return;
-  const currencies = Object.keys((INV?.currencies) || {});
-  const keys = currencies.length ? currencies : ["Jelly"];
+  const keys = moneyCurrencyKeys();
+  const finalKeys = keys.length ? keys : ["Jelly"];
   qualityCurrencySelect.innerHTML = "";
-  keys.forEach(k=>{
+  finalKeys.forEach(k=>{
     const opt = document.createElement("option");
     opt.value = k;
     opt.textContent = k;
     qualityCurrencySelect.appendChild(opt);
   });
   const preferred = $("#global-cur")?.value;
-  if (preferred && keys.includes(preferred)){
+  if (preferred && finalKeys.includes(preferred)){
     qualityCurrencySelect.value = preferred;
   }
 }
@@ -1247,7 +1347,7 @@ async function confirmQualityUpgrade(){
     return;
   }
   const currency = qualityCurrencySelect?.value || $("#global-cur")?.value || "Jelly";
-  const ok = await upgradeQuality(QUALITY_CTX.item_id, target, currency);
+  const ok = await upgradeQuality(QUALITY_CTX.item_id, target, currency, currentGlobalSource());
   if (ok) closeQualityUpgradeModal();
 }
 
@@ -1273,7 +1373,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadInventory();
   $("#search").addEventListener("click", doSearch);
   $("#q").addEventListener("keydown", e=>{ if (e.key==="Enter") doSearch(); });
-  $("#tag").addEventListener("keydown", e=>{ if (e.key==="Enter") doSearch(); });
+  $("#tag")?.addEventListener("keydown", e=>{ if (e.key==="Enter") doSearch(); });
   $("#clear").addEventListener("click", clearSearch);
   $("#add-cont").addEventListener("click", addContainer);
   $("#item-close").addEventListener("click", closeItemModal);
@@ -1285,6 +1385,8 @@ document.addEventListener("DOMContentLoaded", () => {
   qualityModal?.addEventListener("click", (e)=>{ if (e.target === qualityModal) closeQualityUpgradeModal(); });
   $("#cat-select").addEventListener("change", applyCategoryFilter);
   $("#fund-add").addEventListener("click", addFunds);
+  $("#exchange-fee-save").addEventListener("click", saveExchangeFee);
+  $("#exchange-run").addEventListener("click", runExchange);
 });
 
 async function loadInventory(){
@@ -1298,21 +1400,25 @@ function renderInventory(){
   $("#inv-title").textContent = INV.name;
 
   // money
-  const cur = INV.currencies || {};
-  $("#money").innerHTML = Object.keys(cur).length
-    ? Object.entries(cur).map(([k,v])=>`<span class="pill">${k}: <b>${v}</b></span>`).join(" ")
+  const currencies = moneyCurrencyKeys();
+  $("#money").innerHTML = currencies.length
+    ? currencies.map((k)=>{
+      const carried = moneyAmount(k, "carried");
+      const bank = moneyAmount(k, "bank");
+      const total = moneyAmount(k, "total");
+      return `<span class="pill" title="${escapeAttr(moneyTooltip(k))}">${escapeHtml(k)}: <b>${total}</b> <span class="muted">(C ${carried} | B ${bank})</span></span>`;
+    }).join(" ")
     : `<span class="muted">No currency set.</span>`;
+  const feeInput = $("#exchange-fee");
+  if (feeInput){
+    const rawFee = Number(INV.exchange_fee_pct ?? 3);
+    feeInput.value = Number.isFinite(rawFee) ? String(rawFee) : "3";
+  }
 
   // add-funds currency
-  const selFund = $("#fund-cur");
-  selFund.innerHTML = "";
-  const currencies = Object.keys(INV.currencies || {Jelly:0});
-  if (!currencies.length) currencies.push("Jelly");
-  currencies.forEach(k=>{
-    const opt = document.createElement("option");
-    opt.value = k; opt.textContent = k;
-    selFund.appendChild(opt);
-  });
+  setSelectOptions($("#fund-cur"), currencies.length ? currencies : ["Jelly"], $("#fund-cur")?.value || $("#global-cur")?.value || "Jelly");
+  setSelectOptions($("#exchange-from-cur"), currencies.length ? currencies : ["Jelly"], $("#exchange-from-cur")?.value || "Jelly");
+  setSelectOptions($("#exchange-to-cur"), currencies.length ? currencies : ["Jelly"], $("#exchange-to-cur")?.value || "Breath");
 
   // enc totals
   $("#enc-total").textContent = Number(INV.enc_total || 0).toFixed(1);
@@ -1488,7 +1594,8 @@ function renderInventory(){
   for (const t of (INV.transactions || []).slice(-25).reverse()){
     const div = document.createElement("div");
     div.className = "row";
-    div.innerHTML = `<span class="muted">${new Date(t.ts).toLocaleString()}</span> — <b>${t.amount}</b> ${t.currency} — ${escapeHtml(t.note || "")}`;
+    const stackLabel = t.balance_source ? ` [${escapeHtml(t.balance_source)}]` : "";
+    div.innerHTML = `<span class="muted">${new Date(t.ts).toLocaleString()}</span> — <b>${t.amount}</b> ${t.currency}${stackLabel} — ${escapeHtml(t.note || "")}`;
     tx.appendChild(div);
   }
 }
@@ -1507,15 +1614,8 @@ function populateGlobals(){
   if (preferred){ selC.value = preferred.id; }
 
   // Currency selector (global)
-  const selCur = $("#global-cur");
-  selCur.innerHTML = "";
-  const currencies = Object.keys(INV.currencies || {Jelly:0});
-  if (!currencies.length){ currencies.push("Jelly"); }
-  currencies.forEach(k=>{
-    const opt = document.createElement("option");
-    opt.value = k; opt.textContent = k;
-    selCur.appendChild(opt);
-  });
+  const currencies = moneyCurrencyKeys();
+  setSelectOptions($("#global-cur"), currencies.length ? currencies : ["Jelly"], $("#global-cur")?.value || "Jelly");
   populateQualityCurrencyOptions();
 
   // Add-funds currency already populated in renderInventory
@@ -1548,15 +1648,16 @@ async function addContainer(){
 /* ------------- Add Funds ------------- */
 async function addFunds(){
   const currency = $("#fund-cur").value || "Jelly";
-  const amount = parseInt($("#fund-amt").value || "0", 10);
-  const note = ($("#fund-note").value || "Top up").trim();
-  if (!amount || amount <= 0){ alert("Enter a positive amount."); return; }
-  if (!confirm(`Add +${amount} ${currency} to this inventory?`)) return;
+  const balance_source = $("#fund-source").value || "carried";
+  const amount = parseFloat($("#fund-amt").value || "0");
+  const note = ($("#fund-note").value || (amount >= 0 ? "Top up" : "Withdrawal")).trim();
+  if (!Number.isFinite(amount) || amount === 0){ alert("Enter a non-zero amount."); return; }
+  if (!confirm(`Apply ${amount} ${currency} to ${balance_source}?`)) return;
 
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/deposit`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ currency, amount, note })
+    body: JSON.stringify({ currency, amount, note, balance_source })
   });
   const j = await r.json();
   if (j.status !== "success"){ alert(j.message || "Deposit failed"); return; }
@@ -1565,11 +1666,47 @@ async function addFunds(){
   applyInventory(j.inventory);
 }
 
+async function saveExchangeFee(){
+  const feePct = parseFloat($("#exchange-fee").value || "3");
+  if (!Number.isFinite(feePct) || feePct < 0 || feePct > 100){
+    alert("Fee must be between 0 and 100.");
+    return;
+  }
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/exchange_fee`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ fee_pct: feePct })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Failed to save exchange fee"); return; }
+  applyInventory(j.inventory);
+}
+
+async function runExchange(){
+  const from_currency = $("#exchange-from-cur").value || "Jelly";
+  const to_currency = $("#exchange-to-cur").value || "Breath";
+  const from_balance_source = $("#exchange-from-source").value || "carried";
+  const to_balance_source = $("#exchange-to-source").value || "carried";
+  const amount = parseFloat($("#exchange-amount").value || "0");
+  if (!Number.isFinite(amount) || amount <= 0){
+    alert("Enter a positive exchange amount.");
+    return;
+  }
+  const r = await fetch(`/inventories/${encodeURIComponent(invId)}/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ from_currency, to_currency, amount, from_balance_source, to_balance_source })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (j.status !== "success"){ alert(j.message || "Exchange failed"); return; }
+  applyInventory(j.inventory);
+}
+
 /* ------------- Catalog search & filter ------------- */
 
 async function doSearch(){
   const q = ($("#q").value || "").trim();
-  const tags = ($("#tag").value || "").trim();
+  const tags = ($("#tag")?.value || "").trim();
   const kind = $("#kind").value;
   const limit = parseInt($("#limit").value || "50", 10);
   PRICE_MOD = parseFloat($("#price-mod").value || "1") || 1;
@@ -1802,6 +1939,7 @@ function renderResults(){
 
   const globalContainer = $("#global-cont").value;
   const globalCurrency  = $("#global-cur").value || "Jelly";
+  const globalSource = currentGlobalSource();
 
   for (const r of FILTERED){
     const line = document.createElement("div");
@@ -1826,7 +1964,7 @@ function renderResults(){
       const qty = Math.max(1, parseInt(line.querySelector(".qty").value||"1", 10));
       const choice = await invPromptPricingChoice(r);
       if (!choice) return;
-      await buyItem(r.__kind || "object", r.id, qty, globalContainer, globalCurrency, choice);
+      await buyItem(r.__kind || "object", r.id, qty, globalContainer, globalCurrency, globalSource, choice);
     });
 
     list.appendChild(line);
@@ -1835,7 +1973,8 @@ function renderResults(){
 
 function clearSearch(){
   $("#q").value = "";
-  $("#tag").value = "";
+  const tagEl = $("#tag");
+  if (tagEl) tagEl.value = "";
   LAST_RESULTS = [];
   FILTERED = [];
   buildCategoryOptions([]);
@@ -1844,8 +1983,8 @@ function clearSearch(){
 
 /* ------------- Purchase ------------- */
 
-async function buyItem(kind, ref_id, quantity, container_id, currency, opts = {}){
-  const payload = { kind, ref_id, quantity, container_id, currency };
+async function buyItem(kind, ref_id, quantity, container_id, currency, balance_source, opts = {}){
+  const payload = { kind, ref_id, quantity, container_id, currency, balance_source: balance_source || "carried" };
   const priceModifier = (opts.priceModifier != null) ? opts.priceModifier : (parseFloat(invPriceModEl?.value || "1") || 1);
   const customPrice = (opts.customPrice != null) ? Number(opts.customPrice) : null;
   const pricingMode = (opts.pricingMode || "").toString();
@@ -1902,10 +2041,11 @@ function alchemyTierFromPrice(price){
 
 async function useItem(item_id){
   const currency = $("#global-cur").value || "Jelly";
+  const balance_source = currentGlobalSource();
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/use`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ currency })
+    body: JSON.stringify({ currency, balance_source })
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ alert(j.message || "Use failed"); return; }
@@ -1914,10 +2054,11 @@ async function useItem(item_id){
 
 async function refillAlchemy(item_id){
   const currency = $("#global-cur").value || "Jelly";
+  const balance_source = currentGlobalSource();
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/refill_alchemy`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ currency })
+    body: JSON.stringify({ currency, balance_source })
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ alert(j.message || "Refill failed"); return; }
@@ -1926,10 +2067,11 @@ async function refillAlchemy(item_id){
 
 async function sellItem(item_id, price){
   const currency = $("#global-cur").value || "Jelly";
+  const balance_source = currentGlobalSource();
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/sell`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ price, currency })
+    body: JSON.stringify({ price, currency, balance_source })
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ alert(j.message || "Sell failed"); return; }
@@ -1938,10 +2080,11 @@ async function sellItem(item_id, price){
 
 async function disposeItem(item_id){
   const currency = $("#global-cur").value || "Jelly";
+  const balance_source = currentGlobalSource();
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/dispose`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ currency })
+    body: JSON.stringify({ currency, balance_source })
   });
   const j = await r.json().catch(()=>({}));
   if (j.status !== "success"){ alert(j.message || "Dispose failed"); return; }
@@ -2248,9 +2391,10 @@ async function saveAltName(item_id, alt_name){
   applyInventory(j.inventory);
 }
 
-async function upgradeQuality(item_id, to, currency){
+async function upgradeQuality(item_id, to, currency, balanceSource){
   const payload = { to };
   if (currency) payload.currency = currency;
+  payload.balance_source = balanceSource || currentGlobalSource();
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/upgrade_quality`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -2285,7 +2429,7 @@ async function installUpgrade(item_id, upgrade, targetOverride=""){
   const r = await fetch(`/inventories/${encodeURIComponent(invId)}/items/${encodeURIComponent(item_id)}/install_upgrade`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ upgrade_id: upgrade, target })
+    body: JSON.stringify({ upgrade_id: upgrade, target, currency: $("#global-cur")?.value || "Jelly", balance_source: currentGlobalSource() })
   });
   const j = await r.json();
   if (j.status !== "success"){ alert(j.message || "Install failed"); return; }

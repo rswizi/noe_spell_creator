@@ -400,6 +400,8 @@
           <input id="search-input" type="search" placeholder="Title, tags, assigned, faction..." autocomplete="off" />
         </label>
         <button class="btn ghost" id="toggle-hidden">Show Hidden</button>
+        <a class="btn" id="back-to-campaign-btn" href="campaigns_my.html">Back to Campaign</a>
+        <a class="btn" href="portal.html">Portal</a>
         <button class="btn primary gm-only" id="open-create-btn">New Quest</button>
       </div>
     </header>
@@ -537,6 +539,7 @@
   <script>
     const params = new URLSearchParams(location.search);
     const CID = (params.get('cid') || '').trim();
+    const backToCampaignBtn = document.getElementById('back-to-campaign-btn');
 
     const searchInput = document.getElementById('search-input');
     const filterTypeEl = document.getElementById('filter-type');
@@ -606,6 +609,18 @@
       createModalSubmit: null,
       createQuestIdInput: null,
     };
+
+    function refreshBackToCampaignLink() {
+      if (!backToCampaignBtn) return;
+      const targetCid = String(state.campaign?.id || CID || '').trim();
+      if (targetCid) {
+        backToCampaignBtn.href = `campaign_view.html?cid=${encodeURIComponent(targetCid)}`;
+        backToCampaignBtn.textContent = 'Back to Campaign';
+      } else {
+        backToCampaignBtn.href = 'campaigns_my.html';
+        backToCampaignBtn.textContent = 'Back to My Campaigns';
+      }
+    }
 
     function escapeHtml(val) {
       if (!val) return '';
@@ -1480,6 +1495,7 @@
       try {
         const res = await api(`/campaigns/${encodeURIComponent(CID)}`);
         state.campaign = res.campaign || {};
+        refreshBackToCampaignLink();
         refreshGmVisibility();
       } catch (error) {
         console.warn('Failed to load campaign', error);
@@ -1595,6 +1611,7 @@
 
     async function init() {
       setupCreateQuestEditor();
+      refreshBackToCampaignLink();
       if (!CID) {
         pageStatus.textContent = 'This hub must be opened with a campaign id.';
         return;

@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import string
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any, List
@@ -39,6 +40,20 @@ from server.src.modules.logging_helpers import logger, write_audit
 from server.src.modules.spell_helpers import compute_spell_costs, _effect_duplicate_groups, _recompute_spells_for_school, _recompute_spells_for_effect, recompute_all_spells
 from server.src.modules.objects_helpers import _object_from_body
 from server.src.modules.inventory_helpers import WEAPON_UPGRADES, ARMOR_UPGRADES, _slots_for_quality, _upgrade_fee_for_range, _qprice, _compose_variant, _pick_currency, QUALITY_ORDER, craftomancy_row_for_quality, craftomancy_category_index, craftomancy_next_category
+from server.src.modules.currency_wallet import (
+    DEFAULT_CURRENCIES as MONEY_DEFAULT_CURRENCIES,
+    DEFAULT_CURRENCY_VALUES_GC as MONEY_VALUES_GC,
+    DEFAULT_EXCHANGE_FEE_PCT,
+    canonical_currency_name,
+    currency_value_gc,
+    currency_precision,
+    major_to_minor,
+    minor_to_major,
+    minor_to_gc,
+    gc_to_minor,
+    coin_breakdown,
+    carried_coin_enc,
+)
 from server.src.modules.campaign_chat_helpers import (
     CAMPAIGN_CHAT_COL,
     CAMPAIGN_CHAT_WS,
@@ -50,12 +65,16 @@ from server.src.modules.wiki_api import router as wiki_router
 from server.src.modules.assets_api import router as assets_router
 from server.src.modules.quests_api import router as quests_router
 from server.src.modules.campaign_combat import (
+    end_combat,
     create_combat_doc,
     get_active_combat,
     get_combat,
     start_combat,
     advance_combat_turn,
     join_combat,
+    rebuild_initiative_order,
+    remove_combat_participant,
+    update_combat_participant,
 )
 EQUIPMENT_SLOTS = {"head","arms","legs","accessory","chest"}
 AMMO_PACK_DEFAULT = 10
@@ -323,6 +342,9 @@ def _require_campaign_gm(cid: str, user: str, role: str | None = None):
         return doc
     if doc.get("owner") == user:
         return doc
+    assistants = [str(name or "").strip().lower() for name in (doc.get("assistant_gms") or []) if name]
+    if str(user or "").strip().lower() in assistants:
+        return doc
     raise HTTPException(403, "Only GM/admin can manage combats")
 
 
@@ -353,10 +375,36 @@ def _collect_characters(character_ids: List[str]) -> dict[str, dict[str, Any]]:
     docs = list(
         get_col("characters").find(
             {"id": {"$in": [cid for cid in character_ids if cid]}},
-            {"_id": 0, "id": 1, "name": 1, "owner": 1},
+            {"_id": 0, "id": 1, "name": 1, "owner": 1, "initiative": 1, "stats": 1, "derived": 1},
         )
     )
     return {str(doc.get("id") or ""): doc for doc in docs}
+
+
+def _extract_character_initiative(doc: dict[str, Any] | None) -> int:
+    if not isinstance(doc, dict):
+        return 0
+    stats = doc.get("stats") if isinstance(doc.get("stats"), dict) else {}
+    stats_derived = stats.get("derived") if isinstance(stats.get("derived"), dict) else {}
+    stats_derived_stats = (
+        stats.get("derived_stats") if isinstance(stats.get("derived_stats"), dict) else {}
+    )
+    top_derived = doc.get("derived") if isinstance(doc.get("derived"), dict) else {}
+    candidates = [
+        doc.get("initiative"),
+        stats.get("initiative"),
+        stats_derived.get("initiative"),
+        stats_derived_stats.get("initiative"),
+        top_derived.get("initiative"),
+    ]
+    for value in candidates:
+        try:
+            if value is None or value == "":
+                continue
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return 0
 
 
 def _build_participants(
@@ -395,7 +443,8 @@ def _build_participants(
             or (char_doc and char_doc.get("id"))
         )
         name = user_label or fallback_name or (f"Dummy {offset + 1}" if not is_character else f"Character {char_id}")
-        initiative = _safe_int_value(raw.get("initiative"))
+        default_initiative = _extract_character_initiative(char_doc) if is_character else 0
+        initiative = _safe_int_value(raw.get("initiative"), default_initiative)
         participant = {
             "id": f"part_{next_id_str('combat_part', padding=5)}",
             "type": "character" if is_character else "dummy",
@@ -876,6 +925,13 @@ async def add_campaign_combat_participants(cid: str, combat_id: str, req: Reques
         {"$push": {"participants": {"$each": new_entries}}},
     )
     updated = get_combat(cid, combat_id)
+    if updated and (updated.get("status") in {"active", "draft"}):
+        updated = rebuild_initiative_order(
+            cid,
+            combat_id,
+            keep_current=updated.get("status") == "active",
+            bump_turn_token=updated.get("status") == "active",
+        ) or updated
     return {"status": "success", "combat": _combat_response_payload(updated)}
 
 
@@ -911,6 +967,46 @@ def join_campaign_combat(cid: str, combat_id: str, req: Request):
     user, role = require_auth(req)
     _require_campaign_access(cid, user, role)
     doc = join_combat(cid, combat_id, user)
+    if not doc:
+        raise HTTPException(404, "Combat not found")
+    return {"status": "success", "combat": _combat_response_payload(doc)}
+
+
+@app.post("/campaigns/{cid}/combats/{combat_id}/end")
+def end_campaign_combat(cid: str, combat_id: str, req: Request):
+    user, role = require_auth(req)
+    _require_campaign_gm(cid, user, role)
+    doc = end_combat(cid, combat_id)
+    if not doc:
+        raise HTTPException(404, "Combat not found")
+    return {"status": "success", "combat": _combat_response_payload(doc)}
+
+
+@app.patch("/campaigns/{cid}/combats/{combat_id}/participants/{participant_id}")
+async def patch_campaign_combat_participant(
+    cid: str, combat_id: str, participant_id: str, req: Request
+):
+    user, role = require_auth(req)
+    _require_campaign_gm(cid, user, role)
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    doc = update_combat_participant(cid, combat_id, participant_id, body)
+    if not doc:
+        raise HTTPException(404, "Combat not found")
+    return {"status": "success", "combat": _combat_response_payload(doc)}
+
+
+@app.delete("/campaigns/{cid}/combats/{combat_id}/participants/{participant_id}")
+def delete_campaign_combat_participant(
+    cid: str, combat_id: str, participant_id: str, req: Request
+):
+    user, role = require_auth(req)
+    _require_campaign_gm(cid, user, role)
+    doc = remove_combat_participant(cid, combat_id, participant_id)
     if not doc:
         raise HTTPException(404, "Combat not found")
     return {"status": "success", "combat": _combat_response_payload(doc)}
@@ -4313,7 +4409,243 @@ def _default_stow_container(containers: list[dict]) -> str:
     return (containers or [{}])[0].get("id", "")
 
 
-def _recompute_encumbrance(items: list[dict], containers: list[dict]) -> tuple[list[dict], float]:
+def _money_bucket_name(raw: Any) -> str:
+    val = str(raw or "").strip().lower()
+    if val in ("bank", "stored", "storage"):
+        return "bank"
+    return "carried"
+
+
+def _to_decimal_or_zero(value: Any) -> Decimal:
+    if isinstance(value, Decimal):
+        return value
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")
+
+
+def _format_money_major(currency: str, minor_value: int) -> float | int:
+    major = minor_to_major(currency, minor_value)
+    if currency_precision(currency) <= 1:
+        return int(major)
+    return float(major.quantize(Decimal("0.01")))
+
+
+def _wallet_currency_keys(inv: dict) -> list[str]:
+    keys = set(MONEY_DEFAULT_CURRENCIES)
+    for k in (inv.get("currencies") or {}).keys():
+        keys.add(canonical_currency_name(k))
+    for k in (inv.get("wallet") or {}).keys():
+        keys.add(canonical_currency_name(k))
+    return sorted(keys)
+
+
+def _coin_minor_from_payload(currency: str, value: Any) -> int:
+    if isinstance(value, dict):
+        # Expected keys for coin currencies.
+        if currency != "Jelly":
+            pc = int(value.get("pc") or 0)
+            gc = int(value.get("gc") or 0)
+            sc = int(value.get("sc") or 0)
+            bc = int(value.get("bc") or 0)
+            total = (pc * 1000) + (gc * 100) + (sc * 10) + bc
+            return int(max(0, total))
+        return int(max(0, int(value.get("amount") or value.get("units") or 0)))
+    if isinstance(value, (int, float, Decimal, str)):
+        return max(0, major_to_minor(currency, value, rounding="half_up"))
+    return 0
+
+
+def _sync_inventory_currencies(inv: dict) -> dict:
+    wallet = inv.get("wallet") or {}
+    cur = {}
+    for currency in _wallet_currency_keys(inv):
+        entry = wallet.get(currency) if isinstance(wallet, dict) else None
+        if not isinstance(entry, dict):
+            entry = {"carried": 0, "bank": 0}
+        carried = int(entry.get("carried") or 0)
+        bank = int(entry.get("bank") or 0)
+        total_minor = carried + bank
+        cur[currency] = _format_money_major(currency, total_minor)
+    inv["currencies"] = cur
+    return cur
+
+
+def _wallet_summary(inv: dict) -> dict:
+    wallet = inv.get("wallet") or {}
+    out: dict[str, dict] = {}
+    for currency in _wallet_currency_keys(inv):
+        cur = canonical_currency_name(currency)
+        entry = wallet.get(cur) if isinstance(wallet, dict) else None
+        if not isinstance(entry, dict):
+            entry = {"carried": 0, "bank": 0}
+        carried_minor = int(entry.get("carried") or 0)
+        bank_minor = int(entry.get("bank") or 0)
+        total_minor = carried_minor + bank_minor
+        carried_major = _format_money_major(cur, carried_minor)
+        bank_major = _format_money_major(cur, bank_minor)
+        total_major = _format_money_major(cur, total_minor)
+        carried_coins = coin_breakdown(cur, carried_minor)
+        bank_coins = coin_breakdown(cur, bank_minor)
+        total_coins = coin_breakdown(cur, total_minor)
+        value_gc = currency_value_gc(cur)
+        out[cur] = {
+            "value_gc": float(value_gc) if value_gc is not None else None,
+            "carried": {
+                "minor": carried_minor,
+                "amount": carried_major,
+                "coins": carried_coins.get("coins") or {},
+                "coin_count": int(carried_coins.get("coin_count") or 0),
+            },
+            "bank": {
+                "minor": bank_minor,
+                "amount": bank_major,
+                "coins": bank_coins.get("coins") or {},
+                "coin_count": int(bank_coins.get("coin_count") or 0),
+            },
+            "total": {
+                "minor": total_minor,
+                "amount": total_major,
+                "coins": total_coins.get("coins") or {},
+                "coin_count": int(total_coins.get("coin_count") or 0),
+            },
+        }
+    return out
+
+
+def _ensure_inventory_wallet(inv: dict) -> bool:
+    changed = False
+    raw_wallet = inv.get("wallet")
+    legacy_cur = inv.get("currencies") or {}
+    had_wallet = isinstance(raw_wallet, dict) and bool(raw_wallet)
+
+    wallet: dict[str, dict] = {}
+    if isinstance(raw_wallet, dict):
+        for key, row in raw_wallet.items():
+            cur = canonical_currency_name(key)
+            if not isinstance(row, dict):
+                row = {}
+            carried_minor = _coin_minor_from_payload(cur, row.get("carried", row.get("inventory", 0)))
+            bank_minor = _coin_minor_from_payload(cur, row.get("bank", row.get("stored", 0)))
+            prev = wallet.get(cur) or {"carried": 0, "bank": 0}
+            prev["carried"] += carried_minor
+            prev["bank"] += bank_minor
+            wallet[cur] = prev
+
+    for key, val in legacy_cur.items():
+        cur = canonical_currency_name(key)
+        if had_wallet and cur in wallet:
+            continue
+        prev = wallet.get(cur) or {"carried": 0, "bank": 0}
+        prev["carried"] += major_to_minor(cur, val, rounding="half_up")
+        wallet[cur] = prev
+
+    for cur in _wallet_currency_keys({"wallet": wallet, "currencies": legacy_cur}):
+        if cur not in wallet:
+            wallet[cur] = {"carried": 0, "bank": 0}
+
+    if inv.get("wallet") != wallet:
+        inv["wallet"] = wallet
+        changed = True
+
+    current_fee = _to_decimal_or_zero(inv.get("exchange_fee_pct", DEFAULT_EXCHANGE_FEE_PCT))
+    fee = max(Decimal("0"), min(Decimal("100"), current_fee))
+    fee_float = float(fee.quantize(Decimal("0.01")))
+    if inv.get("exchange_fee_pct") != fee_float:
+        inv["exchange_fee_pct"] = fee_float
+        changed = True
+
+    before_cur = dict(inv.get("currencies") or {})
+    after_cur = _sync_inventory_currencies(inv)
+    if before_cur != after_cur:
+        changed = True
+    inv["currency_details"] = _wallet_summary(inv)
+    return changed
+
+
+def _wallet_minor(inv: dict, currency: str, bucket: str = "carried") -> int:
+    cur = canonical_currency_name(currency)
+    b = _money_bucket_name(bucket)
+    wallet = inv.get("wallet") or {}
+    row = wallet.get(cur) if isinstance(wallet, dict) else None
+    if not isinstance(row, dict):
+        return 0
+    return int(row.get(b) or 0)
+
+
+def _wallet_major(inv: dict, currency: str, bucket: str = "carried") -> float | int:
+    return _format_money_major(currency, _wallet_minor(inv, currency, bucket))
+
+
+def _wallet_apply_minor_delta(inv: dict, currency: str, delta_minor: int, bucket: str = "carried", *, allow_negative: bool = False):
+    cur = canonical_currency_name(currency)
+    b = _money_bucket_name(bucket)
+    wallet = inv.get("wallet")
+    if not isinstance(wallet, dict):
+        wallet = {}
+        inv["wallet"] = wallet
+    row = wallet.get(cur)
+    if not isinstance(row, dict):
+        row = {"carried": 0, "bank": 0}
+        wallet[cur] = row
+    before_minor = int(row.get(b) or 0)
+    after_minor = before_minor + int(delta_minor or 0)
+    if not allow_negative and after_minor < 0:
+        raise HTTPException(400, f"Insufficient {cur} in {b}")
+    row[b] = after_minor
+    _sync_inventory_currencies(inv)
+    inv["currency_details"] = _wallet_summary(inv)
+    return {
+        "currency": cur,
+        "bucket": b,
+        "before_minor": before_minor,
+        "after_minor": after_minor,
+        "delta_minor": int(delta_minor or 0),
+        "delta_major": _format_money_major(cur, int(delta_minor or 0)),
+    }
+
+
+def _wallet_spend_gc(inv: dict, currency: str, gc_cost: int | float | Decimal, bucket: str = "carried"):
+    cur = canonical_currency_name(currency)
+    try:
+        required_minor = gc_to_minor(cur, _to_decimal_or_zero(gc_cost), rounding="ceil")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if required_minor <= 0:
+        return {"currency": cur, "bucket": _money_bucket_name(bucket), "required_minor": 0, "required_major": _format_money_major(cur, 0)}
+    available = _wallet_minor(inv, cur, bucket)
+    if required_minor > available:
+        need = _format_money_major(cur, required_minor)
+        have = _format_money_major(cur, available)
+        raise HTTPException(400, f"Insufficient funds in {cur} ({bucket}). Required {need}, available {have}.")
+    _wallet_apply_minor_delta(inv, cur, -required_minor, bucket=bucket, allow_negative=False)
+    return {
+        "currency": cur,
+        "bucket": _money_bucket_name(bucket),
+        "required_minor": required_minor,
+        "required_major": _format_money_major(cur, required_minor),
+    }
+
+
+def _wallet_credit_gc(inv: dict, currency: str, gc_amount: int | float | Decimal, bucket: str = "carried"):
+    cur = canonical_currency_name(currency)
+    try:
+        credit_minor = gc_to_minor(cur, _to_decimal_or_zero(gc_amount), rounding="half_up")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if credit_minor <= 0:
+        return {"currency": cur, "bucket": _money_bucket_name(bucket), "credit_minor": 0, "credit_major": _format_money_major(cur, 0)}
+    _wallet_apply_minor_delta(inv, cur, credit_minor, bucket=bucket, allow_negative=True)
+    return {
+        "currency": cur,
+        "bucket": _money_bucket_name(bucket),
+        "credit_minor": credit_minor,
+        "credit_major": _format_money_major(cur, credit_minor),
+    }
+
+
+def _recompute_encumbrance(items: list[dict], containers: list[dict], wallet: dict | None = None) -> tuple[list[dict], float]:
     """Recalculate per-container and inventory encumbrance from items."""
     containers = _ensure_self_container(containers or [])
     cont_map = {c["id"]: c for c in containers}
@@ -4337,6 +4669,16 @@ def _recompute_encumbrance(items: list[dict], containers: list[dict]) -> tuple[l
         if bool(dest.get("include", True)):
             inv_total += enc_val
 
+    if wallet is not None:
+        coin_enc = carried_coin_enc(wallet)
+        self_cont = cont_map.get(SELF_CONTAINER_ID)
+        if self_cont is not None:
+            self_cont["enc_total"] = float(self_cont.get("enc_total", 0.0)) + coin_enc
+            if bool(self_cont.get("include", True)):
+                inv_total += coin_enc
+        else:
+            inv_total += coin_enc
+
     return containers, inv_total
 
 @app.post("/inventories")
@@ -4352,13 +4694,19 @@ def create_inventory(request: Request, payload: dict = Body(...)):
         "id": next_id_str("inventory", padding=4),
         "name": name,
         "owner": user,
-        "currencies": {k: int(v) for k, v in currencies.items()},
+        "currencies": {k: _format_money_major(k, major_to_minor(k, v, rounding="half_up")) for k, v in currencies.items()},
         "containers": containers,
         "items": [],
         "transactions": [],
+        "wallet": {},
+        "exchange_fee_pct": float(DEFAULT_EXCHANGE_FEE_PCT),
         "enc_total": 0.0,   # NEW
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
     }
+    _ensure_inventory_wallet(inv)
+    containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
+    inv["containers"] = containers
+    inv["enc_total"] = inv_total
     db.inventories.insert_one(dict(inv))
     return {"status": "success", "inventory": inv}
 
@@ -4368,12 +4716,14 @@ def list_inventories(request: Request):
     db = get_db()
     invs = []
     for inv in db.inventories.find({"owner": user}, {"_id":0}):
+        changed = _ensure_inventory_wallet(inv)
         containers = _ensure_self_container(inv.get("containers") or [])
-        containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
-        if containers != (inv.get("containers") or []) or inv.get("enc_total") != inv_total:
-            db.inventories.update_one({"id": inv.get("id")}, {"$set": {"containers": containers, "enc_total": inv_total}})
+        containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
+        if changed or containers != (inv.get("containers") or []) or inv.get("enc_total") != inv_total:
+            db.inventories.update_one({"id": inv.get("id")}, {"$set": {"containers": containers, "enc_total": inv_total, "wallet": inv.get("wallet") or {}, "currencies": inv.get("currencies") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}})
         inv["containers"] = containers
         inv["enc_total"] = inv_total
+        inv["currency_details"] = _wallet_summary(inv)
         invs.append(inv)
     return {"status":"success","inventories": invs}
 
@@ -4388,18 +4738,22 @@ def read_inventory(request: Request, inv_id: str):
         inv = db.inventories.find_one({"id": inv_id}, {"_id":0})
     if not inv:
         raise HTTPException(404, "Not found")
+    wallet_changed = _ensure_inventory_wallet(inv)
     inv, refresh_report = _refresh_inventory_items_from_catalog(inv_id, inv)
     _ensure_upgrade_choice_ids(inv_id, inv, allow_write=bool(user))
     containers = _ensure_self_container(inv.get("containers") or [])
-    recomputed_containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
+    recomputed_containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
     needs_update = (inv.get("enc_total") != inv_total) or ((inv.get("containers") or []) != recomputed_containers)
     if needs_update:
-        db.inventories.update_one({"id": inv_id}, {"$set": {"containers": recomputed_containers, "enc_total": inv_total}})
+        db.inventories.update_one({"id": inv_id}, {"$set": {"containers": recomputed_containers, "enc_total": inv_total, "wallet": inv.get("wallet") or {}, "currencies": inv.get("currencies") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}})
         inv["enc_total"] = inv_total
         inv["containers"] = recomputed_containers
     else:
         inv["containers"] = recomputed_containers
         inv["enc_total"] = inv_total
+    if wallet_changed and not needs_update:
+        db.inventories.update_one({"id": inv_id}, {"$set": {"wallet": inv.get("wallet") or {}, "currencies": inv.get("currencies") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}})
+    inv["currency_details"] = _wallet_summary(inv)
     return {"status":"success","inventory": inv, "refresh_report": refresh_report}
 
 @app.post("/inventories/{inv_id}/duplicate")
@@ -4417,8 +4771,9 @@ def duplicate_inventory(request: Request, inv_id: str, payload: dict = Body(...)
     dup["name"] = base_name
     dup["owner"] = user
     dup["created_at"] = now
+    _ensure_inventory_wallet(dup)
     containers = _ensure_self_container(dup.get("containers") or [])
-    containers, inv_total = _recompute_encumbrance(dup.get("items") or [], containers)
+    containers, inv_total = _recompute_encumbrance(dup.get("items") or [], containers, dup.get("wallet") or {})
     dup["containers"] = containers
     dup["enc_total"] = inv_total
     db.inventories.insert_one(dict(dup))
@@ -4434,9 +4789,12 @@ def add_container(request: Request, inv_id: str, payload: dict = Body(...)):
     containers = _ensure_self_container(inv.get("containers") or [])
     cont = _new_container(payload.get("name"))
     containers.append(cont)
-    containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
-    db.inventories.update_one({"id": inv_id}, {"$set": {"containers": containers, "enc_total": inv_total}})
+    _ensure_inventory_wallet(inv)
+    containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
+    db.inventories.update_one({"id": inv_id}, {"$set": {"containers": containers, "enc_total": inv_total, "wallet": inv.get("wallet") or {}, "currencies": inv.get("currencies") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}})
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2}
 
 
@@ -4459,9 +4817,12 @@ def patch_container(request: Request, inv_id: str, cid: str, payload: dict = Bod
         include_val = bool(payload.get("include"))
         found["include"] = True if found.get("id") == SELF_CONTAINER_ID else include_val
 
-    containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers)
-    db.inventories.update_one({"id": inv_id}, {"$set": {"containers": containers, "enc_total": inv_total}})
+    _ensure_inventory_wallet(inv)
+    containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
+    db.inventories.update_one({"id": inv_id}, {"$set": {"containers": containers, "enc_total": inv_total, "wallet": inv.get("wallet") or {}, "currencies": inv.get("currencies") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}})
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2}
 
 
@@ -4495,12 +4856,15 @@ def delete_container(request: Request, inv_id: str, cid: str):
         if it.get("stowed_container_id") == cid:
             it["stowed_container_id"] = fallback
 
-    remaining, inv_total = _recompute_encumbrance(items, remaining)
+    _ensure_inventory_wallet(inv)
+    remaining, inv_total = _recompute_encumbrance(items, remaining, inv.get("wallet") or {})
     db.inventories.update_one(
         {"id": inv_id, "owner": user},
-        {"$set": {"containers": remaining, "items": items, "enc_total": inv_total}}
+        {"$set": {"containers": remaining, "items": items, "enc_total": inv_total, "wallet": inv.get("wallet") or {}, "currencies": inv.get("currencies") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}}
     )
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2}
 
 @app.post("/inventories/{inv_id}/money/transaction")
@@ -4509,16 +4873,29 @@ def add_transaction(request: Request, inv_id: str, payload: dict = Body(...)):
     db = get_db()
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv: raise HTTPException(404, "Not found")
-    currency = (payload.get("currency") or "Jelly").strip()
-    amount   = int(payload.get("amount") or 0)
+    _ensure_inventory_wallet(inv)
+    currency = canonical_currency_name((payload.get("currency") or "Jelly").strip())
+    amount_major = _to_decimal_or_zero(payload.get("amount") or 0)
+    amount_minor = major_to_minor(currency, amount_major, rounding="half_up")
+    if amount_minor == 0:
+        raise HTTPException(400, "Amount must be non-zero")
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
     note     = (payload.get("note") or "").strip()
     source   = (payload.get("source") or "manual").strip()
-    cur = inv.get("currencies", {})
-    cur[currency] = int(cur.get(currency,0)) + amount
-    tx = {"ts": datetime.datetime.utcnow().isoformat()+"Z","currency":currency,"amount":amount,"note":note,"source":source}
+    _wallet_apply_minor_delta(inv, currency, amount_minor, bucket=balance_source, allow_negative=False)
+    tx = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "currency": currency,
+        "amount": _format_money_major(currency, amount_minor),
+        "amount_minor": amount_minor,
+        "balance_source": balance_source,
+        "note": note,
+        "source": source
+    }
     db.inventories.update_one({"id":inv_id},
-        {"$set":{"currencies": cur}, "$push":{"transactions": tx}})
-    return {"status":"success","currencies": cur, "transaction": tx}
+        {"$set":{"currencies": inv.get("currencies") or {}, "wallet": inv.get("wallet") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}, "$push":{"transactions": tx}})
+    inv["currency_details"] = _wallet_summary(inv)
+    return {"status":"success","currencies": inv.get("currencies") or {}, "inventory": inv, "transaction": tx}
 
 def _build_weapon_ammo_entry(ref_id: str, weapon: dict) -> dict | None:
     if not weapon:
@@ -4834,6 +5211,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Not found")
+    _ensure_inventory_wallet(inv)
 
     kind = (payload.get("kind") or "").strip().lower()
     ref_id = (payload.get("ref_id") or "").strip()
@@ -4841,7 +5219,8 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     quality = (payload.get("quality") or "Adequate").strip()  # kept for future-proof; ignored for objects
     container_id = (payload.get("container_id") or None)
     upgrades_req = payload.get("upgrades") or []
-    currency = (payload.get("currency") or "Jelly").strip()
+    currency = canonical_currency_name((payload.get("currency") or "Jelly").strip())
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
     is_equipped = bool(payload.get("equipped", True))
 
     src = _fetch_catalog_item(kind, ref_id)
@@ -4921,9 +5300,7 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     else:
         total = int(unit_price * qty)
 
-    # money (negative transaction)
-    cur = inv.get("currencies", {})
-    cur[currency] = int(cur.get(currency, 0)) - total
+    spend = _wallet_spend_gc(inv, currency, total, bucket=balance_source)
 
     containers = _ensure_self_container(inv.get("containers") or [])
     valid_container_ids = {c.get("id") for c in containers}
@@ -4968,7 +5345,10 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
-        "amount": -total,
+        "amount": -_format_money_major(currency, int(spend.get("required_minor") or 0)),
+        "amount_minor": -int(spend.get("required_minor") or 0),
+        "balance_source": balance_source,
+        "gc_amount": total,
         "note": f"{'Take' if pricing_mode == 'take' else 'Purchase'} {name} x{qty} ({note_tag})",
         "source": "purchase",
         "item_id": item["item_id"]
@@ -4976,12 +5356,14 @@ def purchase_item(request: Request, inv_id: str, payload: dict = Body(...)):
 
     items = inv.get("items") or []
     items = items + [item]
-    containers, inv_enc_total = _recompute_encumbrance(items, containers)
+    containers, inv_enc_total = _recompute_encumbrance(items, containers, inv.get("wallet") or {})
     db.inventories.update_one({"id": inv_id}, {
-        "$set": {"currencies": cur, "containers": containers, "enc_total": inv_enc_total, "items": items},
+        "$set": {"currencies": inv.get("currencies") or {}, "wallet": inv.get("wallet") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)), "containers": containers, "enc_total": inv_enc_total, "items": items},
         "$push": {"transactions": tx}
     })
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "transaction": tx}
 
 @app.post("/inventories/{inv_id}/items/{item_id}/improve")
@@ -4990,7 +5372,9 @@ def improve_item(request: Request, inv_id: str, item_id: str, payload: dict = Bo
     db = get_db()
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv: raise HTTPException(404, "Not found")
-    currency = "Jelly"
+    _ensure_inventory_wallet(inv)
+    currency = canonical_currency_name((payload.get("currency") or "Jelly").strip())
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
 
     items = inv.get("items", [])
     idx = next((i for i,x in enumerate(items) if x["item_id"]==item_id), -1)
@@ -5028,15 +5412,27 @@ def improve_item(request: Request, inv_id: str, item_id: str, payload: dict = Bo
 
     # persist + money
     if total_cost > 0:
-        cur = inv.get("currencies", {})
-        cur[currency] = int(cur.get(currency,0)) - total_cost
-        tx = {"ts": datetime.datetime.utcnow().isoformat()+"Z","currency":currency,"amount":-total_cost,"note":f"Improve {it['name']}: "+", ".join(note_parts),"source":"upgrade"}
+        spend = _wallet_spend_gc(inv, currency, total_cost, bucket=balance_source)
+        tx = {
+            "ts": datetime.datetime.utcnow().isoformat()+"Z",
+            "currency": currency,
+            "amount": -_format_money_major(currency, int(spend.get("required_minor") or 0)),
+            "amount_minor": -int(spend.get("required_minor") or 0),
+            "balance_source": balance_source,
+            "gc_amount": total_cost,
+            "note": f"Improve {it['name']}: " + ", ".join(note_parts),
+            "source": "upgrade"
+        }
         items[idx] = it
-        db.inventories.update_one({"id": inv_id}, {"$set":{"items": items, "currencies": cur}, "$push":{"transactions": tx}})
+        containers = _ensure_self_container(inv.get("containers") or [])
+        containers, inv_enc_total = _recompute_encumbrance(items, containers, inv.get("wallet") or {})
+        db.inventories.update_one({"id": inv_id}, {"$set":{"items": items, "currencies": inv.get("currencies") or {}, "wallet": inv.get("wallet") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)), "containers": containers, "enc_total": inv_enc_total}, "$push":{"transactions": tx}})
     else:
         db.inventories.update_one({"id": inv_id}, {"$set":{"items": items}})
 
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id":0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status":"success","inventory": inv2}
 
 @app.get("/catalog/objects")
@@ -5113,27 +5509,168 @@ def deposit_funds(request: Request, inv_id: str, payload: dict = Body(...)):
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
-    currency = (payload.get("currency") or _pick_currency(inv)).strip()
-    amount = int(payload.get("amount") or 0)
+    currency = canonical_currency_name((payload.get("currency") or _pick_currency(inv)).strip())
+    amount_major = _to_decimal_or_zero(payload.get("amount") or 0)
+    amount_minor = major_to_minor(currency, amount_major, rounding="half_up")
     note = (payload.get("note") or "Deposit").strip()
-    if amount == 0:
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
+    if amount_minor == 0:
         raise HTTPException(400, "Amount must be non-zero")
 
-    cur = inv.get("currencies", {})
-    cur[currency] = int(cur.get(currency, 0)) + amount
+    _wallet_apply_minor_delta(inv, currency, amount_minor, bucket=balance_source, allow_negative=False)
+    containers = _ensure_self_container(inv.get("containers") or [])
+    containers, inv_enc_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
 
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
-        "currency": currency, "amount": amount,
+        "currency": currency,
+        "amount": _format_money_major(currency, amount_minor),
+        "amount_minor": amount_minor,
+        "balance_source": balance_source,
         "note": note, "source": "deposit"
     }
     db.inventories.update_one({"id": inv_id}, {
-        "$set": {"currencies": cur},
+        "$set": {"currencies": inv.get("currencies") or {}, "wallet": inv.get("wallet") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)), "containers": containers, "enc_total": inv_enc_total},
         "$push": {"transactions": tx}
     })
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "transaction": tx}
+
+
+@app.patch("/inventories/{inv_id}/exchange_fee")
+def set_inventory_exchange_fee(request: Request, inv_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
+
+    raw = payload.get("fee_pct", payload.get("exchange_fee_pct"))
+    fee = _to_decimal_or_zero(raw if raw is not None else inv.get("exchange_fee_pct", DEFAULT_EXCHANGE_FEE_PCT))
+    if fee < 0 or fee > 100:
+        raise HTTPException(400, "fee_pct must be between 0 and 100")
+    fee_float = float(fee.quantize(Decimal("0.01")))
+    inv["exchange_fee_pct"] = fee_float
+
+    containers = _ensure_self_container(inv.get("containers") or [])
+    containers, inv_enc_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
+    db.inventories.update_one({"id": inv_id}, {"$set": {"exchange_fee_pct": fee_float, "wallet": inv.get("wallet") or {}, "currencies": inv.get("currencies") or {}, "containers": containers, "enc_total": inv_enc_total}})
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
+    return {"status": "success", "inventory": inv2, "exchange_fee_pct": fee_float}
+
+
+@app.post("/inventories/{inv_id}/exchange")
+def exchange_inventory_currency(request: Request, inv_id: str, payload: dict = Body(...)):
+    user, role = require_auth(request)
+    db = get_db()
+    inv = db.inventories.find_one({"id": inv_id, "owner": user})
+    if not inv:
+        raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
+
+    from_currency = canonical_currency_name(payload.get("from_currency") or payload.get("from") or "")
+    to_currency = canonical_currency_name(payload.get("to_currency") or payload.get("to") or "")
+    if not from_currency or not to_currency:
+        raise HTTPException(400, "from_currency and to_currency are required")
+
+    amount_major = _to_decimal_or_zero(payload.get("amount") or 0)
+    amount_minor = major_to_minor(from_currency, amount_major, rounding="half_up")
+    if amount_minor <= 0:
+        raise HTTPException(400, "amount must be positive")
+
+    from_bucket = _money_bucket_name(payload.get("from_balance_source") or payload.get("from_bucket") or payload.get("balance_source"))
+    to_bucket = _money_bucket_name(payload.get("to_balance_source") or payload.get("to_bucket") or payload.get("balance_target") or from_bucket)
+
+    from_val = currency_value_gc(from_currency)
+    to_val = currency_value_gc(to_currency)
+    if from_val is None or to_val is None:
+        raise HTTPException(400, "Only standard currencies can be exchanged")
+
+    fee_raw = payload.get("fee_pct")
+    fee = _to_decimal_or_zero(fee_raw if fee_raw is not None else inv.get("exchange_fee_pct", DEFAULT_EXCHANGE_FEE_PCT))
+    if fee < 0 or fee > 100:
+        raise HTTPException(400, "fee_pct must be between 0 and 100")
+    fee_pct = float(fee.quantize(Decimal("0.01")))
+
+    available_minor = _wallet_minor(inv, from_currency, from_bucket)
+    if amount_minor > available_minor:
+        need = _format_money_major(from_currency, amount_minor)
+        have = _format_money_major(from_currency, available_minor)
+        raise HTTPException(400, f"Insufficient funds in {from_currency} ({from_bucket}). Required {need}, available {have}.")
+
+    gross_gc = minor_to_gc(from_currency, amount_minor)
+    fee_gc = gross_gc * (fee / Decimal("100"))
+    net_gc = gross_gc - fee_gc
+    if net_gc <= 0:
+        raise HTTPException(400, "Exchange amount too low after fees")
+    try:
+        to_minor = gc_to_minor(to_currency, net_gc, rounding="floor")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if to_minor <= 0:
+        raise HTTPException(400, "Exchange amount too low for destination currency")
+
+    _wallet_apply_minor_delta(inv, from_currency, -amount_minor, bucket=from_bucket, allow_negative=False)
+    _wallet_apply_minor_delta(inv, to_currency, to_minor, bucket=to_bucket, allow_negative=True)
+
+    from_major = _format_money_major(from_currency, amount_minor)
+    to_major = _format_money_major(to_currency, to_minor)
+    tx = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "currency": from_currency,
+        "amount": -from_major,
+        "amount_minor": -amount_minor,
+        "balance_source": from_bucket,
+        "source": "exchange",
+        "note": f"Exchange {from_major} {from_currency} -> {to_major} {to_currency} (fee {fee_pct}%)",
+        "to_currency": to_currency,
+        "to_amount": to_major,
+        "to_amount_minor": to_minor,
+        "to_balance_source": to_bucket,
+        "fee_pct": fee_pct,
+        "gc_amount": float(gross_gc.quantize(Decimal("0.01"))),
+        "gc_net_amount": float(net_gc.quantize(Decimal("0.01"))),
+    }
+
+    containers = _ensure_self_container(inv.get("containers") or [])
+    containers, inv_enc_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
+    db.inventories.update_one(
+        {"id": inv_id, "owner": user},
+        {
+            "$set": {
+                "wallet": inv.get("wallet") or {},
+                "currencies": inv.get("currencies") or {},
+                "exchange_fee_pct": fee_pct,
+                "containers": containers,
+                "enc_total": inv_enc_total,
+            },
+            "$push": {"transactions": tx},
+        },
+    )
+    inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
+    return {
+        "status": "success",
+        "inventory": inv2,
+        "exchange": {
+            "from_currency": from_currency,
+            "from_amount": from_major,
+            "from_balance_source": from_bucket,
+            "to_currency": to_currency,
+            "to_amount": to_major,
+            "to_balance_source": to_bucket,
+            "fee_pct": fee_pct,
+        },
+        "transaction": tx,
+    }
 
 @app.post("/inventories/{inv_id}/transactions/undo")
 def undo_inventory_transaction(request: Request, inv_id: str):
@@ -5142,20 +5679,25 @@ def undo_inventory_transaction(request: Request, inv_id: str):
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
     transactions = inv.get("transactions") or []
     if not transactions:
         raise HTTPException(400, "No transactions to undo")
     tx = transactions[-1]
     source = (tx.get("source") or "").strip()
-    currency = (tx.get("currency") or _pick_currency(inv)).strip()
-    amount = int(tx.get("amount") or 0)
-    cur_map = dict(inv.get("currencies") or {})
+    currency = canonical_currency_name((tx.get("currency") or _pick_currency(inv)).strip())
+    amount_minor = int(tx.get("amount_minor") or major_to_minor(currency, tx.get("amount") or 0, rounding="half_up"))
+    balance_source = _money_bucket_name(tx.get("balance_source") or "carried")
     set_fields: dict[str, object] = {}
     if source == "deposit":
-        cur_map[currency] = int(cur_map.get(currency, 0)) - amount
-        if cur_map[currency] < 0:
-            raise HTTPException(400, "Cannot undo deposit: insufficient balance")
-        set_fields["currencies"] = cur_map
+        _wallet_apply_minor_delta(inv, currency, -amount_minor, bucket=balance_source, allow_negative=False)
+        containers = _ensure_self_container(inv.get("containers") or [])
+        containers, inv_enc_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
+        set_fields["currencies"] = inv.get("currencies") or {}
+        set_fields["wallet"] = inv.get("wallet") or {}
+        set_fields["containers"] = containers
+        set_fields["enc_total"] = inv_enc_total
+        set_fields["exchange_fee_pct"] = inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))
     elif source == "purchase":
         item_id = tx.get("item_id")
         if not item_id:
@@ -5166,13 +5708,15 @@ def undo_inventory_transaction(request: Request, inv_id: str):
             raise HTTPException(400, "Item already removed")
         items = items[:idx] + items[idx + 1:]
         containers = inv.get("containers") or []
-        containers, inv_enc_total = _recompute_encumbrance(items, containers)
-        cur_map[currency] = int(cur_map.get(currency, 0)) - amount
+        _wallet_apply_minor_delta(inv, currency, -amount_minor, bucket=balance_source, allow_negative=True)
+        containers, inv_enc_total = _recompute_encumbrance(items, containers, inv.get("wallet") or {})
         set_fields.update({
             "items": items,
             "containers": containers,
             "enc_total": inv_enc_total,
-            "currencies": cur_map
+            "currencies": inv.get("currencies") or {},
+            "wallet": inv.get("wallet") or {},
+            "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)),
         })
     else:
         raise HTTPException(400, f"Undo not supported for {source or 'unknown'} transactions")
@@ -5181,6 +5725,8 @@ def undo_inventory_transaction(request: Request, inv_id: str):
         update_op["$set"] = set_fields
     db.inventories.update_one({"id": inv_id, "owner": user}, update_op)
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "transaction": tx}
 
 @app.patch("/inventories/{inv_id}/items/{item_id}")
@@ -5190,6 +5736,7 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
     alt_name = payload.get("alt_name", None)
     equipped = payload.get("equipped", None)
@@ -5253,13 +5800,15 @@ def patch_item(request: Request, inv_id: str, item_id: str, payload: dict = Body
             it["stowed_container_id"] = it["container_id"]
 
     items[idx] = it
-    containers, inv_total = _recompute_encumbrance(items, containers)
+    containers, inv_total = _recompute_encumbrance(items, containers, inv.get("wallet") or {})
     db.inventories.update_one(
         {"id": inv_id, "owner": user},
-        {"$set": {"items": items, "containers": containers, "enc_total": inv_total}}
+        {"$set": {"items": items, "containers": containers, "enc_total": inv_total, "wallet": inv.get("wallet") or {}, "currencies": inv.get("currencies") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}}
     )
 
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2}
 
 def _spell_school_info(spell: dict) -> tuple[list[dict], bool]:
@@ -5291,12 +5840,14 @@ def add_craftomancy(request: Request, inv_id: str, item_id: str, payload: dict =
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
     spell_id = str(payload.get("spell_id") or "").strip()
     if not spell_id:
         raise HTTPException(400, "spell_id required")
     supreme = bool(payload.get("supreme", False))
-    currency = (payload.get("currency") or "").strip() or None
+    currency = canonical_currency_name((payload.get("currency") or "").strip() or _pick_currency(inv))
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
 
     items = inv.get("items") or []
     idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
@@ -5375,20 +5926,25 @@ def add_craftomancy(request: Request, inv_id: str, item_id: str, payload: dict =
     crafts.append(craft_entry)
     it["craftomancies"] = crafts
 
-    cur = inv.get("currencies") or {}
-    cur_key = _pick_currency(inv, currency)
-    cur[cur_key] = int(cur.get(cur_key, 0)) - price
+    spend = _wallet_spend_gc(inv, currency, price, bucket=balance_source)
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
-        "currency": cur_key,
-        "amount": -price,
+        "currency": currency,
+        "amount": -_format_money_major(currency, int(spend.get("required_minor") or 0)),
+        "amount_minor": -int(spend.get("required_minor") or 0),
+        "balance_source": balance_source,
+        "gc_amount": price,
         "note": f"Craftomancy {craft_entry['spell_name']} ({spell_cat}) on {it.get('name')}",
         "source": "craftomancy"
     }
 
     items[idx] = it
-    db.inventories.update_one({"id": inv_id, "owner": user}, {"$set": {"items": items, "currencies": cur}, "$push": {"transactions": tx}})
+    containers = _ensure_self_container(inv.get("containers") or [])
+    containers, inv_enc_total = _recompute_encumbrance(items, containers, inv.get("wallet") or {})
+    db.inventories.update_one({"id": inv_id, "owner": user}, {"$set": {"items": items, "currencies": inv.get("currencies") or {}, "wallet": inv.get("wallet") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)), "containers": containers, "enc_total": inv_enc_total}, "$push": {"transactions": tx}})
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     warning = "Second craftomancy requires advanced Craftomancer." if len(crafts) > 1 else ""
     return {"status": "success", "inventory": inv2, "craftomancy": craft_entry, "warning": warning}
 
@@ -5399,6 +5955,7 @@ def update_craftomancy(request: Request, inv_id: str, item_id: str, craft_id: st
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
     focused = payload.get("focused", None)
     order = payload.get("order", None)
@@ -5423,10 +5980,13 @@ def update_craftomancy(request: Request, inv_id: str, item_id: str, craft_id: st
             raise HTTPException(400, "order must be an integer")
     it["craftomancies"] = crafts
     items[idx] = it
-    db.inventories.update_one({"id": inv_id, "owner": user}, {"$set": {"items": items}})
+    containers = _ensure_self_container(inv.get("containers") or [])
+    containers, inv_enc_total = _recompute_encumbrance(items, containers, inv.get("wallet") or {})
+    db.inventories.update_one({"id": inv_id, "owner": user}, {"$set": {"items": items, "containers": containers, "enc_total": inv_enc_total, "currencies": inv.get("currencies") or {}, "wallet": inv.get("wallet") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}})
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2}
-
 @app.post("/inventories/{inv_id}/items/{item_id}/craftomancy/{craft_id}/remove")
 def remove_craftomancy(request: Request, inv_id: str, item_id: str, craft_id: str, payload: dict = Body(...)):
     user, role = require_auth(request)
@@ -5434,8 +5994,10 @@ def remove_craftomancy(request: Request, inv_id: str, item_id: str, craft_id: st
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
-    currency = (payload.get("currency") or "").strip() or None
+    currency = canonical_currency_name((payload.get("currency") or "").strip() or _pick_currency(inv))
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
     items = inv.get("items") or []
     idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
     if idx < 0:
@@ -5449,20 +6011,25 @@ def remove_craftomancy(request: Request, inv_id: str, item_id: str, craft_id: st
     it["craftomancies"] = crafts
 
     price = 500
-    cur = inv.get("currencies") or {}
-    cur_key = _pick_currency(inv, currency)
-    cur[cur_key] = int(cur.get(cur_key, 0)) - price
+    spend = _wallet_spend_gc(inv, currency, price, bucket=balance_source)
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
-        "currency": cur_key,
-        "amount": -price,
+        "currency": currency,
+        "amount": -_format_money_major(currency, int(spend.get("required_minor") or 0)),
+        "amount_minor": -int(spend.get("required_minor") or 0),
+        "balance_source": balance_source,
+        "gc_amount": price,
         "note": f"Remove craftomancy {removed.get('spell_name') or removed.get('spell_id')}",
         "source": "craftomancy_remove"
     }
 
     items[idx] = it
-    db.inventories.update_one({"id": inv_id, "owner": user}, {"$set": {"items": items, "currencies": cur}, "$push": {"transactions": tx}})
+    containers = _ensure_self_container(inv.get("containers") or [])
+    containers, inv_enc_total = _recompute_encumbrance(items, containers, inv.get("wallet") or {})
+    db.inventories.update_one({"id": inv_id, "owner": user}, {"$set": {"items": items, "currencies": inv.get("currencies") or {}, "wallet": inv.get("wallet") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)), "containers": containers, "enc_total": inv_enc_total}, "$push": {"transactions": tx}})
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "removed": craft_id, "cost": price}
 
 @app.post("/inventories/{inv_id}/items/{item_id}/upgrade_quality")
@@ -5472,8 +6039,8 @@ def upgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict =
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
-    # find item
     items = inv.get("items") or []
     it = next((x for x in items if x.get("item_id") == item_id), None)
     if not it:
@@ -5498,21 +6065,21 @@ def upgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict =
     if delta_total <= 0:
         raise HTTPException(400, "No cost difference to apply")
 
-    currency = _pick_currency(inv, (payload.get("currency") or None))
+    currency = canonical_currency_name(_pick_currency(inv, (payload.get("currency") or None)))
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
+    spend = _wallet_spend_gc(inv, currency, delta_total, bucket=balance_source)
 
-    # deduct funds
-    curmap = inv.get("currencies", {})
-    curmap[currency] = int(curmap.get(currency, 0)) - delta_total
-
-    # update item fields
     new_paid_unit = int(it.get("paid_unit") or old_unit) + per_unit_delta
     new_variant = _compose_variant(to, it.get("upgrades"))
 
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
-        "amount": -delta_total,
-        "note": f'Upgrade quality: {it.get("name","Item")} {cur_q} → {to}',
+        "amount": -_format_money_major(currency, int(spend.get("required_minor") or 0)),
+        "amount_minor": -int(spend.get("required_minor") or 0),
+        "balance_source": balance_source,
+        "gc_amount": delta_total,
+        "note": f'Upgrade quality: {it.get("name","Item")} {cur_q} -> {to}',
         "source": "upgrade_quality",
         "item_id": item_id
     }
@@ -5521,7 +6088,9 @@ def upgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict =
         {"id": inv_id, "owner": user, "items.item_id": item_id},
         {
             "$set": {
-                "currencies": curmap,
+                "currencies": inv.get("currencies") or {},
+                "wallet": inv.get("wallet") or {},
+                "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)),
                 "items.$.quality": to,
                 "items.$.paid_unit": new_paid_unit,
                 "items.$.variant": new_variant
@@ -5530,8 +6099,9 @@ def upgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict =
         }
     )
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "transaction": tx}
-
 @app.post("/inventories/{inv_id}/items/{item_id}/downgrade_quality")
 def downgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
     user, role = require_auth(request)
@@ -5539,6 +6109,7 @@ def downgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
     items = inv.get("items") or []
     it = next((x for x in items if x.get("item_id") == item_id), None)
@@ -5564,9 +6135,12 @@ def downgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict
 
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
-        "currency": _pick_currency(inv, (payload.get("currency") or None)),
+        "currency": canonical_currency_name(_pick_currency(inv, (payload.get("currency") or None))),
         "amount": 0,
-        "note": f'Downgrade quality: {it.get("name","Item")} {cur_q} → {to}',
+        "amount_minor": 0,
+        "balance_source": _money_bucket_name(payload.get("balance_source") or payload.get("bucket")),
+        "gc_amount": 0,
+        "note": f'Downgrade quality: {it.get("name","Item")} {cur_q} -> {to}',
         "source": "downgrade_quality",
         "item_id": item_id
     }
@@ -5577,14 +6151,18 @@ def downgrade_quality(request: Request, inv_id: str, item_id: str, payload: dict
             "$set": {
                 "items.$.quality": to,
                 "items.$.paid_unit": new_paid_unit,
-                "items.$.variant": new_variant
+                "items.$.variant": new_variant,
+                "currencies": inv.get("currencies") or {},
+                "wallet": inv.get("wallet") or {},
+                "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)),
             },
             "$push": {"transactions": tx}
         }
     )
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "transaction": tx}
-
 @app.post("/inventories/{inv_id}/items/{item_id}/install_upgrade")
 def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
     user, role = require_auth(request)
@@ -5592,6 +6170,7 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
     items = inv.get("items") or []
     it = next((x for x in items if x.get("item_id") == item_id), None)
@@ -5625,10 +6204,9 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
 
     qty = int(it.get("quantity") or 1)
     delta_total = int(fee_per_unit) * qty
-    currency = _pick_currency(inv, (payload.get("currency") or None))
-
-    curmap = inv.get("currencies", {})
-    curmap[currency] = int(curmap.get(currency, 0)) - delta_total
+    currency = canonical_currency_name(_pick_currency(inv, (payload.get("currency") or None)))
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
+    spend = _wallet_spend_gc(inv, currency, delta_total, bucket=balance_source)
 
     new_upgrades = existing + add_upgrades
     if kind == "equipment" and not it.get("equipment_slot") and upg_doc.get("slot"):
@@ -5640,7 +6218,10 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
-        "amount": -delta_total,
+        "amount": -_format_money_major(currency, int(spend.get("required_minor") or 0)),
+        "amount_minor": -int(spend.get("required_minor") or 0),
+        "balance_source": balance_source,
+        "gc_amount": delta_total,
         "note": f'Install upgrade "{upg_doc.get("name","Upgrade")}" on {it.get("name","Item")}',
         "source": "install_upgrade",
         "item_id": item_id
@@ -5650,18 +6231,21 @@ def install_upgrade(request: Request, inv_id: str, item_id: str, payload: dict =
         {"id": inv_id, "owner": user, "items.item_id": item_id},
         {
             "$set": {
-                "currencies": curmap,
+                "currencies": inv.get("currencies") or {},
+                "wallet": inv.get("wallet") or {},
+                "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)),
                 "items.$.upgrades": new_upgrades,
                 "items.$.paid_unit": new_paid_unit,
                 "items.$.variant": new_variant,
-                **({"items.$.equipment_slot": it.get("equipment_slot")} if kind=="equipment" and it.get("equipment_slot") else {})
+                **({"items.$.equipment_slot": it.get("equipment_slot")} if kind == "equipment" and it.get("equipment_slot") else {})
             },
             "$push": {"transactions": tx}
         }
     )
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "transaction": tx}
-
 @app.post("/inventories/{inv_id}/items/{item_id}/remove_upgrade")
 def remove_upgrade(request: Request, inv_id: str, item_id: str, payload: dict = Body(...)):
     user, role = require_auth(request)
@@ -5669,6 +6253,7 @@ def remove_upgrade(request: Request, inv_id: str, item_id: str, payload: dict = 
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
     items = inv.get("items") or []
     it = next((x for x in items if x.get("item_id") == item_id), None)
@@ -5687,7 +6272,7 @@ def remove_upgrade(request: Request, inv_id: str, item_id: str, payload: dict = 
     if idx < 0:
         raise HTTPException(404, "Upgrade not found on item")
 
-    new_upgrades = existing[:idx] + existing[idx+1:]
+    new_upgrades = existing[:idx] + existing[idx + 1:]
     quality = it.get("quality") or "Adequate"
     new_variant = _compose_variant(quality, new_upgrades)
 
@@ -5695,13 +6280,16 @@ def remove_upgrade(request: Request, inv_id: str, item_id: str, payload: dict = 
         {"id": inv_id, "owner": user, "items.item_id": item_id},
         {"$set": {
             "items.$.upgrades": new_upgrades,
-            "items.$.variant": new_variant
+            "items.$.variant": new_variant,
+            "currencies": inv.get("currencies") or {},
+            "wallet": inv.get("wallet") or {},
+            "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)),
         }}
     )
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2}
-
-
 def _pop_inventory_item(inv: dict, item_id: str):
     containers = _ensure_self_container(inv.get("containers") or [])
     items = inv.get("items") or []
@@ -5736,28 +6324,39 @@ def dispose_item(request: Request, inv_id: str, item_id: str, payload: dict = Bo
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
     it, remaining, containers = _pop_inventory_item(inv, item_id)
-    currency = (payload.get("currency") or _pick_currency(inv)).strip()
+    currency = canonical_currency_name((payload.get("currency") or _pick_currency(inv)).strip())
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
     qty = int(it.get("quantity") or 1)
 
-    curmap = inv.get("currencies", {})
-    # no currency delta (disposed)
-
-    containers, inv_enc_total = _recompute_encumbrance(remaining, containers)
+    containers, inv_enc_total = _recompute_encumbrance(remaining, containers, inv.get("wallet") or {})
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
         "amount": 0,
+        "amount_minor": 0,
+        "balance_source": balance_source,
+        "gc_amount": 0,
         "note": f"Disposed {it.get('name','Item')} x{qty}",
         "source": "dispose",
         "item_id": item_id
     }
     db.inventories.update_one({"id": inv_id}, {
-        "$set": {"currencies": curmap, "items": remaining, "containers": containers, "enc_total": inv_enc_total},
+        "$set": {
+            "currencies": inv.get("currencies") or {},
+            "wallet": inv.get("wallet") or {},
+            "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)),
+            "items": remaining,
+            "containers": containers,
+            "enc_total": inv_enc_total,
+        },
         "$push": {"transactions": tx}
     })
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "transaction": tx}
 
 
@@ -5768,9 +6367,11 @@ def sell_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
     it, remaining, containers = _pop_inventory_item(inv, item_id)
-    currency = (payload.get("currency") or _pick_currency(inv)).strip()
+    currency = canonical_currency_name((payload.get("currency") or _pick_currency(inv)).strip())
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
     qty = int(it.get("quantity") or 1)
     base_price = int(it.get("base_price") or 0)
     quality = it.get("quality") or "Adequate"
@@ -5782,25 +6383,36 @@ def sell_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(
     except Exception:
         price_input = fallback_unit
     unit_price = max(0, int(round(price_input)))
-    total = unit_price * qty
+    total_gc = unit_price * qty
 
-    curmap = inv.get("currencies", {})
-    curmap[currency] = int(curmap.get(currency, 0)) + total
+    credit = _wallet_credit_gc(inv, currency, total_gc, bucket=balance_source)
 
-    containers, inv_enc_total = _recompute_encumbrance(remaining, containers)
+    containers, inv_enc_total = _recompute_encumbrance(remaining, containers, inv.get("wallet") or {})
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
-        "amount": total,
+        "amount": _format_money_major(currency, int(credit.get("credit_minor") or 0)),
+        "amount_minor": int(credit.get("credit_minor") or 0),
+        "balance_source": balance_source,
+        "gc_amount": total_gc,
         "note": f"Sold {it.get('name','Item')} x{qty} @ {unit_price}",
         "source": "sell",
         "item_id": item_id
     }
     db.inventories.update_one({"id": inv_id}, {
-        "$set": {"currencies": curmap, "items": remaining, "containers": containers, "enc_total": inv_enc_total},
+        "$set": {
+            "currencies": inv.get("currencies") or {},
+            "wallet": inv.get("wallet") or {},
+            "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)),
+            "items": remaining,
+            "containers": containers,
+            "enc_total": inv_enc_total,
+        },
         "$push": {"transactions": tx}
     })
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "transaction": tx}
 
 
@@ -5811,6 +6423,7 @@ def use_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(.
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
     items = inv.get("items") or []
     idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
@@ -5834,32 +6447,44 @@ def use_item(request: Request, inv_id: str, item_id: str, payload: dict = Body(.
         raise HTTPException(400, f"Not enough quantity ({qty}) to consume {amount}")
     new_qty = max(0, qty - amount)
     keep_item = it.get("alchemy_tool") or new_qty > 0
-    currency = (payload.get("currency") or _pick_currency(inv)).strip()
+    currency = canonical_currency_name((payload.get("currency") or _pick_currency(inv)).strip())
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
 
     if keep_item:
         it["quantity"] = new_qty
         it["equipped"] = False
         items[idx] = it
     else:
-        items = items[:idx] + items[idx+1:]
+        items = items[:idx] + items[idx + 1:]
 
     containers = _ensure_self_container(inv.get("containers") or [])
-    containers, inv_enc_total = _recompute_encumbrance(items, containers)
-    curmap = inv.get("currencies", {})
+    containers, inv_enc_total = _recompute_encumbrance(items, containers, inv.get("wallet") or {})
 
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
         "amount": 0,
+        "amount_minor": 0,
+        "balance_source": balance_source,
+        "gc_amount": 0,
         "note": f"Used {it.get('name','Item')} x{amount} (remaining {new_qty})",
         "source": "use",
         "item_id": item_id
     }
     db.inventories.update_one({"id": inv_id}, {
-        "$set": {"items": items, "containers": containers, "enc_total": inv_enc_total, "currencies": curmap},
+        "$set": {
+            "items": items,
+            "containers": containers,
+            "enc_total": inv_enc_total,
+            "currencies": inv.get("currencies") or {},
+            "wallet": inv.get("wallet") or {},
+            "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)),
+        },
         "$push": {"transactions": tx}
     })
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "transaction": tx}
 
 
@@ -5870,6 +6495,7 @@ def refill_alchemy_item(request: Request, inv_id: str, item_id: str, payload: di
     inv = db.inventories.find_one({"id": inv_id, "owner": user})
     if not inv:
         raise HTTPException(404, "Inventory not found")
+    _ensure_inventory_wallet(inv)
 
     items = inv.get("items") or []
     idx = next((i for i, x in enumerate(items) if x.get("item_id") == item_id), -1)
@@ -5881,34 +6507,44 @@ def refill_alchemy_item(request: Request, inv_id: str, item_id: str, payload: di
 
     base_price = int(it.get("base_price") or 0)
     tier = _alchemy_tier_from_price(base_price)
-    cost = 50 * max(1, tier)
-    currency = (payload.get("currency") or _pick_currency(inv)).strip()
+    cost_gc = 50 * max(1, tier)
+    currency = canonical_currency_name((payload.get("currency") or _pick_currency(inv)).strip())
+    balance_source = _money_bucket_name(payload.get("balance_source") or payload.get("bucket"))
 
-    curmap = inv.get("currencies", {})
-    curmap[currency] = int(curmap.get(currency, 0)) - cost
+    spend = _wallet_spend_gc(inv, currency, cost_gc, bucket=balance_source)
 
     it["quantity"] = max(0, int(it.get("quantity") or 0)) + 1
     items[idx] = it
 
     containers = _ensure_self_container(inv.get("containers") or [])
-    containers, inv_enc_total = _recompute_encumbrance(items, containers)
+    containers, inv_enc_total = _recompute_encumbrance(items, containers, inv.get("wallet") or {})
 
     tx = {
         "ts": datetime.datetime.utcnow().isoformat() + "Z",
         "currency": currency,
-        "amount": -cost,
+        "amount": -_format_money_major(currency, int(spend.get("required_minor") or 0)),
+        "amount_minor": -int(spend.get("required_minor") or 0),
+        "balance_source": balance_source,
+        "gc_amount": cost_gc,
         "note": f"Refill {it.get('name','Alchemy tool')} (+1) tier {tier}",
         "source": "refill_alchemy",
         "item_id": item_id
     }
     db.inventories.update_one({"id": inv_id}, {
-        "$set": {"items": items, "containers": containers, "enc_total": inv_enc_total, "currencies": curmap},
+        "$set": {
+            "items": items,
+            "containers": containers,
+            "enc_total": inv_enc_total,
+            "currencies": inv.get("currencies") or {},
+            "wallet": inv.get("wallet") or {},
+            "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT)),
+        },
         "$push": {"transactions": tx}
     })
     inv2 = db.inventories.find_one({"id": inv_id}, {"_id": 0})
+    _ensure_inventory_wallet(inv2)
+    inv2["currency_details"] = _wallet_summary(inv2)
     return {"status": "success", "inventory": inv2, "transaction": tx}
-
-
 @app.get("/catalog/weapons")
 def catalog_weapons(request: Request, q: str = "", tags: str = "", limit: int = 50):
     require_auth(request)
@@ -7102,3 +7738,6 @@ async def admin_delete_user(target_username: str, request: Request):
         return JSONResponse({"status": "error", "message": "User not found."}, status_code=404)
     write_audit("delete_user", admin_username, spell_id="?", before={"user": target_username}, after=None)
     return {"status":"success","username": target_username}
+
+
+

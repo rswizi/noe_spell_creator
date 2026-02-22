@@ -59,8 +59,22 @@ def _pick_currency(inv: dict, preferred: str | None = None) -> str:
     if preferred: 
         return preferred
     cur = inv.get("currencies") or {}
+    ordered = ["Jelly", "Breath", "Web", "Kabuto", "Jawhar", "Baya"]
     if cur:
-        # return the first key deterministically
+        for key in ordered:
+            try:
+                if float(cur.get(key, 0) or 0) > 0:
+                    return key
+            except Exception:
+                continue
+        for key in sorted(cur.keys()):
+            try:
+                if float(cur.get(key, 0) or 0) > 0:
+                    return key
+            except Exception:
+                continue
+        if "Jelly" in cur:
+            return "Jelly"
         return sorted(cur.keys())[0]
     return "Jelly"
 

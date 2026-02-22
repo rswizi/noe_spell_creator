@@ -5,6 +5,7 @@
   const POSTER_SRC = "/assets/logo/logo.png";
   const FALLBACK_TIMEOUT = 10000;
   const FADE_CLASS = "intro-overlay--fade";
+  const OVERLAY_ID = "intro-overlay";
 
   function safeSessionStorage() {
     try {
@@ -46,10 +47,18 @@
     return video;
   }
 
-  function attachOverlay(storage) {
+  function removeExistingOverlay() {
+    const existing = document.getElementById(OVERLAY_ID);
+    if (existing) {
+      existing.remove();
+    }
+  }
+
+  function attachOverlay() {
     if (!document.body) return;
+    removeExistingOverlay();
     const overlay = document.createElement("div");
-    overlay.id = "intro-overlay";
+    overlay.id = OVERLAY_ID;
     overlay.className = "intro-overlay";
     overlay.setAttribute("aria-hidden", "true");
 
@@ -93,14 +102,17 @@
     });
   }
 
-  function runIntro() {
+  function runIntro(force = false) {
     const storage = safeSessionStorage();
-    if (!shouldShowIntro(storage)) {
-      return;
+    if (!force && !shouldShowIntro(storage)) {
+      return false;
     }
     markIntroSeen(storage);
-    attachOverlay(storage);
+    attachOverlay();
+    return true;
   }
+
+  window.replayIntroOverlay = () => runIntro(true);
 
   if (typeof document === "undefined") {
     return;

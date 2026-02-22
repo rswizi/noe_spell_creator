@@ -12,6 +12,8 @@
     .cta a{display:block;text-align:center;padding:24px;border-radius:12px;border:1px solid #333;background:#101010}
     .muted{opacity:.85}
     .portal-logo{height:72px;width:auto;display:block;margin:auto;max-width:280px;}
+    .portal-logo-btn{background:none;border:0;padding:0;margin:0;cursor:pointer;display:block;}
+    .portal-logo-btn:focus-visible{outline:2px solid #8aa2ff;outline-offset:4px;border-radius:8px;}
 
     .modal, .modal-backdrop { display: none; }
     .modal.open, .modal-backdrop.open { display: block; }
@@ -21,7 +23,9 @@
 <body>
   <div class="topbar">
     <h1>
-      <img src="/assets/logo/logo.svg" alt="NoE Asset Manager" class="portal-logo" />
+      <button id="portal-logo-btn" class="portal-logo-btn" type="button" aria-label="Replay intro animation">
+        <img src="/assets/logo/logo.svg" alt="NoE Asset Manager" class="portal-logo" />
+      </button>
     </h1>
     <div class="auth-inline">
       <div id="user-chip" class="user-chip">
@@ -232,6 +236,15 @@
       });
 
       document.getElementById("chip-logout").addEventListener("click", (e) => { e.preventDefault(); logout(); });
+      const portalLogoBtn = document.getElementById("portal-logo-btn");
+      if (portalLogoBtn) {
+        portalLogoBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (typeof window.replayIntroOverlay === "function") {
+            window.replayIntroOverlay();
+          }
+        });
+      }
 
       document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLogin(); });
 
