@@ -5324,19 +5324,21 @@ function skillLabelFromValue(value){
   return hit?.label || target;
 }
 
-function buildAutoSublimationCore(attSkill, defSkill, preferredType, capSlots, maxTier){
+function buildAutoSublimationCore(attSkill, defSkill, preferredType, preferredNature, capSlots, maxTier){
   const pref = String(preferredType || '').toLowerCase();
   const cap = Math.max(0, Math.floor(Number(capSlots) || 0));
   const capTier = Math.max(1, Math.min(4, Number(maxTier) || 1));
   const ordered = ['lethality', 'speed', 'defense'];
-  const prefType = ordered.includes(pref) ? pref : 'lethality';
-  const secondary = ordered.filter(t => t !== prefType);
-  const required = [
-    { type: 'excellence', skill: attSkill || '' },
-    { type: 'excellence', skill: defSkill || '' },
-    { type: prefType, skill: '' },
-    ...secondary.map(type => ({ type, skill: '' })),
-  ];
+  const prefType = (pref === 'blessing' || ordered.includes(pref)) ? pref : 'lethality';
+  const required = [{ type: 'excellence', skill: attSkill || '', nature: '' }, { type: 'excellence', skill: defSkill || '', nature: '' }];
+  if (prefType === 'blessing'){
+    required.push({ type: 'blessing', skill: '', nature: String(preferredNature || '').trim() });
+    required.push(...ordered.map(type => ({ type, skill: '', nature: '' })));
+  }else{
+    const secondary = ordered.filter(t => t !== prefType);
+    required.push({ type: prefType, skill: '', nature: '' });
+    required.push(...secondary.map(type => ({ type, skill: '', nature: '' })));
+  }
   const chosen = [];
   let remaining = cap;
   for (const item of required){
@@ -5359,7 +5361,8 @@ function autoSublimationSummary(plan, capSlots){
   const lines = [`Auto Sublimation proposal (${used}/${cap} slots):`];
   plan.forEach((entry, idx) => {
     const skillPart = entry.type === 'excellence' ? ` -> ${skillLabelFromValue(entry.skill)}` : '';
-    lines.push(`${idx + 1}. ${entry.type} Tier ${entry.tier}${skillPart}`);
+    const naturePart = entry.type === 'blessing' ? ` -> ${String(entry.nature || 'magic')}` : '';
+    lines.push(`${idx + 1}. ${entry.type} Tier ${entry.tier}${skillPart}${naturePart}`);
   });
   if (used < cap){
     lines.push(`Unused slots: ${cap - used}`);
@@ -5403,19 +5406,31 @@ async function openAutoSublimationWizard(){
 
   const preferredType = await openSkillSelectModal({
     titleText: 'Auto Sublimation',
-    subtitleText: 'Choose your preference: Damage, HP, or MO.',
+    subtitleText: 'Choose your preference: Damage, HP, MO, or Magic Damage.',
     options: [
       { name: 'lethality', label: 'Damage (Lethality)' },
       { name: 'defense', label: 'HP (Defense)' },
       { name: 'speed', label: 'MO (Speed)' },
+      { name: 'blessing', label: 'Magic Damage (Benediction)' },
     ],
   });
   if (!preferredType) return;
+  let preferredNature = '';
+  if (String(preferredType).toLowerCase() === 'blessing'){
+    const naturePick = await openSkillSelectModal({
+      titleText: 'Auto Sublimation',
+      subtitleText: 'Choose one nature for Benediction.',
+      options: NATURES.map(n => ({ name: String(n || '').toLowerCase(), label: String(n || '') })),
+    });
+    if (!naturePick) return;
+    preferredNature = String(naturePick || '').toLowerCase();
+  }
 
   const coreBuild = buildAutoSublimationCore(
     String(attackSkill || ''),
     String(defenseSkill || ''),
     String(preferredType || ''),
+    String(preferredNature || ''),
     capSlots,
     maxTier
   );
@@ -5453,7 +5468,10 @@ async function openAutoSublimationWizard(){
 
   let preview = autoSublimationSummary(proposal, capSlots);
   if (!coreBuild.includedAllCore){
-    preview += '\n\nNote: Not enough slots to include all core sublimations (both Excellences + Lethality/Speed/Defense).';
+    const coreLabel = String(preferredType).toLowerCase() === 'blessing'
+      ? 'both Excellences + Benediction + Lethality/Speed/Defense'
+      : 'both Excellences + Lethality/Speed/Defense';
+    preview += `\n\nNote: Not enough slots to include all core sublimations (${coreLabel}).`;
   }
   if (coreBuild.includedAllCore && !coreBuild.allCoreAtMax){
     preview += '\n\nNote: Core sublimations were included but not all could stay at max tier due slot limits.';
@@ -5466,7 +5484,7 @@ async function openAutoSublimationWizard(){
       type: entry.type,
       tier: entry.tier,
       skill: entry.skill || '',
-      nature: '',
+      nature: entry.nature || '',
     }))
   );
   subWarningEl.textContent = `Auto build applied (${slotsUsed(SUBLIMATIONS)}/${capSlots} slots).`;
@@ -6562,8 +6580,9 @@ function renderInventoryUI(){
   invTitleEl.textContent = LINKED_INV.name || 'Inventory';
   // Money + currency selects
   const keys = invMoneyCurrencyKeys();
-  invMoneyEl.innerHTML = keys.length
-    ? keys.map((k)=>{
+  const visibleMoneyKeys = keys.filter((k)=> Math.abs(invMoneyAmount(k, 'total')) > 1e-9);
+  invMoneyEl.innerHTML = visibleMoneyKeys.length
+    ? visibleMoneyKeys.map((k)=>{
       const carried = invMoneyAmount(k, 'carried');
       const bank = invMoneyAmount(k, 'bank');
       const total = invMoneyAmount(k, 'total');
