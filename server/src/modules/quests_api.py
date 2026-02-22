@@ -158,7 +158,9 @@ def _normalize_objectives(raw: Iterable[Any], quest_id: str | None = None) -> li
             title = (entry.get("title") or entry.get("label") or entry.get("name") or "").strip()
             description = (entry.get("description") or "").strip()
             status = _sanitize_choice(entry.get("status") or entry.get("state"), VALID_OBJECTIVE_STATUSES, "not_started")
-            obj_type = _sanitize_choice(entry.get("type") or entry.get("objectiveType"), VALID_OBJECTIVE_TYPES, "mandatory")
+            hidden_flag = bool(entry.get("hidden"))
+            raw_type = "hidden" if hidden_flag else (entry.get("type") or entry.get("objectiveType"))
+            obj_type = _sanitize_choice(raw_type, VALID_OBJECTIVE_TYPES, "mandatory")
             priority = _sanitize_choice(entry.get("priority") or entry.get("priorityLevel"), VALID_OBJECTIVE_PRIORITIES, "secondary")
             order = entry.get("order") if isinstance(entry.get("order"), int) else idx
             obj_id = (entry.get("id") or entry.get("objectiveId") or "").strip()
@@ -178,6 +180,7 @@ def _normalize_objectives(raw: Iterable[Any], quest_id: str | None = None) -> li
             "status": status,
             "state": status,
             "type": obj_type,
+            "hidden": obj_type == "hidden",
             "priority": priority,
             "order": order,
         })
@@ -198,26 +201,31 @@ def _split_quests(
     group = []
     personal = []
     archive = []
+    user_lower = (user or "").lower()
     for quest in quests:
         entry = dict(quest)
         entry.pop("_id", None)
         status = (entry.get("status") or "").lower()
-        qtype = (entry.get("type") or "").lower()
+        qtype = (entry.get("type") or "group").lower()
         visibility = (entry.get("visibility") or "").lower()
         created_by = (entry.get("createdBy") or "").lower()
-        is_owner = created_by and created_by == user.lower()
+        assigned_to = [(name or "").strip().lower() for name in (entry.get("assignedTo") or [])]
+        is_owner = bool(created_by and created_by == user_lower)
+        is_assigned = user_lower in assigned_to
+        can_view_group = is_gm or visibility != "gm_only"
+        can_view_personal = is_gm or is_owner or is_assigned
         if status == "archived":
-            if qtype == "personal" and (is_gm or is_owner):
+            if qtype == "personal" and can_view_personal:
                 archive.append(entry)
-            elif qtype == "group" and (is_gm or visibility.startswith("group.visible")):
+            elif qtype == "group" and can_view_group:
                 archive.append(entry)
             continue
         if qtype == "group":
-            if not is_gm and not visibility.startswith("group.visible"):
+            if not can_view_group:
                 continue
             group.append(entry)
         elif qtype == "personal":
-            if not is_gm and not is_owner:
+            if not can_view_personal:
                 continue
             personal.append(entry)
     return group, personal, archive
@@ -367,6 +375,7 @@ async def update_campaign_quest(
         "title": payload.get("title"),
         "subtitle": payload.get("subtitle"),
         "description": payload.get("description"),
+        "type": _sanitize_choice(payload.get("scope") or payload.get("type"), {"group", "personal"}, quest.get("type") or "group"),
         "visibility": _sanitize_choice(payload.get("visibility"), VALID_VISIBILITY, quest.get("visibility") or "party_visible"),
         "status": _sanitize_choice(payload.get("status"), VALID_QUEST_STATUSES, quest.get("status") or "pending"),
         "quest_kind": _sanitize_choice(payload.get("questKind") or payload.get("quest_type"), VALID_QUEST_CATEGORIES, quest.get("quest_kind") or "main"),
@@ -443,6 +452,29 @@ async def update_quest_objective(
         objective["status"] = new_status
         objective["state"] = new_status
         updated = True
+    if "type" in payload:
+        obj_type = _sanitize_choice(payload.get("type"), VALID_OBJECTIVE_TYPES, objective.get("type") or "mandatory")
+        objective["type"] = obj_type
+        objective["hidden"] = obj_type == "hidden"
+        updated = True
+    if "hidden" in payload:
+        hidden = bool(payload.get("hidden"))
+        if hidden:
+            objective["type"] = "hidden"
+            objective["hidden"] = True
+        else:
+            fallback_type = _sanitize_choice(payload.get("unhideType"), VALID_OBJECTIVE_TYPES, "mandatory")
+            if fallback_type == "hidden":
+                fallback_type = "mandatory"
+            objective["type"] = fallback_type
+            objective["hidden"] = False
+        updated = True
+    if "order" in payload:
+        try:
+            objective["order"] = int(payload.get("order"))
+            updated = True
+        except (TypeError, ValueError):
+            pass
     if updated:
         QUEST_COL.update_one({"campaignId": cid, "id": quest_id}, {"$set": {"objectives": quest.get("objectives"), "updatedAt": _current_ts()}})
     return {"status": "success", "quest": _sanitize_docs([quest])[0]}

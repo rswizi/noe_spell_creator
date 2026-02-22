@@ -185,6 +185,8 @@
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;z-index:4000;}
     .modal-backdrop.open{display:flex;}
     .modal{background:#10131d;border:1px solid #2a2f3a;border-radius:16px;padding:16px;min-width:320px;max-width:90vw;}
+    .quest-overlay-modal{width:min(1240px,96vw);height:min(88vh,920px);display:flex;flex-direction:column;gap:10px;padding:12px;}
+    #quest-overlay-frame{width:100%;flex:1;border:1px solid #2a2f3a;border-radius:12px;background:#0a0d14;}
     .menu{position:fixed;z-index:5000;background:#10131d;border:1px solid #2a2f3a;border-radius:12px;padding:10px;display:none;min-width:260px;}
     .menu.open{display:block;}
     .menu label{font-size:.85rem;color:var(--muted);}
@@ -203,6 +205,7 @@
       <div class="row" style="margin-left:auto;align-items:center;gap:8px;">
         <span id="role-chip" class="pill" style="display:none;">Role: --</span>
         <span id="login-chip" class="pill">Checking login...</span>
+        <button class="btn" id="open-quest-overlay-btn" disabled>Quest Log</button>
         <button class="btn secondary" id="role-config-btn" title="Manage campaign roles" style="display:none;">
           <i class="fa-solid fa-gear"></i>
         </button>
@@ -342,6 +345,19 @@
     <div class="muted" id="role-menu-status"></div>
   </div>
 
+  <div class="modal-backdrop" id="quest-overlay-backdrop">
+    <div class="modal quest-overlay-modal">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <strong>Campaign Quest Log</strong>
+        <div class="row" style="margin-left:auto;">
+          <a class="btn secondary" id="quest-overlay-open-page" target="_blank" rel="noopener noreferrer">Open Full Page</a>
+          <button class="btn secondary" id="quest-overlay-close">Close</button>
+        </div>
+      </div>
+      <iframe id="quest-overlay-frame" title="Campaign quest log" loading="lazy"></iframe>
+    </div>
+  </div>
+
   <script>
     const params = new URLSearchParams(location.search);
     const CID = params.get('cid') || '';
@@ -355,6 +371,11 @@
     const gmActions = document.getElementById('gm-actions');
     const gmCombatBtn = document.getElementById('gm-combat-btn');
     const openQuestLogBtn = document.getElementById('open-quest-log-btn');
+    const openQuestOverlayBtn = document.getElementById('open-quest-overlay-btn');
+    const questOverlayBackdrop = document.getElementById('quest-overlay-backdrop');
+    const questOverlayClose = document.getElementById('quest-overlay-close');
+    const questOverlayFrame = document.getElementById('quest-overlay-frame');
+    const questOverlayOpenPage = document.getElementById('quest-overlay-open-page');
     const charList = document.getElementById('char-list');
 
     const chatLog = document.getElementById('chat-log');
@@ -392,6 +413,9 @@
 
     if (openQuestLogBtn) {
       openQuestLogBtn.disabled = !CID;
+    }
+    if (openQuestOverlayBtn) {
+      openQuestOverlayBtn.disabled = !CID;
     }
 
     function getCharacterFallbackPermission(){
@@ -466,6 +490,34 @@
 
     function openModal(el){ el.classList.add('open'); }
     function closeModal(el){ el.classList.remove('open'); }
+
+    function questLogUrl(cid){
+      const targetCid = cid || CAMPAIGN?.id || CID;
+      if (!targetCid) return '';
+      return `campaign_quest_log.html?cid=${encodeURIComponent(targetCid)}`;
+    }
+
+    function openQuestOverlay(){
+      const url = questLogUrl();
+      if (!url){
+        statusEl.textContent = 'Select a campaign before opening the quest log.';
+        return;
+      }
+      if (questOverlayFrame) {
+        questOverlayFrame.src = url;
+      }
+      if (questOverlayOpenPage) {
+        questOverlayOpenPage.href = url;
+      }
+      if (questOverlayBackdrop) {
+        openModal(questOverlayBackdrop);
+      }
+    }
+
+    function closeQuestOverlay(){
+      if (!questOverlayBackdrop) return;
+      closeModal(questOverlayBackdrop);
+    }
 
     async function loadMe(){
       try{
@@ -559,6 +611,12 @@
       if (gm) campCode.textContent = `Code: ${CAMPAIGN.join_code || '--'}`;
       if (openQuestLogBtn) {
         openQuestLogBtn.disabled = !CAMPAIGN?.id;
+      }
+      if (openQuestOverlayBtn) {
+        openQuestOverlayBtn.disabled = !CAMPAIGN?.id;
+      }
+      if (questOverlayOpenPage) {
+        questOverlayOpenPage.href = questLogUrl(CAMPAIGN?.id || CID) || '#';
       }
 
       const members = [CAMPAIGN.owner].concat(CAMPAIGN.members || []).filter(Boolean);
@@ -1701,6 +1759,18 @@
         return;
       }
       window.location.assign(`campaign_quest_log.html?cid=${encodeURIComponent(targetCid)}`);
+    });
+
+    openQuestOverlayBtn?.addEventListener('click', ()=>{
+      openQuestOverlay();
+    });
+    questOverlayClose?.addEventListener('click', ()=>{
+      closeQuestOverlay();
+    });
+    questOverlayBackdrop?.addEventListener('click', (event)=>{
+      if (event.target === questOverlayBackdrop) {
+        closeQuestOverlay();
+      }
     });
 
     document.getElementById('gm-add-char').addEventListener('click', ()=>{

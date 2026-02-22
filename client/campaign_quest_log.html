@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Campaign Quest Hub</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer" />
   <style>
     :root {
       color-scheme: dark;
@@ -205,8 +206,31 @@
       gap: 8px;
       flex-wrap: wrap;
     }
-    .objective-card select {
-      width: 140px;
+    .objective-status-icons {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .objective-status-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: #101622;
+      color: #cfd4e3;
+      display: inline-grid;
+      place-items: center;
+      cursor: pointer;
+    }
+    .objective-status-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(201, 162, 39, 0.16);
+    }
+    .objective-status-btn[disabled] {
+      opacity: 0.65;
+      cursor: default;
     }
     .notes-grid {
       display: grid;
@@ -271,6 +295,9 @@
       flex-wrap: wrap;
       align-items: center;
     }
+    .hidden {
+      display: none !important;
+    }
     .gm-only {
       display: none;
     }
@@ -302,6 +329,54 @@
       overflow-y: auto;
       box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
     }
+    .rtf-wrap {
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0f141f;
+    }
+    .rtf-toolbar {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      padding: 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.12);
+      background: #0d121d;
+    }
+    .rtf-toolbar button {
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 8px;
+      min-width: 28px;
+      height: 28px;
+      background: #151b29;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .rtf-editor {
+      min-height: 120px;
+      padding: 10px;
+      outline: none;
+    }
+    .rtf-editor.small {
+      min-height: 90px;
+    }
+    .rich-view p {
+      margin: 0 0 8px;
+    }
+    .rich-view ul,
+    .rich-view ol {
+      margin: 0 0 8px 18px;
+      padding: 0;
+    }
+    .badge.tracked { border-color: #4a8b8f; color: #9adce0; }
+    .badge.pinned { border-color: #c9a227; color: #edd77a; }
+    .feedback {
+      color: #8ed8be;
+      font-size: 0.88rem;
+    }
+    .feedback.error {
+      color: #f19e9e;
+    }
     @media (max-width: 900px) {
       .layout {
         grid-template-columns: 1fr;
@@ -330,7 +405,7 @@
     </header>
     <section class="filters-row">
       <select id="filter-type">
-        <option value="">Type</option>
+        <option value="">Quest Kind</option>
       </select>
       <select id="filter-status">
         <option value="">Status</option>
@@ -417,14 +492,6 @@
             </select>
           </label>
           <label>
-            Priority
-            <select name="priority">
-              <option value="main">Main</option>
-              <option value="secondary">Secondary</option>
-              <option value="tertiary">Tertiary</option>
-            </select>
-          </label>
-          <label>
             Assigned Characters (comma-separated)
             <input name="assignedTo" placeholder="player1, player2" />
           </label>
@@ -490,12 +557,12 @@
     const createFeedback = document.getElementById('create-feedback');
     const pageStatus = document.getElementById('page-subtitle');
 
-    const OBJECTIVE_STATUS_OPTIONS = [
-      { value: 'not_started', label: 'Not started' },
-      { value: 'ongoing', label: 'Ongoing' },
-      { value: 'succeeded', label: 'Succeeded' },
-      { value: 'failed', label: 'Failed' },
-    ];
+    const OBJECTIVE_STATUS_META = {
+      not_started: { label: 'Not Started', icon: 'fa-regular fa-circle' },
+      ongoing: { label: 'Ongoing', icon: 'fa-solid fa-spinner' },
+      succeeded: { label: 'Succeeded', icon: 'fa-solid fa-check-circle' },
+      failed: { label: 'Failed', icon: 'fa-solid fa-circle-xmark' },
+    };
 
     const QUEST_STATUS_LABELS = {
       pending: 'Pending',
@@ -517,22 +584,28 @@
       dynamic: 'Dynamic/Event Quest',
     };
 
-      const state = {
-        user: null,
-        campaign: null,
-        quests: [],
-        filters: {
-          search: '',
-          type: '',
-          status: '',
-          assigned: '',
-          faction: '',
-          session: '',
-          showHidden: false,
-        },
-        activeQuest: null,
-        isGm: false,
-      };
+    const state = {
+      user: null,
+      campaign: null,
+      quests: [],
+      filters: {
+        search: '',
+        type: '',
+        status: '',
+        assigned: '',
+        faction: '',
+        session: '',
+        showHidden: false,
+      },
+      activeQuest: null,
+      isGm: false,
+      editingQuestId: null,
+      createDescriptionEditor: null,
+      createDescriptionTextarea: null,
+      createModalTitle: null,
+      createModalSubmit: null,
+      createQuestIdInput: null,
+    };
 
     function escapeHtml(val) {
       if (!val) return '';
@@ -541,8 +614,142 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;')
-        .replace(/\n/g, '<br>');
+        .replace(/'/g, '&#039;');
+    }
+
+    function stripHtml(val) {
+      const div = document.createElement('div');
+      div.innerHTML = String(val || '');
+      return (div.textContent || div.innerText || '').trim();
+    }
+
+    function sanitizeRichHtml(input) {
+      const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'P', 'BR', 'UL', 'OL', 'LI', 'A', 'CODE', 'BLOCKQUOTE']);
+      const allowedAttrs = { A: new Set(['href', 'target', 'rel']) };
+      const tpl = document.createElement('template');
+      tpl.innerHTML = String(input || '');
+      function clean(node) {
+        const children = Array.from(node.childNodes);
+        children.forEach((child) => {
+          if (child.nodeType === Node.ELEMENT_NODE) {
+            const tag = child.tagName.toUpperCase();
+            if (!allowedTags.has(tag)) {
+              const text = document.createTextNode(child.textContent || '');
+              child.replaceWith(text);
+              return;
+            }
+            Array.from(child.attributes).forEach((attr) => {
+              const name = attr.name.toLowerCase();
+              const ok = allowedAttrs[tag] && allowedAttrs[tag].has(name);
+              if (!ok) child.removeAttribute(attr.name);
+            });
+            if (tag === 'A') {
+              const href = (child.getAttribute('href') || '').trim();
+              if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
+                child.removeAttribute('href');
+              } else {
+                child.setAttribute('target', '_blank');
+                child.setAttribute('rel', 'noopener noreferrer');
+              }
+            }
+            clean(child);
+          } else if (child.nodeType === Node.COMMENT_NODE) {
+            child.remove();
+          }
+        });
+      }
+      clean(tpl.content);
+      return tpl.innerHTML;
+    }
+
+    function richView(html) {
+      const safe = sanitizeRichHtml(html || '');
+      return `<div class="rich-view">${safe || '<span class="muted">None</span>'}</div>`;
+    }
+
+    function createEditorMarkup(editorId, small = false) {
+      return `
+        <div class="rtf-wrap">
+          <div class="rtf-toolbar" data-editor="${editorId}">
+            <button type="button" data-cmd="bold" title="Bold"><i class="fa-solid fa-bold"></i></button>
+            <button type="button" data-cmd="italic" title="Italic"><i class="fa-solid fa-italic"></i></button>
+            <button type="button" data-cmd="underline" title="Underline"><i class="fa-solid fa-underline"></i></button>
+            <button type="button" data-cmd="insertUnorderedList" title="Bulleted List"><i class="fa-solid fa-list-ul"></i></button>
+            <button type="button" data-cmd="insertOrderedList" title="Numbered List"><i class="fa-solid fa-list-ol"></i></button>
+            <button type="button" data-link="1" title="Insert Link"><i class="fa-solid fa-link"></i></button>
+            <button type="button" data-cmd="removeFormat" title="Clear"><i class="fa-solid fa-eraser"></i></button>
+          </div>
+          <div id="${editorId}" class="rtf-editor ${small ? 'small' : ''}" contenteditable="true"></div>
+        </div>
+      `;
+    }
+
+    function getEditorHtml(editor) {
+      return sanitizeRichHtml(editor?.innerHTML || '');
+    }
+
+    function setEditorHtml(editor, html) {
+      if (!editor) return;
+      editor.innerHTML = sanitizeRichHtml(html || '');
+    }
+
+    function wireRichToolbars(root = document) {
+      root.querySelectorAll('.rtf-toolbar button').forEach((btn) => {
+        if (btn.dataset.wired === '1') return;
+        btn.dataset.wired = '1';
+        btn.addEventListener('click', () => {
+          const toolbar = btn.closest('.rtf-toolbar');
+          const editorId = toolbar?.dataset?.editor;
+          const editor = editorId ? document.getElementById(editorId) : null;
+          if (!editor) return;
+          editor.focus();
+          if (btn.dataset.link) {
+            const url = window.prompt('Enter URL (https://...)');
+            if (url && url.trim()) document.execCommand('createLink', false, url.trim());
+            return;
+          }
+          const cmd = btn.dataset.cmd;
+          if (cmd) document.execCommand(cmd, false, null);
+        });
+      });
+    }
+
+    function setupCreateQuestEditor() {
+      const priorityLabel = createForm.querySelector('select[name="priority"]')?.closest('label');
+      if (priorityLabel) priorityLabel.remove();
+
+      state.createModalTitle = document.querySelector('#create-panel strong');
+      state.createModalSubmit = createForm.querySelector('button[type="submit"]');
+
+      const hiddenInput = document.createElement('input');
+      hiddenInput.type = 'hidden';
+      hiddenInput.name = 'questId';
+      createForm.prepend(hiddenInput);
+      state.createQuestIdInput = hiddenInput;
+
+      const descriptionTextarea = createForm.querySelector('textarea[name="description"]');
+      if (!descriptionTextarea) return;
+      state.createDescriptionTextarea = descriptionTextarea;
+      const wrapLabel = descriptionTextarea.closest('label');
+      wrapLabel.firstChild.textContent = 'Description (Rich Text)';
+      descriptionTextarea.classList.add('hidden');
+      const editorHost = document.createElement('div');
+      editorHost.innerHTML = createEditorMarkup('create-description-editor', false);
+      wrapLabel.appendChild(editorHost.firstElementChild);
+      state.createDescriptionEditor = document.getElementById('create-description-editor');
+      setEditorHtml(state.createDescriptionEditor, '');
+      wireRichToolbars(wrapLabel);
+    }
+
+    function getCampaignUsers() {
+      const values = new Set();
+      const owner = (state.campaign?.owner || '').trim();
+      if (owner) values.add(owner);
+      (state.campaign?.members || []).forEach((name) => { if (name) values.add(name); });
+      (state.campaign?.assistant_gms || []).forEach((name) => { if (name) values.add(name); });
+      const me = (state.user?.username || '').trim();
+      if (me) values.add(me);
+      return Array.from(values).sort((a, b) => a.localeCompare(b));
     }
 
     function refreshGmVisibility() {
@@ -553,7 +760,7 @@
       state.isGm =
         isOwner ||
         isAssistant ||
-        ['gm', 'assistant'].includes(campaignRole) ||
+        ['gm', 'assistant', 'owner', 'assistant_gm', 'assistant gm'].includes(campaignRole) ||
         userRole === 'admin';
       if (openCreateBtn) {
         openCreateBtn.classList.toggle('visible', state.isGm);
@@ -565,6 +772,107 @@
       if (!createLayer) return;
       createLayer.classList.toggle('visible', visible);
       document.body.classList.toggle('modal-open', visible);
+    }
+
+    function setCreateFormValue(name, value) {
+      const field = createForm.elements.namedItem(name);
+      if (!field) return;
+      field.value = value || '';
+    }
+
+    function setCreateFormChecked(name, checked) {
+      const field = createForm.elements.namedItem(name);
+      if (!field || field.type !== 'checkbox') return;
+      field.checked = Boolean(checked);
+    }
+
+    function openCreateModalForCreate() {
+      state.editingQuestId = null;
+      if (state.createQuestIdInput) state.createQuestIdInput.value = '';
+      if (state.createModalTitle) state.createModalTitle.textContent = 'Create Quest';
+      if (state.createModalSubmit) state.createModalSubmit.textContent = 'Create Quest';
+      createForm.reset();
+      setCreateFormValue('scope', 'group');
+      setCreateFormValue('status', 'pending');
+      setCreateFormValue('visibility', 'party_visible');
+      if (state.createDescriptionEditor) setEditorHtml(state.createDescriptionEditor, '');
+      createFeedback.textContent = '';
+      setCreateModalVisible(true);
+    }
+
+    function openCreateModalForEdit(quest) {
+      if (!quest || !quest.id) return;
+      state.editingQuestId = quest.id;
+      if (state.createQuestIdInput) state.createQuestIdInput.value = quest.id;
+      if (state.createModalTitle) state.createModalTitle.textContent = 'Modify Quest';
+      if (state.createModalSubmit) state.createModalSubmit.textContent = 'Save Changes';
+
+      setCreateFormValue('title', quest.title || '');
+      setCreateFormValue('subtitle', quest.subtitle || '');
+      setCreateFormValue('questKind', quest.quest_kind || 'main');
+      setCreateFormValue('scope', quest.type || 'group');
+      setCreateFormValue('status', quest.status || 'pending');
+      setCreateFormValue('visibility', quest.visibility || 'party_visible');
+      setCreateFormValue('assignedTo', (quest.assignedTo || []).join(', '));
+      setCreateFormValue('tags', (quest.tags || []).join(', '));
+      setCreateFormValue('faction', quest.faction || '');
+      setCreateFormValue('session', quest.session || '');
+      setCreateFormValue(
+        'objectives',
+        (quest.objectives || [])
+          .slice()
+          .sort((a, b) => (a.order || 0) - (b.order || 0))
+          .map((entry) => (entry.title || '').trim())
+          .filter(Boolean)
+          .join('\n'),
+      );
+      setCreateFormChecked('tracked', isTracked(quest));
+      setCreateFormChecked('pinned', isPinned(quest));
+      if (state.createDescriptionEditor) {
+        setEditorHtml(state.createDescriptionEditor, quest.description || '');
+      } else {
+        setCreateFormValue('description', quest.description || '');
+      }
+      createFeedback.textContent = '';
+      setCreateModalVisible(true);
+    }
+
+    function closeCreateModal() {
+      setCreateModalVisible(false);
+      createFeedback.textContent = '';
+    }
+
+    function buildObjectivesPayload(linesRaw, existing = []) {
+      const titles = String(linesRaw || '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const pools = new Map();
+      (existing || []).forEach((entry) => {
+        const key = (entry?.title || '').trim().toLowerCase();
+        if (!key) return;
+        const queue = pools.get(key) || [];
+        queue.push(entry);
+        pools.set(key, queue);
+      });
+      return titles.map((title, idx) => {
+        const key = title.toLowerCase();
+        const queue = pools.get(key) || [];
+        const current = queue.length ? queue.shift() : null;
+        if (current) {
+          return {
+            id: current.id,
+            title,
+            description: current.description || '',
+            status: current.status || 'not_started',
+            type: current.type || (current.hidden ? 'hidden' : 'mandatory'),
+            hidden: Boolean(current.hidden || current.type === 'hidden'),
+            priority: current.priority || 'secondary',
+            order: idx + 1,
+          };
+        }
+        return { title, order: idx + 1 };
+      });
     }
 
     function canUpdateObjectives(quest) {
@@ -604,25 +912,32 @@
           const haystack = [
             quest.title,
             quest.subtitle,
-            quest.description,
+            stripHtml(quest.description),
             ...(quest.tags || []),
             ...(quest.assignedTo || []),
             quest.faction,
             quest.session,
           ]
             .filter(Boolean)
-            .map((value) => value.toLowerCase())
+            .map((value) => String(value).toLowerCase())
             .join(' ');
           if (!haystack.includes(search)) return;
         }
         list.push(quest);
       });
+      list.sort((a, b) => {
+        const pinnedDelta = (isPinned(b) ? 1 : 0) - (isPinned(a) ? 1 : 0);
+        if (pinnedDelta !== 0) return pinnedDelta;
+        const trackedDelta = (isTracked(b) ? 1 : 0) - (isTracked(a) ? 1 : 0);
+        if (trackedDelta !== 0) return trackedDelta;
+        return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
+      });
       return list;
     }
 
     function renderFilters() {
-      const types = new Set(['main']);
-      const statuses = new Set(['pending']);
+      const types = new Set();
+      const statuses = new Set();
       const assigned = new Set();
       const factions = new Set();
       const sessions = new Set();
@@ -635,11 +950,11 @@
         if (quest.faction) factions.add(quest.faction);
         if (quest.session) sessions.add(quest.session);
       });
-      function pushOptions(el, values) {
+      function pushOptions(el, values, placeholder) {
         const current = el.value;
-        el.innerHTML = `<option value="">${el === filterTypeEl ? 'Type' : el === filterStatusEl ? 'Status' : el === filterAssignedEl ? 'Assigned' : el === filterFactionEl ? 'Faction' : 'Session'}</option>`;
+        el.innerHTML = `<option value="">${placeholder}</option>`;
         Array.from(values)
-          .sort()
+          .sort((a, b) => String(a).localeCompare(String(b)))
           .forEach((value) => {
             const option = document.createElement('option');
             option.value = value;
@@ -648,11 +963,11 @@
           });
         if (current) el.value = current;
       }
-      pushOptions(filterTypeEl, types);
-      pushOptions(filterStatusEl, statuses);
-      pushOptions(filterAssignedEl, assigned);
-      pushOptions(filterFactionEl, factions);
-      pushOptions(filterSessionEl, sessions);
+      pushOptions(filterTypeEl, types, 'Quest Kind');
+      pushOptions(filterStatusEl, statuses, 'Status');
+      pushOptions(filterAssignedEl, assigned, 'Assigned');
+      pushOptions(filterFactionEl, factions, 'Faction');
+      pushOptions(filterSessionEl, sessions, 'Session');
     }
 
     function renderQuestList() {
@@ -665,16 +980,16 @@
         if (state.activeQuest && state.activeQuest.id === quest.id) {
           card.classList.add('active');
         }
+        const badges = [`<span class="badge">${QUEST_KIND_LABELS[quest.quest_kind] || 'Main Quest'}</span>`];
+        if (isTracked(quest)) badges.push('<span class="badge tracked"><i class="fa-solid fa-eye"></i> Tracked</span>');
+        if (isPinned(quest)) badges.push('<span class="badge pinned"><i class="fa-solid fa-thumbtack"></i> Pinned</span>');
         card.innerHTML = `
           <div class="titles">
             <h3>${escapeHtml(quest.title || 'Untitled Quest')}</h3>
             <span class="status-pill ${quest.status || 'pending'}">${QUEST_STATUS_LABELS[quest.status] || quest.status || 'Pending'}</span>
           </div>
-          <div class="badges">
-            <span class="badge">${QUEST_KIND_LABELS[quest.quest_kind] || 'Main Quest'}</span>
-            <span class="badge">${(quest.priority || 'Main').replace('_', ' ')}</span>
-          </div>
-          <div class="muted">${(quest.assignedTo || []).join(', ') || 'Unassigned'}</div>
+          <div class="badges">${badges.join('')}</div>
+          <div class="muted">${escapeHtml((quest.assignedTo || []).join(', ') || 'Unassigned')}</div>
         `;
         card.addEventListener('click', () => {
           state.activeQuest = quest;
@@ -695,58 +1010,79 @@
         questDetailEl.innerHTML = '<div class="detail-empty">Select a quest to inspect its objectives, notes, and theories.</div>';
         return;
       }
-      const header = `
-        <div class="detail-header">
-          <div>
-            <h2>${escapeHtml(quest.title || 'Untitled Quest')}</h2>
-            ${quest.subtitle ? `<div class="detail-subtitle">${escapeHtml(quest.subtitle)}</div>` : ''}
-          </div>
-          <div class="badges">
-            <span class="badge">${QUEST_KIND_LABELS[quest.quest_kind] || 'Main Quest'}</span>
-            <span class="badge">${(quest.priority || 'Main').replace('_', ' ')}</span>
-            <span class="badge">${quest.faction || 'No faction'}</span>
-          </div>
-        </div>
-      `;
-      const meta = `
-        <div class="row">
-          <span class="muted">Status: ${QUEST_STATUS_LABELS[quest.status] || quest.status || 'Pending'}</span>
-          <span class="muted">Visibility: ${(quest.visibility || 'party_visible').replace('_', ' ')}</span>
-          <span class="muted">Assigned: ${(quest.assignedTo || []).join(', ') || 'Unassigned'}</span>
-          <span class="muted">Session: ${quest.session || 'N/A'}</span>
-          <span class="muted">Tracked by you: ${isTracked(quest) ? 'Yes' : 'No'}</span>
-        </div>
-      `;
-      const description = `
+      const assignedUsers = quest.assignedTo || [];
+      const campaignUsers = getCampaignUsers();
+      const assignOptions = campaignUsers.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+      const gmControls = state.isGm ? `
         <div class="detail-section">
-          <strong>Description</strong>
-          <div>${escapeHtml(quest.description)}</div>
+          <div class="section-actions">
+            <button class="btn secondary" id="edit-quest-btn">Modify Quest</button>
+            <button class="btn secondary" id="delete-quest-btn">Delete Quest</button>
+            <label class="muted">Status
+              <select id="status-update">${Object.entries(QUEST_STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === quest.status ? 'selected' : ''}>${label}</option>`).join('')}</select>
+            </label>
+            <label class="muted">Scope
+              <select id="scope-update">
+                <option value="group" ${(quest.type || 'group') === 'group' ? 'selected' : ''}>Group</option>
+                <option value="personal" ${(quest.type || '') === 'personal' ? 'selected' : ''}>Personal</option>
+              </select>
+            </label>
+            <label class="muted">Quest Kind
+              <select id="kind-update">${Object.entries(QUEST_KIND_LABELS).map(([value, label]) => `<option value="${value}" ${value === quest.quest_kind ? 'selected' : ''}>${label}</option>`).join('')}</select>
+            </label>
+          </div>
+          <div class="section-actions">
+            <label class="muted">Assign User
+              <select id="assign-user-select">
+                <option value="">Choose...</option>
+                ${assignOptions}
+              </select>
+            </label>
+            <button class="btn ghost" id="assign-user-btn">Assign</button>
+            <button class="btn ghost" id="unassign-user-btn">Unassign</button>
+            <span class="muted" id="assign-feedback"></span>
+          </div>
         </div>
-      `;
-      const objectives = (quest.objectives || []).sort((a, b) => (a.order || 0) - (b.order || 0));
+      ` : '';
+      const objectives = (quest.objectives || [])
+        .filter((entry) => {
+          if (state.isGm) return true;
+          return !(entry.hidden || entry.type === 'hidden');
+        })
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
       const objectivesHtml = objectives.length
         ? objectives.map((obj) => {
-            const typeLabel = obj.type ? obj.type.replace('_', ' ') : 'mandatory';
-            const priorityLabel = (obj.priority || 'secondary').replace('_', ' ');
-            const select = canUpdateObjectives(quest) ? `<select data-objective-id="${obj.id}" class="objective-select">
-              ${OBJECTIVE_STATUS_OPTIONS.map((option) => `<option value="${option.value}" ${option.value === obj.status ? 'selected' : ''}>${option.label}</option>`).join('')}
-            </select>` : `<span class="muted">${OBJECTIVE_STATUS_OPTIONS.find((option) => option.value === obj.status)?.label || 'Not started'}</span>`;
+            const hidden = !!obj.hidden || obj.type === 'hidden';
+            const statusIcons = `<div class="objective-status-icons">${Object.entries(OBJECTIVE_STATUS_META).map(([status, meta]) => {
+              const active = (obj.status || 'not_started') === status ? 'active' : '';
+              const disabled = canUpdateObjectives(quest) ? '' : 'disabled';
+              return `<button class="objective-status-btn ${active}" ${disabled} title="${meta.label}" data-status="${status}" data-objective-id="${escapeHtml(obj.id || '')}"><i class="${meta.icon}"></i></button>`;
+            }).join('')}</div>`;
             return `
               <div class="objective-card">
-                <div class="row">
-                  <strong>${escapeHtml(obj.title)}</strong>
-                  ${select}
+                <div class="row" style="justify-content:space-between;">
+                  <div class="row" style="gap:8px;">
+                    <strong>${escapeHtml(obj.title || 'Untitled Objective')}</strong>
+                    ${hidden ? '<span class="badge">Hidden</span>' : ''}
+                  </div>
+                  ${statusIcons}
                 </div>
                 <div class="objective-meta muted">
-                  <span>Type: ${typeLabel}</span>
-                  <span>Priority: ${priorityLabel}</span>
-                  <span>Status: ${obj.status}</span>
+                  <span>Type: ${escapeHtml((obj.type || 'mandatory').replace('_', ' '))}</span>
+                  <span>Status: ${escapeHtml(OBJECTIVE_STATUS_META[obj.status || 'not_started']?.label || obj.status || 'Not Started')}</span>
                 </div>
-                <div>${escapeHtml(obj.description)}</div>
+                ${richView(obj.description || '')}
+                ${state.isGm ? `<div class="section-actions"><button class="btn ghost objective-hide-btn" data-objective-id="${escapeHtml(obj.id || '')}" data-hidden="${hidden ? '1' : '0'}">${hidden ? 'Unhide Objective' : 'Hide Objective'}</button></div>` : ''}
               </div>
             `;
           }).join('')
         : '<div class="muted">No objectives yet.</div>';
+      const objectiveManageHtml = state.isGm ? `
+        <div class="section-actions">
+          <input id="objective-add-input" placeholder="Add objective title..." />
+          <button class="btn secondary" id="objective-add-btn">Add Objective</button>
+        </div>
+      ` : '';
       const notesHtml = `
         <div class="detail-section">
           <div class="row" style="justify-content:space-between;">
@@ -757,16 +1093,16 @@
             ${(quest.personalNotes || []).map((note) => `
               <div class="note-card">
                 <div class="row" style="justify-content:space-between;">
-                  <span><strong>${note.author}</strong></span>
-                  <span class="muted" style="font-size:0.8rem;">${note.createdAt}</span>
+                  <span><strong>${escapeHtml(note.author || 'Unknown')}</strong></span>
+                  <span class="muted" style="font-size:0.8rem;">${escapeHtml(note.createdAt || '')}</span>
                 </div>
-                <div>${escapeHtml(note.text)}</div>
+                ${richView(note.text || '')}
               </div>`).join('') || '<div class="muted">No notes yet.</div>'}
           </div>
           <div id="note-form-container" class="hidden">
-            <textarea id="note-text" placeholder="Add a note..."></textarea>
+            ${createEditorMarkup('note-editor', true)}
             <div class="section-actions">
-              <button class="btn primary" id="note-submit">Save note</button>
+              <button class="btn primary" id="note-submit">Save Note</button>
               <button class="btn secondary" id="note-cancel">Cancel</button>
             </div>
           </div>
@@ -782,16 +1118,16 @@
             ${(quest.theories || []).map((entry) => `
               <div class="note-card">
                 <div class="row" style="justify-content:space-between;">
-                  <span><strong>${entry.author}</strong></span>
-                  <span class="muted" style="font-size:0.8rem;">${entry.createdAt}</span>
+                  <span><strong>${escapeHtml(entry.author || 'Unknown')}</strong></span>
+                  <span class="muted" style="font-size:0.8rem;">${escapeHtml(entry.createdAt || '')}</span>
                 </div>
-                <div>${escapeHtml(entry.text)}</div>
+                ${richView(entry.text || '')}
               </div>`).join('') || '<div class="muted">No theories yet.</div>'}
           </div>
           <div id="theory-form-container" class="hidden">
-            <textarea id="theory-text" placeholder="Draft a theory..."></textarea>
+            ${createEditorMarkup('theory-editor', true)}
             <div class="section-actions">
-              <button class="btn primary" id="theory-submit">Save theory</button>
+              <button class="btn primary" id="theory-submit">Save Theory</button>
               <button class="btn secondary" id="theory-cancel">Cancel</button>
             </div>
           </div>
@@ -802,17 +1138,42 @@
           <div class="section-actions">
             <button class="btn ghost" id="track-btn">${isTracked(quest) ? 'Untrack' : 'Track'} Quest</button>
             <button class="btn ghost" id="pin-btn">${isPinned(quest) ? 'Unpin' : 'Pin'} to HUD</button>
-            ${state.isGm ? `<select id="status-update">
-              ${Object.entries(QUEST_STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === quest.status ? 'selected' : ''}>${label}</option>`).join('')}
-            </select>` : ''}
+            <span id="tracking-feedback" class="feedback"></span>
           </div>
         </div>
       `;
-      questDetailEl.innerHTML = header + meta + description + `
+      questDetailEl.innerHTML = `
+        <div class="detail-header">
+          <div>
+            <h2>${escapeHtml(quest.title || 'Untitled Quest')}</h2>
+            ${quest.subtitle ? `<div class="detail-subtitle">${escapeHtml(quest.subtitle)}</div>` : ''}
+          </div>
+          <div class="badges">
+            <span class="badge">${QUEST_KIND_LABELS[quest.quest_kind] || 'Main Quest'}</span>
+            <span class="badge">${escapeHtml(quest.faction || 'No faction')}</span>
+            ${isTracked(quest) ? '<span class="badge tracked"><i class="fa-solid fa-eye"></i> Tracked</span>' : ''}
+            ${isPinned(quest) ? '<span class="badge pinned"><i class="fa-solid fa-thumbtack"></i> Pinned</span>' : ''}
+          </div>
+        </div>
+        <div class="row">
+          <span class="muted">Status: ${QUEST_STATUS_LABELS[quest.status] || quest.status || 'Pending'}</span>
+          <span class="muted">Visibility: ${escapeHtml((quest.visibility || 'party_visible').replace('_', ' '))}</span>
+          <span class="muted">Scope: ${escapeHtml((quest.type || 'group').replace('_', ' '))}</span>
+          <span class="muted">Assigned: ${escapeHtml(assignedUsers.join(', ') || 'Unassigned')}</span>
+          <span class="muted">Session: ${escapeHtml(quest.session || 'N/A')}</span>
+        </div>
+        ${gmControls}
+        <div class="detail-section">
+          <strong>Description</strong>
+          ${richView(quest.description || '')}
+        </div>
+      ` + `
         <div class="detail-section">
           <strong>Objectives</strong>
           <div class="objectives-grid">${objectivesHtml}</div>
+          ${objectiveManageHtml}
         </div>` + notesHtml + theoriesHtml + trackingControls;
+      wireRichToolbars(questDetailEl);
       attachObjectiveListeners();
       attachNoteButtons();
       attachTheoryButtons();
@@ -831,15 +1192,49 @@
     }
 
     function attachObjectiveListeners() {
-      document.querySelectorAll('.objective-card select').forEach((select) => {
-        select.addEventListener('change', () => {
-          const objectiveId = select.dataset.objectiveId;
+      document.querySelectorAll('.objective-status-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (btn.hasAttribute('disabled')) return;
+          const objectiveId = btn.dataset.objectiveId;
+          const status = btn.dataset.status;
           const questId = state.activeQuest?.id;
-          if (questId && objectiveId) {
-            updateObjectiveStatus(questId, objectiveId, select.value);
+          if (questId && objectiveId && status) {
+            await updateObjectiveStatus(questId, objectiveId, { status });
           }
         });
       });
+      document.querySelectorAll('.objective-hide-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const objectiveId = btn.dataset.objectiveId;
+          const hidden = btn.dataset.hidden === '1';
+          const questId = state.activeQuest?.id;
+          if (questId && objectiveId) {
+            await updateObjectiveStatus(questId, objectiveId, { hidden: !hidden });
+          }
+        });
+      });
+      const objectiveAddBtn = document.getElementById('objective-add-btn');
+      const objectiveAddInput = document.getElementById('objective-add-input');
+      if (objectiveAddBtn && objectiveAddInput) {
+        objectiveAddBtn.addEventListener('click', async () => {
+          const title = objectiveAddInput.value.trim();
+          const quest = state.activeQuest;
+          if (!quest || !title) return;
+          const objectives = (quest.objectives || []).map((entry, idx) => ({
+            id: entry.id,
+            title: entry.title || '',
+            description: entry.description || '',
+            status: entry.status || 'not_started',
+            type: entry.type || (entry.hidden ? 'hidden' : 'mandatory'),
+            hidden: Boolean(entry.hidden || entry.type === 'hidden'),
+            priority: entry.priority || 'secondary',
+            order: entry.order || idx + 1,
+          }));
+          objectives.push({ title, order: objectives.length + 1 });
+          objectiveAddInput.value = '';
+          await patchQuest(quest.id, { objectives });
+        });
+      }
     }
 
     function attachNoteButtons() {
@@ -847,17 +1242,19 @@
       const noteForm = document.getElementById('note-form-container');
       const noteCancel = document.getElementById('note-cancel');
       const noteSubmit = document.getElementById('note-submit');
-      const noteText = document.getElementById('note-text');
+      const noteEditor = document.getElementById('note-editor');
       if (!noteAdd || !noteForm) return;
       noteAdd.addEventListener('click', () => {
         noteForm.classList.remove('hidden');
-        noteText.value = '';
-        noteText.focus();
+        if (noteEditor) {
+          noteEditor.innerHTML = '';
+          noteEditor.focus();
+        }
       });
       noteCancel.addEventListener('click', () => noteForm.classList.add('hidden'));
       noteSubmit.addEventListener('click', async () => {
-        const text = noteText.value.trim();
-        if (!text) return;
+        const text = getEditorHtml(noteEditor);
+        if (!stripHtml(text)) return;
         await postNote(text);
       });
     }
@@ -867,17 +1264,19 @@
       const theoryForm = document.getElementById('theory-form-container');
       const theoryCancel = document.getElementById('theory-cancel');
       const theorySubmit = document.getElementById('theory-submit');
-      const theoryText = document.getElementById('theory-text');
+      const theoryEditor = document.getElementById('theory-editor');
       if (!theoryAdd || !theoryForm) return;
       theoryAdd.addEventListener('click', () => {
         theoryForm.classList.remove('hidden');
-        theoryText.value = '';
-        theoryText.focus();
+        if (theoryEditor) {
+          theoryEditor.innerHTML = '';
+          theoryEditor.focus();
+        }
       });
       theoryCancel.addEventListener('click', () => theoryForm.classList.add('hidden'));
       theorySubmit.addEventListener('click', async () => {
-        const text = theoryText.value.trim();
-        if (!text) return;
+        const text = getEditorHtml(theoryEditor);
+        if (!stripHtml(text)) return;
         await postTheory(text);
       });
     }
@@ -885,32 +1284,95 @@
     function attachTrackingButtons() {
       const trackBtn = document.getElementById('track-btn');
       const pinBtn = document.getElementById('pin-btn');
+      const feedback = document.getElementById('tracking-feedback');
       if (trackBtn) {
         trackBtn.addEventListener('click', async () => {
           await toggleTracking('tracked', isTracked(state.activeQuest) ? 'untrack' : 'track');
+          if (feedback) {
+            feedback.classList.remove('error');
+            feedback.textContent = isTracked(state.activeQuest || {}) ? 'Quest is tracked.' : 'Quest is no longer tracked.';
+          }
         });
       }
       if (pinBtn) {
         pinBtn.addEventListener('click', async () => {
           await toggleTracking('pinned', isPinned(state.activeQuest) ? 'untrack' : 'track');
+          if (feedback) {
+            feedback.classList.remove('error');
+            feedback.textContent = isPinned(state.activeQuest || {}) ? 'Quest is pinned to HUD.' : 'Quest is no longer pinned.';
+          }
         });
       }
     }
 
     function attachStatusUpdate() {
       const statusSelect = document.getElementById('status-update');
-      if (!statusSelect) return;
-      statusSelect.addEventListener('change', async () => {
-        await patchQuest(state.activeQuest.id, { status: statusSelect.value });
-      });
+      const scopeSelect = document.getElementById('scope-update');
+      const kindSelect = document.getElementById('kind-update');
+      const editBtn = document.getElementById('edit-quest-btn');
+      const deleteBtn = document.getElementById('delete-quest-btn');
+      const assignBtn = document.getElementById('assign-user-btn');
+      const unassignBtn = document.getElementById('unassign-user-btn');
+      const assignSelect = document.getElementById('assign-user-select');
+      const assignFeedback = document.getElementById('assign-feedback');
+      if (statusSelect) {
+        statusSelect.addEventListener('change', async () => {
+          await patchQuest(state.activeQuest.id, { status: statusSelect.value });
+        });
+      }
+      if (scopeSelect) {
+        scopeSelect.addEventListener('change', async () => {
+          await patchQuest(state.activeQuest.id, { scope: scopeSelect.value });
+        });
+      }
+      if (kindSelect) {
+        kindSelect.addEventListener('change', async () => {
+          await patchQuest(state.activeQuest.id, { questKind: kindSelect.value });
+        });
+      }
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          openCreateModalForEdit(state.activeQuest);
+        });
+      }
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', async () => {
+          if (!window.confirm('Delete this quest? This action cannot be undone.')) return;
+          await deleteQuest(state.activeQuest.id);
+        });
+      }
+      if (assignBtn) {
+        assignBtn.addEventListener('click', async () => {
+          const username = (assignSelect?.value || '').trim();
+          if (!username) {
+            if (assignFeedback) assignFeedback.textContent = 'Select a user first.';
+            return;
+          }
+          const assigned = Array.from(new Set([...(state.activeQuest.assignedTo || []), username]));
+          await patchQuest(state.activeQuest.id, { assignedTo: assigned });
+          if (assignFeedback) assignFeedback.textContent = `${username} assigned.`;
+        });
+      }
+      if (unassignBtn) {
+        unassignBtn.addEventListener('click', async () => {
+          const username = (assignSelect?.value || '').trim();
+          if (!username) {
+            if (assignFeedback) assignFeedback.textContent = 'Select a user first.';
+            return;
+          }
+          const assigned = (state.activeQuest.assignedTo || []).filter((name) => (name || '').toLowerCase() !== username.toLowerCase());
+          await patchQuest(state.activeQuest.id, { assignedTo: assigned });
+          if (assignFeedback) assignFeedback.textContent = `${username} unassigned.`;
+        });
+      }
     }
 
-    async function updateObjectiveStatus(questId, objectiveId, status) {
+    async function updateObjectiveStatus(questId, objectiveId, payload) {
       try {
         await api(`/campaigns/${encodeURIComponent(CID)}/quests/${encodeURIComponent(questId)}/objectives/${encodeURIComponent(objectiveId)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
+          body: JSON.stringify(payload || {}),
         });
         await loadQuestData();
       } catch (error) {
@@ -938,22 +1400,41 @@
       await loadQuestData();
     }
 
-    async function toggleTracking(type, action) {
-      if (!state.activeQuest) return;
-      await api(`/campaigns/${encodeURIComponent(CID)}/quests/${encodeURIComponent(state.activeQuest.id)}/tracking`, {
+    async function setQuestTracking(questId, type, action, options = {}) {
+      await api(`/campaigns/${encodeURIComponent(CID)}/quests/${encodeURIComponent(questId)}/tracking`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, action }),
       });
-      await loadQuestData();
+      if (options.reload !== false) {
+        await loadQuestData();
+      }
     }
 
-    async function patchQuest(questId, payload) {
+    async function toggleTracking(type, action) {
+      if (!state.activeQuest) return;
+      await setQuestTracking(state.activeQuest.id, type, action);
+    }
+
+    async function patchQuest(questId, payload, options = {}) {
       await api(`/campaigns/${encodeURIComponent(CID)}/quests/${encodeURIComponent(questId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      if (options.reload !== false) {
+        await loadQuestData();
+      }
+    }
+
+    async function deleteQuest(questId) {
+      if (!questId) return;
+      await api(`/campaigns/${encodeURIComponent(CID)}/quests/${encodeURIComponent(questId)}`, {
+        method: 'DELETE',
+      });
+      if (state.activeQuest?.id === questId) {
+        state.activeQuest = null;
+      }
       await loadQuestData();
     }
 
@@ -978,9 +1459,7 @@
         }
         renderFilters();
         renderQuestList();
-        if (state.activeQuest) {
-          renderQuestDetail();
-        }
+        renderQuestDetail();
       } catch (error) {
         pageStatus.textContent = `Unable to load quests: ${error.message}`;
       }
@@ -1033,45 +1512,69 @@
       renderQuestList();
     });
 
-    openCreateBtn?.addEventListener('click', () => setCreateModalVisible(true));
-    closeCreateBtn?.addEventListener('click', () => setCreateModalVisible(false));
-    createBackdrop?.addEventListener('click', () => setCreateModalVisible(false));
+    openCreateBtn?.addEventListener('click', () => openCreateModalForCreate());
+    closeCreateBtn?.addEventListener('click', () => closeCreateModal());
+    createBackdrop?.addEventListener('click', () => closeCreateModal());
 
     createForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       const formData = new FormData(createForm);
-      const payload = {};
-      formData.forEach((value, key) => {
-        payload[key] = value;
-      });
-      if (payload.tags) {
-        payload.tags = payload.tags.split(',').map((value) => value.trim()).filter(Boolean);
-      }
-      if (payload.assignedTo) {
-        payload.assignedTo = payload.assignedTo.split(',').map((value) => value.trim()).filter(Boolean);
-      }
-      if (payload.objectives) {
-        payload.objectives = payload.objectives
-          .split('\n')
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .map((label) => ({ title: label }));
-      }
-      payload.tracked = formData.get('tracked') === 'on';
-      payload.pinned = formData.get('pinned') === 'on';
+      const parseCsv = (value) =>
+        String(value || '')
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean);
+      const questId = String(formData.get('questId') || state.editingQuestId || '').trim();
+      const editingQuest = questId ? state.quests.find((entry) => entry.id === questId) || null : null;
+      const trackedWanted = formData.get('tracked') === 'on';
+      const pinnedWanted = formData.get('pinned') === 'on';
+      const payload = {
+        title: String(formData.get('title') || '').trim(),
+        subtitle: String(formData.get('subtitle') || '').trim(),
+        questKind: String(formData.get('questKind') || 'main').trim(),
+        scope: String(formData.get('scope') || 'group').trim(),
+        status: String(formData.get('status') || 'pending').trim(),
+        visibility: String(formData.get('visibility') || 'party_visible').trim(),
+        assignedTo: parseCsv(formData.get('assignedTo')),
+        tags: parseCsv(formData.get('tags')),
+        faction: String(formData.get('faction') || '').trim(),
+        session: String(formData.get('session') || '').trim(),
+        description: state.createDescriptionEditor
+          ? getEditorHtml(state.createDescriptionEditor)
+          : String(formData.get('description') || ''),
+        objectives: buildObjectivesPayload(
+          formData.get('objectives'),
+          editingQuest?.objectives || [],
+        ),
+      };
       try {
-        createFeedback.textContent = 'Creating quest...';
-        await api(`/campaigns/${encodeURIComponent(CID)}/quests`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        createFeedback.textContent = 'Quest created.';
-        createForm.reset();
-        setCreateModalVisible(false);
+        if (questId) {
+          createFeedback.textContent = 'Saving quest...';
+          await patchQuest(questId, payload, { reload: false });
+          const wasTracked = editingQuest ? isTracked(editingQuest) : false;
+          const wasPinned = editingQuest ? isPinned(editingQuest) : false;
+          if (wasTracked !== trackedWanted) {
+            await setQuestTracking(questId, 'tracked', trackedWanted ? 'track' : 'untrack', { reload: false });
+          }
+          if (wasPinned !== pinnedWanted) {
+            await setQuestTracking(questId, 'pinned', pinnedWanted ? 'track' : 'untrack', { reload: false });
+          }
+          createFeedback.textContent = 'Quest updated.';
+        } else {
+          payload.tracked = trackedWanted;
+          payload.pinned = pinnedWanted;
+          createFeedback.textContent = 'Creating quest...';
+          await api(`/campaigns/${encodeURIComponent(CID)}/quests`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          createFeedback.textContent = 'Quest created.';
+        }
+        closeCreateModal();
         await loadQuestData();
       } catch (error) {
-        createFeedback.textContent = error.message || 'Creation failed';
+        createFeedback.textContent = error.message || 'Save failed';
       }
     });
 
@@ -1091,6 +1594,7 @@
     }
 
     async function init() {
+      setupCreateQuestEditor();
       if (!CID) {
         pageStatus.textContent = 'This hub must be opened with a campaign id.';
         return;
