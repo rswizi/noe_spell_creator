@@ -313,6 +313,32 @@ if WIKI_DIST_DIR.exists():
             return FileResponse(WIKI_INDEX)
         raise HTTPException(404)
 
+CHAR_MANAGER_DIST_DIR = BASE_DIR / "frontend" / "character_manager" / "dist"
+CHAR_MANAGER_INDEX = CHAR_MANAGER_DIST_DIR / "index.html"
+if CHAR_MANAGER_DIST_DIR.exists():
+    char_assets = CHAR_MANAGER_DIST_DIR / "assets"
+    if char_assets.exists():
+        app.mount(
+            "/character-manager/assets",
+            StaticFiles(directory=str(char_assets)),
+            name="character-manager-assets",
+        )
+
+@app.get("/character-manager", include_in_schema=False)
+def character_manager_index():
+    if CHAR_MANAGER_INDEX.exists():
+        return FileResponse(CHAR_MANAGER_INDEX)
+    return RedirectResponse("/characters.html")
+
+@app.get("/character-manager/{rest:path}", include_in_schema=False)
+def character_manager_fallback(rest: str):
+    target = CHAR_MANAGER_DIST_DIR / rest
+    if target.exists() and target.is_file():
+        return FileResponse(target)
+    if CHAR_MANAGER_INDEX.exists():
+        return FileResponse(CHAR_MANAGER_INDEX)
+    return RedirectResponse("/characters.html")
+
 @app.get("/", include_in_schema=False)
 def root():
     return RedirectResponse("/portal.html")
