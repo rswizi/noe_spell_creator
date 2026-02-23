@@ -23,6 +23,8 @@ ALLOWED_PAGES = {
     "campaigns_my",
     "campaign_view",
     "character_admin",
+    "character_manager",
+    "character_manager_edit",
     "character_edit",
     "characters",
     "equipment_edit",

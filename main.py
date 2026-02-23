@@ -328,6 +328,9 @@ if CHAR_MANAGER_DIST_DIR.exists():
 def character_manager_index():
     if CHAR_MANAGER_INDEX.exists():
         return FileResponse(CHAR_MANAGER_INDEX)
+    fallback_page = CLIENT_DIR / "character_manager.html"
+    if fallback_page.exists():
+        return FileResponse(fallback_page)
     return RedirectResponse("/characters.html")
 
 @app.get("/character-manager/{rest:path}", include_in_schema=False)
@@ -337,6 +340,15 @@ def character_manager_fallback(rest: str):
         return FileResponse(target)
     if CHAR_MANAGER_INDEX.exists():
         return FileResponse(CHAR_MANAGER_INDEX)
+    rest_clean = (rest or "").strip().strip("/")
+    if rest_clean.startswith("edit/"):
+        parts = rest_clean.split("/", 2)
+        cid = parts[1].strip() if len(parts) > 1 else ""
+        if cid:
+            return RedirectResponse(f"/character_manager_edit.html?id={quote(cid)}")
+    fallback_page = CLIENT_DIR / "character_manager.html"
+    if fallback_page.exists():
+        return FileResponse(fallback_page)
     return RedirectResponse("/characters.html")
 
 @app.get("/", include_in_schema=False)
