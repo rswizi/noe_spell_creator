@@ -1,12 +1,70 @@
 (() => {
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
-  const PORTAL_URL = "/portal.html";
-  const VIDEO_SRC = "/assets/logo/logo_animated.mp4";
-  const POSTER_SRC = "/assets/logo/logo.png";
+  const PORTAL_PATH = "/portal.html";
+  const REPLAY_FLAG_KEY = "noePortalReplayPending";
+  const REPLAY_QUERY_KEY = "replay_intro";
   const BUTTON_ID = "global-portal-replay-btn";
   const STYLE_ID = "global-portal-replay-style";
-  const OVERLAY_ID = "global-portal-replay-overlay";
+
+  function isPortalPage() {
+    const path = String(window.location.pathname || "").toLowerCase();
+    return path === "/portal.html" || path === "/portal";
+  }
+
+  function setReplayPending() {
+    try {
+      window.sessionStorage.setItem(REPLAY_FLAG_KEY, "1");
+    } catch {
+      // ignore storage restrictions
+    }
+  }
+
+  function consumeReplayPending() {
+    let pending = false;
+    try {
+      pending = window.sessionStorage.getItem(REPLAY_FLAG_KEY) === "1";
+      if (pending) window.sessionStorage.removeItem(REPLAY_FLAG_KEY);
+    } catch {
+      // ignore storage restrictions
+    }
+    const current = new URL(window.location.href);
+    if (current.searchParams.get(REPLAY_QUERY_KEY) === "1") {
+      pending = true;
+      current.searchParams.delete(REPLAY_QUERY_KEY);
+      window.history.replaceState(window.history.state, "", current.pathname + current.search + current.hash);
+    }
+    return pending;
+  }
+
+  function replayIntroOnPortal() {
+    const attemptReplay = () => {
+      if (typeof window.replayIntroOverlay === "function") {
+        window.replayIntroOverlay();
+        return true;
+      }
+      return false;
+    };
+    if (attemptReplay()) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries += 1;
+      if (attemptReplay() || tries > 40) {
+        window.clearInterval(timer);
+      }
+    }, 100);
+  }
+
+  function goToPortalThenReplay() {
+    if (isPortalPage()) {
+      replayIntroOnPortal();
+      return;
+    }
+    setReplayPending();
+    const target = new URL(PORTAL_PATH, window.location.origin);
+    target.searchParams.set(REPLAY_QUERY_KEY, "1");
+    window.location.assign(target.pathname + target.search);
+  }
 
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -39,81 +97,8 @@
       #${BUTTON_ID}:hover {
         border-color: rgba(255,255,255,0.5);
       }
-      #${OVERLAY_ID} {
-        position: fixed;
-        inset: 0;
-        z-index: 9998;
-        background: #000;
-        opacity: 1;
-        transition: opacity .55s ease;
-        display: grid;
-        place-items: center;
-      }
-      #${OVERLAY_ID}.fade {
-        opacity: 0;
-      }
-      #${OVERLAY_ID} video {
-        width: min(96vw, 960px);
-        max-height: 96vh;
-        object-fit: contain;
-        background: #000;
-      }
     `;
     document.head.appendChild(style);
-  }
-
-  function removeOverlay() {
-    const old = document.getElementById(OVERLAY_ID);
-    if (old) old.remove();
-  }
-
-  function redirectToPortal() {
-    window.location.assign(PORTAL_URL);
-  }
-
-  function playIntroThenGoPortal() {
-    ensureStyles();
-    removeOverlay();
-
-    const overlay = document.createElement("div");
-    overlay.id = OVERLAY_ID;
-    overlay.setAttribute("aria-hidden", "true");
-
-    const video = document.createElement("video");
-    video.setAttribute("autoplay", "");
-    video.setAttribute("muted", "");
-    video.setAttribute("playsinline", "");
-    video.setAttribute("preload", "auto");
-    video.setAttribute("poster", POSTER_SRC);
-    video.setAttribute("aria-hidden", "true");
-
-    const source = document.createElement("source");
-    source.src = VIDEO_SRC;
-    source.type = "video/mp4";
-    video.appendChild(source);
-    overlay.appendChild(video);
-    document.body.appendChild(overlay);
-
-    let finished = false;
-    const done = () => {
-      if (finished) return;
-      finished = true;
-      overlay.classList.add("fade");
-      setTimeout(() => {
-        overlay.remove();
-        redirectToPortal();
-      }, 600);
-    };
-
-    const timeoutId = setTimeout(done, 10000);
-    const clearAndDone = () => {
-      clearTimeout(timeoutId);
-      done();
-    };
-
-    video.addEventListener("ended", clearAndDone, { once: true });
-    video.addEventListener("error", clearAndDone, { once: true });
-    video.play().catch(clearAndDone);
   }
 
   function bindExistingPortalButton(button) {
@@ -124,7 +109,7 @@
       (event) => {
         event.preventDefault();
         event.stopImmediatePropagation();
-        playIntroThenGoPortal();
+        goToPortalThenReplay();
       },
       true
     );
@@ -135,18 +120,23 @@
     const button = document.createElement("button");
     button.id = BUTTON_ID;
     button.type = "button";
-    button.setAttribute("aria-label", "Play intro and return to portal");
-    button.title = "Play intro and return to portal";
+    button.setAttribute("aria-label", "Return to portal and replay intro");
+    button.title = "Return to portal and replay intro";
     button.innerHTML = '<img src="/assets/logo/logo.svg" alt="Portal" />';
     button.addEventListener("click", (event) => {
       event.preventDefault();
-      playIntroThenGoPortal();
+      goToPortalThenReplay();
     });
     document.body.appendChild(button);
   }
 
   function init() {
     ensureStyles();
+
+    if (isPortalPage() && consumeReplayPending()) {
+      replayIntroOnPortal();
+    }
+
     const portalHeaderButton = document.getElementById("portal-logo-btn");
     if (portalHeaderButton) {
       bindExistingPortalButton(portalHeaderButton);

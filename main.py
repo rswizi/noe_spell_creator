@@ -114,15 +114,25 @@ def _campaign_character_entry(entry: Any) -> dict[str, Any]:
     return {"character_id": cid}
 
 
+def _as_list_any(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, (tuple, set)):
+        return list(value)
+    if value is None:
+        return []
+    return [value]
+
+
 def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) -> dict:
     if not doc:
         return {}
     d = dict(doc)
     d.pop("_id", None)
     d.pop("avatar", None)
-    owner = (d.get("owner") or "").strip()
+    owner = str(d.get("owner") or "").strip()
     owner_lower = owner.lower()
-    assistant_raw = d.get("assistant_gms") or []
+    assistant_raw = _as_list_any(d.get("assistant_gms"))
     assistant_processed = []
     assistant_lower = set()
     for entry in assistant_raw:
@@ -136,10 +146,13 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
         assistant_lower.add(name.lower())
         assistant_processed.append(name)
     d["assistant_gms"] = assistant_processed
+    members = [str(m).strip() for m in _as_list_any(d.get("members")) if str(m).strip()]
+    d["members"] = members
+    characters_raw = _as_list_any(d.get("characters"))
     if user:
         target_lower = user.lower()
-        d["is_owner"] = owner and owner == user
-        d["is_member"] = user in (d.get("members") or [])
+        d["is_owner"] = bool(owner and owner == user)
+        d["is_member"] = user in members
         d["is_admin"] = (role or "").lower() == "admin"
         if d["is_owner"]:
             d["user_role"] = "gm"
@@ -150,7 +163,7 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
         d["is_assistant_gm"] = d["user_role"] == "assistant"
     if user and not (d.get("is_owner") or d.get("is_admin")):
         visible_chars = []
-        for raw in (d.get("characters") or []):
+        for raw in characters_raw:
             c = _campaign_character_entry(raw)
             if not c:
                 continue
@@ -158,8 +171,9 @@ def _campaign_view(doc: dict, user: str | None = None, role: str | None = None) 
             if perm != DEFAULT_CAMPAIGN_PERMISSION:
                 visible_chars.append(c)
         d["characters"] = visible_chars
+        characters_raw = visible_chars
     chars = []
-    for raw in (d.get("characters") or []):
+    for raw in characters_raw:
         c = _campaign_character_entry(raw)
         if c:
             chars.append(c)
@@ -552,7 +566,13 @@ async def create_campaign(req: Request):
 async def list_campaigns(req: Request):
     user, role = require_auth(req)
     docs = list(CAMPAIGN_COL.find({ "$or":[ {"owner":user}, {"members":user} ] }, {"_id":0}))
-    return {"status":"success", "campaigns":[_campaign_view(d, user, role) for d in docs]}
+    campaigns = []
+    for doc in docs:
+        try:
+            campaigns.append(_campaign_view(doc, user, role))
+        except Exception:
+            logger.exception("Failed to render campaign for list (campaign_id=%s)", str((doc or {}).get("id") if isinstance(doc, dict) else ""))
+    return {"status":"success", "campaigns": campaigns}
 
 @app.post("/campaigns/join")
 async def join_campaign(req: Request):
@@ -4443,15 +4463,45 @@ SELF_CONTAINER_ID = "self"
 SELF_CONTAINER_NAME = "Self"
 
 
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        try:
+            return int(Decimal(str(value)))
+        except (InvalidOperation, TypeError, ValueError):
+            return int(default)
+
+
+def _coerce_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def _ensure_self_container(containers: list[dict]) -> list[dict]:
-    containers = containers or []
-    found = next((c for c in containers if c.get("id") == SELF_CONTAINER_ID), None)
+    raw_containers = containers if isinstance(containers, list) else []
+    normalized: list[dict] = []
+    for raw in raw_containers:
+        if not isinstance(raw, dict):
+            continue
+        c = dict(raw)
+        cid = str(c.get("id") or "").strip()
+        if not cid:
+            cid = next_id_str("container", padding=3)
+        c["id"] = cid
+        c["name"] = str(c.get("name") or "Container").strip() or "Container"
+        c["include"] = bool(c.get("include", True))
+        c["enc_total"] = _coerce_float(c.get("enc_total", 0.0), 0.0)
+        normalized.append(c)
+    found = next((c for c in normalized if c.get("id") == SELF_CONTAINER_ID), None)
     if found:
         found["name"] = found.get("name") or SELF_CONTAINER_NAME
         found["include"] = bool(found.get("include", True))
-        found["enc_total"] = float(found.get("enc_total", 0.0))
+        found["enc_total"] = _coerce_float(found.get("enc_total", 0.0), 0.0)
         found["built_in"] = True
-        return containers
+        return normalized
     # keep Self first for visibility
     self_c = {
         "id": SELF_CONTAINER_ID,
@@ -4460,14 +4510,16 @@ def _ensure_self_container(containers: list[dict]) -> list[dict]:
         "enc_total": 0.0,
         "built_in": True,
     }
-    return [self_c, *containers]
+    return [self_c, *normalized]
 
 
 def _default_stow_container(containers: list[dict]) -> str:
-    for c in containers or []:
+    for c in (containers if isinstance(containers, list) else []):
+        if not isinstance(c, dict):
+            continue
         if c.get("id") != SELF_CONTAINER_ID:
-            return c.get("id")
-    return (containers or [{}])[0].get("id", "")
+            return str(c.get("id") or "")
+    return SELF_CONTAINER_ID
 
 
 def _money_bucket_name(raw: Any) -> str:
@@ -4495,10 +4547,14 @@ def _format_money_major(currency: str, minor_value: int) -> float | int:
 
 def _wallet_currency_keys(inv: dict) -> list[str]:
     keys = set(MONEY_DEFAULT_CURRENCIES)
-    for k in (inv.get("currencies") or {}).keys():
-        keys.add(canonical_currency_name(k))
-    for k in (inv.get("wallet") or {}).keys():
-        keys.add(canonical_currency_name(k))
+    currencies = inv.get("currencies")
+    if isinstance(currencies, dict):
+        for k in currencies.keys():
+            keys.add(canonical_currency_name(k))
+    wallet = inv.get("wallet")
+    if isinstance(wallet, dict):
+        for k in wallet.keys():
+            keys.add(canonical_currency_name(k))
     return sorted(keys)
 
 
@@ -4506,27 +4562,31 @@ def _coin_minor_from_payload(currency: str, value: Any) -> int:
     if isinstance(value, dict):
         # Expected keys for coin currencies.
         if currency != "Jelly":
-            pc = int(value.get("pc") or 0)
-            gc = int(value.get("gc") or 0)
-            sc = int(value.get("sc") or 0)
-            bc = int(value.get("bc") or 0)
+            pc = max(0, _coerce_int(value.get("pc"), 0))
+            gc = max(0, _coerce_int(value.get("gc"), 0))
+            sc = max(0, _coerce_int(value.get("sc"), 0))
+            bc = max(0, _coerce_int(value.get("bc"), 0))
             total = (pc * 1000) + (gc * 100) + (sc * 10) + bc
             return int(max(0, total))
-        return int(max(0, int(value.get("amount") or value.get("units") or 0)))
+        amount = _coerce_int(value.get("amount") or value.get("units"), 0)
+        return int(max(0, amount))
     if isinstance(value, (int, float, Decimal, str)):
-        return max(0, major_to_minor(currency, value, rounding="half_up"))
+        try:
+            return max(0, major_to_minor(currency, value, rounding="half_up"))
+        except Exception:
+            return 0
     return 0
 
 
 def _sync_inventory_currencies(inv: dict) -> dict:
-    wallet = inv.get("wallet") or {}
+    wallet = inv.get("wallet") if isinstance(inv.get("wallet"), dict) else {}
     cur = {}
     for currency in _wallet_currency_keys(inv):
         entry = wallet.get(currency) if isinstance(wallet, dict) else None
         if not isinstance(entry, dict):
             entry = {"carried": 0, "bank": 0}
-        carried = int(entry.get("carried") or 0)
-        bank = int(entry.get("bank") or 0)
+        carried = _coerce_int(entry.get("carried"), 0)
+        bank = _coerce_int(entry.get("bank"), 0)
         total_minor = carried + bank
         cur[currency] = _format_money_major(currency, total_minor)
     inv["currencies"] = cur
@@ -4534,15 +4594,15 @@ def _sync_inventory_currencies(inv: dict) -> dict:
 
 
 def _wallet_summary(inv: dict) -> dict:
-    wallet = inv.get("wallet") or {}
+    wallet = inv.get("wallet") if isinstance(inv.get("wallet"), dict) else {}
     out: dict[str, dict] = {}
     for currency in _wallet_currency_keys(inv):
         cur = canonical_currency_name(currency)
         entry = wallet.get(cur) if isinstance(wallet, dict) else None
         if not isinstance(entry, dict):
             entry = {"carried": 0, "bank": 0}
-        carried_minor = int(entry.get("carried") or 0)
-        bank_minor = int(entry.get("bank") or 0)
+        carried_minor = _coerce_int(entry.get("carried"), 0)
+        bank_minor = _coerce_int(entry.get("bank"), 0)
         total_minor = carried_minor + bank_minor
         carried_major = _format_money_major(cur, carried_minor)
         bank_major = _format_money_major(cur, bank_minor)
@@ -4578,7 +4638,10 @@ def _wallet_summary(inv: dict) -> dict:
 def _ensure_inventory_wallet(inv: dict) -> bool:
     changed = False
     raw_wallet = inv.get("wallet")
-    legacy_cur = inv.get("currencies") or {}
+    legacy_cur_raw = inv.get("currencies")
+    legacy_cur = legacy_cur_raw if isinstance(legacy_cur_raw, dict) else {}
+    if legacy_cur_raw is not None and not isinstance(legacy_cur_raw, dict):
+        changed = True
     had_wallet = isinstance(raw_wallet, dict) and bool(raw_wallet)
 
     wallet: dict[str, dict] = {}
@@ -4599,7 +4662,11 @@ def _ensure_inventory_wallet(inv: dict) -> bool:
         if had_wallet and cur in wallet:
             continue
         prev = wallet.get(cur) or {"carried": 0, "bank": 0}
-        prev["carried"] += major_to_minor(cur, val, rounding="half_up")
+        try:
+            prev["carried"] += major_to_minor(cur, val, rounding="half_up")
+        except Exception:
+            changed = True
+            continue
         wallet[cur] = prev
 
     for cur in _wallet_currency_keys({"wallet": wallet, "currencies": legacy_cur}):
@@ -4617,7 +4684,7 @@ def _ensure_inventory_wallet(inv: dict) -> bool:
         inv["exchange_fee_pct"] = fee_float
         changed = True
 
-    before_cur = dict(inv.get("currencies") or {})
+    before_cur = dict(legacy_cur)
     after_cur = _sync_inventory_currencies(inv)
     if before_cur != after_cur:
         changed = True
@@ -4709,32 +4776,39 @@ def _wallet_credit_gc(inv: dict, currency: str, gc_amount: int | float | Decimal
 def _recompute_encumbrance(items: list[dict], containers: list[dict], wallet: dict | None = None) -> tuple[list[dict], float]:
     """Recalculate per-container and inventory encumbrance from items."""
     containers = _ensure_self_container(containers or [])
-    cont_map = {c["id"]: c for c in containers}
+    cont_map = {str(c.get("id")): c for c in containers if isinstance(c, dict) and c.get("id")}
     for c in containers:
         c["enc_total"] = 0.0
     inv_total = 0.0
 
-    for it in items or []:
-        enc_val = float(it.get("enc") or 0.0) * int(it.get("quantity") or 1)
-        cid = it.get("container_id") or SELF_CONTAINER_ID
+    for it in (items if isinstance(items, list) else []):
+        if not isinstance(it, dict):
+            continue
+        qty = max(0, _coerce_int(it.get("quantity"), 1))
+        enc_val = _coerce_float(it.get("enc"), 0.0) * qty
+        cid = str(it.get("container_id") or SELF_CONTAINER_ID).strip() or SELF_CONTAINER_ID
         if it.get("equipped") is not False:
             cid = SELF_CONTAINER_ID
         elif cid == SELF_CONTAINER_ID:
-            cid = it.get("stowed_container_id") or _default_stow_container(containers)
+            stowed = str(it.get("stowed_container_id") or "").strip()
+            cid = stowed or _default_stow_container(containers)
         dest = cont_map.get(cid) or cont_map.get(SELF_CONTAINER_ID)
         if dest is None and containers:
             dest = containers[0]
         if dest is None:
             continue
-        dest["enc_total"] = float(dest.get("enc_total", 0.0)) + enc_val
+        dest["enc_total"] = _coerce_float(dest.get("enc_total", 0.0), 0.0) + enc_val
         if bool(dest.get("include", True)):
             inv_total += enc_val
 
     if wallet is not None:
-        coin_enc = carried_coin_enc(wallet)
+        try:
+            coin_enc = _coerce_float(carried_coin_enc(wallet if isinstance(wallet, dict) else {}), 0.0)
+        except Exception:
+            coin_enc = 0.0
         self_cont = cont_map.get(SELF_CONTAINER_ID)
         if self_cont is not None:
-            self_cont["enc_total"] = float(self_cont.get("enc_total", 0.0)) + coin_enc
+            self_cont["enc_total"] = _coerce_float(self_cont.get("enc_total", 0.0), 0.0) + coin_enc
             if bool(self_cont.get("include", True)):
                 inv_total += coin_enc
         else:
@@ -4747,7 +4821,8 @@ def create_inventory(request: Request, payload: dict = Body(...)):
     user, role = require_auth(request)
     db = get_db()
     name = (payload.get("name") or "Inventory").strip()
-    currencies = payload.get("currencies") or {}
+    currencies_raw = payload.get("currencies")
+    currencies = currencies_raw if isinstance(currencies_raw, dict) else {}
     containers = payload.get("containers") or []
     containers = [_new_container(c.get("name")) for c in containers if isinstance(c, dict)] or [_new_container("Backpack")]
     containers = _ensure_self_container(containers)
@@ -4777,15 +4852,20 @@ def list_inventories(request: Request):
     db = get_db()
     invs = []
     for inv in db.inventories.find({"owner": user}, {"_id":0}):
-        changed = _ensure_inventory_wallet(inv)
-        containers = _ensure_self_container(inv.get("containers") or [])
-        containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
-        if changed or containers != (inv.get("containers") or []) or inv.get("enc_total") != inv_total:
-            db.inventories.update_one({"id": inv.get("id")}, {"$set": {"containers": containers, "enc_total": inv_total, "wallet": inv.get("wallet") or {}, "currencies": inv.get("currencies") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}})
-        inv["containers"] = containers
-        inv["enc_total"] = inv_total
-        inv["currency_details"] = _wallet_summary(inv)
-        invs.append(inv)
+        if not isinstance(inv, dict):
+            continue
+        try:
+            changed = _ensure_inventory_wallet(inv)
+            containers = _ensure_self_container(inv.get("containers") or [])
+            containers, inv_total = _recompute_encumbrance(inv.get("items") or [], containers, inv.get("wallet") or {})
+            if changed or containers != (inv.get("containers") or []) or inv.get("enc_total") != inv_total:
+                db.inventories.update_one({"id": inv.get("id")}, {"$set": {"containers": containers, "enc_total": inv_total, "wallet": inv.get("wallet") or {}, "currencies": inv.get("currencies") or {}, "exchange_fee_pct": inv.get("exchange_fee_pct", float(DEFAULT_EXCHANGE_FEE_PCT))}})
+            inv["containers"] = containers
+            inv["enc_total"] = inv_total
+            inv["currency_details"] = _wallet_summary(inv)
+            invs.append(inv)
+        except Exception:
+            logger.exception("Failed to render inventory for list (inventory_id=%s)", str(inv.get("id") or ""))
     return {"status":"success","inventories": invs}
 
 @app.get("/inventories/{inv_id}")
