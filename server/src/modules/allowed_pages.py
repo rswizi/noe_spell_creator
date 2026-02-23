@@ -45,6 +45,7 @@ ALLOWED_PAGES = {
     "my_account",
     "my_spells",
     "my_submissions",
+    "noe_0_3_5",
     "objects_edit",
     "objects_home",
     "objects_parse",
