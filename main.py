@@ -13,7 +13,7 @@ from typing import Any, List
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Query, Body, Depends, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import DuplicateKeyError
 from urllib.parse import quote
@@ -289,6 +289,29 @@ BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
 ASSETS_DIR = BASE_DIR / "assets"
 
+GLOBAL_PORTAL_BUTTON_INJECT = (
+    '<script defer src="/static/global-portal-button.js"></script>'
+)
+
+
+def _serve_html_file(path: Path):
+    if not path.exists() or not path.is_file():
+        raise HTTPException(404)
+    if path.suffix.lower() != ".html":
+        return FileResponse(path)
+    try:
+        html = path.read_text(encoding="utf-8")
+    except Exception:
+        return FileResponse(path)
+    if "/static/global-portal-button.js" not in html:
+        if "</body>" in html:
+            html = html.replace("</body>", f"{GLOBAL_PORTAL_BUTTON_INJECT}\n</body>", 1)
+        elif "</html>" in html:
+            html = html.replace("</html>", f"{GLOBAL_PORTAL_BUTTON_INJECT}\n</html>", 1)
+        else:
+            html = f"{html}\n{GLOBAL_PORTAL_BUTTON_INJECT}\n"
+    return HTMLResponse(content=html)
+
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
@@ -301,16 +324,16 @@ if WIKI_DIST_DIR.exists():
     @app.get("/wiki", include_in_schema=False)
     def wiki_index():
         if WIKI_INDEX.exists():
-            return FileResponse(WIKI_INDEX)
+            return _serve_html_file(WIKI_INDEX)
         raise HTTPException(404)
 
     @app.get("/wiki/{rest:path}", include_in_schema=False)
     def wiki_fallback(rest: str):
         target = WIKI_DIST_DIR / rest
         if target.exists() and target.is_file():
-            return FileResponse(target)
+            return _serve_html_file(target)
         if WIKI_INDEX.exists():
-            return FileResponse(WIKI_INDEX)
+            return _serve_html_file(WIKI_INDEX)
         raise HTTPException(404)
 
 CHAR_MANAGER_DIST_DIR = BASE_DIR / "frontend" / "character_manager" / "dist"
@@ -327,19 +350,19 @@ if CHAR_MANAGER_DIST_DIR.exists():
 @app.get("/character-manager", include_in_schema=False)
 def character_manager_index():
     if CHAR_MANAGER_INDEX.exists():
-        return FileResponse(CHAR_MANAGER_INDEX)
+        return _serve_html_file(CHAR_MANAGER_INDEX)
     fallback_page = CLIENT_DIR / "character_manager.html"
     if fallback_page.exists():
-        return FileResponse(fallback_page)
+        return _serve_html_file(fallback_page)
     return RedirectResponse("/characters.html")
 
 @app.get("/character-manager/{rest:path}", include_in_schema=False)
 def character_manager_fallback(rest: str):
     target = CHAR_MANAGER_DIST_DIR / rest
     if target.exists() and target.is_file():
-        return FileResponse(target)
+        return _serve_html_file(target)
     if CHAR_MANAGER_INDEX.exists():
-        return FileResponse(CHAR_MANAGER_INDEX)
+        return _serve_html_file(CHAR_MANAGER_INDEX)
     rest_clean = (rest or "").strip().strip("/")
     if rest_clean.startswith("edit/"):
         parts = rest_clean.split("/", 2)
@@ -348,7 +371,7 @@ def character_manager_fallback(rest: str):
             return RedirectResponse(f"/character_manager_edit.html?id={quote(cid)}")
     fallback_page = CLIENT_DIR / "character_manager.html"
     if fallback_page.exists():
-        return FileResponse(fallback_page)
+        return _serve_html_file(fallback_page)
     return RedirectResponse("/characters.html")
 
 @app.get("/", include_in_schema=False)
@@ -358,7 +381,7 @@ def root():
 @app.get("/{page}.html", include_in_schema=False)
 def serve_page(page: str):
     if page in ALLOWED_PAGES:
-        return FileResponse(CLIENT_DIR / f"{page}.html")
+        return _serve_html_file(CLIENT_DIR / f"{page}.html")
     raise HTTPException(404, "Page not found")
 
 # ---------- Campaigns ----------

@@ -3,16 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NoE - New Character Manager - Editor</title>
+  <title>NoE - New Character Manager - Edit</title>
   <style>
     :root {
       color-scheme: dark;
       --border: #252533;
-      --accent: #c53535;
       --text: #f3f3f5;
     }
-    * { box-sizing: border-box; }
-    html, body, #root { min-height: 100%; }
     body {
       margin: 0;
       font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -21,498 +18,148 @@
       background-repeat: no-repeat;
       background-attachment: fixed;
     }
-    .page { min-height: 100vh; display: grid; place-items: start center; }
-    .wrap { width: 100%; max-width: 1440px; padding: 28px 16px 60px; }
-    .topbar { display:flex; gap:12px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
-    .topbar h1 { margin:0; font-size:24px; }
-    .right { margin-left:auto; }
-    .btn, .tab, input, select, textarea {
+    .shell {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px 14px;
+    }
+    .topbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .topbar h1 {
+      margin: 0;
+      font-size: 22px;
+    }
+    .btn {
       padding: 9px 12px;
       border-radius: 12px;
       border: 1px solid var(--border);
       background: #181821;
       color: var(--text);
       text-decoration: none;
+      display: inline-block;
     }
-    .btn { cursor:pointer; transition: background .15s ease, border .15s ease, transform .1s ease; }
-    .btn:hover { background:#1f1f2a; border-color:#2f2f42; }
-    .btn:active { transform: translateY(1px); }
-    .primary { background: linear-gradient(135deg, rgba(197,53,53,.35), rgba(20,20,29,.9)); border-color: var(--accent); color:#fff; }
-    .muted { opacity:.82; font-size:.9rem; }
-    .error { color:#ff9f9f; font-size:.92rem; }
-    .tabs { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
-    .tab { cursor:pointer; }
-    .tab.active { border-color:var(--accent); background: linear-gradient(135deg, rgba(197,53,53,.26), rgba(17,17,26,.95)); }
-    .grid2 { display:grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap:12px; }
-    .panel {
-      border:1px solid var(--border);
-      border-radius:14px;
-      background:#101018;
-      padding:14px;
-      display:grid;
-      gap:10px;
+    .muted {
+      opacity: .82;
+      font-size: .9rem;
     }
-    .panel h2 { margin:0; font-size:1rem; }
-    .panel label { display:grid; gap:4px; font-size:.9rem; }
-    .panel input, .panel select, .panel textarea {
-      width:100%;
-      border:1px solid var(--border);
-      border-radius:10px;
-      padding:9px 10px;
-      background:#1b1b2a;
-      color:var(--text);
+    .error {
+      color: #ff9f9f;
+      font-size: .92rem;
     }
-    .panel-wide { grid-column:1 / -1; }
-    .checkline { display:flex; align-items:center; gap:8px; }
-    .checkline input { width:auto; }
-    .avatar-row { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
-    .big-avatar {
-      width:120px;
-      height:120px;
-      border-radius:14px;
-      border:1px solid #323246;
-      object-fit:cover;
-      background:#09090f;
-    }
-    .intensity-grid { display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); }
-    .skill-list { display:grid; gap:8px; }
-    .skill-row { display:grid; grid-template-columns: minmax(120px,1fr) 90px auto; align-items:center; gap:8px; }
-    .add-skill { display:grid; grid-template-columns: minmax(0,1fr) auto; gap:8px; }
-    .json { min-height:360px; font-family: Consolas, "Courier New", monospace; }
-    .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div class="shell">
+    <div class="topbar">
+      <h1>Character Sheet</h1>
+      <a class="btn" href="/character-manager">Back to New Character Manager</a>
+      <a class="btn" id="legacy-link" href="#">Open Legacy Sheet Directly</a>
+    </div>
+    <div id="status" class="muted">Loading full legacy feature set...</div>
+    <div id="error" class="error" style="display:none;"></div>
+    <div id="host"></div>
+  </div>
 
-  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <script type="text/babel">
-    const { useEffect, useMemo, useState } = React;
-    const DEFAULT_INTENSITIES = ["Fire","Lightning","Water","Earth","Wind","Sun","Moon","Ki"];
-
-    const toInt = (value, fallback = 0) => {
-      const parsed = Number.parseInt(String(value ?? ""), 10);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    };
-
-    const clone = (value) => JSON.parse(JSON.stringify(value ?? {}));
-    const normalizeStats = (stats) => {
-      const base = clone(stats || {});
-      if (!base.intensities || typeof base.intensities !== "object" || Array.isArray(base.intensities)) {
-        base.intensities = {};
-      }
-      return base;
-    };
-
-    function getToken() {
-      return localStorage.getItem("auth_token") || "";
-    }
-
-    function authHeaders() {
-      const token = getToken();
-      if (!token) return {};
-      return { "Authorization": `Bearer ${token}`, "X-Auth-Token": token };
-    }
-
-    async function api(path, options = {}) {
-      const headers = { ...(options.headers || {}), ...authHeaders() };
-      const response = await fetch(path, { credentials: "include", ...options, headers });
-      const contentType = response.headers.get("content-type") || "";
-      const payload = contentType.includes("application/json")
-        ? await response.json()
-        : { status: "error", message: await response.text() };
-      if (!response.ok || payload.status === "error") {
-        throw new Error(payload.message || `HTTP ${response.status}`);
-      }
-      return payload;
-    }
-
-    async function uploadAvatar(id, file) {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch(`/characters/${encodeURIComponent(id)}/avatar`, {
-        method: "POST",
-        body: form,
-        credentials: "include",
-        headers: authHeaders(),
-      });
-      const contentType = response.headers.get("content-type") || "";
-      const payload = contentType.includes("application/json")
-        ? await response.json()
-        : { status: "error", message: await response.text() };
-      if (!response.ok || payload.status === "error") {
-        throw new Error(payload.message || `HTTP ${response.status}`);
-      }
-      return payload;
-    }
-
-    function App() {
+  <script>
+    (async function bootstrap() {
       const params = new URLSearchParams(window.location.search);
       const id = (params.get("id") || "").trim();
-      const [loading, setLoading] = useState(true);
-      const [saving, setSaving] = useState(false);
-      const [uploadingAvatar, setUploadingAvatar] = useState(false);
-      const [error, setError] = useState("");
-      const [status, setStatus] = useState("");
-      const [tab, setTab] = useState("overview");
-      const [avatarTs, setAvatarTs] = useState(Date.now());
-      const [archetypes, setArchetypes] = useState([]);
-      const [inventories, setInventories] = useState([]);
-      const [spellLists, setSpellLists] = useState([]);
-      const [form, setForm] = useState({
-        name: "",
-        public: false,
-        level: 1,
-        xp: 0,
-        archetype_id: "",
-        inventory_id: "",
-        spell_list_id: "",
-        stats: normalizeStats({}),
-      });
-      const [rawStats, setRawStats] = useState("{}");
-      const [skillDraftByChar, setSkillDraftByChar] = useState({});
-
-      useEffect(() => {
-        if (!id) return;
-        let active = true;
-        const run = async () => {
-          setLoading(true);
-          setError("");
-          setStatus("");
-          try {
-            const [charRes, archRes, invRes, spellRes] = await Promise.all([
-              api(`/characters/${encodeURIComponent(id)}`),
-              api("/archetypes").catch(() => ({ archetypes: [] })),
-              api("/inventories").catch(() => ({ inventories: [] })),
-              api("/spell_lists/mine").catch(() => ({ lists: [] })),
-            ]);
-            if (!active) return;
-            const ch = charRes.character || {};
-            const level = toInt(ch.level ?? ch?.stats?.level, 1);
-            const stats = normalizeStats(ch.stats || {});
-            setForm({
-              name: ch.name || "",
-              public: Boolean(ch.public),
-              level,
-              xp: Math.max(0, toInt(ch.xp, 0)),
-              archetype_id: ch.archetype_id || "",
-              inventory_id: ch.inventory_id || "",
-              spell_list_id: ch.spell_list_id || "",
-              stats,
-            });
-            setRawStats(JSON.stringify(stats, null, 2));
-            setArchetypes(archRes.archetypes || []);
-            setInventories(invRes.inventories || []);
-            setSpellLists(spellRes.lists || []);
-          } catch (err) {
-            if (!active) return;
-            setError(err instanceof Error ? err.message : "Unable to load character.");
-          } finally {
-            if (active) setLoading(false);
-          }
-        };
-        run();
-        return () => { active = false; };
-      }, [id]);
-
-      useEffect(() => {
-        setRawStats(JSON.stringify(form.stats || {}, null, 2));
-      }, [form.stats]);
-
-      const characteristicEntries = useMemo(() => {
-        const entries = Object.entries(form.stats || {}).filter(([, value]) => {
-          if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-          return Object.prototype.hasOwnProperty.call(value, "invest") || Object.prototype.hasOwnProperty.call(value, "skills");
-        });
-        entries.sort((a, b) => a[0].localeCompare(b[0]));
-        return entries;
-      }, [form.stats]);
-
-      const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
-
-      const updateStatInvest = (charKey, value) => {
-        setForm((prev) => {
-          const next = clone(prev.stats);
-          if (!next[charKey] || typeof next[charKey] !== "object") next[charKey] = {};
-          next[charKey].invest = toInt(value, 0);
-          if (!next[charKey].skills || typeof next[charKey].skills !== "object") next[charKey].skills = {};
-          return { ...prev, stats: next };
-        });
-      };
-
-      const updateSkillInvest = (charKey, skillKey, value) => {
-        setForm((prev) => {
-          const next = clone(prev.stats);
-          if (!next[charKey] || typeof next[charKey] !== "object") next[charKey] = {};
-          if (!next[charKey].skills || typeof next[charKey].skills !== "object") next[charKey].skills = {};
-          next[charKey].skills[skillKey] = toInt(value, 0);
-          return { ...prev, stats: next };
-        });
-      };
-
-      const removeSkill = (charKey, skillKey) => {
-        setForm((prev) => {
-          const next = clone(prev.stats);
-          if (!next[charKey]?.skills || typeof next[charKey].skills !== "object") return prev;
-          delete next[charKey].skills[skillKey];
-          return { ...prev, stats: next };
-        });
-      };
-
-      const addSkill = (charKey) => {
-        const skillName = (skillDraftByChar[charKey] || "").trim();
-        if (!skillName) return;
-        setForm((prev) => {
-          const next = clone(prev.stats);
-          if (!next[charKey] || typeof next[charKey] !== "object") next[charKey] = {};
-          if (!next[charKey].skills || typeof next[charKey].skills !== "object") next[charKey].skills = {};
-          if (!Object.prototype.hasOwnProperty.call(next[charKey].skills, skillName)) {
-            next[charKey].skills[skillName] = 0;
-          }
-          return { ...prev, stats: next };
-        });
-        setSkillDraftByChar((prev) => ({ ...prev, [charKey]: "" }));
-      };
-
-      const updateIntensity = (nature, value) => {
-        setForm((prev) => {
-          const next = clone(prev.stats);
-          if (!next.intensities || typeof next.intensities !== "object") next.intensities = {};
-          next.intensities[nature] = toInt(value, 0);
-          return { ...prev, stats: next };
-        });
-      };
-
-      const applyRawStats = () => {
-        try {
-          const parsed = JSON.parse(rawStats || "{}");
-          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Stats JSON must be an object.");
-          setForm((prev) => ({ ...prev, stats: normalizeStats(parsed) }));
-          setStatus("Raw stats applied.");
-          setError("");
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Invalid JSON");
-        }
-      };
-
-      const onSave = async () => {
-        if (!id) return;
-        setSaving(true);
-        setError("");
-        setStatus("");
-        try {
-          const payload = {
-            name: (form.name || "").trim() || "New Character",
-            public: Boolean(form.public),
-            level: Math.max(1, toInt(form.level, 1)),
-            xp: Math.max(0, toInt(form.xp, 0)),
-            archetype_id: form.archetype_id || "",
-            inventory_id: form.inventory_id || "",
-            spell_list_id: form.spell_list_id || "",
-            stats: { ...clone(form.stats), level: Math.max(1, toInt(form.level, 1)) },
-          };
-          await api(`/characters/${encodeURIComponent(id)}`, {
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          setStatus("Character saved.");
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Save failed.");
-        } finally {
-          setSaving(false);
-        }
-      };
-
-      const onDelete = async () => {
-        if (!id) return;
-        if (!window.confirm("Delete this character? This cannot be undone.")) return;
-        setError("");
-        setStatus("");
-        try {
-          await api(`/characters/${encodeURIComponent(id)}`, { method: "DELETE" });
-          window.location.href = "character_manager.html";
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Delete failed.");
-        }
-      };
-
-      const onAvatarPicked = async (event) => {
-        if (!id) return;
-        const file = event.target.files?.[0];
-        if (!file) return;
-        setUploadingAvatar(true);
-        setError("");
-        setStatus("");
-        try {
-          await uploadAvatar(id, file);
-          setAvatarTs(Date.now());
-          setStatus("Avatar updated.");
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Avatar upload failed.");
-        } finally {
-          setUploadingAvatar(false);
-          event.target.value = "";
-        }
-      };
+      const statusEl = document.getElementById("status");
+      const errorEl = document.getElementById("error");
+      const host = document.getElementById("host");
+      const legacyLink = document.getElementById("legacy-link");
+      const HEAD_ATTR = "data-character-manager-legacy-head";
+      const SCRIPT_ATTR = "data-character-manager-legacy-script";
 
       if (!id) {
-        return (
-          <div className="page">
-            <div className="wrap">
-              <div className="topbar">
-                <h1>Character Sheet</h1>
-                <a className="btn" href="character_manager.html">Back to New Character Manager</a>
-              </div>
-              <div className="error">Missing character id.</div>
-            </div>
-          </div>
-        );
+        statusEl.style.display = "none";
+        errorEl.style.display = "";
+        errorEl.textContent = "Missing character id.";
+        legacyLink.href = "/character_edit.html";
+        return;
       }
 
-      const legacyHref = `character_edit.html?id=${encodeURIComponent(id)}`;
+      legacyLink.href = "/character_edit.html?id=" + encodeURIComponent(id);
 
-      return (
-        <div className="page">
-          <div className="wrap">
-            <div className="topbar">
-              <h1>Character Sheet</h1>
-              <a className="btn" href="character_manager.html">Back to New Character Manager</a>
-              <a className="btn" href={legacyHref} target="_blank" rel="noreferrer">Open Legacy Sheet</a>
-              <button type="button" className="btn primary right" onClick={onSave} disabled={saving || loading}>
-                {saving ? "Saving..." : "Save"}
-              </button>
-              <button type="button" className="btn" onClick={onDelete} disabled={saving || loading}>Delete</button>
-            </div>
+      try {
+        const target = "/character_edit.html?id=" + encodeURIComponent(id);
+        const response = await fetch(target, { credentials: "include" });
+        if (!response.ok) {
+          throw new Error("Unable to load legacy sheet (HTTP " + response.status + ")");
+        }
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
 
-            {error && <div className="error">{error}</div>}
-            {status && <div className="muted">{status}</div>}
-            {loading && <div className="muted">Loading character...</div>}
+        document.querySelectorAll("[" + HEAD_ATTR + "]").forEach((node) => node.remove());
+        document.querySelectorAll("[" + SCRIPT_ATTR + "]").forEach((node) => node.remove());
 
-            {!loading && (
-              <>
-                <div className="tabs">
-                  <button className={`tab ${tab === "overview" ? "active" : ""}`} onClick={() => setTab("overview")} type="button">Overview</button>
-                  <button className={`tab ${tab === "stats" ? "active" : ""}`} onClick={() => setTab("stats")} type="button">Statistics</button>
-                  <button className={`tab ${tab === "advanced" ? "active" : ""}`} onClick={() => setTab("advanced")} type="button">Advanced</button>
-                </div>
+        const headNodes = doc.querySelectorAll("head style, head link[rel='stylesheet']");
+        headNodes.forEach((node) => {
+          if (node.tagName.toLowerCase() === "link") {
+            const href = node.getAttribute("href");
+            if (!href) return;
+            const exists = Array.from(document.querySelectorAll("link[rel='stylesheet']")).some(
+              (ln) => ln.getAttribute("href") === href
+            );
+            if (exists) return;
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = href;
+            link.setAttribute(HEAD_ATTR, "1");
+            document.head.appendChild(link);
+            return;
+          }
+          const style = document.createElement("style");
+          style.textContent = node.textContent || "";
+          style.setAttribute(HEAD_ATTR, "1");
+          document.head.appendChild(style);
+        });
 
-                {tab === "overview" && (
-                  <div className="grid2">
-                    <section className="panel">
-                      <h2>General</h2>
-                      <label>Name<input value={form.name} onChange={(event) => setField("name", event.target.value)} /></label>
-                      <label>Level<input type="number" min="1" value={form.level} onChange={(event) => setField("level", event.target.value)} /></label>
-                      <label>XP<input type="number" min="0" value={form.xp} onChange={(event) => setField("xp", event.target.value)} /></label>
-                      <label className="checkline"><input type="checkbox" checked={Boolean(form.public)} onChange={(event) => setField("public", event.target.checked)} />Public</label>
-                    </section>
-                    <section className="panel">
-                      <h2>Links</h2>
-                      <label>
-                        Archetype
-                        <select value={form.archetype_id} onChange={(event) => setField("archetype_id", event.target.value)}>
-                          <option value="">-- None --</option>
-                          {archetypes.map((item) => <option key={item.id} value={item.id}>{item.name || item.id}</option>)}
-                        </select>
-                      </label>
-                      <label>
-                        Inventory
-                        <select value={form.inventory_id} onChange={(event) => setField("inventory_id", event.target.value)}>
-                          <option value="">-- None --</option>
-                          {inventories.map((item) => <option key={item.id} value={item.id}>{item.name || item.id}</option>)}
-                        </select>
-                      </label>
-                      <label>
-                        Spell List
-                        <select value={form.spell_list_id} onChange={(event) => setField("spell_list_id", event.target.value)}>
-                          <option value="">-- None --</option>
-                          {spellLists.map((item) => <option key={item.id} value={item.id}>{item.name || item.id}</option>)}
-                        </select>
-                      </label>
-                    </section>
-                    <section className="panel panel-wide">
-                      <h2>Avatar</h2>
-                      <div className="avatar-row">
-                        <img className="big-avatar" src={`/characters/${encodeURIComponent(id)}/avatar?ts=${avatarTs}`} alt="Character avatar" />
-                        <div>
-                          <input type="file" accept="image/png,image/jpeg,image/jpg" onChange={onAvatarPicked} />
-                          <div className="muted">{uploadingAvatar ? "Uploading..." : "PNG/JPEG up to 2MB"}</div>
-                        </div>
-                      </div>
-                    </section>
-                  </div>
-                )}
+        const bodyClone = doc.body.cloneNode(true);
+        const scripts = Array.from(bodyClone.querySelectorAll("script"));
+        scripts.forEach((script) => script.remove());
 
-                {tab === "stats" && (
-                  <div className="row" style={{ display: "grid", gap: "12px" }}>
-                    <section className="panel">
-                      <h2>Intensities</h2>
-                      <div className="intensity-grid">
-                        {DEFAULT_INTENSITIES.map((nature) => (
-                          <label key={nature}>
-                            {nature}
-                            <input
-                              type="number"
-                              value={toInt(form.stats?.intensities?.[nature], 0)}
-                              onChange={(event) => updateIntensity(nature, event.target.value)}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </section>
-                    {characteristicEntries.map(([charKey, statObj]) => {
-                      const skills = Object.entries(statObj.skills || {}).sort((a, b) => a[0].localeCompare(b[0]));
-                      return (
-                        <section key={charKey} className="panel">
-                          <h2>{charKey}</h2>
-                          <label>
-                            Invest
-                            <input type="number" value={toInt(statObj.invest, 0)} onChange={(event) => updateStatInvest(charKey, event.target.value)} />
-                          </label>
-                          <div className="skill-list">
-                            {skills.map(([skillKey, skillVal]) => (
-                              <div key={`${charKey}-${skillKey}`} className="skill-row">
-                                <span>{skillKey}</span>
-                                <input type="number" value={toInt(skillVal, 0)} onChange={(event) => updateSkillInvest(charKey, skillKey, event.target.value)} />
-                                <button type="button" className="btn" onClick={() => removeSkill(charKey, skillKey)}>Remove</button>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="add-skill">
-                            <input
-                              placeholder="New skill key"
-                              value={skillDraftByChar[charKey] || ""}
-                              onChange={(event) => setSkillDraftByChar((prev) => ({ ...prev, [charKey]: event.target.value }))}
-                            />
-                            <button type="button" className="btn" onClick={() => addSkill(charKey)}>Add Skill</button>
-                          </div>
-                        </section>
-                      );
-                    })}
-                  </div>
-                )}
+        host.innerHTML = "";
+        while (bodyClone.firstChild) {
+          host.appendChild(bodyClone.firstChild);
+        }
 
-                {tab === "advanced" && (
-                  <section className="panel">
-                    <h2>Raw Stats JSON</h2>
-                    <textarea className="json" value={rawStats} onChange={(event) => setRawStats(event.target.value)} spellCheck={false}></textarea>
-                    <div className="row">
-                      <button type="button" className="btn" onClick={applyRawStats}>Apply JSON</button>
-                      <div className="muted">Use this when a field has not yet been ported to UI controls.</div>
-                    </div>
-                  </section>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      );
-    }
+        const current = new URL(window.location.href);
+        current.searchParams.set("id", id);
+        window.history.replaceState(window.history.state, "", current.toString());
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+        for (const oldScript of scripts) {
+          const script = document.createElement("script");
+          script.setAttribute(SCRIPT_ATTR, "1");
+          const src = oldScript.getAttribute("src");
+          if (src) {
+            script.src = src;
+            if (oldScript.getAttribute("defer") !== null) script.defer = true;
+            if (oldScript.getAttribute("type")) script.type = oldScript.getAttribute("type");
+            host.appendChild(script);
+            await new Promise((resolve, reject) => {
+              script.addEventListener("load", resolve, { once: true });
+              script.addEventListener("error", () => reject(new Error("Failed to load script: " + src)), { once: true });
+            });
+          } else {
+            script.text = oldScript.textContent || "";
+            host.appendChild(script);
+          }
+        }
+
+        statusEl.style.display = "none";
+      } catch (err) {
+        statusEl.style.display = "none";
+        errorEl.style.display = "";
+        errorEl.textContent = (err && err.message) ? err.message : "Unable to initialize legacy character sheet.";
+      }
+    })();
   </script>
 </body>
 </html>
