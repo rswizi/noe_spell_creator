@@ -316,7 +316,7 @@
           });
           const cid = res.id || (res.character && res.character.id);
           if (!cid) throw new Error("Character creation failed.");
-          window.location.href = `character_manager_edit.html?id=${encodeURIComponent(cid)}`;
+          window.location.href = `/character-manager/edit/${encodeURIComponent(cid)}`;
         } catch (err) {
           setError(err instanceof Error ? err.message : "Unable to create character.");
         }
@@ -433,7 +433,7 @@
             body: JSON.stringify(updatePayload),
           });
 
-          window.location.href = `character_manager_edit.html?id=${encodeURIComponent(cid)}`;
+          window.location.href = `/character-manager/edit/${encodeURIComponent(cid)}`;
         } catch (err) {
           setQuickStatus(`Quick create failed: ${err instanceof Error ? err.message : "Unknown error"}`);
         } finally {
@@ -473,7 +473,7 @@
                   key={character.id}
                   className="cm-card"
                   onClick={() => {
-                    window.location.href = `character_manager_edit.html?id=${encodeURIComponent(character.id)}`;
+                    window.location.href = `/character-manager/edit/${encodeURIComponent(character.id)}`;
                   }}
                   type="button"
                 >

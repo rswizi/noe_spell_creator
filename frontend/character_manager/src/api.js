@@ -50,3 +50,52 @@ export async function createCharacter(name) {
     body: JSON.stringify({ name }),
   });
 }
+
+export async function fetchCharacter(id) {
+  return api(`/characters/${encodeURIComponent(id)}`);
+}
+
+export async function updateCharacter(id, payload) {
+  return api(`/characters/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCharacter(id) {
+  return api(`/characters/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchArchetypes() {
+  return api("/archetypes");
+}
+
+export async function fetchInventories() {
+  return api("/inventories");
+}
+
+export async function fetchMySpellLists() {
+  return api("/spell_lists/mine");
+}
+
+export async function uploadCharacterAvatar(id, file) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`/characters/${encodeURIComponent(id)}/avatar`, {
+    method: "POST",
+    body: form,
+    credentials: "include",
+    headers: authHeaders(),
+  });
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : { status: "error", message: await response.text() };
+  if (!response.ok || payload.status === "error") {
+    throw new Error(payload.message || `HTTP ${response.status}`);
+  }
+  return payload;
+}

@@ -272,18 +272,136 @@ body {
   min-height: 100vh;
 }
 
-.cm-iframe-shell {
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  overflow: hidden;
-  background: #0f0f16;
-  min-height: calc(100vh - 120px);
+.cm-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
 }
 
-.cm-iframe {
+.cm-tab {
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #171722;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.cm-tab.active {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(197, 53, 53, 0.26), rgba(17, 17, 26, 0.95));
+}
+
+.cm-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.cm-panel {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #101018;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.cm-panel h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.cm-panel label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.cm-panel input,
+.cm-panel select,
+.cm-panel textarea {
   width: 100%;
-  height: calc(100vh - 120px);
-  border: 0;
-  display: block;
-  background: #0f0f16;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: #1b1b2a;
+  color: var(--text);
+}
+
+.cm-panel-wide {
+  grid-column: 1 / -1;
+}
+
+.cm-checkline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cm-checkline input {
+  width: auto;
+}
+
+.cm-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.cm-big-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 14px;
+  border: 1px solid #323246;
+  object-fit: cover;
+  background: #09090f;
+}
+
+.cm-avatar-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.cm-stat-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.cm-intensity-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.cm-skill-list {
+  display: grid;
+  gap: 8px;
+}
+
+.cm-skill-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 90px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.cm-add-skill {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.cm-json {
+  min-height: 360px;
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.cm-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
