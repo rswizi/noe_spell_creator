@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import string
+import unicodedata
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -326,6 +327,26 @@ def _serve_html_file(path: Path):
             html = f"{html}\n{GLOBAL_PORTAL_BUTTON_INJECT}\n"
     return HTMLResponse(content=html)
 
+
+def _slugify_character_name(name: str) -> str:
+    raw = str(name or "").strip().lower()
+    normalized = unicodedata.normalize("NFKD", raw)
+    ascii_text = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    slug = re.sub(r"[^a-z0-9]+", "_", ascii_text).strip("_")
+    if not slug:
+        return "character"
+    return slug[:64]
+
+
+def _character_manager_slug_path(cid: str) -> str:
+    clean_cid = str(cid or "").strip()
+    if not clean_cid:
+        return "/character-manager"
+    doc = get_col("characters").find_one({"id": clean_cid}, {"_id": 0, "name": 1}) or {}
+    char_name = str(doc.get("name") or clean_cid)
+    slug = _slugify_character_name(char_name)
+    return f"/character-manager/{quote(clean_cid)}_{slug}"
+
 # ---------- Pages ----------
 app.mount("/static", StaticFiles(directory=str(CLIENT_DIR)), name="static")
 app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
@@ -372,23 +393,22 @@ def character_manager_index():
 
 @app.get("/character-manager/{rest:path}", include_in_schema=False)
 def character_manager_fallback(rest: str):
+    rest_clean = (rest or "").strip().strip("/")
+    if rest_clean.startswith("edit/"):
+        parts = rest_clean.split("/", 2)
+        cid_raw = parts[1].strip() if len(parts) > 1 else ""
+        cid = unquote(cid_raw).strip() if cid_raw else ""
+        if cid:
+            return RedirectResponse(_character_manager_slug_path(cid))
     target = CHAR_MANAGER_DIST_DIR / rest
     if target.exists() and target.is_file():
         return _serve_html_file(target)
     if CHAR_MANAGER_INDEX.exists():
         return _serve_html_file(CHAR_MANAGER_INDEX)
-    rest_clean = (rest or "").strip().strip("/")
-    if rest_clean.startswith("edit/"):
-        parts = rest_clean.split("/", 2)
-        cid = parts[1].strip() if len(parts) > 1 else ""
-        if cid:
-            return RedirectResponse(f"/character_manager_edit.html?id={quote(cid)}")
     if rest_clean and "/" not in rest_clean and ("_" in rest_clean or rest_clean.isdigit()):
-        slug_id = rest_clean.split("_", 1)[0].strip()
-        if slug_id:
-            decoded_id = unquote(slug_id).strip()
-            if decoded_id:
-                return RedirectResponse(f"/character_manager_edit.html?id={quote(decoded_id)}")
+        new_fallback_page = CLIENT_DIR / "character_manager_edit_0_3_5.html"
+        if new_fallback_page.exists():
+            return _serve_html_file(new_fallback_page)
     fallback_page = CLIENT_DIR / "character_manager.html"
     if fallback_page.exists():
         return _serve_html_file(fallback_page)

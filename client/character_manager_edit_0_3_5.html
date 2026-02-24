@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NoE - New Character Manager - Edit 0.3.5</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --border: #252533;
+      --text: #f3f3f5;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #1a0c0f 0%, #0b0b10 100%);
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+    }
+    .shell {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px 14px;
+    }
+    .topbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .topbar h1 {
+      margin: 0;
+      font-size: 22px;
+    }
+    .btn {
+      padding: 9px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #181821;
+      color: var(--text);
+      text-decoration: none;
+      display: inline-block;
+    }
+    .muted {
+      opacity: .82;
+      font-size: .9rem;
+    }
+    .error {
+      color: #ff9f9f;
+      font-size: .92rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <h1>Character Sheet</h1>
+      <a class="btn" href="/character-manager">Back to New Character Manager</a>
+      <a class="btn" id="legacy-link" href="#">Open 0.3.5 Sheet Directly</a>
+    </div>
+    <div id="status" class="muted">Loading NoE 0.3.5 sheet...</div>
+    <div id="error" class="error" style="display:none;"></div>
+    <div id="host"></div>
+  </div>
+
+  <script>
+    (async function bootstrap() {
+      function idFromPathname(pathname) {
+        const parts = String(pathname || "").split("/").filter(Boolean);
+        if (parts.length < 2) return "";
+        if (parts[0] !== "character-manager") return "";
+        const slug = parts[1] || "";
+        const idPart = slug.split("_", 1)[0] || "";
+        if (!idPart) return "";
+        try {
+          return decodeURIComponent(idPart).trim();
+        } catch (_) {
+          return idPart.trim();
+        }
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const id = (params.get("id") || idFromPathname(window.location.pathname) || "").trim();
+      const statusEl = document.getElementById("status");
+      const errorEl = document.getElementById("error");
+      const host = document.getElementById("host");
+      const legacyLink = document.getElementById("legacy-link");
+      const HEAD_ATTR = "data-character-manager-legacy-head";
+      const SCRIPT_ATTR = "data-character-manager-legacy-script";
+
+      if (!id) {
+        statusEl.style.display = "none";
+        errorEl.style.display = "";
+        errorEl.textContent = "Missing character id.";
+        legacyLink.href = "/character_edit_0_3_5.html";
+        return;
+      }
+
+      legacyLink.href = "/character_edit_0_3_5.html?id=" + encodeURIComponent(id);
+
+      try {
+        const target = "/character_edit_0_3_5.html?id=" + encodeURIComponent(id);
+        const response = await fetch(target, { credentials: "include" });
+        if (!response.ok) {
+          throw new Error("Unable to load 0.3.5 sheet (HTTP " + response.status + ")");
+        }
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+
+        document.querySelectorAll("[" + HEAD_ATTR + "]").forEach((node) => node.remove());
+        document.querySelectorAll("[" + SCRIPT_ATTR + "]").forEach((node) => node.remove());
+
+        const headNodes = doc.querySelectorAll("head style, head link[rel='stylesheet']");
+        headNodes.forEach((node) => {
+          if (node.tagName.toLowerCase() === "link") {
+            const href = node.getAttribute("href");
+            if (!href) return;
+            const exists = Array.from(document.querySelectorAll("link[rel='stylesheet']")).some(
+              (ln) => ln.getAttribute("href") === href
+            );
+            if (exists) return;
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = href;
+            link.setAttribute(HEAD_ATTR, "1");
+            document.head.appendChild(link);
+            return;
+          }
+          const style = document.createElement("style");
+          style.textContent = node.textContent || "";
+          style.setAttribute(HEAD_ATTR, "1");
+          document.head.appendChild(style);
+        });
+
+        const bodyClone = doc.body.cloneNode(true);
+        const scripts = Array.from(bodyClone.querySelectorAll("script"));
+        scripts.forEach((script) => script.remove());
+
+        host.innerHTML = "";
+        while (bodyClone.firstChild) {
+          host.appendChild(bodyClone.firstChild);
+        }
+
+        for (const oldScript of scripts) {
+          const script = document.createElement("script");
+          script.setAttribute(SCRIPT_ATTR, "1");
+          const src = oldScript.getAttribute("src");
+          if (src) {
+            script.src = src;
+            if (oldScript.getAttribute("defer") !== null) script.defer = true;
+            if (oldScript.getAttribute("type")) script.type = oldScript.getAttribute("type");
+            host.appendChild(script);
+            await new Promise((resolve, reject) => {
+              script.addEventListener("load", resolve, { once: true });
+              script.addEventListener("error", () => reject(new Error("Failed to load script: " + src)), { once: true });
+            });
+          } else {
+            script.text = oldScript.textContent || "";
+            host.appendChild(script);
+          }
+        }
+
+        statusEl.style.display = "none";
+      } catch (err) {
+        statusEl.style.display = "none";
+        errorEl.style.display = "";
+        errorEl.textContent = (err && err.message) ? err.message : "Unable to initialize 0.3.5 character sheet.";
+      }
+    })();
+  </script>
+</body>
+</html>

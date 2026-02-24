@@ -25,6 +25,7 @@ ALLOWED_PAGES = {
     "character_admin",
     "character_manager",
     "character_manager_edit",
+    "character_manager_edit_0_3_5",
     "character_edit",
     "character_edit_0_3_5",
     "characters",
