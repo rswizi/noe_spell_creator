@@ -5273,7 +5273,9 @@ function normalizeSublimations(arr){
 }
 function slotsForLevel(lvl){
   const levelVal = Math.max(1, Math.floor(Number(lvl) || 1));
-  const base = Math.max(0, Math.floor(levelVal / 2)) + characteristicValueForDerived('presence');
+  const pre = characteristicValueForDerived('presence');
+  const prePrestige = prestigeValueForDerived('presence');
+  const base = Math.max(0, Math.floor(levelVal / 2)) + (pre + prePrestige);
   const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.sublimation || 0)) * 4;
   return base + bonus;
 }
@@ -11043,7 +11045,7 @@ function renderXpProgress(){
 async function renderSchoolSpellCounters(){
   if (!CHAR || !CHAR.stats) return;
   try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
-  const magVal = characteristicValueForDerived('magic');
+  const magVal = characteristicValueForDerived('magic') + prestigeValueForDerived('magic');
   let simpleSchools = 0, complexSchools = 0;
   ADDED_SCHOOLS.forEach(id=>{
     const s = (SCHOOLS||[]).find(x=>String(x.id||x.name)===String(id));
@@ -14236,25 +14238,25 @@ function weaponDamageParts(it){
   const die = String(dieMatch[2] || '').toUpperCase();
   let rest = compact.slice(dieMatch[0].length);
   if (rest && /^[0-9]/.test(rest)) rest = `+${rest}`;
-  const msMatches = Array.from(rest.matchAll(/M\(([^)]+)\)/gi));
+  const msMatches = Array.from(rest.matchAll(/[MC]\(([^)]+)\)/gi));
   const ms = msMatches.map(m=> String(m[1] || '').trim().toUpperCase()).filter(Boolean);
-  rest = rest.replace(/M\([^)]+\)/gi, '');
+  rest = rest.replace(/[MC]\([^)]+\)/gi, '');
   const nums = rest.match(/[+-]\d+/g) || [];
   const flat = nums.reduce((sum, token)=> sum + Number(token), 0);
   return { dice, die, flat, ms };
 }
 
-function milestoneKeyFromCode(code){
+function characteristicKeyFromCode(code){
   const map = { REF:'reflex', DEX:'dexterity', BODY:'body', WIS:'wisdom', PRE:'presence', MAG:'magic', WIL:'willpower', TEC:'tech' };
   return map[String(code || '').toUpperCase()] || '';
 }
-function resolveMilestoneCodes(codes){
+function resolveCharacteristicCodes(codes){
   const parts = [];
   let total = 0;
   (codes || []).forEach(code=>{
-    const key = milestoneKeyFromCode(code);
+    const key = characteristicKeyFromCode(code);
     if (!key) return;
-    const value = milestone(key);
+    const value = characteristicContribution(key);
     parts.push({ code, value });
     total += value;
   });
@@ -14684,10 +14686,10 @@ function parseAbilityRollTokens(expr){
     const msMatch = token.match(/^[MC]\(([^)]+)\)$/i);
     if (msMatch){
       const code = String(msMatch[1] || '').trim().toUpperCase();
-      const key = milestoneKeyFromCode(code);
+      const key = characteristicKeyFromCode(code);
       if (!key) return { error:`Unknown characteristic "${code}".` };
-      const value = milestone(key);
-      parts.push({ type:'milestone', code, value, sign });
+      const value = characteristicContribution(key);
+      parts.push({ type:'characteristic', code, value, sign });
       continue;
     }
     const diceMatch = token.match(/^(\d+)?(d\d+|id)$/i);
@@ -14734,7 +14736,7 @@ function rollAbilityExpression(expr, idInfo){
       total += part.sign * sum;
       const text = `${part.count}${dieLabel} (${rolls.join(' + ')} = ${sum})`;
       pieces.push({ sign: part.sign, text });
-    }else if (part.type === 'milestone'){
+    }else if (part.type === 'characteristic'){
       total += part.sign * part.value;
       const label = `C(${part.code})=${part.value}`;
       pieces.push({ sign: part.sign, text: label });
@@ -15279,7 +15281,7 @@ function renderCombatWeapons(){
         return;
       }
       const msCodes = isAnimarma ? ['MAG'] : parts.ms;
-      const msInfo = resolveMilestoneCodes(msCodes);
+      const msInfo = resolveCharacteristicCodes(msCodes);
       const msVal = msInfo.total;
       let die = parts.die;
       let dieLabelOverride = '';
@@ -16749,11 +16751,26 @@ function characteristicValueForDerived(key){
   const { value } = applyOps(invested, PASSIVE.char[key]);
   return Math.max(0, Math.floor(numOr(value, invested)));
 }
-function milestone(key){
+function prestigeValueForDerived(key){
+  const raw = CHAR?.stats?.noe_0_3_5_stats?.prestige?.[key];
+  return Math.max(0, Math.floor(numOr(raw, 0)));
+}
+function skillInvestForDerived(charKey, skillName){
+  const skills = CHAR?.stats?.[charKey]?.skills || {};
+  const direct = investVal(skills?.[skillName], Number.NaN);
+  if (Number.isFinite(direct)) return Math.max(0, Math.floor(direct));
+  const target = String(skillName || '').toLowerCase();
+  const hit = Object.keys(skills).find(name=> String(name || '').toLowerCase() === target);
+  if (!hit) return 0;
+  return Math.max(0, Math.floor(investVal(skills[hit], 0)));
+}
+function characteristicContribution(key){
   return characteristicValueForDerived(key);
 }
 function baseTalentMax(){
-  return 1 + characteristicValueForDerived('wisdom');
+  const wis = characteristicValueForDerived('wisdom');
+  const wisPrestige = prestigeValueForDerived('wisdom');
+  return 1 + (wis + wisPrestige);
 }
 function talentMax(){
   const base = TALENT_MAX || baseTalentMax();
@@ -16771,7 +16788,7 @@ function updateTalentCounter(){
   const over = count > max;
   talentCounterEl.textContent = `Talents: ${count} / ${max}`;
   talentCounterEl.style.color = over ? '#f66' : '';
-  talentCounterEl.title = `Base ${baseValue} (1 + WIS) (+1 per Talent+Skill reward)`;
+  talentCounterEl.title = `Base ${baseValue} (1 + WIS + Prestige WIS) (+1 per Talent+Skill reward)`;
 }
 function expertiseMax(){
   return Math.max(0, Math.floor(numOr(DERIVED_CACHE?.max_expertise, 0)));
@@ -16844,37 +16861,56 @@ function updateDerived(){
   const magVal = characteristicValueForDerived('magic');
   const wisVal = characteristicValueForDerived('wisdom');
   const preVal = characteristicValueForDerived('presence');
-  const tecVal = characteristicValueForDerived('tech');
+  const bodPrestige = prestigeValueForDerived('body');
+  const wilPrestige = prestigeValueForDerived('willpower');
+  const magPrestige = prestigeValueForDerived('magic');
+  const wisPrestige = prestigeValueForDerived('wisdom');
+  const prePrestige = prestigeValueForDerived('presence');
+  const dexPrestige = prestigeValueForDerived('dexterity');
+  const alchemyVal = skillInvestForDerived('tech', 'Alchemy');
+  const resistanceVal = skillInvestForDerived('body', 'Resistance');
+  const hpBodTerm = bodVal + bodPrestige;
+  const hpWilTerm = wilVal + wilPrestige;
+  const enWilTerm = wilVal + wilPrestige;
+  const enMagTerm = magVal * magPrestige;
+  const foWilTerm = wilVal * wilPrestige;
+  const foPreTerm = preVal * prePrestige;
+  const moTerm = dexVal * prePrestige;
+  const encBodTerm = bodVal + bodPrestige;
+  const encWilTerm = wilVal * wilPrestige;
+  const etMagTerm = magVal + magPrestige;
+  const neutralTerm = dexVal + dexPrestige;
+  const complexMagValue = magVal + magPrestige;
 
   // Base
   const base = {};
-  base.hp = Math.max(0, Math.floor((25 + (lvl * 5)) + (12 * bodVal) + (6 * wilVal)));
-  base.en = Math.max(0, Math.floor((5 + lvl) + wilVal + (2 * magVal)));
-  base.fo = Math.max(0, Math.floor((1 + lvl) + wilVal + preVal));
-  base.mo = Math.max(0, Math.floor(4 + dexVal));
+  base.hp = Math.max(0, Math.floor((25 + (lvl * 5)) + (12 * hpBodTerm) + (6 * hpWilTerm)));
+  base.en = Math.max(0, Math.floor((5 + lvl) + enWilTerm + (2 * enMagTerm)));
+  base.fo = Math.max(0, Math.floor((1 + lvl) + foWilTerm + foPreTerm));
+  base.mo = Math.max(0, Math.floor(4 + moTerm));
   base.initiative = base.mo;
   base.spcap = Math.floor(base.hp * 0.10);
-  const complexSchools = magVal >= 10 ? (1 + Math.floor((magVal - 10) / 2)) : 0;
+  const complexSchools = complexMagValue >= 10 ? (1 + Math.floor((complexMagValue - 10) / 2)) : 0;
   base.complex_schools = complexSchools;
-  base.enc = Math.max(0, Math.floor(10 + (5 * bodVal) + (2 * wilVal)));
+  base.enc = Math.max(0, Math.floor(10 + (5 * encBodTerm) + (2 * encWilTerm)));
   const invEnc = LINKED_INV?.enc_total || 0;
-  base.et = Math.max(0, Math.floor(1 + Math.floor(lvl / 2) + magVal));
+  base.et = Math.max(0, Math.floor(1 + Math.floor(lvl / 2) + etMagTerm));
   base.nature_slots = 1;
   base._notes = Object.assign(base._notes || {}, {
-    et: [`1 + floor(level/2) + MAG(${magVal}) = ${base.et}`],
-    hp: [`25 + level*5 + 12*BOD(${bodVal}) + 6*WIL(${wilVal}) = ${base.hp}`],
-    en: [`5 + level + WIL(${wilVal}) + 2*MAG(${magVal}) = ${base.en}`],
-    fo: [`1 + level + WIL(${wilVal}) + PRE(${preVal}) = ${base.fo}`],
-    mo: [`4 + DEX(${dexVal}) = ${base.mo}`],
-    enc: [`10 + 5*BOD(${bodVal}) + 2*WIL(${wilVal}) = ${base.enc}`],
-    sublimation_slots: [`floor(level/2) + PRE(${preVal}) + bonus = ${slotsForLevel(lvl)}`],
-    complex_schools: [`MAG value ${magVal} -> ${complexSchools}`],
-    tx: [`2 + BOD(${bodVal}) + TEC(${tecVal}) = ${2 + bodVal + tecVal}`],
-    talent_max: [`1 + WIS(${wisVal}) = ${1 + wisVal}`],
-    weapon_neutral: [`DEX(${dexVal}) = ${dexVal}`],
+    et: [`1 + floor(level/2) + (MAG(${magVal}) + Prestige MAG(${magPrestige})) = ${base.et}`],
+    hp: [`25 + level*5 + 12*(BOD(${bodVal}) + Prestige BOD(${bodPrestige})) + 6*(WIL(${wilVal}) + Prestige WIL(${wilPrestige})) = ${base.hp}`],
+    en: [`5 + level + (WIL(${wilVal}) + Prestige WIL(${wilPrestige})) + 2*(MAG(${magVal}) * Prestige MAG(${magPrestige})) = ${base.en}`],
+    fo: [`1 + level + (WIL(${wilVal}) * Prestige WIL(${wilPrestige})) + (PRE(${preVal}) * Prestige PRE(${prePrestige})) = ${base.fo}`],
+    mo: [`4 + (DEX(${dexVal}) * Prestige PRE(${prePrestige})) = ${base.mo}`],
+    enc: [`10 + 5*(BOD(${bodVal}) + Prestige BOD(${bodPrestige})) + 2*(WIL(${wilVal}) * Prestige WIL(${wilPrestige})) = ${base.enc}`],
+    sublimation_slots: [`floor(level/2) + (PRE(${preVal}) + Prestige PRE(${prePrestige})) + bonus = ${slotsForLevel(lvl)}`],
+    complex_schools: [`MAG + Prestige MAG = ${complexMagValue} -> ${complexSchools}`],
+    tx: [`2 + Alchemy(${alchemyVal}) + Resistance(${resistanceVal}) = ${2 + alchemyVal + resistanceVal}`],
+    talent_max: [`1 + (WIS(${wisVal}) + Prestige WIS(${wisPrestige})) = ${1 + wisVal + wisPrestige}`],
+    weapon_neutral: [`DEX(${dexVal}) + Prestige DEX(${dexPrestige}) = ${neutralTerm}`],
   });
   base._notes = Object.assign(base._notes || {}, { nature_slots: [`Base ${base.nature_slots}`] });
-  base.tx = Math.max(0, Math.floor(2 + bodVal + tecVal));
+  base.tx = Math.max(0, Math.floor(2 + alchemyVal + resistanceVal));
   base.talent_max = baseTalentMax();
   base.max_expertise = 0;
   base.max_divine_manifestation = 0;
@@ -16882,7 +16918,7 @@ function updateDerived(){
   base.skill_points = skillPointPool(lvl);
   base.stat_points = statPointPool(lvl);
   base.sublimation_slots = slotsForLevel(lvl);
-  base.weapon_neutral = Math.max(0, Math.floor(dexVal));
+  base.weapon_neutral = Math.max(0, Math.floor(neutralTerm));
   base.craftomancy_max = Math.max(0, Math.floor(numOr(profile.maxCraftomancy, 0)));
   base._notes = Object.assign(base._notes || {}, { craftomancy_max: [`Level profile craftomancy max ${base.craftomancy_max}`] });
 
@@ -20202,7 +20238,7 @@ initRichTextToolbar();
       .ns35-nature-row { display:grid; grid-template-columns:28px max-content 40px; gap:8px; align-items:center; }
       .ns35-nature-row img { width:28px; height:28px; }
       .ns35-id-chip { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-size:.8rem; white-space:nowrap; width:max-content; justify-self:start; display:inline-flex; }
-      .ns35-nature-row input { width:40px; max-width:40px; justify-self:end; text-align:center; padding:2px 4px; }
+      .ns35-nature-row input { width:40px; max-width:40px; justify-self:end; text-align:right; padding:2px 4px; }
       .ns35-roll-char { display:grid; gap:4px; }
       .ns35-roll-char select { min-width:200px; }
       @media (max-width: 1160px){
