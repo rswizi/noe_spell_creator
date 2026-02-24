@@ -20056,6 +20056,7 @@ initRichTextToolbar();
 /* ---------- NoE 0.3.5 statistics-only override ---------- */
 (function(){
   const MAX_INVEST = 8;
+  const NOE35_PRESTIGE_THRESHOLD = 5;
   const NOE35_CHARACTERISTICS = [
     { key:'dexterity', code:'DEX', name:'Dexterity' },
     { key:'body', code:'BOD', name:'Body' },
@@ -20336,15 +20337,18 @@ initRichTextToolbar();
 
   function prestigeLevelFromCharacteristicValue(value){
     const v = Math.max(0, Math.floor(Number(value) || 0));
-    if (v <= 5) return 0;
-    return Math.max(0, v - 5);
+    if (v <= NOE35_PRESTIGE_THRESHOLD) return 0;
+    return Math.max(0, v - NOE35_PRESTIGE_THRESHOLD);
   }
 
-  function ensureNoe35PrestigeState(box){
+  function ensureNoe35PrestigeState(box, totalsByCharacteristic = null){
     NOE35_CHARACTERISTICS.forEach(ch=>{
       const key = ch.key;
       const prevLevel = Math.max(0, Math.floor(Number(box.prestige?.[key] || 0)));
-      const level = prestigeLevelFromCharacteristicValue(clampInvested(box.characteristics?.[key]));
+      const investedTotal = totalsByCharacteristic && Object.prototype.hasOwnProperty.call(totalsByCharacteristic, key)
+        ? clampInvested(totalsByCharacteristic[key])
+        : clampInvested(box.characteristics?.[key]);
+      const level = prestigeLevelFromCharacteristicValue(investedTotal);
       box.prestige[key] = level;
       const remainRaw = Math.floor(Number(box.prestige_remaining?.[key]));
       let remaining = Number.isFinite(remainRaw) ? Math.max(0, Math.min(level, remainRaw)) : level;
@@ -20357,9 +20361,10 @@ initRichTextToolbar();
     ensureNoe35AttributeAllocations(box, lvl);
     const totals = characteristicTotalsFromAllocations(box, lvl);
     NOE35_CHARACTERISTICS.forEach(ch=>{
-      box.characteristics[ch.key] = clampInvested(totals[ch.key]);
+      const investedTotal = clampInvested(totals[ch.key]);
+      box.characteristics[ch.key] = Math.min(NOE35_PRESTIGE_THRESHOLD, investedTotal);
     });
-    ensureNoe35PrestigeState(box);
+    ensureNoe35PrestigeState(box, totals);
   }
 
   function resetNoe35PrestigeRerolls(box){
@@ -20395,7 +20400,9 @@ initRichTextToolbar();
   }
 
   function totalNoe35Characteristics(box){
-    return NOE35_CHARACTERISTICS.reduce((sum, c)=> sum + clampInvested(box.characteristics[c.key]), 0);
+    const lvl = Math.max(1, Math.floor(Number(levelEl?.value) || Number(CHAR?.level) || 1));
+    const totals = characteristicTotalsFromAllocations(box, lvl);
+    return NOE35_CHARACTERISTICS.reduce((sum, c)=> sum + clampInvested(totals[c.key]), 0);
   }
 
   function totalNoe35Skills(box){
