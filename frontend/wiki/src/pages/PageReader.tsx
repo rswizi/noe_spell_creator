@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Editor, EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import ExtendedLink from "../extensions/ExtendedLink";
@@ -20,21 +20,21 @@ const ReadOnlyEditor: React.FC<{ content: any }> = ({ content }) => {
   const editor = useEditor({
     editable: false,
     content,
-      extensions: [
-        HeadingAnchors,
-        TableOfContents,
-        StarterKit,
-        Table.configure({ resizable: true }),
-        TableRow,
-        TableHeader,
-        TableCell,
-        Underline,
-        ExtendedLink,
-        ExtendedImage,
-        TaskList,
-        TaskItem,
-        HorizontalRule,
-      ],
+    extensions: [
+      HeadingAnchors,
+      TableOfContents,
+      StarterKit,
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      Underline,
+      ExtendedLink,
+      ExtendedImage,
+      TaskList,
+      TaskItem,
+      HorizontalRule,
+    ],
   });
 
   return <EditorContent editor={editor} />;
@@ -45,14 +45,25 @@ const PageReader: React.FC = () => {
   const [page, setPage] = useState<PagePayload | null>(null);
   const [backlinks, setBacklinks] = useState<any[]>([]);
   const [relations, setRelations] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
-      getPage(id).then(setPage);
+      getPage(id)
+        .then((payload) => {
+          setPage(payload);
+          setError(null);
+        })
+        .catch((err) => setError(err instanceof Error ? err.message : "Failed to load page"));
       return;
     }
     if (slug) {
-      getPageBySlug(slug).then(setPage);
+      getPageBySlug(slug)
+        .then((payload) => {
+          setPage(payload);
+          setError(null);
+        })
+        .catch((err) => setError(err instanceof Error ? err.message : "Failed to load page"));
       return;
     }
   }, [id, slug]);
@@ -72,8 +83,12 @@ const PageReader: React.FC = () => {
       });
   }, [page?.id]);
 
+  if (error) {
+    return <p style={{ color: "#ff7675" }}>{error}</p>;
+  }
+
   if (!page) {
-    return <p>Loading…</p>;
+    return <p>Loading...</p>;
   }
 
   return (
@@ -81,7 +96,7 @@ const PageReader: React.FC = () => {
       <h1>{page.title}</h1>
       <p style={{ fontSize: "13px", color: "#9ba5ff" }}>Last updated {new Date(page.updated_at).toLocaleString()}</p>
       <p style={{ fontSize: "13px", color: "#9ba5ff" }}>
-        {page.category_id} {page.entity_type ? `• ${page.entity_type}` : ""} {page.status ? `• ${page.status}` : ""}
+        {page.category_id} {page.entity_type ? `- ${page.entity_type}` : ""} {page.status ? `- ${page.status}` : ""}
       </p>
       <div className="editor-wrapper">
         <ReadOnlyEditor content={page.doc_json} />
@@ -92,9 +107,7 @@ const PageReader: React.FC = () => {
           {backlinks.length ? (
             <ul>
               {backlinks.map((row) => (
-                <li key={row.id || `${row.from_page_id}-${row.to_page_id}`}>
-                  {row.from_page?.title || row.from_page_id}
-                </li>
+                <li key={row.id || `${row.from_page_id}-${row.to_page_id}`}>{row.from_page?.title || row.from_page_id}</li>
               ))}
             </ul>
           ) : (
@@ -107,7 +120,7 @@ const PageReader: React.FC = () => {
             <ul>
               {relations.map((row) => (
                 <li key={row.id || `${row.from_page_id}-${row.to_page_id}-${row.relation_type}`}>
-                  {row.relation_type}: {row.from_page?.title || row.from_page_id} → {row.to_page?.title || row.to_page_id}
+                  {row.relation_type}: {row.from_page?.title || row.from_page_id} -&gt; {row.to_page?.title || row.to_page_id}
                 </li>
               ))}
             </ul>

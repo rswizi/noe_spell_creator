@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchCategories, fetchPages, WikiCategory } from "../utils/api";
 
@@ -18,6 +18,7 @@ const PageList: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [entityTypeFilter, setEntityTypeFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -30,6 +31,14 @@ const PageList: React.FC = () => {
           return;
         }
         setPages(payload.items);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!active) {
+          return;
+        }
+        setPages([]);
+        setError(err instanceof Error ? err.message : "Failed to load pages");
       })
       .finally(() => active && setLoading(false));
     return () => {
@@ -72,7 +81,9 @@ const PageList: React.FC = () => {
       </header>
 
       {loading ? (
-        <p>Loading…</p>
+        <p>Loading...</p>
+      ) : error ? (
+        <p style={{ color: "#ff7675" }}>{error}</p>
       ) : (
         <table className="page-table">
           <thead>

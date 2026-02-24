@@ -5,6 +5,7 @@ import PageList from "./pages/PageList";
 import PageReader from "./pages/PageReader";
 import NewPage from "./pages/NewPage";
 import WikiAdmin from "./pages/WikiAdmin";
+import LoginRequired from "./pages/LoginRequired";
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
       <div className="wiki-content">
         <Routes>
           <Route path="/" element={<PageList />} />
+          <Route path="/login" element={<LoginRequired />} />
           <Route path="/new" element={<NewPage />} />
           <Route path="/admin" element={<WikiAdmin />} />
           <Route path="/slug/:slug" element={<PageReader />} />

@@ -6,6 +6,9 @@ const defaultHeaders: Record<string, string> = {
 
 const redirectToLogin = () => {
   if (typeof window !== "undefined") {
+    if (window.location.pathname.startsWith("/wiki/login")) {
+      return;
+    }
     window.location.assign("/wiki/login");
   }
 };
