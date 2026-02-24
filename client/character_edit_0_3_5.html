@@ -5282,30 +5282,37 @@ function effectiveSublimationSlots(lvl){
 function slotsUsed(subs){
   return (subs||[]).reduce((acc,s)=> acc + (SUB_TIER_SLOTS[s.tier] || 0), 0);
 }
-const NOE35_EXCELLENCE_SKILLS = [
-  'Brutality','Technicity','Accuracy','Dodge','Absorption',
-  'Stealth','Reactivity','Acrobatics','Resistance','Athletics',
-  'Spirit','Aura','Investigation','Education','Cunning',
-  'Survival','Instinct','Perception','Psychology','Attunement',
-  'Persuasion','Charm','Taming','Subjugation','Deception',
-  'Crafting','Alchemy','Medicine','Engineering','Sleight of Hand'
-];
-const NOE35_TO_LEGACY_SKILL_ALIAS = {
-  'Subjugation': 'Intimidation',
-  'Sleight of Hand': 'Sleight of hand',
-  'Attunement': 'Potential',
-  'Cunning': 'Charisma'
-};
-const LEGACY_TO_NOE35_SKILL_ALIAS = {
-  'Intimidation': 'Subjugation',
-  'Sleight of hand': 'Sleight of Hand',
-  'Potential': 'Attunement',
-  'Charisma': 'Cunning'
-};
+function noe35ExcellenceSkills(){
+  return [
+    'Brutality','Technicity','Accuracy','Dodge','Absorption',
+    'Stealth','Reactivity','Acrobatics','Resistance','Athletics',
+    'Spirit','Aura','Investigation','Education','Cunning',
+    'Survival','Instinct','Perception','Psychology','Attunement',
+    'Persuasion','Charm','Taming','Subjugation','Deception',
+    'Crafting','Alchemy','Medicine','Engineering','Sleight of Hand'
+  ];
+}
+function noe35ToLegacySkillAlias(){
+  return {
+    'Subjugation': 'Intimidation',
+    'Sleight of Hand': 'Sleight of hand',
+    'Attunement': 'Potential',
+    'Cunning': 'Charisma'
+  };
+}
+function legacyToNoe35SkillAlias(){
+  return {
+    'Intimidation': 'Subjugation',
+    'Sleight of hand': 'Sleight of Hand',
+    'Potential': 'Attunement',
+    'Charisma': 'Cunning'
+  };
+}
 function resolveNoe35ExcellenceSkillPath(skillName){
   const display = String(skillName || '').trim();
   if (!display) return null;
-  const legacySkill = NOE35_TO_LEGACY_SKILL_ALIAS[display] || display;
+  const alias = noe35ToLegacySkillAlias();
+  const legacySkill = alias[display] || display;
   const charKey = charKeyForSkillName(legacySkill);
   if (!charKey) return null;
   return { value:`${charKey}|${legacySkill}`, label:display, legacySkill, charKey };
@@ -5313,7 +5320,7 @@ function resolveNoe35ExcellenceSkillPath(skillName){
 function buildSkillOptions(){
   const opts = [];
   const seen = new Set();
-  NOE35_EXCELLENCE_SKILLS.forEach(skill=>{
+  noe35ExcellenceSkills().forEach(skill=>{
     const path = resolveNoe35ExcellenceSkillPath(skill);
     if (!path || seen.has(path.value)) return;
     seen.add(path.value);
@@ -5385,7 +5392,8 @@ function skillLabelFromValue(value){
   const parts = target.split('|');
   if (parts.length >= 2){
     const raw = String(parts[1] || '').trim();
-    return LEGACY_TO_NOE35_SKILL_ALIAS[raw] || raw || target;
+    const alias = legacyToNoe35SkillAlias();
+    return alias[raw] || raw || target;
   }
   return target;
 }
