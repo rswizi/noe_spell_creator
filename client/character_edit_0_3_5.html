@@ -20315,10 +20315,33 @@ initRichTextToolbar();
       }
       fixed[bucket.key] = raw;
     });
+    const cap = Math.max(0, Math.min(MAX_INVEST, Math.floor(numOr(statInvestCap(lvl), MAX_INVEST))));
+    const totals = {};
+    NOE35_CHARACTERISTICS.forEach(ch=>{ totals[ch.key] = 0; });
+    buckets.forEach(bucket=>{
+      const alloc = normalizeAttrAllocationBucket(fixed[bucket.key]);
+      fixed[bucket.key] = alloc;
+      NOE35_CHARACTERISTICS.forEach(ch=>{
+        totals[ch.key] += Math.max(0, Math.floor(Number(alloc[ch.key] || 0)));
+      });
+    });
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      let overflow = Math.max(0, totals[ch.key] - cap);
+      if (overflow <= 0) return;
+      for (let i = buckets.length - 1; i >= 0 && overflow > 0; i -= 1){
+        const key = buckets[i].key;
+        const alloc = fixed[key];
+        const available = Math.max(0, Math.floor(Number(alloc?.[ch.key] || 0)));
+        if (!available) continue;
+        const cut = Math.min(overflow, available);
+        alloc[ch.key] = available - cut;
+        overflow -= cut;
+      }
+    });
     box.attribute_allocations = fixed;
   }
 
-  function characteristicTotalsFromAllocations(box, lvl){
+  function characteristicRawTotalsFromAllocations(box, lvl){
     const totals = {};
     NOE35_CHARACTERISTICS.forEach(ch=>{ totals[ch.key] = 0; });
     const buckets = noe35CharPointBuckets(lvl);
@@ -20328,6 +20351,11 @@ initRichTextToolbar();
         totals[ch.key] += Math.max(0, Math.floor(Number(alloc[ch.key] || 0)));
       });
     });
+    return totals;
+  }
+
+  function characteristicTotalsFromAllocations(box, lvl){
+    const totals = characteristicRawTotalsFromAllocations(box, lvl);
     const cap = Math.max(0, Math.min(MAX_INVEST, Math.floor(numOr(statInvestCap(lvl), MAX_INVEST))));
     NOE35_CHARACTERISTICS.forEach(ch=>{
       totals[ch.key] = Math.max(0, Math.min(cap, totals[ch.key]));
@@ -20490,10 +20518,11 @@ initRichTextToolbar();
     queueSave();
   }
 
-  function renderNoe35AttributeConfigurator(targetLvl){
+  function renderNoe35AttributeConfigurator(targetLvl, options = {}){
     if (!levelRewardModal || !levelRewardBackdrop || !levelRewardSummary || !levelRewardOptionsGrid) return;
     const box = ensureNoe35StatsState();
     if (!box) return;
+    const openBuckets = (options && options.openBuckets instanceof Set) ? options.openBuckets : null;
     const lvl = Math.max(1, Math.floor(Number(targetLvl || levelEl?.value || CHAR?.level || 1)));
     applyNoe35CharacteristicState(box, lvl);
     const cap = Math.max(0, Math.min(MAX_INVEST, Math.floor(numOr(statInvestCap(lvl), MAX_INVEST))));
@@ -20509,11 +20538,13 @@ initRichTextToolbar();
     buckets.forEach(bucket=>{
       const details = document.createElement('details');
       details.className = 'ns35-attr-details';
-      details.open = false;
+      details.dataset.bucket = bucket.key;
+      details.open = openBuckets ? openBuckets.has(bucket.key) : false;
       const summary = document.createElement('summary');
       summary.className = 'ns35-attr-summary';
       const alloc = normalizeAttrAllocationBucket(box.attribute_allocations?.[bucket.key]);
       const used = sumAttrAllocationBucket(alloc);
+      const totals = characteristicTotalsFromAllocations(box, lvl);
       summary.innerHTML = `<strong>${bucket.label}</strong><span class="muted">${used}/${bucket.points} used</span>`;
       details.appendChild(summary);
 
@@ -20533,24 +20564,31 @@ initRichTextToolbar();
         const minus = row.querySelector('button[data-delta="-1"]');
         const plus = row.querySelector('button[data-delta="1"]');
         minus.disabled = val <= 0;
-        plus.disabled = false;
+        plus.disabled = used >= bucket.points || totals[key] >= cap;
         const tryApply = (delta)=>{
           const liveAlloc = normalizeAttrAllocationBucket(box.attribute_allocations?.[bucket.key]);
           const current = Math.max(0, Math.floor(Number(liveAlloc[key] || 0)));
           const usedNow = sumAttrAllocationBucket(liveAlloc);
           if (delta > 0){
             if (usedNow >= bucket.points) return;
-            const totals = characteristicTotalsFromAllocations(box, lvl);
-            if (totals[key] >= cap) return;
+            const rawTotals = characteristicRawTotalsFromAllocations(box, lvl);
+            if (Math.max(0, Math.floor(Number(rawTotals[key] || 0))) >= cap) return;
             liveAlloc[key] = current + 1;
           }else{
             if (current <= 0) return;
             liveAlloc[key] = current - 1;
           }
+          const openBucketsNext = new Set();
+          levelRewardOptionsGrid.querySelectorAll('.ns35-attr-details[data-bucket]').forEach(node=>{
+            const bucketKey = String(node.getAttribute('data-bucket') || '').trim();
+            if (!bucketKey) return;
+            if (node.open) openBucketsNext.add(bucketKey);
+          });
+          openBucketsNext.add(bucket.key);
           box.attribute_allocations[bucket.key] = liveAlloc;
           applyNoe35CharacteristicState(box, lvl);
           commitNoe35StatChanges(box);
-          renderNoe35AttributeConfigurator(lvl);
+          renderNoe35AttributeConfigurator(lvl, { openBuckets: openBucketsNext });
         };
         minus.addEventListener('click', ()=> tryApply(-1));
         plus.addEventListener('click', ()=> tryApply(1));
@@ -20793,7 +20831,7 @@ initRichTextToolbar();
     const natureLimit = (typeof natureSlotLimit === 'function')
       ? natureSlotLimit()
       : NOE35_NATURES.length;
-    naturePanel.innerHTML = `<div class="hdr"><strong>Nature Skills</strong><span class="muted">Max natures allowed: ${natureLimit}</span></div>`;
+    naturePanel.innerHTML = `<div class="hdr ns35-skill-cat-hdr"><strong>Nature Skills</strong><span class="muted">Max natures allowed: ${natureLimit}</span></div>`;
     const natureBody = document.createElement('div');
     natureBody.className = 'panel-body';
     const natureGrid = document.createElement('div');
