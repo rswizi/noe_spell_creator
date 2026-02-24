@@ -19881,12 +19881,12 @@ initRichTextToolbar();
 (function(){
   const MAX_INVEST = 8;
   const NOE35_CHARACTERISTICS = [
-    { key:'dexterity', code:'DEX', name:'Dexterity', desc:'Hand-eye coordination and agile movement.' },
-    { key:'body', code:'BOD', name:'Body', desc:'Physical power and endurance.' },
-    { key:'willpower', code:'WIL', name:'Willpower', desc:'Resolve, conviction, and mental resistance.' },
-    { key:'magic', code:'MAG', name:'Magic', desc:'Arcane talent and occult understanding.' },
-    { key:'wisdom', code:'WIS', name:'Wisdom', desc:'Knowledge use, analysis, and perception of context.' },
-    { key:'presence', code:'PRE', name:'Presence', desc:'Social impact, leadership, and influence.' },
+    { key:'dexterity', code:'DEX', name:'Dexterity' },
+    { key:'body', code:'BOD', name:'Body' },
+    { key:'willpower', code:'WIL', name:'Willpower' },
+    { key:'magic', code:'MAG', name:'Magic' },
+    { key:'wisdom', code:'WIS', name:'Wisdom' },
+    { key:'presence', code:'PRE', name:'Presence' },
   ];
   const NOE35_CHAR_BY_KEY = new Map(NOE35_CHARACTERISTICS.map(c=> [c.key, c]));
   const NOE35_NATURES = ['Fire','Water','Wind','Earth','Lightning','Sun','Moon','Ki'];
@@ -19976,20 +19976,19 @@ initRichTextToolbar();
     style.textContent = `
       #stats-grid { display:grid; grid-template-columns:1fr; gap:14px; }
       .ns35-char-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
-      .ns35-char-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:10px; display:grid; gap:8px; }
-      .ns35-char-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-      .ns35-char-desc { font-size:.84rem; opacity:.82; min-height:2.6em; }
-      .ns35-value-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-      .ns35-value-row input { width:72px; max-width:72px; }
+      .ns35-char-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:10px; }
+      .ns35-char-line { display:grid; grid-template-columns:minmax(0, 1fr) auto 72px; align-items:center; gap:8px; }
+      .ns35-char-line input { width:72px; max-width:72px; }
       .ns35-category-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
-      .ns35-skill-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px 10px; }
+      .ns35-skill-grid { display:grid; grid-template-columns:1fr; gap:8px; }
       .ns35-skill-row { display:grid; grid-template-columns:minmax(0, 1fr) 64px; align-items:center; gap:8px; }
       .ns35-skill-row .skill-name { font-weight:600; text-align:left; }
       .ns35-nature-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; }
-      .ns35-nature-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:10px; display:grid; gap:8px; }
-      .ns35-nature-row { display:grid; grid-template-columns:28px minmax(0, 1fr) auto; gap:8px; align-items:center; }
+      .ns35-nature-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:10px; }
+      .ns35-nature-row { display:grid; grid-template-columns:28px auto 64px; gap:8px; align-items:center; }
       .ns35-nature-row img { width:28px; height:28px; }
       .ns35-id-chip { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-size:.8rem; white-space:nowrap; }
+      .ns35-nature-row input { width:64px; max-width:64px; justify-self:end; }
       .ns35-roll-char { display:grid; gap:4px; }
       .ns35-roll-char select { min-width:200px; }
       @media (max-width: 1160px){
@@ -20241,7 +20240,7 @@ initRichTextToolbar();
 
     const statPanel = document.createElement('div');
     statPanel.className = 'panel';
-    statPanel.innerHTML = '<div class="hdr"><strong>Characteristics</strong><span class="muted">Invested values only (0-8)</span></div>';
+    statPanel.innerHTML = '<div class="hdr"><strong>Characteristics</strong><span class="muted">0-8</span></div>';
     const statBody = document.createElement('div');
     statBody.className = 'panel-body';
     const statGrid = document.createElement('div');
@@ -20251,9 +20250,11 @@ initRichTextToolbar();
       cell.className = 'ns35-char-cell';
       const inputId = `noe35-char-${ch.key}`;
       cell.innerHTML = `
-        <div class="ns35-char-head"><strong>${ch.name}</strong><span class="pill">${ch.code}</span></div>
-        <div class="ns35-char-desc">${ch.desc}</div>
-        <label class="ns35-value-row"><span class="muted">Invested</span><input id="${inputId}" class="num" type="number" min="0" max="${MAX_INVEST}" value="${clampInvested(box.characteristics[ch.key])}"></label>
+        <div class="ns35-char-line">
+          <strong>${ch.name}</strong>
+          <span class="pill">${ch.code}</span>
+          <input id="${inputId}" class="num" type="number" min="0" max="${MAX_INVEST}" value="${clampInvested(box.characteristics[ch.key])}">
+        </div>
       `;
       statGrid.appendChild(cell);
       const input = cell.querySelector(`#${inputId}`);
@@ -20324,7 +20325,10 @@ initRichTextToolbar();
 
     const naturePanel = document.createElement('div');
     naturePanel.className = 'panel';
-    naturePanel.innerHTML = '<div class="hdr"><strong>Nature Skills</strong><span class="muted">Invested values and ID</span></div>';
+    const natureLimit = (typeof natureSlotLimit === 'function')
+      ? natureSlotLimit()
+      : NOE35_NATURES.length;
+    naturePanel.innerHTML = `<div class="hdr"><strong>Nature Skills</strong><span class="muted">Max natures allowed: ${natureLimit}</span></div>`;
     const natureBody = document.createElement('div');
     natureBody.className = 'panel-body';
     const natureGrid = document.createElement('div');
@@ -20340,10 +20344,9 @@ initRichTextToolbar();
       cell.innerHTML = `
         <div class="ns35-nature-row">
           <img src="/assets/natures/${iconName}.svg" alt="${nature}" title="${nature}">
-          <div><strong>${nature}</strong></div>
           <span class="ns35-id-chip" id="${idId}">ID ${idLabel}</span>
+          <input id="${inputId}" class="num" type="number" min="0" max="${MAX_INVEST}" value="${invested}" title="${nature}">
         </div>
-        <label class="ns35-value-row"><span class="muted">Invested</span><input id="${inputId}" class="num" type="number" min="0" max="${MAX_INVEST}" value="${invested}"></label>
       `;
       natureGrid.appendChild(cell);
       const input = cell.querySelector(`#${inputId}`);
@@ -20355,6 +20358,21 @@ initRichTextToolbar();
         const desired = clampInvested(input.value);
         const allowed = Math.max(0, pools.skillPool - totalOther);
         const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, MAX_INVEST);
+        if (current <= 0 && val > 0){
+          const limit = (typeof natureSlotLimit === 'function')
+            ? natureSlotLimit()
+            : NOE35_NATURES.length;
+          let positiveAfter = 0;
+          NOE35_NATURES.forEach(name=>{
+            const nextVal = name === nature ? val : clampInvested(box.natures[name]);
+            if (nextVal > 0) positiveAfter++;
+          });
+          if (positiveAfter > limit){
+            alert(`Only ${limit} nature${limit === 1 ? '' : 's'} can have invested points at once.`);
+            input.value = current;
+            return;
+          }
+        }
         if (!OVERRIDE_ENABLED) input.value = val;
         box.natures[nature] = val;
         syncNoe35ToLegacy(box);
