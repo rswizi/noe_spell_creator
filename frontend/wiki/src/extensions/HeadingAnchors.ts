@@ -1,6 +1,6 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "prosemirror-state";
-import { collectHeadings, gatherHeadingNodes, assignHeadingIds } from "../utils/text";
+import { collectHeadings, gatherHeadingNodes, assignHeadingIds, HeadingItem } from "../utils/text";
 
 const headingKey = new PluginKey("headingAnchors");
 
@@ -12,19 +12,25 @@ const HeadingAnchors = Extension.create({
     };
   },
   addProseMirrorPlugins() {
-    const storage = this.storage.headingAnchors;
+    const writeHeadings = (headings: HeadingItem[]) => {
+      const extensionStorage =
+        (this.editor?.storage as any)?.headingAnchors || (this.storage as any);
+      if (extensionStorage && typeof extensionStorage === "object") {
+        extensionStorage.headings = headings;
+      }
+    };
     return [
       new Plugin({
         key: headingKey,
         state: {
           init: (_, state) => {
             const headings = collectHeadings(state.doc);
-            storage.headings = headings;
+            writeHeadings(headings);
             return headings;
           },
           apply: (_, __, ___, newState) => {
             const headings = collectHeadings(newState.doc);
-            storage.headings = headings;
+            writeHeadings(headings);
             return headings;
           },
         },
