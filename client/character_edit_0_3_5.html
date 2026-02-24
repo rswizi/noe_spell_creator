@@ -3435,26 +3435,26 @@ function craftSpellIsComplex(sp){
 }
 const MAX_LEVEL = 20;
 const LEVEL_REWARD_PROFILES = [
-  { level:1, skillPoints:80, skillCap:3, charPoints:24, charCap:10, archetypeRank:4, abilityPoints:0, tensionCap:3, subSlots:0, maxSublimationTier:1, maxCraftomancy:0, awakeningStage:0, boonStage:1 },
-  { level:2, skillPoints:90, skillCap:4, charPoints:28, charCap:10, archetypeRank:4, abilityPoints:1, tensionCap:6, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, awakeningStage:0, boonStage:2 },
-  { level:3, skillPoints:100, skillCap:4, charPoints:28, charCap:12, archetypeRank:5, abilityPoints:1, tensionCap:6, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, awakeningStage:0, boonStage:2 },
-  { level:4, skillPoints:110, skillCap:5, charPoints:32, charCap:12, archetypeRank:5, abilityPoints:2, tensionCap:9, subSlots:2, maxSublimationTier:1, maxCraftomancy:2, awakeningStage:0, boonStage:3 },
-  { level:5, skillPoints:120, skillCap:5, charPoints:32, charCap:12, archetypeRank:6, abilityPoints:2, tensionCap:9, subSlots:4, maxSublimationTier:2, maxCraftomancy:2, awakeningStage:1, boonStage:3 },
-  { level:6, skillPoints:130, skillCap:6, charPoints:36, charCap:14, archetypeRank:6, abilityPoints:3, tensionCap:12, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, awakeningStage:1, boonStage:4 },
-  { level:7, skillPoints:140, skillCap:6, charPoints:36, charCap:14, archetypeRank:7, abilityPoints:3, tensionCap:12, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, awakeningStage:1, boonStage:4 },
-  { level:8, skillPoints:150, skillCap:7, charPoints:40, charCap:14, archetypeRank:7, abilityPoints:4, tensionCap:15, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, awakeningStage:1, boonStage:5 },
-  { level:9, skillPoints:160, skillCap:7, charPoints:40, charCap:16, archetypeRank:8, abilityPoints:4, tensionCap:15, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, awakeningStage:1, boonStage:5 },
-  { level:10, skillPoints:170, skillCap:8, charPoints:44, charCap:16, archetypeRank:8, abilityPoints:5, tensionCap:18, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, awakeningStage:2, boonStage:6 },
-  { level:11, skillPoints:180, skillCap:8, charPoints:44, charCap:16, archetypeRank:9, abilityPoints:5, tensionCap:18, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, awakeningStage:2, boonStage:6 },
-  { level:12, skillPoints:190, skillCap:8, charPoints:48, charCap:18, archetypeRank:9, abilityPoints:6, tensionCap:18, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, awakeningStage:2, boonStage:7 },
-  { level:13, skillPoints:200, skillCap:8, charPoints:48, charCap:18, archetypeRank:10, abilityPoints:6, tensionCap:18, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, awakeningStage:2, boonStage:7 },
-  { level:14, skillPoints:210, skillCap:8, charPoints:52, charCap:18, archetypeRank:10, abilityPoints:7, tensionCap:18, subSlots:14, maxSublimationTier:3, maxCraftomancy:7, awakeningStage:2, boonStage:8 },
-  { level:15, skillPoints:220, skillCap:8, charPoints:52, charCap:20, archetypeRank:11, abilityPoints:7, tensionCap:18, subSlots:14, maxSublimationTier:4, maxCraftomancy:7, awakeningStage:3, boonStage:8 },
-  { level:16, skillPoints:230, skillCap:8, charPoints:56, charCap:20, archetypeRank:11, abilityPoints:8, tensionCap:18, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, awakeningStage:3, boonStage:9 },
-  { level:17, skillPoints:240, skillCap:8, charPoints:56, charCap:20, archetypeRank:12, abilityPoints:8, tensionCap:18, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, awakeningStage:3, boonStage:9 },
-  { level:18, skillPoints:250, skillCap:8, charPoints:60, charCap:20, archetypeRank:12, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3, boonStage:10 },
-  { level:19, skillPoints:260, skillCap:8, charPoints:60, charCap:20, archetypeRank:12, abilityPoints:9, tensionCap:18, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, awakeningStage:3, boonStage:10 },
-  { level:20, skillPoints:270, skillCap:8, charPoints:64, charCap:20, archetypeRank:12, abilityPoints:10, tensionCap:18, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, awakeningStage:3, boonStage:11 },
+  { level:1, skillPoints:68, skillCap:3, charPoints:18, charCap:4, archetypeRank:4, abilityPoints:0, boonStage:1, hpPlus:5, enPlus:1, foPlus:1, etPlus:0, subSlots:0, maxSublimationTier:1, maxCraftomancy:0, tensionCap:3, awakeningStage:0 },
+  { level:2, skillPoints:76, skillCap:4, charPoints:20, charCap:4, archetypeRank:4, abilityPoints:1, boonStage:2, hpPlus:10, enPlus:2, foPlus:2, etPlus:1, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, tensionCap:6, awakeningStage:0 },
+  { level:3, skillPoints:84, skillCap:4, charPoints:22, charCap:5, archetypeRank:5, abilityPoints:1, boonStage:2, hpPlus:15, enPlus:3, foPlus:3, etPlus:2, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, tensionCap:6, awakeningStage:0 },
+  { level:4, skillPoints:92, skillCap:5, charPoints:22, charCap:5, archetypeRank:5, abilityPoints:2, boonStage:3, hpPlus:20, enPlus:4, foPlus:4, etPlus:2, subSlots:4, maxSublimationTier:1, maxCraftomancy:2, tensionCap:9, awakeningStage:0 },
+  { level:5, skillPoints:100, skillCap:5, charPoints:24, charCap:5, archetypeRank:6, abilityPoints:2, boonStage:3, hpPlus:25, enPlus:5, foPlus:5, etPlus:3, subSlots:4, maxSublimationTier:2, maxCraftomancy:2, tensionCap:9, awakeningStage:1 },
+  { level:6, skillPoints:108, skillCap:6, charPoints:24, charCap:6, archetypeRank:6, abilityPoints:3, boonStage:4, hpPlus:30, enPlus:6, foPlus:6, etPlus:3, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, tensionCap:12, awakeningStage:1 },
+  { level:7, skillPoints:116, skillCap:6, charPoints:26, charCap:6, archetypeRank:7, abilityPoints:3, boonStage:4, hpPlus:35, enPlus:7, foPlus:7, etPlus:4, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, tensionCap:12, awakeningStage:1 },
+  { level:8, skillPoints:124, skillCap:7, charPoints:26, charCap:6, archetypeRank:7, abilityPoints:4, boonStage:5, hpPlus:40, enPlus:8, foPlus:8, etPlus:4, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, tensionCap:15, awakeningStage:1 },
+  { level:9, skillPoints:132, skillCap:7, charPoints:28, charCap:7, archetypeRank:8, abilityPoints:4, boonStage:5, hpPlus:45, enPlus:9, foPlus:9, etPlus:5, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, tensionCap:15, awakeningStage:1 },
+  { level:10, skillPoints:140, skillCap:8, charPoints:28, charCap:7, archetypeRank:8, abilityPoints:5, boonStage:6, hpPlus:50, enPlus:10, foPlus:10, etPlus:5, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, tensionCap:18, awakeningStage:2 },
+  { level:11, skillPoints:148, skillCap:8, charPoints:30, charCap:7, archetypeRank:9, abilityPoints:5, boonStage:6, hpPlus:55, enPlus:11, foPlus:11, etPlus:6, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, tensionCap:18, awakeningStage:2 },
+  { level:12, skillPoints:156, skillCap:8, charPoints:30, charCap:8, archetypeRank:9, abilityPoints:6, boonStage:7, hpPlus:60, enPlus:12, foPlus:12, etPlus:6, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, tensionCap:18, awakeningStage:2 },
+  { level:13, skillPoints:164, skillCap:8, charPoints:32, charCap:8, archetypeRank:10, abilityPoints:6, boonStage:7, hpPlus:65, enPlus:13, foPlus:13, etPlus:7, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, tensionCap:18, awakeningStage:2 },
+  { level:14, skillPoints:172, skillCap:8, charPoints:32, charCap:8, archetypeRank:10, abilityPoints:7, boonStage:8, hpPlus:70, enPlus:14, foPlus:14, etPlus:7, subSlots:14, maxSublimationTier:3, maxCraftomancy:7, tensionCap:18, awakeningStage:2 },
+  { level:15, skillPoints:180, skillCap:8, charPoints:34, charCap:8, archetypeRank:11, abilityPoints:7, boonStage:8, hpPlus:75, enPlus:15, foPlus:15, etPlus:8, subSlots:14, maxSublimationTier:4, maxCraftomancy:7, tensionCap:18, awakeningStage:3 },
+  { level:16, skillPoints:188, skillCap:8, charPoints:34, charCap:8, archetypeRank:11, abilityPoints:8, boonStage:9, hpPlus:80, enPlus:16, foPlus:16, etPlus:8, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, tensionCap:18, awakeningStage:3 },
+  { level:17, skillPoints:196, skillCap:8, charPoints:38, charCap:8, archetypeRank:12, abilityPoints:8, boonStage:9, hpPlus:85, enPlus:17, foPlus:17, etPlus:9, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, tensionCap:18, awakeningStage:3 },
+  { level:18, skillPoints:204, skillCap:8, charPoints:38, charCap:8, archetypeRank:12, abilityPoints:9, boonStage:10, hpPlus:90, enPlus:18, foPlus:18, etPlus:9, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, tensionCap:18, awakeningStage:3 },
+  { level:19, skillPoints:212, skillCap:8, charPoints:40, charCap:8, archetypeRank:12, abilityPoints:9, boonStage:10, hpPlus:95, enPlus:19, foPlus:19, etPlus:10, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, tensionCap:18, awakeningStage:3 },
+  { level:20, skillPoints:220, skillCap:8, charPoints:40, charCap:8, archetypeRank:12, abilityPoints:10, boonStage:11, hpPlus:100, enPlus:20, foPlus:20, etPlus:10, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, tensionCap:18, awakeningStage:3 },
 ];
 const MAX_ARCHETYPE_RANK = 12;
 function computeArchetypeRank(lvl){
@@ -3464,26 +3464,29 @@ function computeArchetypeRank(lvl){
 function levelProfile(lvl){
   const target = Math.max(1, Math.floor(Number(lvl) || 1));
   if (target <= LEVEL_REWARD_PROFILES.length){
-    const entry = { ...LEVEL_REWARD_PROFILES[target - 1] };
-    entry.archetypeRank = computeArchetypeRank(target);
-    return entry;
+    return { ...LEVEL_REWARD_PROFILES[target - 1] };
   }
   const base = LEVEL_REWARD_PROFILES[LEVEL_REWARD_PROFILES.length - 1];
   const extra = target - base.level;
+  const evenStepDelta = Math.max(0, Math.floor(target / 2) - Math.floor(base.level / 2));
   return {
     level: target,
-    skillPoints: base.skillPoints + extra * 10,
+    skillPoints: base.skillPoints + extra * 8,
     skillCap: base.skillCap,
-    charPoints: base.charPoints,
+    charPoints: base.charPoints + (evenStepDelta * 2),
     charCap: base.charCap,
-    archetypeRank: computeArchetypeRank(target),
-    abilityPoints: Math.floor(target / 2),
-    tensionCap: base.tensionCap,
-    subSlots: base.subSlots + extra,
-    boonStage: 1 + Math.floor(target / 2),
-    maxSublimationTier: base.maxSublimationTier,
-    maxCraftomancy: base.maxCraftomancy + Math.floor((extra + 1) / 2),
-    awakeningStage: 3,
+    archetypeRank: Math.min(MAX_ARCHETYPE_RANK, base.archetypeRank + evenStepDelta),
+    abilityPoints: base.abilityPoints + evenStepDelta,
+    boonStage: base.boonStage + evenStepDelta,
+    hpPlus: base.hpPlus + (extra * 5),
+    enPlus: base.enPlus + extra,
+    foPlus: base.foPlus + extra,
+    etPlus: base.etPlus + evenStepDelta,
+    subSlots: 2 * Math.floor(target / 2),
+    maxSublimationTier: Math.min(4, 1 + Math.floor((target - 1) / 5)),
+    maxCraftomancy: Math.max(base.maxCraftomancy, Math.floor(target / 2)),
+    tensionCap: Math.min(18, 3 * Math.ceil(target / 2)),
+    awakeningStage: Math.min(3, Math.floor(target / 5)),
   };
 }
 function xpForLevel(level){
@@ -3695,21 +3698,25 @@ let TALENT_MAX = 1;
 let INITIAL_LOAD = true;
 let LEVEL_REWARD_CONTEXT = null;
 const LEVEL_REWARD_OPTION_DEFS = [
-  { key:'talent', title:'Talent slot', desc:'Gain access to another talent.', effect:'+1 talent slot' },
-  { key:'char', title:'Characteristic points', desc:'Add two points to characteristics pool.', effect:'+2 characteristic points' },
-  { key:'skill', title:'Skill points', desc:'Receive six extra skill points.', effect:'+6 skill points' },
+  { key:'talent_skill', title:'Talent + skill points', desc:'Gain one talent slot and four extra skill points.', effect:'+1 talent slot, +4 skill points' },
+  { key:'char', title:'Characteristic point', desc:'Add one point to characteristics pool.', effect:'+1 characteristic point' },
   { key:'sublimation', title:'Sublimation slots', desc:'Unlock four additional slots.', effect:'+4 sublimation slots' },
 ];
-let LEVEL_REWARD_ALLOCATIONS = { talent:0, char:0, skill:0, sublimation:0 };
+let LEVEL_REWARD_ALLOCATIONS = { talent_skill:0, char:0, sublimation:0 };
 
 function normalizeLevelRewardAllocations(raw){
-  const base = { talent:0, char:0, skill:0, sublimation:0 };
+  const base = { talent_skill:0, char:0, sublimation:0 };
   if (!raw || typeof raw !== 'object') return { ...base };
   const out = {};
   Object.keys(base).forEach(key=>{
     const value = Number(raw[key] ?? 0);
     out[key] = Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
   });
+  if (!Number.isFinite(Number(raw.talent_skill))){
+    const legacyTalent = Math.max(0, Math.floor(Number(raw.talent) || 0));
+    const legacySkill = Math.max(0, Math.floor(Number(raw.skill) || 0));
+    out.talent_skill += legacyTalent + legacySkill;
+  }
   return out;
 }
 
@@ -5171,12 +5178,12 @@ function skillMaxForLevel(lvl){
 }
 function skillPointPool(lvl){
   const base = levelProfile(lvl).skillPoints;
-  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.skill || 0)) * 6;
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.talent_skill || 0)) * 4;
   return base + bonus;
 }
 function statPointPool(lvl){
   const base = levelProfile(lvl).charPoints;
-  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.char || 0)) * 2;
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.char || 0));
   return base + bonus;
 }
 function effectiveSkillPointPool(lvl){
@@ -5186,11 +5193,11 @@ function effectiveStatPointPool(lvl){
   return numOr(DERIVED_CACHE?.stat_points, statPointPool(lvl));
 }
 function statInvestCap(lvl){
-  const maxTotal = levelProfile(lvl).charCap;
-  return Math.max(0, maxTotal - 4);
+  const maxInvest = levelProfile(lvl).charCap;
+  return Math.max(0, maxInvest);
 }
 function statTotalCap(lvl){
-  return totalFromInvest(statInvestCap(lvl));
+  return statInvestCap(lvl);
 }
 function totalSkillInvest(){
   let t = 0;
@@ -5275,17 +5282,50 @@ function effectiveSublimationSlots(lvl){
 function slotsUsed(subs){
   return (subs||[]).reduce((acc,s)=> acc + (SUB_TIER_SLOTS[s.tier] || 0), 0);
 }
+const NOE35_EXCELLENCE_SKILLS = [
+  'Brutality','Technicity','Accuracy','Dodge','Absorption',
+  'Stealth','Reactivity','Acrobatics','Resistance','Athletics',
+  'Spirit','Aura','Investigation','Education','Cunning',
+  'Survival','Instinct','Perception','Psychology','Attunement',
+  'Persuasion','Charm','Taming','Subjugation','Deception',
+  'Crafting','Alchemy','Medicine','Engineering','Sleight of Hand'
+];
+const NOE35_TO_LEGACY_SKILL_ALIAS = {
+  'Subjugation': 'Intimidation',
+  'Sleight of Hand': 'Sleight of hand',
+  'Attunement': 'Potential',
+  'Cunning': 'Charisma'
+};
+const LEGACY_TO_NOE35_SKILL_ALIAS = {
+  'Intimidation': 'Subjugation',
+  'Sleight of hand': 'Sleight of Hand',
+  'Potential': 'Attunement',
+  'Charisma': 'Cunning'
+};
+function resolveNoe35ExcellenceSkillPath(skillName){
+  const display = String(skillName || '').trim();
+  if (!display) return null;
+  const legacySkill = NOE35_TO_LEGACY_SKILL_ALIAS[display] || display;
+  const charKey = charKeyForSkillName(legacySkill);
+  if (!charKey) return null;
+  return { value:`${charKey}|${legacySkill}`, label:display, legacySkill, charKey };
+}
 function buildSkillOptions(){
   const opts = [];
-  for (const c of CHARACS){
-    for (const s of c.skills){
-      opts.push({ value:`${c.key}|${s}`, label:`${s} (${c.name})` });
+  const seen = new Set();
+  NOE35_EXCELLENCE_SKILLS.forEach(skill=>{
+    const path = resolveNoe35ExcellenceSkillPath(skill);
+    if (!path || seen.has(path.value)) return;
+    seen.add(path.value);
+    opts.push({ value:path.value, label:path.label });
+  });
+  if (!opts.length){
+    for (const c of CHARACS){
+      for (const s of c.skills){
+        opts.push({ value:`${c.key}|${s}`, label:`${s} (${c.name})` });
+      }
     }
   }
-  // Allow intensities as targetable “skills” for Excellence
-  INTENSITIES.forEach(n=>{
-    opts.push({ value:`magic|${n}`, label:`${n} (Intensity)` });
-  });
   return opts;
 }
 
@@ -5341,7 +5381,13 @@ function skillLabelFromValue(value){
   const target = String(value || '').trim();
   if (!target) return '(none)';
   const hit = buildSkillOptions().find(opt => String(opt.value || '') === target);
-  return hit?.label || target;
+  if (hit?.label) return hit.label;
+  const parts = target.split('|');
+  if (parts.length >= 2){
+    const raw = String(parts[1] || '').trim();
+    return LEGACY_TO_NOE35_SKILL_ALIAS[raw] || raw || target;
+  }
+  return target;
 }
 
 function buildAutoSublimationCore(attSkill, defSkill, preferredType, preferredNature, capSlots, maxTier){
@@ -5517,7 +5563,7 @@ function sublimationDescription(sub){
   if (t === 'lethality') return `+${2 * tier} neutral weapon dmg (not animarmas)`;
   if (t === 'blessing') return `+${2 * tier} ${(sub.nature || 'magic').toLowerCase()} dmg to space actions`;
   if (t === 'excellence'){
-    const name = (sub.skill || '').split('|')[1] || 'skill';
+    const name = skillLabelFromValue(sub.skill);
     return `+${tier} to ${name}`;
   }
   if (t === 'defense') return `+${12 * tier} HP`;
@@ -11304,6 +11350,10 @@ function showLevelRewardModal(newLvl, prevLvl, mode='level'){
       charPoints: newProfile.charPoints - oldProfile.charPoints,
       charCap: newProfile.charCap - oldProfile.charCap,
       abilityPoints: newProfile.abilityPoints - oldProfile.abilityPoints,
+      hpPlus: newProfile.hpPlus - oldProfile.hpPlus,
+      enPlus: newProfile.enPlus - oldProfile.enPlus,
+      foPlus: newProfile.foPlus - oldProfile.foPlus,
+      etPlus: newProfile.etPlus - oldProfile.etPlus,
       tensionCap: newProfile.tensionCap - oldProfile.tensionCap,
       subSlots: newProfile.subSlots - oldProfile.subSlots,
       maxSublimationTier: newProfile.maxSublimationTier - oldProfile.maxSublimationTier,
@@ -11315,8 +11365,12 @@ function showLevelRewardModal(newLvl, prevLvl, mode='level'){
     summaryParts.push(`<div class="level-reward-line">Skill points pool: ${newProfile.skillPoints}${delta.skillPoints>0?` (+${delta.skillPoints})`:''}</div>`);
     summaryParts.push(`<div class="level-reward-line">Maximum per skill: ${newProfile.skillCap}</div>`);
     summaryParts.push(`<div class="level-reward-line">Characteristic cap: ${newProfile.charCap}${delta.charCap>0?` (+${delta.charCap})`:''}</div>`);
-    summaryParts.push(`<div class="level-reward-line">Attribute points gained: +${delta.charPoints}</div>`);
+    summaryParts.push(`<div class="level-reward-line">Characteristic points pool: ${newProfile.charPoints}${delta.charPoints>0?` (+${delta.charPoints})`:''}</div>`);
     summaryParts.push(`<div class="level-reward-line">Ability points: ${newProfile.abilityPoints}${delta.abilityPoints>0?` (+${delta.abilityPoints})`:''}</div>`);
+    summaryParts.push(`<div class="level-reward-line">HP from level: ${newProfile.hpPlus}${delta.hpPlus>0?` (+${delta.hpPlus})`:''}</div>`);
+    summaryParts.push(`<div class="level-reward-line">EN from level: ${newProfile.enPlus}${delta.enPlus>0?` (+${delta.enPlus})`:''}</div>`);
+    summaryParts.push(`<div class="level-reward-line">FO from level: ${newProfile.foPlus}${delta.foPlus>0?` (+${delta.foPlus})`:''}</div>`);
+    summaryParts.push(`<div class="level-reward-line">ET from level: ${newProfile.etPlus}${delta.etPlus>0?` (+${delta.etPlus})`:''}</div>`);
     summaryParts.push(`<div class="level-reward-line">Tension cap: ${newProfile.tensionCap}</div>`);
     summaryParts.push(`<div class="level-reward-line">Sublimation slots: ${newProfile.subSlots}${delta.subSlots>0?` (+${delta.subSlots})`:''}</div>`);
     summaryParts.push(`<div class="level-reward-line">Max sublimation tier: ${newProfile.maxSublimationTier}</div>`);
@@ -16551,13 +16605,12 @@ function milestone(key){
   return Math.max(0, charAdjMod(key).mod + 3);
 }
 function baseTalentMax(lvl){
-  const levelVal = 1 + Math.floor(Math.max(1, lvl) / 10);
-  return levelVal + 1 + milestone('tech') + milestone('wisdom');
+  return 2 + Math.floor(Math.max(1, lvl) / 10);
 }
 function talentMax(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
   const base = TALENT_MAX || baseTalentMax(lvl);
-  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.talent || 0));
+  const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.talent_skill || 0));
   return base + bonus;
 }
 function talentCount(){
@@ -16568,14 +16621,12 @@ function updateTalentCounter(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
   const baseLevel = 1 + Math.floor(lvl / 10);
   const baselineBonus = 1;
-  const msTec = milestone('tech');
-  const msWis = milestone('wisdom');
   const max = talentMax();
   const count = talentCount();
   const over = count > max;
   talentCounterEl.textContent = `Talents: ${count} / ${max}`;
   talentCounterEl.style.color = over ? '#f66' : '';
-  talentCounterEl.title = `Base ${baseLevel} + baseline +${baselineBonus} + TEC milestone ${msTec} + WIS milestone ${msWis}`;
+  talentCounterEl.title = `Base ${baseLevel} + baseline +${baselineBonus} (+1 per Talent+Skill reward)`;
 }
 function expertiseMax(){
   return Math.max(0, Math.floor(numOr(DERIVED_CACHE?.max_expertise, 0)));
@@ -16640,49 +16691,45 @@ function skillTotalAdjustedFor(key, name){
 
 function updateDerived(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
+  const profile = levelProfile(lvl);
   const st = combatState();
-  const msBOD = milestone('body');
-  const msWIL = milestone('willpower');
-  const msMAG = milestone('magic');
-  const msPRE = milestone('presence');
-  const msREF = milestone('reflex');
-  const msDEX = milestone('dexterity');
   const magTotal = totalFromInvest(investVal(CHAR.stats.magic?.invest, 0));
 
   // Base
   const base = {};
-  const msTEC = milestone('tech');
-  base.hp = 100 + (5 * lvl) + (12 * msBOD) + (6 * msWIL);
-  base.en = 5 + lvl + msWIL + (2 * msMAG);
-  base.fo = 2 + lvl + msWIL + msPRE;
-    base.mo = 4 + msDEX + msREF;
+  base.hp = Math.max(0, Math.floor(numOr(profile.hpPlus, lvl * 5)));
+  base.en = Math.max(0, Math.floor(numOr(profile.enPlus, lvl)));
+  base.fo = Math.max(0, Math.floor(numOr(profile.foPlus, lvl)));
+    base.mo = 4;
     base.initiative = base.mo;
     base.spcap = Math.floor(base.hp * 0.10);
     const complexSchools = magTotal >= 10 ? (1 + Math.floor((magTotal - 10) / 2)) : 0;
     base.complex_schools = complexSchools;
-  base.enc = 10 + (10 * msBOD) + (5 * msWIL);
+  base.enc = 10;
   const invEnc = LINKED_INV?.enc_total || 0;
-  base.et = 1 + Math.floor(lvl / 2) + msMAG;
-  const etTech = 1 + Math.floor(lvl / 2) + msTEC;
+  base.et = Math.max(0, Math.floor(numOr(profile.etPlus, Math.floor(lvl / 2))));
+  base.nature_slots = 1;
   base._notes = Object.assign(base._notes || {}, {
-    et: [`Alt (TEC): ${etTech}`],
-    sublimation_slots: [`Base ${slotsForLevel(lvl)} + PRE milestone ${msPRE * 2}`],
+    et: [`Level profile ET +${base.et}`],
+    hp: [`Level profile HP +${base.hp}`],
+    en: [`Level profile EN +${base.en}`],
+    fo: [`Level profile FO +${base.fo}`],
+    sublimation_slots: [`Level profile slots ${slotsForLevel(lvl)}`],
     complex_schools: [`MAG total ${magTotal} -> ${complexSchools}`],
   });
   base._notes = Object.assign(base._notes || {}, { nature_slots: [`Base ${base.nature_slots}`] });
-  base.tx = 2 + msBOD + (2 * msTEC);
+  base.tx = Math.max(0, Math.floor(numOr(profile.tensionCap, tensionCapForLevel(lvl))));
   base.talent_max = baseTalentMax(lvl);
-  base.nature_slots = 1;
   base.max_expertise = 0;
   base.max_divine_manifestation = 0;
   base.max_awakenings = 0;
   base.skill_points = skillPointPool(lvl);
     base.stat_points = statPointPool(lvl);
-    base.sublimation_slots = slotsForLevel(lvl) + (2 * msPRE);
-    base.weapon_neutral = msDEX;
-    base.craftomancy_max = Math.floor(lvl / 9) + msTEC;
-    base._notes = Object.assign(base._notes || {}, { weapon_neutral: [`DEX milestone ${msDEX}`] });
-    base._notes = Object.assign(base._notes || {}, { craftomancy_max: [`Base ${Math.floor(lvl / 9)} + TEC milestone ${msTEC}`] });
+    base.sublimation_slots = slotsForLevel(lvl);
+    base.weapon_neutral = 0;
+    base.craftomancy_max = Math.max(0, Math.floor(numOr(profile.maxCraftomancy, 0)));
+    base._notes = Object.assign(base._notes || {}, { weapon_neutral: ['Fixed 0 (no milestone bonus)'] });
+    base._notes = Object.assign(base._notes || {}, { craftomancy_max: [`Level profile craftomancy max ${base.craftomancy_max}`] });
 
     // Apply passive modifiers to derived
     const final = applyPassiveModifiersToDerived(base, invEnc);
@@ -20036,9 +20083,13 @@ initRichTextToolbar();
 
   function currentStatPools(){
     const lvl = Math.max(1, Math.floor(Number(levelEl?.value) || Number(CHAR?.level) || 1));
+    const skillCap = Math.max(0, Math.min(MAX_INVEST, Math.floor(numOr(skillMaxForLevel(lvl), MAX_INVEST))));
+    const statCap = Math.max(0, Math.min(MAX_INVEST, Math.floor(numOr(statInvestCap(lvl), MAX_INVEST))));
     return {
       skillPool: Math.max(0, Math.floor(numOr(effectiveSkillPointPool(lvl), 0))),
       statPool: Math.max(0, Math.floor(numOr(effectiveStatPointPool(lvl), 0))),
+      skillCap,
+      statCap,
     };
   }
 
@@ -20123,7 +20174,14 @@ initRichTextToolbar();
   }
 
   function rollBaseNoe35(skillName, charKey, box){
-    const skillVal = clampInvested(box?.skills?.[skillName]);
+    const baseSkill = clampInvested(box?.skills?.[skillName]);
+    let skillVal = baseSkill;
+    const path = resolveLegacySkillPath(skillName);
+    if (path){
+      const adjusted = skillAdjTotal(path.charKey, path.skill);
+      const total = Number(adjusted?.total);
+      if (Number.isFinite(total)) skillVal = Math.max(0, Math.floor(total));
+    }
     const charVal = clampInvested(box?.characteristics?.[charKey]);
     return { skillVal, charVal, base: skillVal + charVal };
   }
@@ -20228,19 +20286,20 @@ initRichTextToolbar();
     const usedStats = totalNoe35Characteristics(box);
     if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkills} / ${pools.skillPool}`;
     if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStats} / ${pools.statPool}`;
-    if (skillCapEl) skillCapEl.textContent = `Max per skill: ${MAX_INVEST}`;
-    if (statCapEl) statCapEl.textContent = `Max per characteristic: ${MAX_INVEST}`;
+    if (skillCapEl) skillCapEl.textContent = `Max per skill: ${pools.skillCap}`;
+    if (statCapEl) statCapEl.textContent = `Max per characteristic: ${pools.statCap}`;
   };
 
   renderStatistics = function(){
     const box = ensureNoe35StatsState();
     if (!box || !gridEl) return;
+    const pools = currentStatPools();
     ensureNoe35Style();
     gridEl.innerHTML = '';
 
     const statPanel = document.createElement('div');
     statPanel.className = 'panel';
-    statPanel.innerHTML = '<div class="hdr"><strong>Characteristics</strong><span class="muted">0-8</span></div>';
+    statPanel.innerHTML = `<div class="hdr"><strong>Characteristics</strong><span class="muted">0-${pools.statCap}</span></div>`;
     const statBody = document.createElement('div');
     statBody.className = 'panel-body';
     const statGrid = document.createElement('div');
@@ -20253,18 +20312,18 @@ initRichTextToolbar();
         <div class="ns35-char-line">
           <strong>${ch.name}</strong>
           <span class="pill">${ch.code}</span>
-          <input id="${inputId}" class="num" type="number" min="0" max="${MAX_INVEST}" value="${clampInvested(box.characteristics[ch.key])}">
+          <input id="${inputId}" class="num" type="number" min="0" max="${pools.statCap}" value="${clampInvested(box.characteristics[ch.key])}">
         </div>
       `;
       statGrid.appendChild(cell);
       const input = cell.querySelector(`#${inputId}`);
       input.addEventListener('input', ()=>{
-        const pools = currentStatPools();
+        const livePools = currentStatPools();
         const current = clampInvested(box.characteristics[ch.key]);
         const totalOther = totalNoe35Characteristics(box) - current;
         const desired = clampInvested(input.value);
-        const allowed = Math.max(0, pools.statPool - totalOther);
-        const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, MAX_INVEST);
+        const allowed = Math.max(0, livePools.statPool - totalOther);
+        const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, livePools.statCap);
         if (!OVERRIDE_ENABLED) input.value = val;
         box.characteristics[ch.key] = val;
         syncNoe35ToLegacy(box);
@@ -20295,18 +20354,18 @@ initRichTextToolbar();
         const inputId = `noe35-skill-${skill.name.replace(/[^a-z0-9]+/gi, '-')}`;
         row.innerHTML = `
           <button type="button" class="roll-link skill-name">${skill.name} <span class="muted">(${codes})</span></button>
-          <input id="${inputId}" class="num" type="number" min="0" max="${MAX_INVEST}" value="${clampInvested(box.skills[skill.name])}">
+          <input id="${inputId}" class="num" type="number" min="0" max="${pools.skillCap}" value="${clampInvested(box.skills[skill.name])}">
         `;
         skillGrid.appendChild(row);
         row.querySelector('.skill-name')?.addEventListener('click', ()=> openSkillRoll(skill.defaults[0], NOE35_CHAR_BY_KEY.get(skill.defaults[0])?.name || '', skill.name));
         const input = row.querySelector(`#${inputId}`);
         input.addEventListener('input', ()=>{
-          const pools = currentStatPools();
+          const livePools = currentStatPools();
           const current = clampInvested(box.skills[skill.name]);
           const totalOther = totalNoe35Skills(box) - current;
           const desired = clampInvested(input.value);
-          const allowed = Math.max(0, pools.skillPool - totalOther);
-          const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, MAX_INVEST);
+          const allowed = Math.max(0, livePools.skillPool - totalOther);
+          const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, livePools.skillCap);
           if (!OVERRIDE_ENABLED) input.value = val;
           box.skills[skill.name] = val;
           syncNoe35ToLegacy(box);
@@ -20336,28 +20395,25 @@ initRichTextToolbar();
     NOE35_NATURES.forEach(nature=>{
       const iconName = String(nature).toLowerCase();
       const inputId = `noe35-nature-${iconName}`;
-      const idId = `noe35-id-${iconName}`;
       const invested = clampInvested(box.natures[nature]);
-      const idLabel = invested > 0 ? intensityIdForValue(invested) : '--';
       const cell = document.createElement('div');
       cell.className = 'ns35-nature-cell';
       cell.innerHTML = `
         <div class="ns35-nature-row">
           <img src="/assets/natures/${iconName}.svg" alt="${nature}" title="${nature}">
-          <span class="ns35-id-chip" id="${idId}">ID ${idLabel}</span>
-          <input id="${inputId}" class="num" type="number" min="0" max="${MAX_INVEST}" value="${invested}" title="${nature}">
+          <span class="ns35-id-chip">${nature}</span>
+          <input id="${inputId}" class="num" type="number" min="0" max="${pools.skillCap}" value="${invested}" title="${nature}">
         </div>
       `;
       natureGrid.appendChild(cell);
       const input = cell.querySelector(`#${inputId}`);
-      const idEl = cell.querySelector(`#${idId}`);
       input.addEventListener('input', ()=>{
-        const pools = currentStatPools();
+        const livePools = currentStatPools();
         const current = clampInvested(box.natures[nature]);
         const totalOther = totalNoe35Skills(box) - current;
         const desired = clampInvested(input.value);
-        const allowed = Math.max(0, pools.skillPool - totalOther);
-        const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, MAX_INVEST);
+        const allowed = Math.max(0, livePools.skillPool - totalOther);
+        const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, livePools.skillCap);
         if (current <= 0 && val > 0){
           const limit = (typeof natureSlotLimit === 'function')
             ? natureSlotLimit()
@@ -20376,7 +20432,6 @@ initRichTextToolbar();
         if (!OVERRIDE_ENABLED) input.value = val;
         box.natures[nature] = val;
         syncNoe35ToLegacy(box);
-        idEl.textContent = `ID ${val > 0 ? intensityIdForValue(val) : '--'}`;
         updatePointCounters();
         updateDerived();
         renderAddedSchools();
