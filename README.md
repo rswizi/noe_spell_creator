@@ -1,83 +1,99 @@
 # NoE Spell Creator
 
-## Running the server locally
+## Local backend run
 
-1. Install dependencies: `pip install -r requirements.txt`
-   - This pulls in `asyncpg`, `aiosqlite`, `python-multipart`, SQLAlchemy, and the testing stack used for the wiki slice.
-2. Set the required environment variables:
-   - `DATABASE_URL` (Postgres: `postgresql+asyncpg://user:pass@host/db`; SQLite for local dev: `sqlite+aiosqlite:///./wiki.db`)
-   - `API_TOKEN` (must be set in prod; development environments warn but still run)
-   - `CORS_ORIGINS` (comma-separated list of allowed origins; mandatory in production)
-   - Optional: `WIKI_MAX_DOC_BYTES` caps the serialized JSON payload (default 200000 bytes)
-3. Run migrations: `alembic upgrade head`
-4. Start the app: `uvicorn main:app --reload --host 0.0.0.0 --port 8000`
+1. Install Python dependencies:
+   - `pip install -r requirements.txt`
+2. Configure env vars (minimum):
+   - `MONGODB_URI` (example local test: `mongomock://localhost`, production: Atlas URI)
+   - `CORS_ORIGINS` (mandatory in production)
+3. Optional wiki/env settings:
+   - `WIKI_ENABLED` (`true`/`false`, default `true`)
+   - `WIKI_REQUIRE_AUTH` (`true`/`false`, default `true`)
+   - `WIKI_STRICT_STARTUP` (`true` fails startup on wiki env errors)
+   - `WIKI_MAX_DOC_BYTES` (default `200000`)
+   - `WIKI_DEFAULT_VIEW_ROLES` (default `viewer,editor,admin`)
+   - `WIKI_DEFAULT_EDIT_ROLES` (default `editor,admin`)
+4. Start server:
+   - `uvicorn main:app --reload --host 0.0.0.0 --port 8000`
 
-## Wiki frontend (Milestone 2)
+## Wiki storage architecture
 
-1. Enter `frontend/wiki` and run `npm install` to pull the React + TipTap stack.
-2. For development, run `npm run dev` and open the `/wiki` path from the dev server.
-3. Build the static files: `npm run build` (output lands under `frontend/wiki/dist`).
-4. FastAPI automatically serves `/wiki` with the built assets, so redeploy after building to update the SPA.
-5. Configure `VITE_API_BASE_URL` (defaults to same origin) and dev-only `VITE_API_TOKEN` when running locally.
-6. Use the toolbar TOC button or `/` slash command to drop a Table of Contents block; headings now generate stable slug anchors so the sidebar links stay valid.
-7. Type `[[` to open the internal link palette. The UI hits `GET /api/wiki/resolve?query=…` (title/slug search, default 10 results, max 25) and stores the referenced page slug/ID plus fragment for future rename/backlink support.
-8. Tables now work out of the box: use the Table button to open the 2×2–10×10 grid picker, then manage rows/columns via the floating menu that appears while editing a table. Columns are resizable by drag and the read-only renderer keeps them styled consistently.
+- Wiki is Mongo-backed (`wiki_categories`, `wiki_pages`, `wiki_page_content`, `wiki_page_revisions`, `wiki_links`, `wiki_relations`, `wiki_assets`, `wiki_entity_templates`).
+- Startup validates wiki env contract and ensures validators/indexes.
+- Page ACL uses defaults unless `acl_override=true` on a page.
+- Roles:
+  - app `user` -> wiki `viewer`
+  - app `moderator` -> wiki `editor`
+  - app `admin` -> wiki `admin`
+  - optional per-user `users.wiki_role` override (`viewer|editor|admin`)
 
-## Wiki API slice (Milestone 1)
+## Wiki API (current)
 
-- Postgres-backed models:
-  - `wiki_pages` (id, slug, title, doc_json, created_at, updated_at; JSONB on Postgres, JSON on SQLite)
-  - `wiki_revisions` (id, page_id, doc_json, title, slug, created_at)
-- Read endpoints (list, retrieve by id/slug, `/resolve`, and revisions retrieval) are public for rendering. Creation, updates, and revisions snapshots use the `require_wiki_admin` guard so only admin/moderator sessions or the API token can mutate state.
-- `GET /api/wiki/resolve?query=…` performs case-insensitive title/slug matching, prefers exact title hits, caps results at 25, and powers the internal link picker.
-- Configurable CORS and automatic slug/size rejection guard the canonical document storage.
-- `scripts/wiki_client.sh` demonstrates create → update → revision using the token-based auth.
+- Categories:
+  - `GET /api/wiki/categories`
+  - `POST /api/wiki/categories` (admin)
+  - `PUT /api/wiki/categories/{category_id}` (admin)
+  - `DELETE /api/wiki/categories/{category_id}` (admin)
+- Entity templates:
+  - `GET /api/wiki/templates`
+  - `POST /api/wiki/templates` (admin)
+  - `PUT /api/wiki/templates/{template_id}` (admin)
+  - `DELETE /api/wiki/templates/{template_id}` (admin)
+- Pages:
+  - `POST /api/wiki/pages` (editor+)
+  - `PUT /api/wiki/pages/{id}` (editor+ with ACL)
+  - `PATCH /api/wiki/pages/{id}/fields` (editor+ with ACL)
+  - `DELETE /api/wiki/pages/{id}` (editor+ with ACL)
+  - `GET /api/wiki/pages`
+  - `GET /api/wiki/pages/{id}`
+  - `GET /api/wiki/pages/slug/{slug}`
+  - `PUT /api/wiki/pages/{id}/acl` (admin)
+  - `GET /api/wiki/me`
+- Search/resolve:
+  - `GET /api/wiki/resolve?query=...`
+- Links/backlinks:
+  - `POST /api/wiki/pages/{id}/links/rebuild`
+  - `GET /api/wiki/pages/{id}/links`
+  - `GET /api/wiki/pages/{id}/backlinks`
+  - `GET /api/wiki/pages/{id}/context`
+- Revisions:
+  - `POST /api/wiki/pages/{id}/revisions`
+  - `GET /api/wiki/pages/{id}/revisions`
+  - `POST /api/wiki/pages/{id}/revisions/{revision_id}/restore`
+- Relations:
+  - `POST /api/wiki/pages/{id}/relations`
+  - `GET /api/wiki/pages/{id}/relations`
+  - `DELETE /api/wiki/relations/{relation_id}`
 
-## Testing
+## Wiki frontend
 
-- Run `python -m pytest tests/test_wiki_api.py` after installing dependencies to exercise the wiki CRUD + revision flows, slug enforcement, and authentication guardrails.
+Path: `frontend/wiki`
 
-## Alembic migrations
+1. `cd frontend/wiki`
+2. `npm install`
+3. `npm run dev` (or `npm run build`)
 
-- Controlled via `alembic.ini`/`alembic/env.py`. The env script derives a sync URL (using `DATABASE_SYNC_URL` or falling back to the async URL with `psycopg2`/`sqlite` variants).
-- Run `alembic upgrade head` any time the schema changes; it creates/updates the `wiki_pages` and `wiki_revisions` tables plus the `updated_at` index on `wiki_pages`.
+FastAPI serves built assets from `/wiki` when `frontend/wiki/dist` exists.
 
-## Render deployment notes
+- Admin panel route: `/wiki/admin` (category/template management, admin-only behavior).
 
-- Environment variables:
-- `DATABASE_URL` (use the managed Postgres URL and include `postgresql+asyncpg` as the scheme)
-- `API_TOKEN` (random bearer token that secures `/api/wiki/*`)
-- `CORS_ORIGINS` (e.g., `https://your-frontend.onrender.com`)
-- Optional: `WIKI_MAX_DOC_BYTES`
-- `MONGODB_URI` (used for GridFS image storage; set to `mongomock://localhost` for local tests or your Atlas URL in production)
-- `DB_NAME` (optional override when your URI doesn't already encode `NoeSpellCreator`; defaults to that name if unspecified)
-- `ASSETS_MAX_UPLOAD_MB` (defaults to `10`; caps image uploads in the browser)
-Images are uploaded by admins/moderators via `/api/assets/upload` (tooling enforces the same `API_TOKEN`/session guard), then served at `/api/assets/{asset_id}` with long cache headers.
+## Assets and R2
 
-## Wiki editor image workflow
-1. Use the Image button, drop, or paste to add an image.
-2. Uploads automatically POST to the asset endpoint, store GridFS metadata, and insert nodes with `asset_id`, caption, and sizing attributes.
-3. The floating toolbar lets you adjust width, alignment, or caption without triggering extra autosaves.
-- Recommended start command: `pip install -r requirements.txt && alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT`
-- Recommended Render build pipeline: `pip install -r requirements.txt && cd frontend/wiki && npm install && npm run build`
+- Upload endpoint: `POST /api/assets/upload` (editor+)
+- Fetch endpoint: `GET /api/assets/{asset_id}`
+- Storage:
+  - R2 if configured (`R2_ENABLED=true` + R2 credentials/env)
+  - fallback to GridFS / mongomock store
 
-## Tips
+## Tests
 
-- Always run `alembic upgrade head` before the app boots on Render or locally; the async session assumes the tables and indexes exist.
+- Run:
+  - `python -m pytest -q tests/test_wiki_api.py tests/test_assets.py`
+- Tests use `mongomock://localhost` and session-token auth fixtures.
 
-## Proof-of-life client
+## One-shot migration
 
-Use the helper script with `BASE`/`TOKEN` to confirm API connectivity:
-
-```
-BASE=http://localhost:8000 TOKEN=supersecret bash scripts/wiki_client.sh
-```
-
-Requires `jq` plus the API token configured above.
-
-## Next steps (Milestone 2)
-
-1. Build the TipTap-powered rich text editor + read-mode renderer.
-2. Hook autosave to `PUT /api/wiki/pages/{id}`.
-3. Add tables, images, TOC, and the internal link resolver/block support.
-4. Implement presigned image uploads, asset metadata, and `/resolve` for wiki intra-links.
+- Legacy SQL wiki to Mongo migration script:
+  - `python scripts/migrate_wiki_sql_to_mongo.py --sqlite-path wiki.db`
+  - optional dry run: `python scripts/migrate_wiki_sql_to_mongo.py --sqlite-path wiki.db --dry-run`

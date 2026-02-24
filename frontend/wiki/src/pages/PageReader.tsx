@@ -14,7 +14,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import HeadingAnchors from "../extensions/HeadingAnchors";
 import TableOfContents from "../extensions/TableOfContents";
-import { getPage, getPageBySlug, PagePayload } from "../utils/api";
+import { fetchPageContext, getPage, getPageBySlug, PagePayload } from "../utils/api";
 
 const ReadOnlyEditor: React.FC<{ content: any }> = ({ content }) => {
   const editor = useEditor({
@@ -28,7 +28,6 @@ const ReadOnlyEditor: React.FC<{ content: any }> = ({ content }) => {
         TableRow,
         TableHeader,
         TableCell,
-        TableColumnResizing,
         Underline,
         ExtendedLink,
         ExtendedImage,
@@ -44,6 +43,8 @@ const ReadOnlyEditor: React.FC<{ content: any }> = ({ content }) => {
 const PageReader: React.FC = () => {
   const { id, slug } = useParams<{ id?: string; slug?: string }>();
   const [page, setPage] = useState<PagePayload | null>(null);
+  const [backlinks, setBacklinks] = useState<any[]>([]);
+  const [relations, setRelations] = useState<any[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -56,6 +57,21 @@ const PageReader: React.FC = () => {
     }
   }, [id, slug]);
 
+  useEffect(() => {
+    if (!page?.id) {
+      return;
+    }
+    fetchPageContext(page.id)
+      .then((context) => {
+        setBacklinks(context.backlinks || []);
+        setRelations(context.relations || []);
+      })
+      .catch(() => {
+        setBacklinks([]);
+        setRelations([]);
+      });
+  }, [page?.id]);
+
   if (!page) {
     return <p>Loading…</p>;
   }
@@ -64,8 +80,41 @@ const PageReader: React.FC = () => {
     <div>
       <h1>{page.title}</h1>
       <p style={{ fontSize: "13px", color: "#9ba5ff" }}>Last updated {new Date(page.updated_at).toLocaleString()}</p>
+      <p style={{ fontSize: "13px", color: "#9ba5ff" }}>
+        {page.category_id} {page.entity_type ? `• ${page.entity_type}` : ""} {page.status ? `• ${page.status}` : ""}
+      </p>
       <div className="editor-wrapper">
         <ReadOnlyEditor content={page.doc_json} />
+      </div>
+      <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+        <div>
+          <h3>Backlinks</h3>
+          {backlinks.length ? (
+            <ul>
+              {backlinks.map((row) => (
+                <li key={row.id || `${row.from_page_id}-${row.to_page_id}`}>
+                  {row.from_page?.title || row.from_page_id}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No backlinks.</p>
+          )}
+        </div>
+        <div>
+          <h3>Relations</h3>
+          {relations.length ? (
+            <ul>
+              {relations.map((row) => (
+                <li key={row.id || `${row.from_page_id}-${row.to_page_id}-${row.relation_type}`}>
+                  {row.relation_type}: {row.from_page?.title || row.from_page_id} → {row.to_page?.title || row.to_page_id}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No relations.</p>
+          )}
+        </div>
       </div>
     </div>
   );

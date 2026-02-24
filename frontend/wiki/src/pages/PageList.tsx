@@ -1,21 +1,30 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchPages } from "../utils/api";
+import { fetchCategories, fetchPages, WikiCategory } from "../utils/api";
 
 type PageSummary = {
   id: string;
   title: string;
   slug: string;
+  category_id: string;
+  entity_type?: string | null;
+  status: "draft" | "published" | "archived";
   updated_at: string;
 };
 
 const PageList: React.FC = () => {
   const [pages, setPages] = useState<PageSummary[]>([]);
+  const [categories, setCategories] = useState<WikiCategory[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [entityTypeFilter, setEntityTypeFilter] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    fetchPages()
+    fetchPages({
+      ...(categoryFilter ? { category_id: categoryFilter } : {}),
+      ...(entityTypeFilter ? { entity_type: entityTypeFilter } : {}),
+    })
       .then((payload) => {
         if (!active) {
           return;
@@ -26,6 +35,10 @@ const PageList: React.FC = () => {
     return () => {
       active = false;
     };
+  }, [categoryFilter, entityTypeFilter]);
+
+  useEffect(() => {
+    fetchCategories().then(setCategories).catch(() => setCategories([]));
   }, []);
 
   return (
@@ -36,6 +49,26 @@ const PageList: React.FC = () => {
         <Link to="/new">
           <button>Create Page</button>
         </Link>
+        <Link to="/admin" style={{ marginLeft: "8px" }}>
+          <button>Wiki Admin</button>
+        </Link>
+        <div style={{ marginTop: "10px" }}>
+          <label style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
+            Category
+            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+              <option value="">All</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "inline-flex", gap: "8px", alignItems: "center", marginLeft: "12px" }}>
+            Entity Type
+            <input value={entityTypeFilter} onChange={(event) => setEntityTypeFilter(event.target.value)} placeholder="character..." />
+          </label>
+        </div>
       </header>
 
       {loading ? (
@@ -46,6 +79,8 @@ const PageList: React.FC = () => {
             <tr>
               <th>Title</th>
               <th>Slug</th>
+              <th>Type</th>
+              <th>Status</th>
               <th>Updated</th>
               <th>Actions</th>
             </tr>
@@ -55,6 +90,8 @@ const PageList: React.FC = () => {
               <tr key={page.id}>
                 <td>{page.title}</td>
                 <td>{page.slug}</td>
+                <td>{page.entity_type || "-"}</td>
+                <td>{page.status}</td>
                 <td>{new Date(page.updated_at).toLocaleString()}</td>
                 <td style={{ display: "flex", gap: "8px" }}>
                   <Link className="card-link" to={`/${page.id}`}>

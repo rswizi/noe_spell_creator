@@ -7,10 +7,17 @@ from tests.conftest import wiki_client
 
 
 @pytest.mark.asyncio
-async def test_upload_requires_admin():
+async def test_upload_requires_auth():
     async with wiki_client(auth_token=None) as client:
         resp = await client.post("/api/assets/upload", files={"file": ("test.png", b"x", "image/png")})
         assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_upload_forbidden_for_viewer():
+    async with wiki_client(role="user", wiki_role="viewer") as client:
+        resp = await client.post("/api/assets/upload", files={"file": ("test.png", b"x", "image/png")})
+        assert resp.status_code == 403
 
 
 @pytest.mark.asyncio

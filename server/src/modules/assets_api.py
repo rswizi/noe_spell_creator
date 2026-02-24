@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from gridfs.errors import NoFile
 
 from server.src.modules.assets_storage import GridFSStorage
-from server.src.modules.wiki_auth import require_wiki_admin
+from server.src.modules.wiki_auth import require_wiki_editor
 
 ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 MAX_UPLOAD_MB = int(os.environ.get("ASSETS_MAX_UPLOAD_MB", "10"))
@@ -25,7 +25,7 @@ def _validate_file(file: UploadFile) -> None:
 @router.post("/upload")
 async def upload_asset(
     file: UploadFile = File(...),
-    auth: dict[str, Any] = Depends(require_wiki_admin),
+    auth: dict[str, Any] = Depends(require_wiki_editor),
 ):
     _validate_file(file)
     data = await file.read()

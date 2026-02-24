@@ -4,6 +4,7 @@ import PageEditor from "./pages/PageEditor";
 import PageList from "./pages/PageList";
 import PageReader from "./pages/PageReader";
 import NewPage from "./pages/NewPage";
+import WikiAdmin from "./pages/WikiAdmin";
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Routes>
           <Route path="/" element={<PageList />} />
           <Route path="/new" element={<NewPage />} />
+          <Route path="/admin" element={<WikiAdmin />} />
           <Route path="/slug/:slug" element={<PageReader />} />
           <Route path="/:id/edit" element={<PageEditor />} />
           <Route path="/:id" element={<PageReader />} />

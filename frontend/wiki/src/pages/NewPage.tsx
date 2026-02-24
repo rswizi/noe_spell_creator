@@ -1,6 +1,6 @@
 import React, { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createPage } from "../utils/api";
+import { createPage, fetchCategories, fetchTemplates, WikiCategory, WikiTemplate } from "../utils/api";
 
 const slugify = (value: string): string =>
   value
@@ -17,7 +17,26 @@ const NewPage: React.FC = () => {
   const [slugTouched, setSlugTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<WikiCategory[]>([]);
+  const [templates, setTemplates] = useState<WikiTemplate[]>([]);
+  const [categoryId, setCategoryId] = useState("general");
+  const [entityType, setEntityType] = useState("");
+  const [templateId, setTemplateId] = useState("");
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    fetchCategories()
+      .then((rows) => {
+        setCategories(rows);
+        if (rows.some((row) => row.id === "general")) {
+          setCategoryId("general");
+        } else if (rows[0]?.id) {
+          setCategoryId(rows[0].id);
+        }
+      })
+      .catch(() => setCategories([]));
+    fetchTemplates().then(setTemplates).catch(() => setTemplates([]));
+  }, []);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -30,7 +49,13 @@ const NewPage: React.FC = () => {
       return;
     }
     try {
-      const page = await createPage(title, normalizedSlug);
+      const page = await createPage({
+        title,
+        slug: normalizedSlug,
+        category_id: categoryId || "general",
+        entity_type: entityType || undefined,
+        template_id: templateId || undefined,
+      });
       navigate(`/${page.id}/edit`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create page.");
@@ -68,6 +93,34 @@ const NewPage: React.FC = () => {
             }}
             placeholder="my-awesome-chapter"
           />
+        </label>
+        <label>
+          Category
+          <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+            {(categories.length
+              ? categories
+              : [{ id: "general", key: "general", label: "General", slug: "general", sort_order: 0, created_at: "", updated_at: "" }]
+            ).map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Entity Type
+          <input value={entityType} onChange={(event) => setEntityType(event.target.value)} placeholder="character, location, item..." />
+        </label>
+        <label>
+          Template
+          <select value={templateId} onChange={(event) => setTemplateId(event.target.value)}>
+            <option value="">None</option>
+            {templates.map((tpl) => (
+              <option key={tpl.id} value={tpl.id}>
+                {tpl.label}
+              </option>
+            ))}
+          </select>
         </label>
         <button type="submit" disabled={saving}>
           {saving ? "Creating..." : "Create and edit"}

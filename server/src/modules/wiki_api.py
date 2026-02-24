@@ -1,33 +1,91 @@
-import json
-import os
-import re
+from __future__ import annotations
+
 import logging
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import case, func, or_, select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
+from pymongo.errors import DuplicateKeyError
 
-from server.src.modules.wiki_auth import require_wiki_admin
-from server.src.modules.wiki_db import WikiPage, WikiRevision, get_session
-MAX_DOC_BYTES = int(os.environ.get("WIKI_MAX_DOC_BYTES", "200000"))
-SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-logger = logging.getLogger(__name__)
-
-
-router = APIRouter(
-    prefix="/api/wiki",
-    tags=["wiki"],
+from server.src.modules.wiki_auth import require_wiki_admin, require_wiki_editor, require_wiki_viewer
+from server.src.modules.wiki_repo import WikiMongoRepo
+from server.src.modules.wiki_service import (
+    can_edit_page,
+    can_view_page,
+    iso_utc,
+    normalize_acl,
+    normalize_entity_fields,
+    normalize_entity_type,
+    normalize_status,
+    resolve_slug,
+    sanitize_doc,
 )
+
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/wiki", tags=["wiki"])
+
+
+class WikiCategoryPayload(BaseModel):
+    key: str
+    label: str
+    slug: str = ""
+    icon: str | None = None
+    sort_order: int = 0
+
+
+class WikiCategoryUpdatePayload(BaseModel):
+    label: str | None = None
+    slug: str | None = None
+    icon: str | None = None
+    sort_order: int | None = None
+
+
+class WikiCategoryOut(BaseModel):
+    id: str
+    key: str
+    label: str
+    slug: str
+    icon: str | None = None
+    sort_order: int = 0
+    created_at: str
+    updated_at: str
+
+
+class WikiTemplatePayload(BaseModel):
+    key: str
+    label: str
+    description: str | None = None
+    fields: dict[str, Any] = {}
+
+
+class WikiTemplateUpdatePayload(BaseModel):
+    label: str | None = None
+    description: str | None = None
+    fields: dict[str, Any] | None = None
+
+
+class WikiTemplateOut(BaseModel):
+    id: str
+    key: str
+    label: str
+    description: str | None = None
+    fields: dict[str, Any] = {}
+    created_at: str
+    updated_at: str
 
 
 class WikiPagePayload(BaseModel):
     title: str
-    slug: str
+    slug: str = ""
     doc_json: Any
+    category_id: str | None = None
+    entity_type: str | None = None
+    template_id: str | None = None
+    fields: dict[str, Any] | None = None
+    summary: str | None = None
+    tags: list[str] | None = None
+    status: str | None = None
 
 
 class WikiPageOut(BaseModel):
@@ -35,6 +93,15 @@ class WikiPageOut(BaseModel):
     slug: str
     title: str
     doc_json: Any
+    category_id: str
+    entity_type: str | None = None
+    template_id: str | None = None
+    fields: dict[str, Any] = {}
+    summary: str | None = None
+    tags: list[str] = []
+    status: str = "draft"
+    acl_override: bool = False
+    acl: dict[str, list[str]] | None = None
     created_at: str
     updated_at: str
 
@@ -55,254 +122,653 @@ class WikiListResponse(BaseModel):
     offset: int
 
 
-def sanitize_doc(doc: Any) -> Any:
-    if not isinstance(doc, (dict, list)):
-        raise HTTPException(status_code=400, detail="doc_json must be a JSON object or array")
-    payload = json.dumps(doc, ensure_ascii=False)
-    if len(payload.encode("utf-8")) > MAX_DOC_BYTES:
-        raise HTTPException(status_code=400, detail="doc_json is too large")
-    return doc
+class WikiAclPayload(BaseModel):
+    acl_override: bool = False
+    view_roles: list[str] | None = None
+    edit_roles: list[str] | None = None
 
 
-def _normalize_slug(value: str) -> str:
-    slug = (value or "").strip().lower()
-    if not slug:
-        return ""
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = re.sub(r"-{2,}", "-", slug).strip("-")
-    return slug
+class WikiRelationPayload(BaseModel):
+    to_page_id: str
+    relation_type: str
+    note: str | None = None
 
 
-def validate_slug(value: str) -> str:
-    slug = _normalize_slug(value)
-    if not slug or not SLUG_RE.match(slug):
-        raise HTTPException(status_code=400, detail="Invalid slug")
-    return slug
+class WikiFieldsPatchPayload(BaseModel):
+    fields: dict[str, Any] = {}
 
 
-def resolve_slug(raw_slug: str, title: str) -> str:
-    return validate_slug(raw_slug or title)
+def _repo() -> WikiMongoRepo:
+    return WikiMongoRepo()
 
 
-def _wiki_db_error_detail(exc: Exception, operation: str) -> str:
-    raw = str(getattr(exc, "orig", exc) or "")
-    msg = raw.lower()
-    if ("wiki_pages" in msg and "does not exist" in msg) or ("no such table" in msg and "wiki_pages" in msg):
-        return "Wiki tables are missing. Run database migrations (alembic upgrade head)."
-    if "permission denied" in msg:
-        return "Wiki database permission error."
-    if "read-only" in msg or "readonly" in msg:
-        return "Wiki database is read-only."
-    if "uuid" in msg and ("character varying" in msg or "varchar" in msg):
-        return "Wiki ID type mismatch (UUID vs text)."
-    return f"Wiki database error during {operation}."
+def _category_to_out(row: dict[str, Any]) -> WikiCategoryOut:
+    return WikiCategoryOut(
+        id=str(row.get("id") or ""),
+        key=str(row.get("key") or ""),
+        label=str(row.get("label") or ""),
+        slug=str(row.get("slug") or ""),
+        icon=(str(row.get("icon")) if row.get("icon") else None),
+        sort_order=int(row.get("sort_order") or 0),
+        created_at=iso_utc(row.get("created_at")),
+        updated_at=iso_utc(row.get("updated_at")),
+    )
 
 
-def _page_to_dict(page: WikiPage) -> WikiPageOut:
+def _template_to_out(row: dict[str, Any]) -> WikiTemplateOut:
+    return WikiTemplateOut(
+        id=str(row.get("id") or ""),
+        key=str(row.get("key") or ""),
+        label=str(row.get("label") or ""),
+        description=(str(row.get("description")) if row.get("description") is not None else None),
+        fields=row.get("fields") if isinstance(row.get("fields"), dict) else {},
+        created_at=iso_utc(row.get("created_at")),
+        updated_at=iso_utc(row.get("updated_at")),
+    )
+
+
+def _page_to_out(page: dict[str, Any]) -> WikiPageOut:
+    acl_raw = page.get("acl") if isinstance(page.get("acl"), dict) else {}
+    view_roles = [str(v) for v in (acl_raw.get("view_roles") or []) if str(v).strip()]
+    edit_roles = [str(v) for v in (acl_raw.get("edit_roles") or []) if str(v).strip()]
     return WikiPageOut(
-        id=str(page.id),
-        slug=page.slug,
-        title=page.title,
-        doc_json=page.doc_json,
-        created_at=page.created_at.isoformat() if page.created_at else "",
-        updated_at=page.updated_at.isoformat() if page.updated_at else "",
+        id=str(page.get("id") or ""),
+        slug=str(page.get("slug") or ""),
+        title=str(page.get("title") or ""),
+        doc_json=page.get("doc_json") or {"type": "doc", "content": []},
+        category_id=str(page.get("category_id") or "general"),
+        entity_type=(str(page.get("entity_type")) if page.get("entity_type") is not None else None),
+        template_id=(str(page.get("template_id")) if page.get("template_id") is not None else None),
+        fields=page.get("fields") if isinstance(page.get("fields"), dict) else {},
+        summary=(str(page.get("summary")) if page.get("summary") is not None else None),
+        tags=[str(tag) for tag in (page.get("tags") or []) if str(tag).strip()],
+        status=str(page.get("status") or "draft"),
+        acl_override=bool(page.get("acl_override")),
+        acl={"view_roles": view_roles, "edit_roles": edit_roles},
+        created_at=iso_utc(page.get("created_at")),
+        updated_at=iso_utc(page.get("updated_at")),
     )
 
 
-def _revision_to_dict(revision: WikiRevision) -> WikiRevisionOut:
+def _revision_to_out(revision: dict[str, Any]) -> WikiRevisionOut:
     return WikiRevisionOut(
-        id=str(revision.id),
-        page_id=str(revision.page_id),
-        title=revision.title,
-        slug=revision.slug,
-        doc_json=revision.doc_json,
-        created_at=revision.created_at.isoformat(),
+        id=str(revision.get("id") or ""),
+        page_id=str(revision.get("page_id") or ""),
+        title=str(revision.get("title") or ""),
+        slug=str(revision.get("slug") or ""),
+        doc_json=revision.get("doc_json") or {"type": "doc", "content": []},
+        created_at=iso_utc(revision.get("saved_at") or revision.get("created_at")),
     )
+
+
+@router.get("/categories", response_model=list[WikiCategoryOut])
+async def list_categories(auth: dict[str, Any] = Depends(require_wiki_viewer)):
+    _ = auth
+    try:
+        return [_category_to_out(row) for row in _repo().list_categories()]
+    except Exception:
+        logger.exception("wiki list_categories failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during category listing.")
+
+
+@router.post("/categories", response_model=WikiCategoryOut)
+async def create_category(
+    payload: WikiCategoryPayload,
+    auth: dict[str, Any] = Depends(require_wiki_admin),
+):
+    _ = auth
+    key = payload.key.strip()
+    label = payload.label.strip()
+    if not key or not label:
+        raise HTTPException(status_code=400, detail="key and label are required")
+    try:
+        row = _repo().create_category(
+            key=key,
+            label=label,
+            slug=payload.slug,
+            icon=payload.icon,
+            sort_order=payload.sort_order,
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Category key/slug already exists")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("wiki create_category failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during category creation.")
+    return _category_to_out(row)
+
+
+@router.put("/categories/{category_id}", response_model=WikiCategoryOut)
+async def update_category(
+    category_id: str,
+    payload: WikiCategoryUpdatePayload,
+    auth: dict[str, Any] = Depends(require_wiki_admin),
+):
+    _ = auth
+    repo = _repo()
+    if not repo.get_category(category_id):
+        raise HTTPException(status_code=404, detail="Category not found")
+    try:
+        row = repo.update_category(
+            category_id,
+            label=payload.label,
+            slug=payload.slug,
+            icon=payload.icon,
+            sort_order=payload.sort_order,
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Category slug already exists")
+    except Exception:
+        logger.exception("wiki update_category failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during category update.")
+    return _category_to_out(row)
+
+
+@router.delete("/categories/{category_id}")
+async def delete_category(
+    category_id: str,
+    auth: dict[str, Any] = Depends(require_wiki_admin),
+):
+    _ = auth
+    repo = _repo()
+    ok = repo.delete_category(category_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Unable to delete category")
+    return {"ok": True}
+
+
+@router.get("/templates", response_model=list[WikiTemplateOut])
+async def list_templates(auth: dict[str, Any] = Depends(require_wiki_viewer)):
+    _ = auth
+    try:
+        return [_template_to_out(row) for row in _repo().list_templates()]
+    except Exception:
+        logger.exception("wiki list_templates failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during template listing.")
+
+
+@router.post("/templates", response_model=WikiTemplateOut)
+async def create_template(
+    payload: WikiTemplatePayload,
+    auth: dict[str, Any] = Depends(require_wiki_admin),
+):
+    _ = auth
+    key = payload.key.strip()
+    label = payload.label.strip()
+    if not key or not label:
+        raise HTTPException(status_code=400, detail="key and label are required")
+    try:
+        row = _repo().create_template(
+            key=key,
+            label=label,
+            fields=normalize_entity_fields(payload.fields),
+            description=payload.description,
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Template key already exists")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("wiki create_template failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during template creation.")
+    return _template_to_out(row)
+
+
+@router.put("/templates/{template_id}", response_model=WikiTemplateOut)
+async def update_template(
+    template_id: str,
+    payload: WikiTemplateUpdatePayload,
+    auth: dict[str, Any] = Depends(require_wiki_admin),
+):
+    _ = auth
+    repo = _repo()
+    if not repo.get_template(template_id):
+        raise HTTPException(status_code=404, detail="Template not found")
+    try:
+        row = repo.update_template(
+            template_id=template_id,
+            label=payload.label,
+            description=payload.description,
+            fields=normalize_entity_fields(payload.fields) if payload.fields is not None else None,
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Template conflict")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("wiki update_template failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during template update.")
+    return _template_to_out(row)
+
+
+@router.delete("/templates/{template_id}")
+async def delete_template(
+    template_id: str,
+    auth: dict[str, Any] = Depends(require_wiki_admin),
+):
+    _ = auth
+    ok = _repo().delete_template(template_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return {"ok": True}
+
+
+@router.get("/me")
+async def get_wiki_me(auth: dict[str, Any] = Depends(require_wiki_viewer)):
+    return {
+        "username": str(auth.get("username") or ""),
+        "role": str(auth.get("role") or ""),
+        "wiki_role": str(auth.get("wiki_role") or "viewer"),
+    }
 
 
 @router.post("/pages", response_model=WikiPageOut)
 async def create_page(
     payload: WikiPagePayload,
-    session: AsyncSession = Depends(get_session),
-    _auth: dict = Depends(require_wiki_admin),
+    auth: dict[str, Any] = Depends(require_wiki_editor),
 ):
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
     slug = resolve_slug(payload.slug, title)
     doc_json = sanitize_doc(payload.doc_json)
-
-    existing = await session.execute(select(WikiPage).where(WikiPage.slug == slug))
-    if existing.scalars().first():
+    repo = _repo()
+    if repo.slug_exists(slug):
         raise HTTPException(status_code=409, detail="Slug already exists")
-
-    page = WikiPage(slug=slug, title=title, doc_json=doc_json)
-    session.add(page)
     try:
-        await session.commit()
-        await session.refresh(page)
-        return _page_to_dict(page)
-    except IntegrityError as exc:
-        await session.rollback()
-        msg = str(getattr(exc, "orig", exc)).lower()
-        if "slug" in msg and ("unique" in msg or "duplicate" in msg):
-            raise HTTPException(status_code=409, detail="Slug already exists")
-        logger.exception("wiki create_page integrity failure")
-        raise HTTPException(status_code=500, detail="Wiki storage integrity error")
-    except SQLAlchemyError as exc:
-        await session.rollback()
-        logger.exception("wiki create_page database failure")
-        raise HTTPException(status_code=500, detail=_wiki_db_error_detail(exc, "page creation"))
+        page = repo.create_page(
+            title=title,
+            slug=slug,
+            doc_json=doc_json,
+            category_id=payload.category_id or "general",
+            entity_type=normalize_entity_type(payload.entity_type),
+            template_id=(payload.template_id or None),
+            fields=normalize_entity_fields(payload.fields),
+            summary=payload.summary,
+            tags=payload.tags,
+            status=payload.status or "draft",
+            created_by=str(auth.get("username") or "unknown"),
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Slug already exists")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("wiki create_page failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during page creation.")
+    return _page_to_out(page)
 
 
 @router.get("/pages/{page_id}", response_model=WikiPageOut)
-async def get_page(page_id: str, session: AsyncSession = Depends(get_session)):
-    page = await session.get(WikiPage, page_id)
+async def get_page(page_id: str, auth: dict[str, Any] = Depends(require_wiki_viewer)):
+    repo = _repo()
+    page = repo.get_page_by_id(page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
-    return _page_to_dict(page)
+    if not can_view_page(str(auth.get("wiki_role") or "viewer"), page):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return _page_to_out(page)
 
 
 @router.put("/pages/{page_id}", response_model=WikiPageOut)
 async def update_page(
     page_id: str,
     payload: WikiPagePayload,
-    session: AsyncSession = Depends(get_session),
-    _auth: dict = Depends(require_wiki_admin),
+    auth: dict[str, Any] = Depends(require_wiki_editor),
 ):
-    page = await session.get(WikiPage, page_id)
-    if not page:
+    repo = _repo()
+    existing = repo.get_page_by_id(page_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Page not found")
+    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), existing):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
     slug = resolve_slug(payload.slug, title)
     doc_json = sanitize_doc(payload.doc_json)
-
-    existing = await session.execute(
-        select(WikiPage).where(WikiPage.slug == slug, WikiPage.id != page.id)
-    )
-    if existing.scalars().first():
+    if repo.slug_exists(slug, exclude_id=page_id):
         raise HTTPException(status_code=409, detail="Slug already exists")
 
-    page.slug = slug
-    page.title = title
-    page.doc_json = doc_json
-    page.updated_at = datetime.utcnow()
     try:
-        await session.commit()
-        await session.refresh(page)
-        return _page_to_dict(page)
-    except IntegrityError as exc:
-        await session.rollback()
-        msg = str(getattr(exc, "orig", exc)).lower()
-        if "slug" in msg and ("unique" in msg or "duplicate" in msg):
-            raise HTTPException(status_code=409, detail="Slug already exists")
-        logger.exception("wiki update_page integrity failure")
-        raise HTTPException(status_code=500, detail="Wiki storage integrity error")
-    except SQLAlchemyError as exc:
-        await session.rollback()
-        logger.exception("wiki update_page database failure")
-        raise HTTPException(status_code=500, detail=_wiki_db_error_detail(exc, "page update"))
+        page = repo.update_page(
+            page_id=page_id,
+            title=title,
+            slug=slug,
+            doc_json=doc_json,
+            category_id=payload.category_id,
+            entity_type=normalize_entity_type(payload.entity_type) if payload.entity_type is not None else None,
+            template_id=payload.template_id if payload.template_id is not None else None,
+            fields=normalize_entity_fields(payload.fields) if payload.fields is not None else None,
+            summary=payload.summary,
+            tags=payload.tags,
+            status=payload.status,
+            updated_by=str(auth.get("username") or "unknown"),
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Slug already exists")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("wiki update_page failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during page update.")
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return _page_to_out(page)
+
+
+@router.patch("/pages/{page_id}/fields", response_model=WikiPageOut)
+async def patch_page_fields(
+    page_id: str,
+    payload: WikiFieldsPatchPayload,
+    auth: dict[str, Any] = Depends(require_wiki_editor),
+):
+    repo = _repo()
+    existing = repo.get_page_by_id(page_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), existing):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        page = repo.patch_page_fields(page_id=page_id, fields=normalize_entity_fields(payload.fields))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("wiki patch_page_fields failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during fields update.")
+    return _page_to_out(page)
+
+
+@router.delete("/pages/{page_id}")
+async def delete_page(
+    page_id: str,
+    auth: dict[str, Any] = Depends(require_wiki_editor),
+):
+    repo = _repo()
+    existing = repo.get_page_by_id(page_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), existing):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        ok = repo.delete_page(page_id)
+    except Exception:
+        logger.exception("wiki delete_page failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during page deletion.")
+    if not ok:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return {"ok": True}
+
+
+@router.put("/pages/{page_id}/acl", response_model=WikiPageOut)
+async def update_page_acl(
+    page_id: str,
+    payload: WikiAclPayload,
+    auth: dict[str, Any] = Depends(require_wiki_admin),
+):
+    _ = auth
+    repo = _repo()
+    existing = repo.get_page_by_id(page_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Page not found")
+    acl = normalize_acl({"view_roles": payload.view_roles, "edit_roles": payload.edit_roles})
+    try:
+        page = repo.set_page_acl(
+            page_id=page_id,
+            acl_override=bool(payload.acl_override),
+            acl={"view_roles": list(acl["view_roles"]), "edit_roles": list(acl["edit_roles"])},
+        )
+    except Exception:
+        logger.exception("wiki update_page_acl failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during ACL update.")
+    return _page_to_out(page)
 
 
 @router.get("/pages", response_model=WikiListResponse)
 async def list_pages(
     query: str | None = Query(default=None),
+    category_id: str | None = Query(default=None),
+    entity_type: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    tag: str | None = Query(default=None),
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    auth: dict[str, Any] = Depends(require_wiki_viewer),
 ):
-    filters = []
-    stmt = select(WikiPage).order_by(WikiPage.updated_at.desc()).offset(offset).limit(limit)
-    if query:
-        pattern = f"%{query.lower()}%"
-        filters.append(or_(WikiPage.title.ilike(pattern), WikiPage.slug.ilike(pattern)))
-        stmt = stmt.where(filters[-1])
-    result = await session.execute(stmt)
-    pages = result.scalars().all()
-
-    count_stmt = select(func.count()).select_from(WikiPage)
-    if filters:
-        count_stmt = count_stmt.where(filters[-1])
-    total = (await session.execute(count_stmt)).scalar_one()
-
-    return WikiListResponse(
-        items=[_page_to_dict(page) for page in pages],
-        total=total,
-        limit=limit,
-        offset=offset,
-    )
+    if status is not None:
+        _ = normalize_status(status)
+    if entity_type is not None:
+        entity_type = normalize_entity_type(entity_type)
+    repo = _repo()
+    try:
+        items, total = repo.list_pages(
+            role=str(auth.get("wiki_role") or "viewer"),
+            query=query,
+            category_id=category_id,
+            entity_type=entity_type,
+            status=status,
+            tag=tag,
+            limit=limit,
+            offset=offset,
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("wiki list_pages failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during page listing.")
+    return WikiListResponse(items=[_page_to_out(page) for page in items], total=int(total), limit=limit, offset=offset)
 
 
 @router.get("/pages/slug/{slug}", response_model=WikiPageOut)
-async def get_page_by_slug(slug: str, session: AsyncSession = Depends(get_session)):
-    normalized = validate_slug(slug)
-    stmt = select(WikiPage).where(WikiPage.slug == normalized)
-    page = (await session.execute(stmt)).scalars().first()
+async def get_page_by_slug(slug: str, auth: dict[str, Any] = Depends(require_wiki_viewer)):
+    repo = _repo()
+    normalized = resolve_slug(slug, slug)
+    page = repo.get_page_by_slug(normalized)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
-    return _page_to_dict(page)
+    if not can_view_page(str(auth.get("wiki_role") or "viewer"), page):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return _page_to_out(page)
 
 
 @router.get("/resolve")
 async def resolve_pages(
     query: str = Query(..., min_length=1),
     limit: int = Query(default=10, ge=1),
-    session: AsyncSession = Depends(get_session),
+    auth: dict[str, Any] = Depends(require_wiki_viewer),
 ):
     safe_limit = min(limit, 25)
-    pattern = f"%{query.lower()}%"
-    match_title = func.lower(WikiPage.title).ilike(pattern)
-    match_slug = WikiPage.slug.ilike(pattern)
-    score = case(
-        (match_title, 0),
-        (match_slug, 1),
-        else_=2,
-    )
-    stmt = (
-        select(WikiPage.id, WikiPage.title, WikiPage.slug)
-        .where(or_(match_title, match_slug))
-        .order_by(score, WikiPage.updated_at.desc())
-        .limit(safe_limit)
-    )
-    rows = await session.execute(stmt)
-    result = rows.all()
-    return [{"id": str(id_), "title": title, "slug": slug} for id_, title, slug in result]
+    try:
+        return _repo().resolve_pages(role=str(auth.get("wiki_role") or "viewer"), query=query, limit=safe_limit)
+    except Exception:
+        logger.exception("wiki resolve failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during page resolve.")
+
+
+@router.post("/pages/{page_id}/links/rebuild")
+async def rebuild_links(page_id: str, auth: dict[str, Any] = Depends(require_wiki_editor)):
+    repo = _repo()
+    page = repo.get_page_by_id(page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), page):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        count = repo.rebuild_links_for_page(page_id)
+    except Exception:
+        logger.exception("wiki rebuild_links failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during link rebuild.")
+    return {"ok": True, "count": int(count)}
+
+
+@router.get("/pages/{page_id}/links")
+async def list_links(page_id: str, auth: dict[str, Any] = Depends(require_wiki_viewer)):
+    repo = _repo()
+    page = repo.get_page_by_id(page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if not can_view_page(str(auth.get("wiki_role") or "viewer"), page):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        return repo.list_page_links(page_id)
+    except Exception:
+        logger.exception("wiki list_links failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during link listing.")
+
+
+@router.get("/pages/{page_id}/backlinks")
+async def list_backlinks(page_id: str, auth: dict[str, Any] = Depends(require_wiki_viewer)):
+    repo = _repo()
+    page = repo.get_page_by_id(page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if not can_view_page(str(auth.get("wiki_role") or "viewer"), page):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        return repo.list_backlinks(page_id)
+    except Exception:
+        logger.exception("wiki list_backlinks failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during backlink listing.")
+
+
+@router.get("/pages/{page_id}/context")
+async def get_page_context(page_id: str, auth: dict[str, Any] = Depends(require_wiki_viewer)):
+    repo = _repo()
+    page = repo.get_page_by_id(page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if not can_view_page(str(auth.get("wiki_role") or "viewer"), page):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        context = repo.page_context(page_id)
+    except Exception:
+        logger.exception("wiki page_context failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during page context load.")
+    if not context:
+        raise HTTPException(status_code=404, detail="Page not found")
+    page_out = _page_to_out(context.get("page", {}))
+    context["page"] = page_out.model_dump() if hasattr(page_out, "model_dump") else page_out.dict()
+    return context
 
 
 @router.post("/pages/{page_id}/revisions", response_model=WikiRevisionOut)
-async def create_revision(
-    page_id: str,
-    session: AsyncSession = Depends(get_session),
-    _auth: dict = Depends(require_wiki_admin),
-):
-    page = await session.get(WikiPage, page_id)
+async def create_revision(page_id: str, auth: dict[str, Any] = Depends(require_wiki_editor)):
+    repo = _repo()
+    page = repo.get_page_by_id(page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
-    revision = WikiRevision(page_id=page.id, doc_json=page.doc_json, title=page.title, slug=page.slug)
-    session.add(revision)
+    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), page):
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        await session.commit()
-        await session.refresh(revision)
-        return _revision_to_dict(revision)
-    except SQLAlchemyError as exc:
-        await session.rollback()
-        logger.exception("wiki create_revision database failure")
-        raise HTTPException(status_code=500, detail=_wiki_db_error_detail(exc, "revision creation"))
+        revision = repo.create_revision(page_id=page_id, saved_by=str(auth.get("username") or "unknown"))
+    except Exception:
+        logger.exception("wiki create_revision failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during revision creation.")
+    return _revision_to_out(revision)
 
 
 @router.get("/pages/{page_id}/revisions", response_model=list[WikiRevisionOut])
-async def list_revisions(
+async def list_revisions(page_id: str, auth: dict[str, Any] = Depends(require_wiki_viewer)):
+    repo = _repo()
+    page = repo.get_page_by_id(page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if not can_view_page(str(auth.get("wiki_role") or "viewer"), page):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        revisions = repo.list_revisions(page_id=page_id)
+    except Exception:
+        logger.exception("wiki list_revisions failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during revision listing.")
+    return [_revision_to_out(revision) for revision in revisions]
+
+
+@router.post("/pages/{page_id}/revisions/{revision_id}/restore", response_model=WikiPageOut)
+async def restore_revision(
     page_id: str,
-    session: AsyncSession = Depends(get_session),
-    _auth: dict = Depends(require_wiki_admin),
+    revision_id: str,
+    auth: dict[str, Any] = Depends(require_wiki_editor),
 ):
-    result = await session.execute(
-        select(WikiRevision)
-        .where(WikiRevision.page_id == page_id)
-        .order_by(WikiRevision.created_at.desc())
-    )
-    revisions = result.scalars().all()
-    return [_revision_to_dict(rev) for rev in revisions]
+    repo = _repo()
+    page = repo.get_page_by_id(page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), page):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        restored = repo.restore_revision(
+            page_id=page_id,
+            revision_id=revision_id,
+            restored_by=str(auth.get("username") or "unknown"),
+        )
+    except Exception:
+        logger.exception("wiki restore_revision failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during revision restore.")
+    if not restored:
+        raise HTTPException(status_code=404, detail="Revision not found")
+    return _page_to_out(restored)
+
+
+@router.get("/pages/{page_id}/relations")
+async def list_relations(page_id: str, auth: dict[str, Any] = Depends(require_wiki_viewer)):
+    repo = _repo()
+    page = repo.get_page_by_id(page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if not can_view_page(str(auth.get("wiki_role") or "viewer"), page):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        return repo.list_relations(page_id=page_id)
+    except Exception:
+        logger.exception("wiki list_relations failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during relations listing.")
+
+
+@router.post("/pages/{page_id}/relations")
+async def create_relation(
+    page_id: str,
+    payload: WikiRelationPayload,
+    auth: dict[str, Any] = Depends(require_wiki_editor),
+):
+    repo = _repo()
+    source = repo.get_page_by_id(page_id)
+    target = repo.get_page_by_id(payload.to_page_id)
+    if not source or not target:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), source):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    rel_type = str(payload.relation_type or "").strip().lower()
+    if not rel_type:
+        raise HTTPException(status_code=400, detail="relation_type is required")
+    try:
+        return repo.create_relation(
+            from_page_id=page_id,
+            to_page_id=payload.to_page_id,
+            relation_type=rel_type,
+            note=payload.note,
+        )
+    except Exception:
+        logger.exception("wiki create_relation failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during relation creation.")
+
+
+@router.delete("/relations/{relation_id}")
+async def delete_relation(
+    relation_id: str,
+    auth: dict[str, Any] = Depends(require_wiki_editor),
+):
+    _ = auth
+    try:
+        ok = _repo().delete_relation(relation_id)
+    except Exception:
+        logger.exception("wiki delete_relation failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during relation deletion.")
+    if not ok:
+        raise HTTPException(status_code=404, detail="Relation not found")
+    return {"ok": True}

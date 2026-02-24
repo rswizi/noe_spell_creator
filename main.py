@@ -65,7 +65,8 @@ from server.src.modules.campaign_chat_helpers import (
 from server.src.modules.wiki_api import router as wiki_router
 from server.src.modules.assets_api import router as assets_router
 from server.src.modules.quests_api import router as quests_router
-from server.src.modules.wiki_db import Base as WIKI_BASE, engine as WIKI_ENGINE
+from server.src.modules.wiki_config import get_wiki_settings, validate_wiki_environment
+from server.src.modules.wiki_repo import ensure_wiki_collections_and_indexes
 from server.src.modules.r2_storage import R2Storage
 from server.src.modules.campaign_combat import (
     end_combat,
@@ -274,11 +275,19 @@ def _needs_password_reset(user: dict) -> bool:
 async def lifespan(app: FastAPI):
     ensure_indexes()
     sync_counters()
+    wiki_cfg = get_wiki_settings()
+    validation = validate_wiki_environment()
+    for warning in validation.warnings:
+        logger.warning("Wiki startup warning: %s", warning)
+    if validation.errors:
+        for err in validation.errors:
+            logger.error("Wiki startup error: %s", err)
+        if wiki_cfg.strict_startup:
+            raise RuntimeError("Wiki startup validation failed.")
     try:
-        async with WIKI_ENGINE.begin() as conn:
-            await conn.run_sync(WIKI_BASE.metadata.create_all)
+        ensure_wiki_collections_and_indexes()
     except Exception:
-        logger.exception("Wiki schema initialization failed at startup")
+        logger.exception("Wiki collection/index initialization failed at startup")
     yield
 
 app = FastAPI(lifespan=lifespan)
