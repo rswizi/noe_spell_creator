@@ -24,6 +24,15 @@ def _safe_segment(value: str) -> str:
     return quote(str(value or "").strip(), safe="-._~")
 
 
+def _normalize_public_base(value: str | None) -> str:
+    raw = str(value or "").strip().rstrip("/")
+    if not raw:
+        return ""
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    return f"https://{raw}"
+
+
 def _extension_from_content_type(content_type: str | None, fallback_name: str = "") -> str:
     ctype = str(content_type or "").strip().lower()
     if ctype == "image/jpg":
@@ -63,9 +72,14 @@ class R2Storage:
         if self.bucket and endpoint_env.endswith(f"/{self.bucket}"):
             endpoint_env = endpoint_env[: -(len(self.bucket) + 1)]
         self.endpoint = endpoint_env
-        self.public_base = str(
-            os.getenv("R2_PUBLIC_BASE_URL") or os.getenv("R2_PUBLIC_DEV_URL") or ""
-        ).strip().rstrip("/")
+        self.public_base = _normalize_public_base(
+            os.getenv("R2_PUBLIC_BASE_URL")
+            or os.getenv("R2_PUBLIC_URL")
+            or os.getenv("R2_PUBLIC_DOMAIN")
+            or os.getenv("R2_CUSTOM_DOMAIN")
+            or os.getenv("R2_PUBLIC_DEV_URL")
+            or ""
+        )
         self.prefix_characters = _clean_prefix(os.getenv("R2_PREFIX_CHARACTERS"), "characters")
         self.prefix_campaigns = _clean_prefix(os.getenv("R2_PREFIX_CAMPAIGNS"), "campaigns")
         self.prefix_wiki = _clean_prefix(os.getenv("R2_PREFIX_WIKI"), "wiki")
