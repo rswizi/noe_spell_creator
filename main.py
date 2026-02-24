@@ -6836,6 +6836,45 @@ def _can_view(doc, username, role):
         return True
     return doc.get("owner") == username
 
+
+CHARACTERS_0_3_5_COL = "characters_0_3_5"
+
+
+def _utc_now_iso() -> str:
+    return datetime.datetime.utcnow().isoformat() + "Z"
+
+
+def _clone_character_for_0_3_5(cid: str) -> dict | None:
+    target_col = get_col(CHARACTERS_0_3_5_COL)
+    existing = target_col.find_one({"id": cid}, {"_id": 0})
+    if existing:
+        return existing
+    legacy = get_col("characters").find_one({"id": cid}, {"_id": 0})
+    if not legacy:
+        return None
+    now_iso = _utc_now_iso()
+    cloned = dict(legacy)
+    cloned["id"] = cid
+    cloned["legacy_character_id"] = str(legacy.get("id") or cid)
+    cloned["build_version"] = "0.3.5"
+    cloned["cloned_at"] = now_iso
+    cloned["updated_at"] = now_iso
+    if not cloned.get("created_at"):
+        cloned["created_at"] = now_iso
+    try:
+        target_col.insert_one(dict(cloned))
+    except DuplicateKeyError:
+        pass
+    return target_col.find_one({"id": cid}, {"_id": 0})
+
+
+def _find_character_doc(
+    cid: str,
+    collection_name: str = "characters",
+):
+    col = get_col(collection_name)
+    return col.find_one({"id": cid})
+
 @app.get("/characters")
 def list_my_characters(request: Request):
     username, role = require_auth(request, roles=["user","moderator","admin"])
@@ -6922,29 +6961,75 @@ async def create_character(request: Request):
     get_col("characters").insert_one(dict(doc))
     return {"status": "success", "id": cid, "character": {k: v for k, v in doc.items() if k != "_id"}}
 
-@app.get("/characters/{cid}")
-def get_character(cid: str, request: Request):
+def _character_payload_for_view(
+    cid: str,
+    request: Request,
+    collection_name: str = "characters",
+    clone_legacy_for_0_3_5: bool = False,
+):
     username, role = _optional_auth(request)
-    doc = get_col("characters").find_one({"id": cid}, {"_id":0})
-    if not doc:
+    raw_doc = _find_character_doc(cid, collection_name=collection_name)
+    if not raw_doc and clone_legacy_for_0_3_5 and collection_name == CHARACTERS_0_3_5_COL:
+        legacy_doc = _find_character_doc(cid, collection_name="characters")
+        if not legacy_doc:
+            raise HTTPException(404, "Character not found")
+        legacy_public = dict(legacy_doc)
+        legacy_public.pop("_id", None)
+        if not _can_view(legacy_public, username, role):
+            if not username:
+                raise HTTPException(401, "Not authenticated")
+            raise HTTPException(403, "Forbidden")
+        _clone_character_for_0_3_5(cid)
+        raw_doc = _find_character_doc(cid, collection_name=collection_name)
+    if not raw_doc:
         raise HTTPException(404, "Character not found")
+    doc = dict(raw_doc)
+    doc.pop("_id", None)
     if not _can_view(doc, username, role):
         if not username:
             raise HTTPException(401, "Not authenticated")
         raise HTTPException(403, "Forbidden")
-    lvl = int(doc.get("level") or doc.get("stats",{}).get("level") or 1)
+    lvl = int(doc.get("level") or doc.get("stats", {}).get("level") or 1)
     arc_id = doc.get("archetype_id") or ""
-    arc = get_col("archetypes").find_one({"id": arc_id}, {"_id":0}) if arc_id else None
+    arc = get_col("archetypes").find_one({"id": arc_id}, {"_id": 0}) if arc_id else None
     eff_rank = _archetype_rank_for_level(lvl)
     doc["archetype_rank"] = eff_rank
     if arc:
         doc["computed_archetype_abilities"] = _compute_archetype_unlocked(arc, lvl)
-    return {"status":"success","character":doc}
+    return {"status": "success", "character": doc}
 
-@app.put("/characters/{cid}")
-async def update_character(cid: str, request: Request):
+
+@app.get("/characters/{cid}")
+def get_character(cid: str, request: Request):
+    return _character_payload_for_view(cid, request, collection_name="characters")
+
+
+@app.get("/characters_0_3_5/{cid}")
+def get_character_0_3_5(cid: str, request: Request):
+    return _character_payload_for_view(
+        cid,
+        request,
+        collection_name=CHARACTERS_0_3_5_COL,
+        clone_legacy_for_0_3_5=True,
+    )
+
+async def _update_character_common(
+    cid: str,
+    request: Request,
+    collection_name: str = "characters",
+    clone_legacy_for_0_3_5: bool = False,
+):
     username, role = require_auth(request, roles=["user","moderator","admin"])
-    before = get_col("characters").find_one({"id": cid})
+    col = get_col(collection_name)
+    before = _find_character_doc(cid, collection_name=collection_name)
+    if not before and clone_legacy_for_0_3_5 and collection_name == CHARACTERS_0_3_5_COL:
+        legacy_before = _find_character_doc(cid, collection_name="characters")
+        if not legacy_before:
+            return JSONResponse({"status":"error","message":"Character not found"}, status_code=404)
+        if role != "admin" and legacy_before.get("owner") != username:
+            return JSONResponse({"status":"error","message":"Forbidden"}, status_code=403)
+        _clone_character_for_0_3_5(cid)
+        before = _find_character_doc(cid, collection_name=collection_name)
     if not before:
         return JSONResponse({"status":"error","message":"Character not found"}, status_code=404)
     if role != "admin" and before.get("owner") != username:
@@ -7080,8 +7165,8 @@ async def update_character(cid: str, request: Request):
 
     # Archetype prereq validation is handled client-side for warnings.
 
-    get_col("characters").update_one({"id": cid}, {"$set": updates})
-    after = get_col("characters").find_one({"id": cid}, {"_id":0})
+    col.update_one({"id": cid}, {"$set": updates})
+    after = col.find_one({"id": cid}, {"_id":0})
     if after:
         lvl = int(after.get("level") or after.get("stats",{}).get("level") or 1)
         arc_id_final = after.get("archetype_id") or ""
@@ -7091,10 +7176,44 @@ async def update_character(cid: str, request: Request):
             after["computed_archetype_abilities"] = _compute_archetype_unlocked(arc_final, lvl)
     return {"status":"success","character":after}
 
-@app.post("/characters/{cid}/avatar")
-async def upload_avatar(cid: str, request: Request, file: UploadFile = File(...)):
+
+@app.put("/characters/{cid}")
+async def update_character(cid: str, request: Request):
+    return await _update_character_common(
+        cid,
+        request,
+        collection_name="characters",
+        clone_legacy_for_0_3_5=False,
+    )
+
+
+@app.put("/characters_0_3_5/{cid}")
+async def update_character_0_3_5(cid: str, request: Request):
+    return await _update_character_common(
+        cid,
+        request,
+        collection_name=CHARACTERS_0_3_5_COL,
+        clone_legacy_for_0_3_5=True,
+    )
+
+async def _upload_character_avatar_common(
+    cid: str,
+    request: Request,
+    file: UploadFile,
+    collection_name: str = "characters",
+    clone_legacy_for_0_3_5: bool = False,
+):
     username, role = require_auth(request, roles=["user","moderator","admin"])
-    ch = get_col("characters").find_one({"id": cid})
+    col = get_col(collection_name)
+    ch = _find_character_doc(cid, collection_name=collection_name)
+    if not ch and clone_legacy_for_0_3_5 and collection_name == CHARACTERS_0_3_5_COL:
+        legacy = _find_character_doc(cid, collection_name="characters")
+        if not legacy:
+            raise HTTPException(status_code=404, detail="Character not found")
+        if role != "admin" and legacy.get("owner") != username:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        _clone_character_for_0_3_5(cid)
+        ch = _find_character_doc(cid, collection_name=collection_name)
     if not ch:
         raise HTTPException(status_code=404, detail="Character not found")
     if role != "admin" and ch.get("owner") != username:
@@ -7111,18 +7230,58 @@ async def upload_avatar(cid: str, request: Request, file: UploadFile = File(...)
     # delete previous
     prev_id = ch.get("avatar_id")
     if prev_id:
-        try: fs.delete(ObjectId(prev_id))
-        except Exception: pass
+        shared_with_legacy = False
+        if collection_name == CHARACTERS_0_3_5_COL:
+            legacy = get_col("characters").find_one({"id": cid}, {"_id": 0, "avatar_id": 1})
+            shared_with_legacy = str(legacy.get("avatar_id") or "") == str(prev_id or "")
+        if not shared_with_legacy:
+            try:
+                fs.delete(ObjectId(prev_id))
+            except Exception:
+                pass
     new_id = fs.put(data, filename=file.filename, content_type=content_type, owner=username, character_id=cid)
-    get_col("characters").update_one({"id": cid}, {"$set": {"avatar_id": str(new_id), "updated_at": datetime.datetime.utcnow().isoformat()+"Z"}})
+    col.update_one({"id": cid}, {"$set": {"avatar_id": str(new_id), "updated_at": _utc_now_iso()}})
     return {"status":"success","avatar_id": str(new_id)}
 
-@app.get("/characters/{cid}/avatar")
-def get_avatar(cid: str):
-    ch = get_col("characters").find_one({"id": cid}, {"_id":0})
+
+@app.post("/characters/{cid}/avatar")
+async def upload_avatar(cid: str, request: Request, file: UploadFile = File(...)):
+    return await _upload_character_avatar_common(
+        cid,
+        request,
+        file,
+        collection_name="characters",
+        clone_legacy_for_0_3_5=False,
+    )
+
+
+@app.post("/characters_0_3_5/{cid}/avatar")
+async def upload_avatar_0_3_5(cid: str, request: Request, file: UploadFile = File(...)):
+    return await _upload_character_avatar_common(
+        cid,
+        request,
+        file,
+        collection_name=CHARACTERS_0_3_5_COL,
+        clone_legacy_for_0_3_5=True,
+    )
+
+
+def _get_character_avatar_common(
+    cid: str,
+    collection_name: str = "characters",
+):
+    ch = _find_character_doc(cid, collection_name=collection_name)
     if not ch:
-        raise HTTPException(status_code=404, detail="Character not found")
-    av_id = ch.get("avatar_id")
+        if collection_name == CHARACTERS_0_3_5_COL:
+            legacy = _find_character_doc(cid, collection_name="characters")
+            if legacy:
+                ch = legacy
+        if not ch:
+            raise HTTPException(status_code=404, detail="Character not found")
+    av_id = str(ch.get("avatar_id") or "").strip()
+    if not av_id and collection_name == CHARACTERS_0_3_5_COL:
+        legacy = get_col("characters").find_one({"id": cid}, {"_id": 0, "avatar_id": 1})
+        av_id = str((legacy or {}).get("avatar_id") or "").strip()
     if not av_id:
         raise HTTPException(status_code=404, detail="No avatar")
     fs = _fs()
@@ -7133,16 +7292,40 @@ def get_avatar(cid: str):
     data = fh.read()
     return Response(content=data, media_type=fh.content_type or "image/png")
 
-@app.delete("/characters/{cid}")
-def delete_character(cid: str, request: Request):
+
+@app.get("/characters/{cid}/avatar")
+def get_avatar(cid: str):
+    return _get_character_avatar_common(cid, collection_name="characters")
+
+
+@app.get("/characters_0_3_5/{cid}/avatar")
+def get_avatar_0_3_5(cid: str):
+    return _get_character_avatar_common(cid, collection_name=CHARACTERS_0_3_5_COL)
+
+def _delete_character_common(
+    cid: str,
+    request: Request,
+    collection_name: str = "characters",
+):
     username, role = require_auth(request, roles=["user","moderator","admin"])
-    doc = get_col("characters").find_one({"id": cid})
+    col = get_col(collection_name)
+    doc = _find_character_doc(cid, collection_name=collection_name)
     if not doc:
         return {"status":"error","message":"Character not found"}
     if role != "admin" and doc.get("owner") != username:
         return {"status":"error","message":"Forbidden"}
-    get_col("characters").delete_one({"id": cid})
+    col.delete_one({"id": cid})
     return {"status":"success","deleted": cid}
+
+
+@app.delete("/characters/{cid}")
+def delete_character(cid: str, request: Request):
+    return _delete_character_common(cid, request, collection_name="characters")
+
+
+@app.delete("/characters_0_3_5/{cid}")
+def delete_character_0_3_5(cid: str, request: Request):
+    return _delete_character_common(cid, request, collection_name=CHARACTERS_0_3_5_COL)
 
 def _load_abilities_by_id(ids: list[str]) -> list[dict]:
     if not ids:

@@ -3517,6 +3517,13 @@ function _cidFromPathname(pathname){
   }
 }
 const CID = (params.get('id') || _cidFromPathname(location.pathname) || '').trim();
+const CHARACTER_API_ROOT = '/characters_0_3_5';
+function characterApiPath(cid){
+  return `${CHARACTER_API_ROOT}/${encodeURIComponent(String(cid || '').trim())}`;
+}
+function characterAvatarApiPath(cid){
+  return `${characterApiPath(cid)}/avatar`;
+}
 const CAMPAIGN_ID = params.get('cid') || '';
 const INITIAL_TAB_RAW = (params.get('tab') || params.get('pane') || '').trim().toLowerCase();
 const VIEW_ONLY = params.get('view') === '1' || params.get('mode') === 'viewer';
@@ -10627,7 +10634,7 @@ async function uploadAvatar(){
         if (kind === 'character'){
           const fd = new FormData();
           fd.append('file', blob, 'avatar.png');
-          const r = await fetch(`/characters/${encodeURIComponent(CID)}/avatar`, {
+          const r = await fetch(characterAvatarApiPath(CID), {
             method:'POST',
             headers: authHeaders(),
             body: fd
@@ -10635,7 +10642,7 @@ async function uploadAvatar(){
           const j = await r.json().catch(()=>({}));
           if (j.status !== "success"){ throw new Error(j.message || "Upload failed"); }
           avatarStatusEl.textContent = 'Uploaded.';
-          avatarPreview.src = `/characters/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
+          avatarPreview.src = `${characterAvatarApiPath(CID)}?ts=${Date.now()}`;
         }else{
           const dataUrl = avatarCanvas.toDataURL('image/png');
           setAvatarOverrideUrl(kind, targetId, dataUrl);
@@ -16993,7 +17000,7 @@ function renderResourceLedger(){
 async function loadCharacter(){
   INITIAL_LOAD = true;
   if (!CID){ statusEl.textContent = 'Missing id'; return; }
-  const res = await api('/characters/' + encodeURIComponent(CID));
+  const res = await api(characterApiPath(CID));
   CHAR = res.character || {};
   CHAR.public = !!CHAR.public;
   const owner = String(CHAR.owner || '');
@@ -17096,7 +17103,7 @@ async function loadCharacter(){
       backLinkEl.href = 'characters.html';
     }
   }
-  avatarPreview.src = `/characters/${encodeURIComponent(CID)}/avatar?ts=${Date.now()}`;
+  avatarPreview.src = `${characterAvatarApiPath(CID)}?ts=${Date.now()}`;
 
   // Level
   levelEl.value = Math.max(1, Number(CHAR.level)||1);
@@ -17166,7 +17173,7 @@ async function deleteCharacter(){
   if ((typed || '').trim() !== 'I CONFIRM') return;
   try{
     statusEl.textContent = 'Deleting...';
-    const res = await fetch('/characters/' + encodeURIComponent(CID), {
+    const res = await fetch(characterApiPath(CID), {
       method:'DELETE',
       headers: authHeaders()
     });
@@ -17222,7 +17229,7 @@ async function saveNow(){
       resource_ledger: RESOURCE_LEDGER,
       override_stats: { enabled: OVERRIDE_ENABLED, values: OVERRIDE_VALUES }
     };
-    const res = await api('/characters/' + encodeURIComponent(CID), {
+    const res = await api(characterApiPath(CID), {
       method:'PUT', headers:{ 'content-type':'application/json' }, body: JSON.stringify(payload)
     });
     if (titleEl) titleEl.textContent = 'Edit: ' + (res.character?.name || '(unnamed)');
@@ -17493,7 +17500,7 @@ arcApplyBtn.addEventListener('click', async ()=>{
   const arcId = arcSelectEl.value || '';
   try{
     arcStatusEl.textContent = 'Saving archetype...';
-    const res = await api('/characters/' + encodeURIComponent(CID), {
+    const res = await api(characterApiPath(CID), {
       method:'PUT',
       headers:{ 'content-type':'application/json' },
       body: JSON.stringify({ archetype_id: arcId, stats: CHAR.stats })
@@ -18962,7 +18969,7 @@ function refreshAvatarTarget(kind){
 
 function characterAvatarBaseUrl(){
   if (!CID) return '';
-  return `/characters/${encodeURIComponent(CID)}/avatar`;
+  return characterAvatarApiPath(CID);
 }
 
 function restoreCharacterAvatarPreview(){
