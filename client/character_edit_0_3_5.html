@@ -3437,7 +3437,7 @@ const MAX_LEVEL = 20;
 const LEVEL_REWARD_PROFILES = [
   { level:1, skillPoints:68, skillCap:3, charPoints:18, charCap:4, archetypeRank:4, abilityPoints:0, boonStage:1, hpPlus:5, enPlus:1, foPlus:1, etPlus:0, subSlots:0, maxSublimationTier:1, maxCraftomancy:0, tensionCap:3, awakeningStage:0 },
   { level:2, skillPoints:76, skillCap:4, charPoints:20, charCap:4, archetypeRank:4, abilityPoints:1, boonStage:2, hpPlus:10, enPlus:2, foPlus:2, etPlus:1, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, tensionCap:6, awakeningStage:0 },
-  { level:3, skillPoints:84, skillCap:4, charPoints:22, charCap:5, archetypeRank:5, abilityPoints:1, boonStage:2, hpPlus:15, enPlus:3, foPlus:3, etPlus:2, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, tensionCap:6, awakeningStage:0 },
+  { level:3, skillPoints:84, skillCap:4, charPoints:20, charCap:5, archetypeRank:5, abilityPoints:1, boonStage:2, hpPlus:15, enPlus:3, foPlus:3, etPlus:2, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, tensionCap:6, awakeningStage:0 },
   { level:4, skillPoints:92, skillCap:5, charPoints:22, charCap:5, archetypeRank:5, abilityPoints:2, boonStage:3, hpPlus:20, enPlus:4, foPlus:4, etPlus:2, subSlots:4, maxSublimationTier:1, maxCraftomancy:2, tensionCap:9, awakeningStage:0 },
   { level:5, skillPoints:100, skillCap:5, charPoints:24, charCap:5, archetypeRank:6, abilityPoints:2, boonStage:3, hpPlus:25, enPlus:5, foPlus:5, etPlus:3, subSlots:4, maxSublimationTier:2, maxCraftomancy:2, tensionCap:9, awakeningStage:1 },
   { level:6, skillPoints:108, skillCap:6, charPoints:24, charCap:6, archetypeRank:6, abilityPoints:3, boonStage:4, hpPlus:30, enPlus:6, foPlus:6, etPlus:3, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, tensionCap:12, awakeningStage:1 },
@@ -20066,6 +20066,16 @@ initRichTextToolbar();
   ];
   const NOE35_CHAR_BY_KEY = new Map(NOE35_CHARACTERISTICS.map(c=> [c.key, c]));
   const NOE35_NATURES = ['Fire','Water','Wind','Earth','Lightning','Sun','Moon','Ki'];
+  const NOE35_NATURE_IDS = {
+    Fire: 'FR',
+    Water: 'WT',
+    Wind: 'WD',
+    Earth: 'ER',
+    Lightning: 'LG',
+    Sun: 'SN',
+    Moon: 'MN',
+    Ki: 'KI',
+  };
   const NOE35_SKILL_ALIAS = {
     'Subjugation': 'Intimidation',
     'Sleight of Hand': 'Sleight of hand',
@@ -20167,15 +20177,18 @@ initRichTextToolbar();
       .ns35-attr-row .btn { min-width:28px; padding:3px 8px; }
       .ns35-prestige-reset { justify-self:flex-end; }
       .ns35-category-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
+      .ns35-skill-cat-hdr { padding:12px 14px 7px; }
+      .ns35-skill-cat-hdr strong { color:#9aa0b3; font-style:italic; font-weight:600; }
       .ns35-skill-grid { display:grid; grid-template-columns:1fr; gap:8px; }
-      .ns35-skill-row { display:grid; grid-template-columns:minmax(0, 1fr) 64px; align-items:center; gap:8px; }
+      .ns35-skill-row { display:grid; grid-template-columns:minmax(0, 1fr) 40px; align-items:center; gap:8px; }
       .ns35-skill-row .skill-name { font-weight:600; text-align:left; }
+      .ns35-skill-row input { width:40px; max-width:40px; text-align:center; justify-self:end; padding:2px 4px; }
       .ns35-nature-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; }
       .ns35-nature-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:10px; }
-      .ns35-nature-row { display:grid; grid-template-columns:28px auto 64px; gap:8px; align-items:center; }
+      .ns35-nature-row { display:grid; grid-template-columns:28px max-content 40px; gap:8px; align-items:center; }
       .ns35-nature-row img { width:28px; height:28px; }
-      .ns35-id-chip { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-size:.8rem; white-space:nowrap; }
-      .ns35-nature-row input { width:64px; max-width:64px; justify-self:end; }
+      .ns35-id-chip { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-size:.8rem; white-space:nowrap; width:max-content; justify-self:start; display:inline-flex; }
+      .ns35-nature-row input { width:40px; max-width:40px; justify-self:end; text-align:center; padding:2px 4px; }
       .ns35-roll-char { display:grid; gap:4px; }
       .ns35-roll-char select { min-width:200px; }
       @media (max-width: 1160px){
@@ -20321,21 +20334,21 @@ initRichTextToolbar();
     return totals;
   }
 
-  function maxPrestigeForCharacteristicValue(value){
+  function prestigeLevelFromCharacteristicValue(value){
     const v = Math.max(0, Math.floor(Number(value) || 0));
-    if (v < 2) return 0;
-    if (v >= 6) return 5;
-    return Math.min(5, Math.max(1, v - 1));
+    if (v <= 5) return 0;
+    return Math.max(0, v - 5);
   }
 
   function ensureNoe35PrestigeState(box){
     NOE35_CHARACTERISTICS.forEach(ch=>{
       const key = ch.key;
-      const max = maxPrestigeForCharacteristicValue(clampInvested(box.characteristics?.[key]));
-      const level = Math.max(0, Math.min(max, Math.floor(Number(box.prestige?.[key] || 0))));
+      const prevLevel = Math.max(0, Math.floor(Number(box.prestige?.[key] || 0)));
+      const level = prestigeLevelFromCharacteristicValue(clampInvested(box.characteristics?.[key]));
       box.prestige[key] = level;
       const remainRaw = Math.floor(Number(box.prestige_remaining?.[key]));
-      const remaining = Number.isFinite(remainRaw) ? Math.max(0, Math.min(level, remainRaw)) : level;
+      let remaining = Number.isFinite(remainRaw) ? Math.max(0, Math.min(level, remainRaw)) : level;
+      if (level > prevLevel) remaining = level;
       box.prestige_remaining[key] = remaining;
     });
   }
@@ -20477,7 +20490,7 @@ initRichTextToolbar();
     const lvl = Math.max(1, Math.floor(Number(targetLvl || levelEl?.value || CHAR?.level || 1)));
     applyNoe35CharacteristicState(box, lvl);
     const cap = Math.max(0, Math.min(MAX_INVEST, Math.floor(numOr(statInvestCap(lvl), MAX_INVEST))));
-    levelRewardSubtitle.textContent = 'Configure characteristic points and prestige';
+    levelRewardSubtitle.textContent = 'Configure characteristic points';
     levelRewardSummary.innerHTML = `<div class="level-reward-line">Characteristic cap at level ${lvl}: ${cap}</div>`;
     if (levelRewardAvailableEl) levelRewardAvailableEl.textContent = '';
     levelRewardOptionsGrid.innerHTML = '';
@@ -20489,7 +20502,7 @@ initRichTextToolbar();
     buckets.forEach(bucket=>{
       const details = document.createElement('details');
       details.className = 'ns35-attr-details';
-      details.open = true;
+      details.open = false;
       const summary = document.createElement('summary');
       summary.className = 'ns35-attr-summary';
       const alloc = normalizeAttrAllocationBucket(box.attribute_allocations?.[bucket.key]);
@@ -20539,57 +20552,10 @@ initRichTextToolbar();
       details.appendChild(grid);
       wrap.appendChild(details);
     });
-
-    const prestigePanel = document.createElement('details');
-    prestigePanel.className = 'ns35-attr-details';
-    prestigePanel.open = true;
-    const prestigeSummary = document.createElement('summary');
-    prestigeSummary.className = 'ns35-attr-summary';
-    prestigeSummary.innerHTML = '<strong>Prestige</strong><span class="muted">Rerolls per day by characteristic</span>';
-    prestigePanel.appendChild(prestigeSummary);
-    const prestigeGrid = document.createElement('div');
-    prestigeGrid.className = 'ns35-attr-grid';
-    NOE35_CHARACTERISTICS.forEach(ch=>{
-      const key = ch.key;
-      const max = maxPrestigeForCharacteristicValue(clampInvested(box.characteristics?.[key]));
-      const level = Math.max(0, Math.floor(Number(box.prestige?.[key] || 0)));
-      const remaining = Math.max(0, Math.floor(Number(box.prestige_remaining?.[key] || 0)));
-      const row = document.createElement('div');
-      row.className = 'ns35-attr-row';
-      row.innerHTML = `
-        <span>${ch.name} <span class="muted">(${ch.code}) max ${max}</span></span>
-        <button type="button" class="btn small" data-prestige="-1">-</button>
-        <span class="pill">${level} <span class="muted">(${remaining} left)</span></span>
-        <button type="button" class="btn small" data-prestige="1">+</button>
-      `;
-      const minus = row.querySelector('button[data-prestige="-1"]');
-      const plus = row.querySelector('button[data-prestige="1"]');
-      minus.disabled = level <= 0;
-      plus.disabled = level >= max;
-      const updatePrestige = (delta)=>{
-        const next = Math.max(0, Math.min(max, level + delta));
-        if (next === level) return;
-        box.prestige[key] = next;
-        box.prestige_remaining[key] = Math.max(0, Math.min(next, next));
-        commitNoe35StatChanges(box);
-        renderNoe35AttributeConfigurator(lvl);
-      };
-      minus.addEventListener('click', ()=> updatePrestige(-1));
-      plus.addEventListener('click', ()=> updatePrestige(1));
-      prestigeGrid.appendChild(row);
-    });
-    const resetBtn = document.createElement('button');
-    resetBtn.type = 'button';
-    resetBtn.className = 'btn small ns35-prestige-reset';
-    resetBtn.textContent = 'Reset Prestige Rerolls';
-    resetBtn.addEventListener('click', ()=>{
-      resetNoe35PrestigeRerolls(box);
-      commitNoe35StatChanges(box, { rerender:false });
-      renderNoe35AttributeConfigurator(lvl);
-    });
-    prestigePanel.appendChild(prestigeGrid);
-    prestigePanel.appendChild(resetBtn);
-    wrap.appendChild(prestigePanel);
+    const note = document.createElement('div');
+    note.className = 'muted';
+    note.textContent = 'Prestige is automatic: each characteristic point above 5 grants +1 prestige for that characteristic.';
+    wrap.appendChild(note);
     levelRewardOptionsGrid.appendChild(wrap);
 
     levelRewardBackdrop.classList.remove('hidden');
@@ -20775,7 +20741,7 @@ initRichTextToolbar();
     NOE35_SKILL_CATEGORIES.forEach(category=>{
       const panel = document.createElement('div');
       panel.className = 'panel';
-      panel.innerHTML = `<div class="hdr"><strong>${category.title}</strong></div>`;
+      panel.innerHTML = `<div class="hdr ns35-skill-cat-hdr"><strong>${category.title}</strong></div>`;
       const body = document.createElement('div');
       body.className = 'panel-body';
       const skillGrid = document.createElement('div');
@@ -20827,6 +20793,7 @@ initRichTextToolbar();
     natureGrid.className = 'ns35-nature-grid';
     NOE35_NATURES.forEach(nature=>{
       const iconName = String(nature).toLowerCase();
+      const natureId = String(NOE35_NATURE_IDS[nature] || iconName).toUpperCase();
       const inputId = `noe35-nature-${iconName}`;
       const invested = clampInvested(box.natures[nature]);
       const cell = document.createElement('div');
@@ -20834,8 +20801,8 @@ initRichTextToolbar();
       cell.innerHTML = `
         <div class="ns35-nature-row">
           <img src="/assets/natures/${iconName}.svg" alt="${nature}" title="${nature}">
-          <span class="ns35-id-chip">${nature}</span>
-          <input id="${inputId}" class="num" type="number" min="0" max="${pools.skillCap}" value="${invested}" title="${nature}">
+          <span class="ns35-id-chip">${natureId}</span>
+          <input id="${inputId}" class="num" type="number" min="0" max="${pools.skillCap}" value="${invested}" title="${natureId}">
         </div>
       `;
       natureGrid.appendChild(cell);
