@@ -8,6 +8,7 @@ function App() {
     <Routes>
       <Route path="/" element={<CharacterListPage />} />
       <Route path="/edit/:id" element={<CharacterEditPage />} />
+      <Route path="/:characterSlug" element={<CharacterEditPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

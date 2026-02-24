@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import DuplicateKeyError
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from db_mongo import get_col, next_id_str, get_db, ensure_indexes, sync_counters, norm_key, spell_sig
 
@@ -383,6 +383,12 @@ def character_manager_fallback(rest: str):
         cid = parts[1].strip() if len(parts) > 1 else ""
         if cid:
             return RedirectResponse(f"/character_manager_edit.html?id={quote(cid)}")
+    if rest_clean and "/" not in rest_clean and ("_" in rest_clean or rest_clean.isdigit()):
+        slug_id = rest_clean.split("_", 1)[0].strip()
+        if slug_id:
+            decoded_id = unquote(slug_id).strip()
+            if decoded_id:
+                return RedirectResponse(f"/character_manager_edit.html?id={quote(decoded_id)}")
     fallback_page = CLIENT_DIR / "character_manager.html"
     if fallback_page.exists():
         return _serve_html_file(fallback_page)

@@ -26,6 +26,7 @@ ALLOWED_PAGES = {
     "character_manager",
     "character_manager_edit",
     "character_edit",
+    "character_edit_0_3_5",
     "characters",
     "equipment_edit",
     "equipment_home",

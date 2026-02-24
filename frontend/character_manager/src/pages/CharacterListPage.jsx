@@ -26,6 +26,25 @@ function sortByName(list) {
   );
 }
 
+function slugifyCharacterName(name) {
+  const normalized = String(name || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const slug = normalized
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+  return slug || "character";
+}
+
+function buildCharacterSheetPath(id, name) {
+  const cid = String(id || "").trim();
+  if (!cid) return "/";
+  return `/${encodeURIComponent(cid)}_${slugifyCharacterName(name || cid)}`;
+}
+
 function CharacterListPage() {
   const navigate = useNavigate();
   const [me, setMe] = useState({ label: "Checking login...", isAdmin: false });
@@ -150,7 +169,7 @@ function CharacterListPage() {
       const res = await createCharacter(name);
       const cid = res.id || res.character?.id;
       if (!cid) throw new Error("Character creation failed.");
-      navigate(`/edit/${cid}`);
+      navigate(buildCharacterSheetPath(cid, name));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create character.");
     }
@@ -290,7 +309,7 @@ function CharacterListPage() {
 
         setQuickOpen(false);
         setQuickStatus("");
-        navigate(`/edit/${cid}`);
+        navigate(buildCharacterSheetPath(cid, name));
       } catch (err) {
         setQuickStatus(`Quick create failed: ${err instanceof Error ? err.message : "Unknown error"}`);
       } finally {
@@ -345,7 +364,7 @@ function CharacterListPage() {
             <button
               key={character.id}
               className="cm-card"
-              onClick={() => navigate(`/edit/${character.id}`)}
+              onClick={() => navigate(buildCharacterSheetPath(character.id, character.name || character.id))}
               type="button"
             >
               <div className="cm-avatar">

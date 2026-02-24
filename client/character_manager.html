@@ -195,6 +195,25 @@
       return [...(list || [])].sort((a, b) => String(a?.name || a?.id || "").localeCompare(String(b?.name || b?.id || "")));
     }
 
+    function slugifyCharacterName(name) {
+      const normalized = String(name || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "");
+      const slug = normalized
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 64);
+      return slug || "character";
+    }
+
+    function characterManagerPath(id, name) {
+      const cid = String(id || "").trim();
+      if (!cid) return "/character-manager";
+      return `/character-manager/${encodeURIComponent(cid)}_${slugifyCharacterName(name || cid)}`;
+    }
+
     function App() {
       const [me, setMe] = useState({ label: "Checking login...", isAdmin: false });
       const [characters, setCharacters] = useState([]);
@@ -316,7 +335,7 @@
           });
           const cid = res.id || (res.character && res.character.id);
           if (!cid) throw new Error("Character creation failed.");
-          window.location.href = `/character-manager/edit/${encodeURIComponent(cid)}`;
+          window.location.href = characterManagerPath(cid, name);
         } catch (err) {
           setError(err instanceof Error ? err.message : "Unable to create character.");
         }
@@ -433,7 +452,7 @@
             body: JSON.stringify(updatePayload),
           });
 
-          window.location.href = `/character-manager/edit/${encodeURIComponent(cid)}`;
+          window.location.href = characterManagerPath(cid, name);
         } catch (err) {
           setQuickStatus(`Quick create failed: ${err instanceof Error ? err.message : "Unknown error"}`);
         } finally {
@@ -473,7 +492,7 @@
                   key={character.id}
                   className="cm-card"
                   onClick={() => {
-                    window.location.href = `/character-manager/edit/${encodeURIComponent(character.id)}`;
+                    window.location.href = characterManagerPath(character.id, character.name || character.id);
                   }}
                   type="button"
                 >

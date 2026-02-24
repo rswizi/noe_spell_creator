@@ -4,8 +4,23 @@ import { Link, useParams } from "react-router-dom";
 const LEGACY_HEAD_ATTR = "data-character-manager-legacy-head";
 const LEGACY_SCRIPT_ATTR = "data-character-manager-legacy-script";
 
+function extractCharacterId(characterSlug, legacyId) {
+  const directId = String(legacyId || "").trim();
+  if (directId) return directId;
+  const slug = String(characterSlug || "").trim();
+  if (!slug) return "";
+  const slugId = slug.includes("_") ? slug.slice(0, slug.indexOf("_")) : slug;
+  if (!slugId) return "";
+  try {
+    return decodeURIComponent(slugId);
+  } catch (_) {
+    return slugId;
+  }
+}
+
 function CharacterEditPage() {
-  const { id } = useParams();
+  const { id: legacyId, characterSlug } = useParams();
+  const id = extractCharacterId(characterSlug, legacyId);
   const hostRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -20,10 +35,10 @@ function CharacterEditPage() {
       setLoading(true);
       setError("");
       try {
-        const targetUrl = `/character_edit.html?id=${encodeURIComponent(id)}`;
+        const targetUrl = `/character_edit_0_3_5.html?id=${encodeURIComponent(id)}`;
         const response = await fetch(targetUrl, { credentials: "include" });
         if (!response.ok) {
-          throw new Error(`Unable to load legacy sheet (HTTP ${response.status})`);
+          throw new Error(`Unable to load 0.3.5 sheet (HTTP ${response.status})`);
         }
         const html = await response.text();
         if (cancelled) return;
@@ -67,10 +82,6 @@ function CharacterEditPage() {
           hostRef.current.appendChild(bodyClone.firstChild);
         }
 
-        const current = new URL(window.location.href);
-        current.searchParams.set("id", id);
-        window.history.replaceState(window.history.state, "", current.toString());
-
         for (const scriptNode of scriptNodes) {
           if (cancelled) return;
           const script = document.createElement("script");
@@ -96,7 +107,7 @@ function CharacterEditPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Unable to initialize legacy character sheet.");
+          setError(err instanceof Error ? err.message : "Unable to initialize 0.3.5 character sheet.");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -139,11 +150,11 @@ function CharacterEditPage() {
           <Link className="cm-btn" to="/">
             Back to New Character Manager
           </Link>
-          <a className="cm-btn" href={`/character_edit.html?id=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">
-            Open Legacy Sheet Directly
+          <a className="cm-btn" href={`/character_edit_0_3_5.html?id=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">
+            Open 0.3.5 Sheet Directly
           </a>
         </div>
-        {loading && <div className="cm-muted">Loading full legacy feature set...</div>}
+        {loading && <div className="cm-muted">Loading NoE 0.3.5 sheet...</div>}
         {error && <div className="cm-error">{error}</div>}
         <div ref={hostRef} />
       </div>
