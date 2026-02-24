@@ -3435,26 +3435,26 @@ function craftSpellIsComplex(sp){
 }
 const MAX_LEVEL = 20;
 const LEVEL_REWARD_PROFILES = [
-  { level:1, skillPoints:68, skillCap:3, charPoints:18, charCap:4, archetypeRank:4, abilityPoints:0, boonStage:1, hpPlus:5, enPlus:1, foPlus:1, etPlus:0, subSlots:0, maxSublimationTier:1, maxCraftomancy:0, tensionCap:3, awakeningStage:0 },
-  { level:2, skillPoints:76, skillCap:4, charPoints:20, charCap:4, archetypeRank:4, abilityPoints:1, boonStage:2, hpPlus:10, enPlus:2, foPlus:2, etPlus:1, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, tensionCap:6, awakeningStage:0 },
-  { level:3, skillPoints:84, skillCap:4, charPoints:20, charCap:5, archetypeRank:5, abilityPoints:1, boonStage:2, hpPlus:15, enPlus:3, foPlus:3, etPlus:2, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, tensionCap:6, awakeningStage:0 },
-  { level:4, skillPoints:92, skillCap:5, charPoints:22, charCap:5, archetypeRank:5, abilityPoints:2, boonStage:3, hpPlus:20, enPlus:4, foPlus:4, etPlus:2, subSlots:4, maxSublimationTier:1, maxCraftomancy:2, tensionCap:9, awakeningStage:0 },
-  { level:5, skillPoints:100, skillCap:5, charPoints:24, charCap:5, archetypeRank:6, abilityPoints:2, boonStage:3, hpPlus:25, enPlus:5, foPlus:5, etPlus:3, subSlots:4, maxSublimationTier:2, maxCraftomancy:2, tensionCap:9, awakeningStage:1 },
-  { level:6, skillPoints:108, skillCap:6, charPoints:24, charCap:6, archetypeRank:6, abilityPoints:3, boonStage:4, hpPlus:30, enPlus:6, foPlus:6, etPlus:3, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, tensionCap:12, awakeningStage:1 },
-  { level:7, skillPoints:116, skillCap:6, charPoints:26, charCap:6, archetypeRank:7, abilityPoints:3, boonStage:4, hpPlus:35, enPlus:7, foPlus:7, etPlus:4, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, tensionCap:12, awakeningStage:1 },
-  { level:8, skillPoints:124, skillCap:7, charPoints:26, charCap:6, archetypeRank:7, abilityPoints:4, boonStage:5, hpPlus:40, enPlus:8, foPlus:8, etPlus:4, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, tensionCap:15, awakeningStage:1 },
-  { level:9, skillPoints:132, skillCap:7, charPoints:28, charCap:7, archetypeRank:8, abilityPoints:4, boonStage:5, hpPlus:45, enPlus:9, foPlus:9, etPlus:5, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, tensionCap:15, awakeningStage:1 },
-  { level:10, skillPoints:140, skillCap:8, charPoints:28, charCap:7, archetypeRank:8, abilityPoints:5, boonStage:6, hpPlus:50, enPlus:10, foPlus:10, etPlus:5, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, tensionCap:18, awakeningStage:2 },
-  { level:11, skillPoints:148, skillCap:8, charPoints:30, charCap:7, archetypeRank:9, abilityPoints:5, boonStage:6, hpPlus:55, enPlus:11, foPlus:11, etPlus:6, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, tensionCap:18, awakeningStage:2 },
-  { level:12, skillPoints:156, skillCap:8, charPoints:30, charCap:8, archetypeRank:9, abilityPoints:6, boonStage:7, hpPlus:60, enPlus:12, foPlus:12, etPlus:6, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, tensionCap:18, awakeningStage:2 },
-  { level:13, skillPoints:164, skillCap:8, charPoints:32, charCap:8, archetypeRank:10, abilityPoints:6, boonStage:7, hpPlus:65, enPlus:13, foPlus:13, etPlus:7, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, tensionCap:18, awakeningStage:2 },
-  { level:14, skillPoints:172, skillCap:8, charPoints:32, charCap:8, archetypeRank:10, abilityPoints:7, boonStage:8, hpPlus:70, enPlus:14, foPlus:14, etPlus:7, subSlots:14, maxSublimationTier:3, maxCraftomancy:7, tensionCap:18, awakeningStage:2 },
-  { level:15, skillPoints:180, skillCap:8, charPoints:34, charCap:8, archetypeRank:11, abilityPoints:7, boonStage:8, hpPlus:75, enPlus:15, foPlus:15, etPlus:8, subSlots:14, maxSublimationTier:4, maxCraftomancy:7, tensionCap:18, awakeningStage:3 },
-  { level:16, skillPoints:188, skillCap:8, charPoints:34, charCap:8, archetypeRank:11, abilityPoints:8, boonStage:9, hpPlus:80, enPlus:16, foPlus:16, etPlus:8, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, tensionCap:18, awakeningStage:3 },
-  { level:17, skillPoints:196, skillCap:8, charPoints:38, charCap:8, archetypeRank:12, abilityPoints:8, boonStage:9, hpPlus:85, enPlus:17, foPlus:17, etPlus:9, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, tensionCap:18, awakeningStage:3 },
-  { level:18, skillPoints:204, skillCap:8, charPoints:38, charCap:8, archetypeRank:12, abilityPoints:9, boonStage:10, hpPlus:90, enPlus:18, foPlus:18, etPlus:9, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, tensionCap:18, awakeningStage:3 },
-  { level:19, skillPoints:212, skillCap:8, charPoints:40, charCap:8, archetypeRank:12, abilityPoints:9, boonStage:10, hpPlus:95, enPlus:19, foPlus:19, etPlus:10, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, tensionCap:18, awakeningStage:3 },
-  { level:20, skillPoints:220, skillCap:8, charPoints:40, charCap:8, archetypeRank:12, abilityPoints:10, boonStage:11, hpPlus:100, enPlus:20, foPlus:20, etPlus:10, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, tensionCap:18, awakeningStage:3 },
+  { level:1, skillPoints:68, skillCap:3, charPoints:12, charCap:2, archetypeRank:4, abilityPoints:0, boonStage:1, hpPlus:5, enPlus:1, foPlus:1, etPlus:0, subSlots:0, maxSublimationTier:1, maxCraftomancy:0, tensionCap:3, awakeningStage:0 },
+  { level:2, skillPoints:76, skillCap:4, charPoints:14, charCap:2, archetypeRank:4, abilityPoints:1, boonStage:2, hpPlus:10, enPlus:2, foPlus:2, etPlus:1, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, tensionCap:6, awakeningStage:0 },
+  { level:3, skillPoints:84, skillCap:4, charPoints:14, charCap:3, archetypeRank:5, abilityPoints:1, boonStage:2, hpPlus:15, enPlus:3, foPlus:3, etPlus:2, subSlots:2, maxSublimationTier:1, maxCraftomancy:1, tensionCap:6, awakeningStage:0 },
+  { level:4, skillPoints:92, skillCap:5, charPoints:16, charCap:3, archetypeRank:5, abilityPoints:2, boonStage:3, hpPlus:20, enPlus:4, foPlus:4, etPlus:2, subSlots:4, maxSublimationTier:1, maxCraftomancy:2, tensionCap:9, awakeningStage:0 },
+  { level:5, skillPoints:100, skillCap:5, charPoints:16, charCap:3, archetypeRank:6, abilityPoints:2, boonStage:3, hpPlus:25, enPlus:5, foPlus:5, etPlus:3, subSlots:4, maxSublimationTier:2, maxCraftomancy:2, tensionCap:9, awakeningStage:1 },
+  { level:6, skillPoints:108, skillCap:6, charPoints:18, charCap:4, archetypeRank:6, abilityPoints:3, boonStage:4, hpPlus:30, enPlus:6, foPlus:6, etPlus:3, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, tensionCap:12, awakeningStage:1 },
+  { level:7, skillPoints:116, skillCap:6, charPoints:18, charCap:4, archetypeRank:7, abilityPoints:3, boonStage:4, hpPlus:35, enPlus:7, foPlus:7, etPlus:4, subSlots:6, maxSublimationTier:2, maxCraftomancy:3, tensionCap:12, awakeningStage:1 },
+  { level:8, skillPoints:124, skillCap:7, charPoints:20, charCap:4, archetypeRank:7, abilityPoints:4, boonStage:5, hpPlus:40, enPlus:8, foPlus:8, etPlus:4, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, tensionCap:15, awakeningStage:1 },
+  { level:9, skillPoints:132, skillCap:7, charPoints:20, charCap:5, archetypeRank:8, abilityPoints:4, boonStage:5, hpPlus:45, enPlus:9, foPlus:9, etPlus:5, subSlots:8, maxSublimationTier:2, maxCraftomancy:4, tensionCap:15, awakeningStage:1 },
+  { level:10, skillPoints:140, skillCap:8, charPoints:22, charCap:5, archetypeRank:8, abilityPoints:5, boonStage:6, hpPlus:50, enPlus:10, foPlus:10, etPlus:5, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, tensionCap:18, awakeningStage:2 },
+  { level:11, skillPoints:148, skillCap:8, charPoints:22, charCap:5, archetypeRank:9, abilityPoints:5, boonStage:6, hpPlus:55, enPlus:11, foPlus:11, etPlus:6, subSlots:10, maxSublimationTier:3, maxCraftomancy:5, tensionCap:18, awakeningStage:2 },
+  { level:12, skillPoints:156, skillCap:8, charPoints:24, charCap:6, archetypeRank:9, abilityPoints:6, boonStage:7, hpPlus:60, enPlus:12, foPlus:12, etPlus:6, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, tensionCap:18, awakeningStage:2 },
+  { level:13, skillPoints:164, skillCap:8, charPoints:24, charCap:6, archetypeRank:10, abilityPoints:6, boonStage:7, hpPlus:65, enPlus:13, foPlus:13, etPlus:7, subSlots:12, maxSublimationTier:3, maxCraftomancy:6, tensionCap:18, awakeningStage:2 },
+  { level:14, skillPoints:172, skillCap:8, charPoints:26, charCap:7, archetypeRank:10, abilityPoints:7, boonStage:8, hpPlus:70, enPlus:14, foPlus:14, etPlus:7, subSlots:14, maxSublimationTier:3, maxCraftomancy:7, tensionCap:18, awakeningStage:2 },
+  { level:15, skillPoints:180, skillCap:8, charPoints:26, charCap:7, archetypeRank:11, abilityPoints:7, boonStage:8, hpPlus:75, enPlus:15, foPlus:15, etPlus:8, subSlots:14, maxSublimationTier:4, maxCraftomancy:7, tensionCap:18, awakeningStage:3 },
+  { level:16, skillPoints:188, skillCap:8, charPoints:28, charCap:8, archetypeRank:11, abilityPoints:8, boonStage:9, hpPlus:80, enPlus:16, foPlus:16, etPlus:8, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, tensionCap:18, awakeningStage:3 },
+  { level:17, skillPoints:196, skillCap:8, charPoints:28, charCap:8, archetypeRank:12, abilityPoints:8, boonStage:9, hpPlus:85, enPlus:17, foPlus:17, etPlus:9, subSlots:16, maxSublimationTier:4, maxCraftomancy:8, tensionCap:18, awakeningStage:3 },
+  { level:18, skillPoints:204, skillCap:8, charPoints:30, charCap:9, archetypeRank:12, abilityPoints:9, boonStage:10, hpPlus:90, enPlus:18, foPlus:18, etPlus:9, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, tensionCap:18, awakeningStage:3 },
+  { level:19, skillPoints:212, skillCap:8, charPoints:30, charCap:9, archetypeRank:12, abilityPoints:9, boonStage:10, hpPlus:95, enPlus:19, foPlus:19, etPlus:10, subSlots:18, maxSublimationTier:4, maxCraftomancy:9, tensionCap:18, awakeningStage:3 },
+  { level:20, skillPoints:220, skillCap:8, charPoints:32, charCap:10, archetypeRank:12, abilityPoints:10, boonStage:11, hpPlus:100, enPlus:20, foPlus:20, etPlus:10, subSlots:20, maxSublimationTier:4, maxCraftomancy:10, tensionCap:18, awakeningStage:3 },
 ];
 const MAX_ARCHETYPE_RANK = 12;
 function computeArchetypeRank(lvl){
@@ -11576,6 +11576,25 @@ function renderLevelRewardOptions(lvl){
     incBtn.disabled = available <= 0;
     decBtn?.addEventListener('click', ()=> adjustLevelRewardAllocation(opt.key, -1, lvl));
     incBtn?.addEventListener('click', ()=> adjustLevelRewardAllocation(opt.key, 1, lvl));
+  });
+  const charConfigRow = document.createElement('div');
+  charConfigRow.className = 'level-reward-option';
+  charConfigRow.innerHTML = `
+    <div class="level-reward-option-desc">
+      <strong>Characteristic distribution</strong>
+      <div class="muted" style="font-size:.85rem;">Allocate your characteristic pool per level bucket.</div>
+      <div class="muted" style="font-size:.8rem;">Per-level characteristic cap is enforced automatically.</div>
+    </div>
+    <div class="level-reward-option-controls">
+      <button type="button" class="btn small" id="open-noe35-char-config">Configure</button>
+    </div>
+  `;
+  levelRewardOptionsGrid.appendChild(charConfigRow);
+  charConfigRow.querySelector('#open-noe35-char-config')?.addEventListener('click', ()=>{
+    const openConfigurator = (typeof window !== 'undefined' && typeof window.NOE35_OPEN_ATTRIBUTE_CONFIG === 'function')
+      ? window.NOE35_OPEN_ATTRIBUTE_CONFIG
+      : null;
+    if (openConfigurator) openConfigurator(lvl);
   });
   updateLevelRewardAvailableDisplay(lvl);
 }
@@ -20055,7 +20074,7 @@ initRichTextToolbar();
 <script>
 /* ---------- NoE 0.3.5 statistics-only override ---------- */
 (function(){
-  const MAX_INVEST = 8;
+  const MAX_INVEST = 10;
   const NOE35_PRESTIGE_THRESHOLD = 5;
   const NOE35_CHARACTERISTICS = [
     { key:'dexterity', code:'DEX', name:'Dexterity' },
@@ -20067,16 +20086,6 @@ initRichTextToolbar();
   ];
   const NOE35_CHAR_BY_KEY = new Map(NOE35_CHARACTERISTICS.map(c=> [c.key, c]));
   const NOE35_NATURES = ['Fire','Water','Wind','Earth','Lightning','Sun','Moon','Ki'];
-  const NOE35_NATURE_IDS = {
-    Fire: 'FR',
-    Water: 'WT',
-    Wind: 'WD',
-    Earth: 'ER',
-    Lightning: 'LG',
-    Sun: 'SN',
-    Moon: 'MN',
-    Ki: 'KI',
-  };
   const NOE35_SKILL_ALIAS = {
     'Subjugation': 'Intimidation',
     'Sleight of Hand': 'Sleight of hand',
@@ -20165,6 +20174,8 @@ initRichTextToolbar();
       .ns35-char-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
       .ns35-char-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:10px; }
       .ns35-char-line { display:grid; grid-template-columns:minmax(0, 1fr) auto auto auto; align-items:center; gap:8px; }
+      .ns35-char-hdr { display:inline-flex; align-items:center; gap:8px; }
+      .ns35-prestige-icon-btn { width:28px; height:28px; min-width:28px; padding:0; display:inline-grid; place-items:center; }
       .ns35-char-value { min-width:44px; text-align:center; }
       .ns35-prestige-star { position:relative; width:28px; height:28px; display:inline-grid; place-items:center; border:1px solid #3a3a4a; border-radius:999px; color:#d8d8df; background:#101018; }
       .ns35-prestige-star i { font-size:15px; opacity:.9; }
@@ -20207,6 +20218,22 @@ initRichTextToolbar();
 
   function clampInvested(raw){
     return Math.max(0, Math.min(MAX_INVEST, Math.floor(investVal(raw, 0))));
+  }
+
+  function natureIdFromBaseValue(raw){
+    const value = Math.max(0, Math.floor(Number(raw) || 0));
+    if (value <= 0) return '-';
+    if (value <= 7) return '1d4';
+    if (value <= 11) return '1d6';
+    if (value <= 15) return '1d8';
+    if (value <= 17) return '1d10';
+    return '1d12';
+  }
+
+  function noe35CharacteristicCapLabel(rawCap){
+    const cap = Math.max(0, Math.floor(Number(rawCap) || 0));
+    if (cap <= NOE35_PRESTIGE_THRESHOLD) return String(cap);
+    return `Prestige ${cap - NOE35_PRESTIGE_THRESHOLD} (${cap})`;
   }
 
   function safeStatsContainer(){
@@ -20527,7 +20554,7 @@ initRichTextToolbar();
     applyNoe35CharacteristicState(box, lvl);
     const cap = Math.max(0, Math.min(MAX_INVEST, Math.floor(numOr(statInvestCap(lvl), MAX_INVEST))));
     levelRewardSubtitle.textContent = 'Configure characteristic points';
-    levelRewardSummary.innerHTML = `<div class="level-reward-line">Characteristic cap at level ${lvl}: ${cap}</div>`;
+    levelRewardSummary.innerHTML = `<div class="level-reward-line">Characteristic cap at level ${lvl}: ${noe35CharacteristicCapLabel(cap)}</div>`;
     if (levelRewardAvailableEl) levelRewardAvailableEl.textContent = '';
     levelRewardOptionsGrid.innerHTML = '';
 
@@ -20728,7 +20755,7 @@ initRichTextToolbar();
     if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkills} / ${pools.skillPool}`;
     if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStats} / ${pools.statPool}`;
     if (skillCapEl) skillCapEl.textContent = `Max per skill: ${pools.skillCap}`;
-    if (statCapEl) statCapEl.textContent = `Max per characteristic: ${pools.statCap}`;
+    if (statCapEl) statCapEl.textContent = `Max per characteristic: ${noe35CharacteristicCapLabel(pools.statCap)}`;
   };
 
   renderStatistics = function(){
@@ -20740,7 +20767,16 @@ initRichTextToolbar();
 
     const statPanel = document.createElement('div');
     statPanel.className = 'panel';
-    statPanel.innerHTML = `<div class="hdr"><strong>Characteristics</strong><span class="muted">0-${pools.statCap}</span></div>`;
+    statPanel.innerHTML = `
+      <div class="hdr">
+        <span class="ns35-char-hdr">
+          <strong>Characteristics</strong>
+          <button type="button" class="btn small ns35-prestige-icon-btn" title="Reset Prestige Rerolls" aria-label="Reset Prestige Rerolls">
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+        </span>
+      </div>
+    `;
     const statBody = document.createElement('div');
     statBody.className = 'panel-body';
     const statGrid = document.createElement('div');
@@ -20765,19 +20801,10 @@ initRichTextToolbar();
       statGrid.appendChild(cell);
     });
     statBody.appendChild(statGrid);
-    const prestigeResetRow = document.createElement('div');
-    prestigeResetRow.className = 'row';
-    prestigeResetRow.style.justifyContent = 'flex-end';
-    const prestigeResetBtn = document.createElement('button');
-    prestigeResetBtn.type = 'button';
-    prestigeResetBtn.className = 'btn small';
-    prestigeResetBtn.textContent = 'Reset Prestige Rerolls';
-    prestigeResetBtn.addEventListener('click', ()=>{
+    statPanel.querySelector('.ns35-prestige-icon-btn')?.addEventListener('click', ()=>{
       resetNoe35PrestigeRerolls(box);
       commitNoe35StatChanges(box);
     });
-    prestigeResetRow.appendChild(prestigeResetBtn);
-    statBody.appendChild(prestigeResetRow);
     statPanel.appendChild(statBody);
     gridEl.appendChild(statPanel);
 
@@ -20838,9 +20865,9 @@ initRichTextToolbar();
     natureGrid.className = 'ns35-nature-grid';
     NOE35_NATURES.forEach(nature=>{
       const iconName = String(nature).toLowerCase();
-      const natureId = String(NOE35_NATURE_IDS[nature] || iconName).toUpperCase();
       const inputId = `noe35-nature-${iconName}`;
       const invested = clampInvested(box.natures[nature]);
+      const natureId = natureIdFromBaseValue(invested);
       const cell = document.createElement('div');
       cell.className = 'ns35-nature-cell';
       cell.innerHTML = `
@@ -20852,6 +20879,7 @@ initRichTextToolbar();
       `;
       natureGrid.appendChild(cell);
       const input = cell.querySelector(`#${inputId}`);
+      const chip = cell.querySelector('.ns35-id-chip');
       input.addEventListener('input', ()=>{
         const livePools = currentStatPools();
         const current = clampInvested(box.natures[nature]);
@@ -20876,6 +20904,7 @@ initRichTextToolbar();
         }
         if (!OVERRIDE_ENABLED) input.value = val;
         box.natures[nature] = val;
+        if (chip) chip.textContent = natureIdFromBaseValue(val);
         syncNoe35ToLegacy(box);
         updatePointCounters();
         updateDerived();
@@ -20890,14 +20919,7 @@ initRichTextToolbar();
     updatePointCounters();
   };
 
-  const originalShowLevelRewardModal = showLevelRewardModal;
-  showLevelRewardModal = function(newLvl, prevLvl, mode='level'){
-    if (String(mode || '').toLowerCase() === 'configure'){
-      renderNoe35AttributeConfigurator(newLvl);
-      return;
-    }
-    return originalShowLevelRewardModal(newLvl, prevLvl, mode);
-  };
+  window.NOE35_OPEN_ATTRIBUTE_CONFIG = renderNoe35AttributeConfigurator;
 
   window.NOE35_PRESTIGE_API = {
     level(charKey){
