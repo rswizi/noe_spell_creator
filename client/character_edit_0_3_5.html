@@ -1166,7 +1166,7 @@
           <details open class="panel">
             <summary class="hdr">
               <strong>Derived Stats</strong>
-              <span class="muted">(auto from Level, Milestones & skills)</span>
+              <span class="muted">(auto from Level and build values)</span>
               <span class="grow"></span>
             </summary>
             <div class="panel-body">
@@ -3503,7 +3503,20 @@ function levelFromXp(xp){
 
 /* State */
 const params = new URLSearchParams(location.search);
-const CID = params.get('id');
+function _cidFromPathname(pathname){
+  const parts = String(pathname || '').split('/').filter(Boolean);
+  if (!parts.length) return '';
+  if (parts[0] !== 'character-manager') return '';
+  const slug = parts[1] || '';
+  const idPart = slug.split('_', 1)[0] || '';
+  if (!idPart) return '';
+  try{
+    return decodeURIComponent(idPart).trim();
+  }catch{
+    return idPart.trim();
+  }
+}
+const CID = (params.get('id') || _cidFromPathname(location.pathname) || '').trim();
 const CAMPAIGN_ID = params.get('cid') || '';
 const INITIAL_TAB_RAW = (params.get('tab') || params.get('pane') || '').trim().toLowerCase();
 const VIEW_ONLY = params.get('view') === '1' || params.get('mode') === 'viewer';
@@ -19854,6 +19867,506 @@ checkMe().then(async ()=>{
 }).catch((e)=>{ statusEl.textContent = 'Load failed: ' + (e?.message || e); });
 wireRichTextPaste();
 initRichTextToolbar();
+</script>
+
+<script>
+/* ---------- NoE 0.3.5 statistics-only override ---------- */
+(function(){
+  const MAX_INVEST = 8;
+  const NOE35_CHARACTERISTICS = [
+    { key:'dexterity', code:'DEX', name:'Dexterity', desc:'Hand-eye coordination and agile movement.' },
+    { key:'body', code:'BOD', name:'Body', desc:'Physical power and endurance.' },
+    { key:'willpower', code:'WIL', name:'Willpower', desc:'Resolve, conviction, and mental resistance.' },
+    { key:'magic', code:'MAG', name:'Magic', desc:'Arcane talent and occult understanding.' },
+    { key:'wisdom', code:'WIS', name:'Wisdom', desc:'Knowledge use, analysis, and perception of context.' },
+    { key:'presence', code:'PRE', name:'Presence', desc:'Social impact, leadership, and influence.' },
+  ];
+  const NOE35_CHAR_BY_KEY = new Map(NOE35_CHARACTERISTICS.map(c=> [c.key, c]));
+  const NOE35_NATURES = ['Fire','Water','Wind','Earth','Lightning','Sun','Moon','Ki'];
+  const NOE35_SKILL_ALIAS = {
+    'Subjugation': 'Intimidation',
+    'Sleight of Hand': 'Sleight of hand',
+    'Attunement': 'Potential',
+    'Cunning': 'Charisma'
+  };
+  const NOE35_SKILL_CATEGORIES = [
+    {
+      key:'combat',
+      title:'Combat Skills',
+      skills: [
+        { name:'Brutality', defaults:['body'] },
+        { name:'Technicity', defaults:['dexterity'] },
+        { name:'Accuracy', defaults:['dexterity'] },
+        { name:'Dodge', defaults:['dexterity','body'] },
+        { name:'Absorption', defaults:['willpower'] },
+      ]
+    },
+    {
+      key:'physical',
+      title:'Physical Skills',
+      skills: [
+        { name:'Stealth', defaults:['dexterity'] },
+        { name:'Reactivity', defaults:['dexterity'] },
+        { name:'Acrobatics', defaults:['dexterity','body'] },
+        { name:'Resistance', defaults:['body'] },
+        { name:'Athletics', defaults:['body'] },
+      ]
+    },
+    {
+      key:'mental',
+      title:'Mental Skills',
+      skills: [
+        { name:'Spirit', defaults:['willpower'] },
+        { name:'Aura', defaults:['presence'] },
+        { name:'Investigation', defaults:['wisdom'] },
+        { name:'Education', defaults:['wisdom'] },
+        { name:'Cunning', defaults:['wisdom'] },
+      ]
+    },
+    {
+      key:'awareness',
+      title:'Awareness Skills',
+      skills: [
+        { name:'Survival', defaults:['willpower'] },
+        { name:'Instinct', defaults:['wisdom','willpower'] },
+        { name:'Perception', defaults:['wisdom'] },
+        { name:'Psychology', defaults:['wisdom','presence'] },
+        { name:'Attunement', defaults:['willpower','magic'] },
+      ]
+    },
+    {
+      key:'social',
+      title:'Social Skills',
+      skills: [
+        { name:'Persuasion', defaults:['presence','wisdom'] },
+        { name:'Charm', defaults:['presence'] },
+        { name:'Taming', defaults:['presence'] },
+        { name:'Subjugation', defaults:['willpower'] },
+        { name:'Deception', defaults:['presence'] },
+      ]
+    },
+    {
+      key:'technical',
+      title:'Technical Skills',
+      skills: [
+        { name:'Crafting', defaults:['dexterity'] },
+        { name:'Alchemy', defaults:['wisdom'] },
+        { name:'Medicine', defaults:['wisdom'] },
+        { name:'Engineering', defaults:['wisdom'] },
+        { name:'Sleight of Hand', defaults:['dexterity'] },
+      ]
+    },
+  ];
+  const NOE35_SKILL_BY_NAME = new Map();
+  NOE35_SKILL_CATEGORIES.forEach(category=>{
+    category.skills.forEach(skill=> NOE35_SKILL_BY_NAME.set(skill.name, skill));
+  });
+
+  function ensureNoe35Style(){
+    if (document.getElementById('noe35-stats-style')) return;
+    const style = document.createElement('style');
+    style.id = 'noe35-stats-style';
+    style.textContent = `
+      #stats-grid { display:grid; grid-template-columns:1fr; gap:14px; }
+      .ns35-char-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
+      .ns35-char-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:10px; display:grid; gap:8px; }
+      .ns35-char-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .ns35-char-desc { font-size:.84rem; opacity:.82; min-height:2.6em; }
+      .ns35-value-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .ns35-value-row input { width:72px; max-width:72px; }
+      .ns35-category-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
+      .ns35-skill-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px 10px; }
+      .ns35-skill-row { display:grid; grid-template-columns:minmax(0, 1fr) 64px; align-items:center; gap:8px; }
+      .ns35-skill-row .skill-name { font-weight:600; text-align:left; }
+      .ns35-nature-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; }
+      .ns35-nature-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:10px; display:grid; gap:8px; }
+      .ns35-nature-row { display:grid; grid-template-columns:28px minmax(0, 1fr) auto; gap:8px; align-items:center; }
+      .ns35-nature-row img { width:28px; height:28px; }
+      .ns35-id-chip { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-size:.8rem; white-space:nowrap; }
+      .ns35-roll-char { display:grid; gap:4px; }
+      .ns35-roll-char select { min-width:200px; }
+      @media (max-width: 1160px){
+        .ns35-char-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+        .ns35-category-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+        .ns35-nature-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 760px){
+        .ns35-char-grid, .ns35-category-grid, .ns35-nature-grid { grid-template-columns:1fr; }
+        .ns35-skill-grid { grid-template-columns:1fr; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function clampInvested(raw){
+    return Math.max(0, Math.min(MAX_INVEST, Math.floor(investVal(raw, 0))));
+  }
+
+  function safeStatsContainer(){
+    if (!CHAR) return null;
+    if (!CHAR.stats || typeof CHAR.stats !== 'object') CHAR.stats = {};
+    const box = (CHAR.stats.noe_0_3_5_stats && typeof CHAR.stats.noe_0_3_5_stats === 'object')
+      ? CHAR.stats.noe_0_3_5_stats
+      : {};
+    CHAR.stats.noe_0_3_5_stats = box;
+    if (!box.characteristics || typeof box.characteristics !== 'object') box.characteristics = {};
+    if (!box.skills || typeof box.skills !== 'object') box.skills = {};
+    if (!box.skill_characteristics || typeof box.skill_characteristics !== 'object') box.skill_characteristics = {};
+    if (!box.natures || typeof box.natures !== 'object') box.natures = {};
+    return box;
+  }
+
+  function resolveLegacySkillPath(skillName){
+    const legacySkill = NOE35_SKILL_ALIAS[skillName] || skillName;
+    let charKey = charKeyForSkillName(legacySkill);
+    if (!charKey){
+      const target = String(legacySkill || '').toLowerCase();
+      const hit = CHARACS.find(c=> (c.skills || []).some(s=> String(s || '').toLowerCase() === target));
+      charKey = hit ? hit.key : '';
+    }
+    if (!charKey) return null;
+    return { charKey, skill: legacySkill };
+  }
+
+  function currentStatPools(){
+    const lvl = Math.max(1, Math.floor(Number(levelEl?.value) || Number(CHAR?.level) || 1));
+    return {
+      skillPool: Math.max(0, Math.floor(numOr(effectiveSkillPointPool(lvl), 0))),
+      statPool: Math.max(0, Math.floor(numOr(effectiveStatPointPool(lvl), 0))),
+    };
+  }
+
+  function totalNoe35Characteristics(box){
+    return NOE35_CHARACTERISTICS.reduce((sum, c)=> sum + clampInvested(box.characteristics[c.key]), 0);
+  }
+
+  function totalNoe35Skills(box){
+    let total = 0;
+    NOE35_SKILL_CATEGORIES.forEach(category=>{
+      category.skills.forEach(skill=>{
+        total += clampInvested(box.skills[skill.name]);
+      });
+    });
+    NOE35_NATURES.forEach(n=>{ total += clampInvested(box.natures[n]); });
+    return total;
+  }
+
+  function syncNoe35ToLegacy(box){
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      const val = clampInvested(box.characteristics[ch.key]);
+      box.characteristics[ch.key] = val;
+      if (!CHAR.stats[ch.key] || typeof CHAR.stats[ch.key] !== 'object') CHAR.stats[ch.key] = { invest:0, skills:{} };
+      CHAR.stats[ch.key].invest = val;
+    });
+    NOE35_SKILL_CATEGORIES.forEach(category=>{
+      category.skills.forEach(skill=>{
+        const val = clampInvested(box.skills[skill.name]);
+        box.skills[skill.name] = val;
+        const path = resolveLegacySkillPath(skill.name);
+        if (!path) return;
+        if (!CHAR.stats[path.charKey] || typeof CHAR.stats[path.charKey] !== 'object') CHAR.stats[path.charKey] = { invest:0, skills:{} };
+        if (!CHAR.stats[path.charKey].skills || typeof CHAR.stats[path.charKey].skills !== 'object') CHAR.stats[path.charKey].skills = {};
+        CHAR.stats[path.charKey].skills[path.skill] = val;
+      });
+    });
+    if (!CHAR.stats.intensities || typeof CHAR.stats.intensities !== 'object') CHAR.stats.intensities = {};
+    NOE35_NATURES.forEach(n=>{
+      const val = clampInvested(box.natures[n]);
+      box.natures[n] = val;
+      CHAR.stats.intensities[n] = val;
+    });
+  }
+
+  function ensureNoe35StatsState(){
+    const box = safeStatsContainer();
+    if (!box) return null;
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      if (box.characteristics[ch.key] == null){
+        box.characteristics[ch.key] = clampInvested(CHAR?.stats?.[ch.key]?.invest);
+      }else{
+        box.characteristics[ch.key] = clampInvested(box.characteristics[ch.key]);
+      }
+    });
+    NOE35_SKILL_CATEGORIES.forEach(category=>{
+      category.skills.forEach(skill=>{
+        if (box.skills[skill.name] == null){
+          const path = resolveLegacySkillPath(skill.name);
+          const fromLegacy = path ? CHAR?.stats?.[path.charKey]?.skills?.[path.skill] : 0;
+          box.skills[skill.name] = clampInvested(fromLegacy);
+        }else{
+          box.skills[skill.name] = clampInvested(box.skills[skill.name]);
+        }
+        const defaults = Array.isArray(skill.defaults) && skill.defaults.length ? skill.defaults : ['dexterity'];
+        const savedChar = String(box.skill_characteristics[skill.name] || '').trim().toLowerCase();
+        box.skill_characteristics[skill.name] = NOE35_CHAR_BY_KEY.has(savedChar) ? savedChar : defaults[0];
+      });
+    });
+    NOE35_NATURES.forEach(n=>{
+      if (box.natures[n] == null){
+        box.natures[n] = clampInvested(CHAR?.stats?.intensities?.[n]);
+      }else{
+        box.natures[n] = clampInvested(box.natures[n]);
+      }
+    });
+    syncNoe35ToLegacy(box);
+    return box;
+  }
+
+  function characteristicCodes(defaults){
+    return (defaults || []).map(key=> (NOE35_CHAR_BY_KEY.get(key)?.code || String(key || '').toUpperCase())).join('/');
+  }
+
+  function rollBaseNoe35(skillName, charKey, box){
+    const skillVal = clampInvested(box?.skills?.[skillName]);
+    const charVal = clampInvested(box?.characteristics?.[charKey]);
+    return { skillVal, charVal, base: skillVal + charVal };
+  }
+
+  function applyNoe35RollSelection(skillName, charKey){
+    if (!ROLL_CONTEXT || !ROLL_CONTEXT.noe35Skill) return;
+    const box = ensureNoe35StatsState();
+    if (!box) return;
+    const selected = NOE35_CHAR_BY_KEY.has(charKey) ? charKey : (ROLL_CONTEXT.noe35Skill.defaults?.[0] || 'dexterity');
+    box.skill_characteristics[skillName] = selected;
+    const values = rollBaseNoe35(skillName, selected, box);
+    const code = NOE35_CHAR_BY_KEY.get(selected)?.code || selected.toUpperCase();
+    ROLL_CONTEXT.base = values.base;
+    ROLL_CONTEXT.detailsText = `${skillName}: d10 + ${values.skillVal} (skill) + ${values.charVal} (${code})`;
+    ROLL_CONTEXT.detailLines = [`Skill: ${skillName}`, `Characteristic: ${code}`, `Formula: d10 + skill + characteristic`];
+    if (rollBaseEl) rollBaseEl.value = values.base;
+    if (rollDetailsEl){
+      rollDetailsEl.textContent = ROLL_CONTEXT.detailsText;
+      rollDetailsEl.style.display = '';
+    }
+    queueSave();
+  }
+
+  function installNoe35RollCharacteristicPicker(){
+    if (!rollGridEl) return;
+    let wrap = document.getElementById('roll-skill-characteristic-wrap');
+    let select = document.getElementById('roll-skill-characteristic');
+    if (!wrap || !select){
+      wrap = document.createElement('label');
+      wrap.id = 'roll-skill-characteristic-wrap';
+      wrap.className = 'ns35-roll-char';
+      wrap.innerHTML = '<span class="k">Characteristic</span><select id="roll-skill-characteristic"></select>';
+      rollGridEl.appendChild(wrap);
+      select = wrap.querySelector('select');
+      select.addEventListener('change', ()=>{
+        if (!ROLL_CONTEXT?.noe35Skill) return;
+        applyNoe35RollSelection(ROLL_CONTEXT.noe35Skill.name, String(select.value || '').trim().toLowerCase());
+      });
+    }
+    const originalOpenRollModal = openRollModal;
+    openRollModal = function(ctx){
+      originalOpenRollModal(ctx);
+      const skillCtx = ctx?.noe35Skill || null;
+      if (!skillCtx){
+        wrap.style.display = 'none';
+        return;
+      }
+      const box = ensureNoe35StatsState();
+      if (!box){
+        wrap.style.display = 'none';
+        return;
+      }
+      const defaults = Array.isArray(skillCtx.defaults) && skillCtx.defaults.length ? skillCtx.defaults : ['dexterity'];
+      const selected = box.skill_characteristics[skillCtx.name] || defaults[0];
+      select.innerHTML = '';
+      NOE35_CHARACTERISTICS.forEach(ch=>{
+        const opt = document.createElement('option');
+        const isDefault = defaults.includes(ch.key);
+        opt.value = ch.key;
+        opt.textContent = `${ch.name} (${ch.code})${isDefault ? ' [default]' : ''}`;
+        if (ch.key === selected) opt.selected = true;
+        select.appendChild(opt);
+      });
+      wrap.style.display = '';
+      applyNoe35RollSelection(skillCtx.name, selected);
+    };
+  }
+
+  const originalOpenSkillRoll = openSkillRoll;
+  openSkillRoll = function(charKey, charLabel, skillName){
+    const normalizedSkill = String(skillName || '').trim();
+    if (!normalizedSkill || !NOE35_SKILL_BY_NAME.has(normalizedSkill)){
+      return originalOpenSkillRoll(charKey, charLabel, skillName);
+    }
+    const box = ensureNoe35StatsState();
+    if (!box) return;
+    const skillDef = NOE35_SKILL_BY_NAME.get(normalizedSkill);
+    const defaults = (skillDef.defaults && skillDef.defaults.length) ? skillDef.defaults : ['dexterity'];
+    const selected = box.skill_characteristics[normalizedSkill] || defaults[0];
+    const values = rollBaseNoe35(normalizedSkill, selected, box);
+    const cond = getCombatRollModifiers('skill', normalizedSkill);
+    openRollModal({
+      title: normalizedSkill,
+      subtitle: 'Skill check',
+      baseLabel: 'Skill + Characteristic',
+      base: values.base,
+      mod: cond.mod,
+      adv: cond.adv || 'normal',
+      autoConds: cond.conds,
+      detailsText: '',
+      detailLines: [],
+      rollKind: 'skill',
+      noe35Skill: { name: normalizedSkill, defaults }
+    });
+  };
+
+  updatePointCounters = function(){
+    const box = ensureNoe35StatsState();
+    if (!box) return;
+    const pools = currentStatPools();
+    const usedSkills = totalNoe35Skills(box);
+    const usedStats = totalNoe35Characteristics(box);
+    if (skillCounterEl) skillCounterEl.textContent = `Skills: ${usedSkills} / ${pools.skillPool}`;
+    if (statCounterEl) statCounterEl.textContent = `Characteristics: ${usedStats} / ${pools.statPool}`;
+    if (skillCapEl) skillCapEl.textContent = `Max per skill: ${MAX_INVEST}`;
+    if (statCapEl) statCapEl.textContent = `Max per characteristic: ${MAX_INVEST}`;
+  };
+
+  renderStatistics = function(){
+    const box = ensureNoe35StatsState();
+    if (!box || !gridEl) return;
+    ensureNoe35Style();
+    gridEl.innerHTML = '';
+
+    const statPanel = document.createElement('div');
+    statPanel.className = 'panel';
+    statPanel.innerHTML = '<div class="hdr"><strong>Characteristics</strong><span class="muted">Invested values only (0-8)</span></div>';
+    const statBody = document.createElement('div');
+    statBody.className = 'panel-body';
+    const statGrid = document.createElement('div');
+    statGrid.className = 'ns35-char-grid';
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      const cell = document.createElement('div');
+      cell.className = 'ns35-char-cell';
+      const inputId = `noe35-char-${ch.key}`;
+      cell.innerHTML = `
+        <div class="ns35-char-head"><strong>${ch.name}</strong><span class="pill">${ch.code}</span></div>
+        <div class="ns35-char-desc">${ch.desc}</div>
+        <label class="ns35-value-row"><span class="muted">Invested</span><input id="${inputId}" class="num" type="number" min="0" max="${MAX_INVEST}" value="${clampInvested(box.characteristics[ch.key])}"></label>
+      `;
+      statGrid.appendChild(cell);
+      const input = cell.querySelector(`#${inputId}`);
+      input.addEventListener('input', ()=>{
+        const pools = currentStatPools();
+        const current = clampInvested(box.characteristics[ch.key]);
+        const totalOther = totalNoe35Characteristics(box) - current;
+        const desired = clampInvested(input.value);
+        const allowed = Math.max(0, pools.statPool - totalOther);
+        const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, MAX_INVEST);
+        if (!OVERRIDE_ENABLED) input.value = val;
+        box.characteristics[ch.key] = val;
+        syncNoe35ToLegacy(box);
+        updatePointCounters();
+        updateDerived();
+        refreshArchetypeAbilities();
+        queueSave();
+      });
+    });
+    statBody.appendChild(statGrid);
+    statPanel.appendChild(statBody);
+    gridEl.appendChild(statPanel);
+
+    const categoriesWrap = document.createElement('div');
+    categoriesWrap.className = 'ns35-category-grid';
+    NOE35_SKILL_CATEGORIES.forEach(category=>{
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      panel.innerHTML = `<div class="hdr"><strong>${category.title}</strong></div>`;
+      const body = document.createElement('div');
+      body.className = 'panel-body';
+      const skillGrid = document.createElement('div');
+      skillGrid.className = 'ns35-skill-grid';
+      category.skills.forEach(skill=>{
+        const row = document.createElement('div');
+        row.className = 'ns35-skill-row';
+        const codes = characteristicCodes(skill.defaults);
+        const inputId = `noe35-skill-${skill.name.replace(/[^a-z0-9]+/gi, '-')}`;
+        row.innerHTML = `
+          <button type="button" class="roll-link skill-name">${skill.name} <span class="muted">(${codes})</span></button>
+          <input id="${inputId}" class="num" type="number" min="0" max="${MAX_INVEST}" value="${clampInvested(box.skills[skill.name])}">
+        `;
+        skillGrid.appendChild(row);
+        row.querySelector('.skill-name')?.addEventListener('click', ()=> openSkillRoll(skill.defaults[0], NOE35_CHAR_BY_KEY.get(skill.defaults[0])?.name || '', skill.name));
+        const input = row.querySelector(`#${inputId}`);
+        input.addEventListener('input', ()=>{
+          const pools = currentStatPools();
+          const current = clampInvested(box.skills[skill.name]);
+          const totalOther = totalNoe35Skills(box) - current;
+          const desired = clampInvested(input.value);
+          const allowed = Math.max(0, pools.skillPool - totalOther);
+          const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, MAX_INVEST);
+          if (!OVERRIDE_ENABLED) input.value = val;
+          box.skills[skill.name] = val;
+          syncNoe35ToLegacy(box);
+          updatePointCounters();
+          updateDerived();
+          renderAddedSchools();
+          refreshArchetypeAbilities();
+          queueSave();
+        });
+      });
+      body.appendChild(skillGrid);
+      panel.appendChild(body);
+      categoriesWrap.appendChild(panel);
+    });
+    gridEl.appendChild(categoriesWrap);
+
+    const naturePanel = document.createElement('div');
+    naturePanel.className = 'panel';
+    naturePanel.innerHTML = '<div class="hdr"><strong>Nature Skills</strong><span class="muted">Invested values and ID</span></div>';
+    const natureBody = document.createElement('div');
+    natureBody.className = 'panel-body';
+    const natureGrid = document.createElement('div');
+    natureGrid.className = 'ns35-nature-grid';
+    NOE35_NATURES.forEach(nature=>{
+      const iconName = String(nature).toLowerCase();
+      const inputId = `noe35-nature-${iconName}`;
+      const idId = `noe35-id-${iconName}`;
+      const invested = clampInvested(box.natures[nature]);
+      const idLabel = invested > 0 ? intensityIdForValue(invested) : '--';
+      const cell = document.createElement('div');
+      cell.className = 'ns35-nature-cell';
+      cell.innerHTML = `
+        <div class="ns35-nature-row">
+          <img src="/assets/natures/${iconName}.svg" alt="${nature}" title="${nature}">
+          <div><strong>${nature}</strong></div>
+          <span class="ns35-id-chip" id="${idId}">ID ${idLabel}</span>
+        </div>
+        <label class="ns35-value-row"><span class="muted">Invested</span><input id="${inputId}" class="num" type="number" min="0" max="${MAX_INVEST}" value="${invested}"></label>
+      `;
+      natureGrid.appendChild(cell);
+      const input = cell.querySelector(`#${inputId}`);
+      const idEl = cell.querySelector(`#${idId}`);
+      input.addEventListener('input', ()=>{
+        const pools = currentStatPools();
+        const current = clampInvested(box.natures[nature]);
+        const totalOther = totalNoe35Skills(box) - current;
+        const desired = clampInvested(input.value);
+        const allowed = Math.max(0, pools.skillPool - totalOther);
+        const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, MAX_INVEST);
+        if (!OVERRIDE_ENABLED) input.value = val;
+        box.natures[nature] = val;
+        syncNoe35ToLegacy(box);
+        idEl.textContent = `ID ${val > 0 ? intensityIdForValue(val) : '--'}`;
+        updatePointCounters();
+        updateDerived();
+        renderAddedSchools();
+        refreshArchetypeAbilities();
+        queueSave();
+      });
+    });
+    natureBody.appendChild(natureGrid);
+    naturePanel.appendChild(natureBody);
+    gridEl.appendChild(naturePanel);
+    updatePointCounters();
+  };
+
+  installNoe35RollCharacteristicPicker();
+})();
 </script>
 
 
