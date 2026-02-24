@@ -5308,12 +5308,46 @@ function legacyToNoe35SkillAlias(){
     'Charisma': 'Cunning'
   };
 }
+function legacySkillToCharKeyMap(){
+  return {
+    'Brutality':'body',
+    'Technicity':'reflex',
+    'Accuracy':'dexterity',
+    'Dodge':'reflex',
+    'Absorption':'willpower',
+    'Stealth':'dexterity',
+    'Reactivity':'reflex',
+    'Acrobatics':'dexterity',
+    'Resistance':'body',
+    'Athletics':'body',
+    'Spirit':'willpower',
+    'Aura':'magic',
+    'Investigation':'wisdom',
+    'Education':'wisdom',
+    'Charisma':'presence',
+    'Survival':'wisdom',
+    'Instinct':'willpower',
+    'Perception':'wisdom',
+    'Psychology':'wisdom',
+    'Potential':'magic',
+    'Persuasion':'presence',
+    'Charm':'presence',
+    'Taming':'presence',
+    'Intimidation':'willpower',
+    'Deception':'presence',
+    'Crafting':'tech',
+    'Alchemy':'tech',
+    'Medicine':'tech',
+    'Engineering':'tech',
+    'Sleight of hand':'tech'
+  };
+}
 function resolveNoe35ExcellenceSkillPath(skillName){
   const display = String(skillName || '').trim();
   if (!display) return null;
   const alias = noe35ToLegacySkillAlias();
   const legacySkill = alias[display] || display;
-  const charKey = charKeyForSkillName(legacySkill);
+  const charKey = legacySkillToCharKeyMap()[legacySkill] || '';
   if (!charKey) return null;
   return { value:`${charKey}|${legacySkill}`, label:display, legacySkill, charKey };
 }
@@ -6977,6 +7011,7 @@ let ROLL_LOG_COUNT = 0;
 let ROLL_CLICK_TIMER = null;
 const DAZZLING_SPARK_IMAGE = '/assets/dazzling_spark/dazzling_spark.png';
 const DAZZLING_SPARK_SOUND = '/assets/dazzling_spark/dazzling_spark.mp3';
+let ROLL_PRESTIGE_BTN = null;
 
 function resetRollConditions(){
   if (rollCondJinxedEl) rollCondJinxedEl.value = '0';
@@ -7008,6 +7043,53 @@ function refreshRollConditionTargetState(){
       ? 'Jinxed/Motivated are active for this roll (DC provided).'
       : 'Jinxed/Motivated are disabled until you enter a DC.';
   }
+}
+
+function ensureRollPrestigeButton(){
+  if (ROLL_PRESTIGE_BTN && document.body.contains(ROLL_PRESTIGE_BTN)) return ROLL_PRESTIGE_BTN;
+  if (!rollRun || !rollRun.parentElement) return null;
+  const row = rollRun.parentElement;
+  let btn = document.getElementById('roll-prestige-reroll');
+  if (!btn){
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'roll-prestige-reroll';
+    btn.className = 'btn btn-secondary';
+    btn.style.display = 'none';
+    btn.textContent = 'Prestige Reroll';
+    row.insertBefore(btn, rollRun);
+    btn.addEventListener('click', ()=>{
+      const api = window.NOE35_PRESTIGE_API;
+      const charKey = String(ROLL_CONTEXT?.noe35CharKey || '').trim().toLowerCase();
+      if (!api || !charKey) return;
+      const remaining = Math.max(0, Math.floor(Number(api.remaining?.(charKey) || 0)));
+      if (remaining <= 0) return;
+      if (rollResultEl){
+        rollResultEl.textContent = `Prestige reroll used on ${charKey.toUpperCase()} (${remaining - 1} left).`;
+        rollResultEl.style.display = '';
+      }
+      ROLL_CONTEXT._prestigeConsume = true;
+      runRoll();
+    });
+  }
+  ROLL_PRESTIGE_BTN = btn;
+  return btn;
+}
+
+function refreshRollPrestigeButton(){
+  const btn = ensureRollPrestigeButton();
+  if (!btn){
+    return;
+  }
+  const api = window.NOE35_PRESTIGE_API;
+  const infoOnly = !!ROLL_CONTEXT?.infoOnly;
+  const rollKind = String(ROLL_CONTEXT?.rollKind || '');
+  const charKey = String(ROLL_CONTEXT?.noe35CharKey || '').trim().toLowerCase();
+  const remaining = (api && charKey) ? Math.max(0, Math.floor(Number(api.remaining?.(charKey) || 0))) : 0;
+  const show = !infoOnly && rollKind === 'skill' && !!charKey;
+  btn.style.display = show ? '' : 'none';
+  btn.disabled = !show || remaining <= 0;
+  btn.textContent = show ? `Prestige Reroll (${remaining})` : 'Prestige Reroll';
 }
 
 function openRollModal(ctx){
@@ -7048,6 +7130,7 @@ function openRollModal(ctx){
   resetRollConditions();
   applyRollConditionDefaults(ctx?.autoConds || {});
   refreshRollConditionTargetState();
+  refreshRollPrestigeButton();
   invToggleModal(rollModal, rollBackdrop, true);
   if (infoOnly && ctx?.autoLog !== false){
     appendInfoLog(ctx);
@@ -8349,6 +8432,20 @@ async function initCampaignChat(){
 function runRoll(){
   if (!ROLL_CONTEXT) return;
   if (ROLL_CONTEXT.infoOnly) return;
+  const prestigeApi = window.NOE35_PRESTIGE_API;
+  const prestigeCharKey = String(ROLL_CONTEXT?.noe35CharKey || '').trim().toLowerCase();
+  const consumePrestige = !!ROLL_CONTEXT._prestigeConsume;
+  if (consumePrestige){
+    ROLL_CONTEXT._prestigeConsume = false;
+    if (!prestigeApi || !prestigeCharKey || !prestigeApi.consume?.(prestigeCharKey, 1)){
+      if (rollResultEl){
+        rollResultEl.textContent = 'No prestige rerolls available for this characteristic.';
+        rollResultEl.style.display = '';
+      }
+      refreshRollPrestigeButton();
+      return;
+    }
+  }
   const base = Number(rollBaseEl?.value || 0) || 0;
   const mod = Number(rollModEl?.value || 0) || 0;
   const targetRaw = rollTargetEl?.value;
@@ -8441,6 +8538,16 @@ function runRoll(){
     modeLine.className = 'muted';
     modeLine.textContent = `Roll type: ${rollModeLabel}`;
     entry.appendChild(modeLine);
+    if (prestigeApi && prestigeCharKey){
+      const rem = Math.max(0, Math.floor(Number(prestigeApi.remaining?.(prestigeCharKey) || 0)));
+      const level = Math.max(0, Math.floor(Number(prestigeApi.level?.(prestigeCharKey) || 0)));
+      if (level > 0){
+        const prestigeLine = document.createElement('div');
+        prestigeLine.className = 'muted';
+        prestigeLine.textContent = `Prestige (${prestigeCharKey.toUpperCase()}): ${consumePrestige ? 'reroll spent, ' : ''}${rem}/${level} rerolls left today`;
+        entry.appendChild(prestigeLine);
+      }
+    }
     if (critNote){
       const critLine = document.createElement('div');
       critLine.className = 'muted';
@@ -8476,6 +8583,7 @@ function runRoll(){
     emitDazzlingSparkEffect(entry);
   }
   appendRollLog(entry);
+  refreshRollPrestigeButton();
 }
 
 function abilityRollDetails(a){
@@ -10767,6 +10875,18 @@ function title(str){
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 }
 
+function fallbackSkillAliases(){
+  return {
+    enchantment: "enchantement",
+    enchante: "enchantement",
+    incantation: "incantation",
+    incantaion: "incantation",
+    icnantaion: "incantation",
+    incatation: "incantation",
+    resto: "restoration",
+  };
+}
+
 const SKILL_ALIASES = {
   enchantment: "enchantement",
   enchante: "enchantement",
@@ -10804,7 +10924,8 @@ const SKILL_TO_CHAR = {
 };
 function normSkillKey(s){
   const cleaned = (s || "").toString().trim().toLowerCase().replace(/[^a-z]/g, "");
-  return SKILL_ALIASES[cleaned] || cleaned;
+  const aliases = fallbackSkillAliases();
+  return aliases[cleaned] || cleaned;
 }
 function skillValFromIV(skillName, iv){
   const key = normSkillKey(skillName);
@@ -20032,8 +20153,19 @@ initRichTextToolbar();
       #stats-grid { display:grid; grid-template-columns:1fr; gap:14px; }
       .ns35-char-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
       .ns35-char-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:10px; }
-      .ns35-char-line { display:grid; grid-template-columns:minmax(0, 1fr) auto 72px; align-items:center; gap:8px; }
-      .ns35-char-line input { width:72px; max-width:72px; }
+      .ns35-char-line { display:grid; grid-template-columns:minmax(0, 1fr) auto auto auto; align-items:center; gap:8px; }
+      .ns35-char-value { min-width:44px; text-align:center; }
+      .ns35-prestige-star { position:relative; width:28px; height:28px; display:inline-grid; place-items:center; border:1px solid #3a3a4a; border-radius:999px; color:#d8d8df; background:#101018; }
+      .ns35-prestige-star i { font-size:15px; opacity:.9; }
+      .ns35-prestige-star[data-level="0"] { opacity:.45; }
+      .ns35-prestige-num { position:absolute; top:-6px; right:-6px; min-width:16px; height:16px; border-radius:999px; border:1px solid #8892b0; background:#141829; color:#e8ebff; font-size:10px; line-height:14px; text-align:center; padding:0 3px; }
+      .ns35-attr-wrap { display:grid; gap:8px; }
+      .ns35-attr-details { border:1px solid #2f2f40; border-radius:10px; padding:8px; background:#13131c; }
+      .ns35-attr-summary { cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .ns35-attr-grid { display:grid; gap:6px; margin-top:8px; }
+      .ns35-attr-row { display:grid; grid-template-columns:minmax(0, 1fr) auto auto auto; gap:8px; align-items:center; }
+      .ns35-attr-row .btn { min-width:28px; padding:3px 8px; }
+      .ns35-prestige-reset { justify-self:flex-end; }
       .ns35-category-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
       .ns35-skill-grid { display:grid; grid-template-columns:1fr; gap:8px; }
       .ns35-skill-row { display:grid; grid-template-columns:minmax(0, 1fr) 64px; align-items:center; gap:8px; }
@@ -20074,7 +20206,155 @@ initRichTextToolbar();
     if (!box.skills || typeof box.skills !== 'object') box.skills = {};
     if (!box.skill_characteristics || typeof box.skill_characteristics !== 'object') box.skill_characteristics = {};
     if (!box.natures || typeof box.natures !== 'object') box.natures = {};
+    if (!box.attribute_allocations || typeof box.attribute_allocations !== 'object') box.attribute_allocations = {};
+    if (!box.prestige || typeof box.prestige !== 'object') box.prestige = {};
+    if (!box.prestige_remaining || typeof box.prestige_remaining !== 'object') box.prestige_remaining = {};
     return box;
+  }
+
+  function noe35CharPointBuckets(lvl){
+    const levelVal = Math.max(1, Math.floor(Number(lvl) || 1));
+    const out = [];
+    let prev = 0;
+    for (let i = 1; i <= levelVal; i += 1){
+      const curr = Math.max(0, Math.floor(Number(levelProfile(i)?.charPoints || 0)));
+      const delta = Math.max(0, curr - prev);
+      if (delta > 0){
+        out.push({ key:`lvl_${i}`, label:`Level ${i}`, points:delta, level:i });
+      }
+      prev = curr;
+    }
+    const bonus = Math.max(0, Math.floor(numOr(effectiveStatPointPool(levelVal), 0) - numOr(levelProfile(levelVal)?.charPoints, 0)));
+    if (bonus > 0){
+      out.push({ key:'bonus', label:'Ability Bonus', points:bonus, level:levelVal });
+    }
+    return out;
+  }
+
+  function normalizeAttrAllocationBucket(raw){
+    const out = {};
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      out[ch.key] = Math.max(0, Math.floor(Number(raw?.[ch.key] || 0)));
+    });
+    return out;
+  }
+
+  function sumAttrAllocationBucket(raw){
+    let total = 0;
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      total += Math.max(0, Math.floor(Number(raw?.[ch.key] || 0)));
+    });
+    return total;
+  }
+
+  function seededAttrAllocationsFromTotals(targetsIn, buckets){
+    const targets = {};
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      targets[ch.key] = Math.max(0, Math.floor(Number(targetsIn?.[ch.key] || 0)));
+    });
+    const out = {};
+    buckets.forEach(bucket=>{
+      const alloc = {};
+      NOE35_CHARACTERISTICS.forEach(ch=>{ alloc[ch.key] = 0; });
+      let left = Math.max(0, Math.floor(Number(bucket.points || 0)));
+      while (left > 0){
+        let changed = false;
+        NOE35_CHARACTERISTICS.forEach(ch=>{
+          if (left <= 0) return;
+          if (targets[ch.key] > 0){
+            alloc[ch.key] += 1;
+            targets[ch.key] -= 1;
+            left -= 1;
+            changed = true;
+          }
+        });
+        if (!changed) break;
+      }
+      out[bucket.key] = alloc;
+    });
+    return out;
+  }
+
+  function ensureNoe35AttributeAllocations(box, lvl){
+    const buckets = noe35CharPointBuckets(lvl);
+    if (!buckets.length) return;
+    const hasAny = Object.keys(box.attribute_allocations || {}).length > 0;
+    if (!hasAny){
+      const totals = {};
+      NOE35_CHARACTERISTICS.forEach(ch=>{
+        totals[ch.key] = clampInvested(box.characteristics?.[ch.key]);
+      });
+      box.attribute_allocations = seededAttrAllocationsFromTotals(totals, buckets);
+    }
+    const fixed = {};
+    buckets.forEach(bucket=>{
+      const raw = normalizeAttrAllocationBucket(box.attribute_allocations?.[bucket.key]);
+      let used = sumAttrAllocationBucket(raw);
+      if (used > bucket.points){
+        let overflow = used - bucket.points;
+        for (let i = NOE35_CHARACTERISTICS.length - 1; i >= 0 && overflow > 0; i -= 1){
+          const key = NOE35_CHARACTERISTICS[i].key;
+          const cut = Math.min(overflow, raw[key]);
+          raw[key] -= cut;
+          overflow -= cut;
+        }
+      }
+      fixed[bucket.key] = raw;
+    });
+    box.attribute_allocations = fixed;
+  }
+
+  function characteristicTotalsFromAllocations(box, lvl){
+    const totals = {};
+    NOE35_CHARACTERISTICS.forEach(ch=>{ totals[ch.key] = 0; });
+    const buckets = noe35CharPointBuckets(lvl);
+    buckets.forEach(bucket=>{
+      const alloc = normalizeAttrAllocationBucket(box.attribute_allocations?.[bucket.key]);
+      NOE35_CHARACTERISTICS.forEach(ch=>{
+        totals[ch.key] += Math.max(0, Math.floor(Number(alloc[ch.key] || 0)));
+      });
+    });
+    const cap = Math.max(0, Math.min(MAX_INVEST, Math.floor(numOr(statInvestCap(lvl), MAX_INVEST))));
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      totals[ch.key] = Math.max(0, Math.min(cap, totals[ch.key]));
+    });
+    return totals;
+  }
+
+  function maxPrestigeForCharacteristicValue(value){
+    const v = Math.max(0, Math.floor(Number(value) || 0));
+    if (v < 2) return 0;
+    if (v >= 6) return 5;
+    return Math.min(5, Math.max(1, v - 1));
+  }
+
+  function ensureNoe35PrestigeState(box){
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      const key = ch.key;
+      const max = maxPrestigeForCharacteristicValue(clampInvested(box.characteristics?.[key]));
+      const level = Math.max(0, Math.min(max, Math.floor(Number(box.prestige?.[key] || 0))));
+      box.prestige[key] = level;
+      const remainRaw = Math.floor(Number(box.prestige_remaining?.[key]));
+      const remaining = Number.isFinite(remainRaw) ? Math.max(0, Math.min(level, remainRaw)) : level;
+      box.prestige_remaining[key] = remaining;
+    });
+  }
+
+  function applyNoe35CharacteristicState(box, lvl){
+    ensureNoe35AttributeAllocations(box, lvl);
+    const totals = characteristicTotalsFromAllocations(box, lvl);
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      box.characteristics[ch.key] = clampInvested(totals[ch.key]);
+    });
+    ensureNoe35PrestigeState(box);
+  }
+
+  function resetNoe35PrestigeRerolls(box){
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      const key = ch.key;
+      const level = Math.max(0, Math.floor(Number(box.prestige?.[key] || 0)));
+      box.prestige_remaining[key] = level;
+    });
   }
 
   function resolveLegacySkillPath(skillName){
@@ -20145,6 +20425,7 @@ initRichTextToolbar();
   function ensureNoe35StatsState(){
     const box = safeStatsContainer();
     if (!box) return null;
+    const lvl = Math.max(1, Math.floor(Number(levelEl?.value) || Number(CHAR?.level) || 1));
     NOE35_CHARACTERISTICS.forEach(ch=>{
       if (box.characteristics[ch.key] == null){
         box.characteristics[ch.key] = clampInvested(CHAR?.stats?.[ch.key]?.invest);
@@ -20173,8 +20454,148 @@ initRichTextToolbar();
         box.natures[n] = clampInvested(box.natures[n]);
       }
     });
+    applyNoe35CharacteristicState(box, lvl);
     syncNoe35ToLegacy(box);
     return box;
+  }
+
+  function commitNoe35StatChanges(box, { rerender = true } = {}){
+    if (!box) return;
+    syncNoe35ToLegacy(box);
+    updatePointCounters();
+    updateDerived();
+    renderAddedSchools();
+    refreshArchetypeAbilities();
+    if (rerender) renderStatistics();
+    queueSave();
+  }
+
+  function renderNoe35AttributeConfigurator(targetLvl){
+    if (!levelRewardModal || !levelRewardBackdrop || !levelRewardSummary || !levelRewardOptionsGrid) return;
+    const box = ensureNoe35StatsState();
+    if (!box) return;
+    const lvl = Math.max(1, Math.floor(Number(targetLvl || levelEl?.value || CHAR?.level || 1)));
+    applyNoe35CharacteristicState(box, lvl);
+    const cap = Math.max(0, Math.min(MAX_INVEST, Math.floor(numOr(statInvestCap(lvl), MAX_INVEST))));
+    levelRewardSubtitle.textContent = 'Configure characteristic points and prestige';
+    levelRewardSummary.innerHTML = `<div class="level-reward-line">Characteristic cap at level ${lvl}: ${cap}</div>`;
+    if (levelRewardAvailableEl) levelRewardAvailableEl.textContent = '';
+    levelRewardOptionsGrid.innerHTML = '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'ns35-attr-wrap';
+
+    const buckets = noe35CharPointBuckets(lvl);
+    buckets.forEach(bucket=>{
+      const details = document.createElement('details');
+      details.className = 'ns35-attr-details';
+      details.open = true;
+      const summary = document.createElement('summary');
+      summary.className = 'ns35-attr-summary';
+      const alloc = normalizeAttrAllocationBucket(box.attribute_allocations?.[bucket.key]);
+      const used = sumAttrAllocationBucket(alloc);
+      summary.innerHTML = `<strong>${bucket.label}</strong><span class="muted">${used}/${bucket.points} used</span>`;
+      details.appendChild(summary);
+
+      const grid = document.createElement('div');
+      grid.className = 'ns35-attr-grid';
+      NOE35_CHARACTERISTICS.forEach(ch=>{
+        const row = document.createElement('div');
+        row.className = 'ns35-attr-row';
+        const key = ch.key;
+        const val = Math.max(0, Math.floor(Number(alloc[key] || 0)));
+        row.innerHTML = `
+          <span>${ch.name} <span class="muted">(${ch.code})</span></span>
+          <button type="button" class="btn small" data-delta="-1">-</button>
+          <span class="pill">${val}</span>
+          <button type="button" class="btn small" data-delta="1">+</button>
+        `;
+        const minus = row.querySelector('button[data-delta="-1"]');
+        const plus = row.querySelector('button[data-delta="1"]');
+        minus.disabled = val <= 0;
+        plus.disabled = false;
+        const tryApply = (delta)=>{
+          const liveAlloc = normalizeAttrAllocationBucket(box.attribute_allocations?.[bucket.key]);
+          const current = Math.max(0, Math.floor(Number(liveAlloc[key] || 0)));
+          const usedNow = sumAttrAllocationBucket(liveAlloc);
+          if (delta > 0){
+            if (usedNow >= bucket.points) return;
+            const totals = characteristicTotalsFromAllocations(box, lvl);
+            if (totals[key] >= cap) return;
+            liveAlloc[key] = current + 1;
+          }else{
+            if (current <= 0) return;
+            liveAlloc[key] = current - 1;
+          }
+          box.attribute_allocations[bucket.key] = liveAlloc;
+          applyNoe35CharacteristicState(box, lvl);
+          commitNoe35StatChanges(box);
+          renderNoe35AttributeConfigurator(lvl);
+        };
+        minus.addEventListener('click', ()=> tryApply(-1));
+        plus.addEventListener('click', ()=> tryApply(1));
+        grid.appendChild(row);
+      });
+      details.appendChild(grid);
+      wrap.appendChild(details);
+    });
+
+    const prestigePanel = document.createElement('details');
+    prestigePanel.className = 'ns35-attr-details';
+    prestigePanel.open = true;
+    const prestigeSummary = document.createElement('summary');
+    prestigeSummary.className = 'ns35-attr-summary';
+    prestigeSummary.innerHTML = '<strong>Prestige</strong><span class="muted">Rerolls per day by characteristic</span>';
+    prestigePanel.appendChild(prestigeSummary);
+    const prestigeGrid = document.createElement('div');
+    prestigeGrid.className = 'ns35-attr-grid';
+    NOE35_CHARACTERISTICS.forEach(ch=>{
+      const key = ch.key;
+      const max = maxPrestigeForCharacteristicValue(clampInvested(box.characteristics?.[key]));
+      const level = Math.max(0, Math.floor(Number(box.prestige?.[key] || 0)));
+      const remaining = Math.max(0, Math.floor(Number(box.prestige_remaining?.[key] || 0)));
+      const row = document.createElement('div');
+      row.className = 'ns35-attr-row';
+      row.innerHTML = `
+        <span>${ch.name} <span class="muted">(${ch.code}) max ${max}</span></span>
+        <button type="button" class="btn small" data-prestige="-1">-</button>
+        <span class="pill">${level} <span class="muted">(${remaining} left)</span></span>
+        <button type="button" class="btn small" data-prestige="1">+</button>
+      `;
+      const minus = row.querySelector('button[data-prestige="-1"]');
+      const plus = row.querySelector('button[data-prestige="1"]');
+      minus.disabled = level <= 0;
+      plus.disabled = level >= max;
+      const updatePrestige = (delta)=>{
+        const next = Math.max(0, Math.min(max, level + delta));
+        if (next === level) return;
+        box.prestige[key] = next;
+        box.prestige_remaining[key] = Math.max(0, Math.min(next, next));
+        commitNoe35StatChanges(box);
+        renderNoe35AttributeConfigurator(lvl);
+      };
+      minus.addEventListener('click', ()=> updatePrestige(-1));
+      plus.addEventListener('click', ()=> updatePrestige(1));
+      prestigeGrid.appendChild(row);
+    });
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'btn small ns35-prestige-reset';
+    resetBtn.textContent = 'Reset Prestige Rerolls';
+    resetBtn.addEventListener('click', ()=>{
+      resetNoe35PrestigeRerolls(box);
+      commitNoe35StatChanges(box, { rerender:false });
+      renderNoe35AttributeConfigurator(lvl);
+    });
+    prestigePanel.appendChild(prestigeGrid);
+    prestigePanel.appendChild(resetBtn);
+    wrap.appendChild(prestigePanel);
+    levelRewardOptionsGrid.appendChild(wrap);
+
+    levelRewardBackdrop.classList.remove('hidden');
+    levelRewardBackdrop.classList.add('open');
+    levelRewardModal.classList.remove('hidden');
+    levelRewardModal.classList.add('open');
   }
 
   function characteristicCodes(defaults){
@@ -20203,6 +20624,7 @@ initRichTextToolbar();
     const values = rollBaseNoe35(skillName, selected, box);
     const code = NOE35_CHAR_BY_KEY.get(selected)?.code || selected.toUpperCase();
     ROLL_CONTEXT.base = values.base;
+    ROLL_CONTEXT.noe35CharKey = selected;
     ROLL_CONTEXT.detailsText = `${skillName}: d10 + ${values.skillVal} (skill) + ${values.charVal} (${code})`;
     ROLL_CONTEXT.detailLines = [`Skill: ${skillName}`, `Characteristic: ${code}`, `Formula: d10 + skill + characteristic`];
     if (rollBaseEl) rollBaseEl.value = values.base;
@@ -20315,33 +20737,36 @@ initRichTextToolbar();
     NOE35_CHARACTERISTICS.forEach(ch=>{
       const cell = document.createElement('div');
       cell.className = 'ns35-char-cell';
-      const inputId = `noe35-char-${ch.key}`;
+      const value = clampInvested(box.characteristics[ch.key]);
+      const prestigeLevel = Math.max(0, Math.floor(Number(box.prestige?.[ch.key] || 0)));
+      const prestigeRem = Math.max(0, Math.floor(Number(box.prestige_remaining?.[ch.key] || 0)));
       cell.innerHTML = `
         <div class="ns35-char-line">
           <strong>${ch.name}</strong>
           <span class="pill">${ch.code}</span>
-          <input id="${inputId}" class="num" type="number" min="0" max="${pools.statCap}" value="${clampInvested(box.characteristics[ch.key])}">
+          <span class="pill ns35-char-value">${value}</span>
+          <span class="ns35-prestige-star" data-level="${prestigeLevel}" title="${prestigeLevel > 0 ? `${prestigeRem}/${prestigeLevel} prestige rerolls left` : 'No prestige'}">
+            <i class="fa-regular fa-star"></i>
+            <span class="ns35-prestige-num">${prestigeLevel}</span>
+          </span>
         </div>
       `;
       statGrid.appendChild(cell);
-      const input = cell.querySelector(`#${inputId}`);
-      input.addEventListener('input', ()=>{
-        const livePools = currentStatPools();
-        const current = clampInvested(box.characteristics[ch.key]);
-        const totalOther = totalNoe35Characteristics(box) - current;
-        const desired = clampInvested(input.value);
-        const allowed = Math.max(0, livePools.statPool - totalOther);
-        const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, livePools.statCap);
-        if (!OVERRIDE_ENABLED) input.value = val;
-        box.characteristics[ch.key] = val;
-        syncNoe35ToLegacy(box);
-        updatePointCounters();
-        updateDerived();
-        refreshArchetypeAbilities();
-        queueSave();
-      });
     });
     statBody.appendChild(statGrid);
+    const prestigeResetRow = document.createElement('div');
+    prestigeResetRow.className = 'row';
+    prestigeResetRow.style.justifyContent = 'flex-end';
+    const prestigeResetBtn = document.createElement('button');
+    prestigeResetBtn.type = 'button';
+    prestigeResetBtn.className = 'btn small';
+    prestigeResetBtn.textContent = 'Reset Prestige Rerolls';
+    prestigeResetBtn.addEventListener('click', ()=>{
+      resetNoe35PrestigeRerolls(box);
+      commitNoe35StatChanges(box);
+    });
+    prestigeResetRow.appendChild(prestigeResetBtn);
+    statBody.appendChild(prestigeResetRow);
     statPanel.appendChild(statBody);
     gridEl.appendChild(statPanel);
 
@@ -20451,6 +20876,48 @@ initRichTextToolbar();
     naturePanel.appendChild(natureBody);
     gridEl.appendChild(naturePanel);
     updatePointCounters();
+  };
+
+  const originalShowLevelRewardModal = showLevelRewardModal;
+  showLevelRewardModal = function(newLvl, prevLvl, mode='level'){
+    if (String(mode || '').toLowerCase() === 'configure'){
+      renderNoe35AttributeConfigurator(newLvl);
+      return;
+    }
+    return originalShowLevelRewardModal(newLvl, prevLvl, mode);
+  };
+
+  window.NOE35_PRESTIGE_API = {
+    level(charKey){
+      const key = String(charKey || '').trim().toLowerCase();
+      if (!NOE35_CHAR_BY_KEY.has(key)) return 0;
+      const box = ensureNoe35StatsState();
+      return box ? Math.max(0, Math.floor(Number(box.prestige?.[key] || 0))) : 0;
+    },
+    remaining(charKey){
+      const key = String(charKey || '').trim().toLowerCase();
+      if (!NOE35_CHAR_BY_KEY.has(key)) return 0;
+      const box = ensureNoe35StatsState();
+      return box ? Math.max(0, Math.floor(Number(box.prestige_remaining?.[key] || 0))) : 0;
+    },
+    consume(charKey, amount = 1){
+      const key = String(charKey || '').trim().toLowerCase();
+      if (!NOE35_CHAR_BY_KEY.has(key)) return false;
+      const box = ensureNoe35StatsState();
+      if (!box) return false;
+      const spend = Math.max(1, Math.floor(Number(amount) || 1));
+      const rem = Math.max(0, Math.floor(Number(box.prestige_remaining?.[key] || 0)));
+      if (rem < spend) return false;
+      box.prestige_remaining[key] = rem - spend;
+      commitNoe35StatChanges(box, { rerender:false });
+      return true;
+    },
+    resetAll(){
+      const box = ensureNoe35StatsState();
+      if (!box) return;
+      resetNoe35PrestigeRerolls(box);
+      commitNoe35StatChanges(box);
+    }
   };
 
   installNoe35RollCharacteristicPicker();
