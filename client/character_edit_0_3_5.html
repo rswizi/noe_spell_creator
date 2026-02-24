@@ -3109,25 +3109,25 @@ const COMBAT_SPECIAL_WEAPON_DEFS = {
   unarmed_brutality: {
     name: 'Unarmed (Brutality)',
     skill: 'Brutality',
-    damage: '1d6 + M(BOD)',
+    damage: '1d6 + C(BOD)',
     attributes: ['Unarmed'],
   },
   unarmed_accuracy: {
     name: 'Unarmed (Accuracy)',
     skill: 'Accuracy',
-    damage: '1d6 + M(DEX)',
+    damage: '1d6 + C(DEX)',
     attributes: ['Unarmed'],
   },
   unarmed_technicity: {
     name: 'Unarmed (Technicity)',
     skill: 'Technicity',
-    damage: '1d6 + M(REF)',
+    damage: '1d6 + C(REF)',
     attributes: ['Unarmed'],
   },
   improvised_brutality: {
     name: 'Improvised Weapon',
     skill: 'Brutality',
-    damage: '2d6 + M(BOD)',
+    damage: '2d6 + C(BOD)',
     attributes: ['Improvised'],
   },
 };
@@ -3491,7 +3491,7 @@ function levelProfile(lvl){
 }
 function xpForLevel(level){
   const lvl = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level||1)));
-  return 100 * ((lvl-1) * lvl / 2);
+  return 10 * ((lvl-1) * lvl / 2);
 }
 function levelFromXp(xp){
   const val = Math.max(0, Math.floor(xp||0));
@@ -5272,7 +5272,8 @@ function normalizeSublimations(arr){
   return out;
 }
 function slotsForLevel(lvl){
-  const base = levelProfile(lvl).subSlots;
+  const levelVal = Math.max(1, Math.floor(Number(lvl) || 1));
+  const base = Math.max(0, Math.floor(levelVal / 2)) + characteristicValueForDerived('presence');
   const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.sublimation || 0)) * 4;
   return base + bonus;
 }
@@ -11042,8 +11043,7 @@ function renderXpProgress(){
 async function renderSchoolSpellCounters(){
   if (!CHAR || !CHAR.stats) return;
   try{ if (!SCHOOLS.length) await fetchSchools(); }catch{}
-  const magVal = totalFromInvest(investVal(CHAR.stats.magic?.invest, 0));
-  const msMAG = milestone('magic');
+  const magVal = characteristicValueForDerived('magic');
   let simpleSchools = 0, complexSchools = 0;
   ADDED_SCHOOLS.forEach(id=>{
     const s = (SCHOOLS||[]).find(x=>String(x.id||x.name)===String(id));
@@ -11082,7 +11082,7 @@ async function renderSchoolSpellCounters(){
     else if (onlySimple) simplePrepared++;
   });
   const maxSimpleSchools = null; // unlimited simple schools
-    const maxComplexSchools = numOr(DERIVED_CACHE?.complex_schools, msMAG || 0);
+    const maxComplexSchools = numOr(DERIVED_CACHE?.complex_schools, magVal || 0);
   const maxSimplePreparedBase = magVal;
   const complexSlotsFromMag = Math.max(0, Math.floor(Math.max(0, magVal - 8) / 2) * 2);
   const maxComplexPreparedBase = complexSlotsFromMag;
@@ -14681,11 +14681,11 @@ function parseAbilityRollTokens(expr){
       token = token.slice(1);
     }
     if (!token) continue;
-    const msMatch = token.match(/^M\(([^)]+)\)$/i);
+    const msMatch = token.match(/^[MC]\(([^)]+)\)$/i);
     if (msMatch){
       const code = String(msMatch[1] || '').trim().toUpperCase();
       const key = milestoneKeyFromCode(code);
-      if (!key) return { error:`Unknown milestone "${code}".` };
+      if (!key) return { error:`Unknown characteristic "${code}".` };
       const value = milestone(key);
       parts.push({ type:'milestone', code, value, sign });
       continue;
@@ -14736,7 +14736,7 @@ function rollAbilityExpression(expr, idInfo){
       pieces.push({ sign: part.sign, text });
     }else if (part.type === 'milestone'){
       total += part.sign * part.value;
-      const label = `M(${part.code})=${part.value}`;
+      const label = `C(${part.code})=${part.value}`;
       pieces.push({ sign: part.sign, text: label });
     }else if (part.type === 'flat'){
       total += part.sign * part.value;
@@ -15313,7 +15313,7 @@ function renderCombatWeapons(){
         extraMagicTotal = Math.floor(extraMagicTotal / 2);
       }
       const msBreak = msInfo.parts.length
-        ? msInfo.parts.map(p=> `M(${p.code}) ${p.value >= 0 ? '+' : ''}${p.value}`).join(' + ')
+        ? msInfo.parts.map(p=> `C(${p.code}) ${p.value >= 0 ? '+' : ''}${p.value}`).join(' + ')
         : '';
       const flatBreak = parts.flat ? `${parts.flat >= 0 ? '+' : ''}${parts.flat}` : '';
       const coreBreak = [
@@ -16719,16 +16719,12 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
   const initiativeBeforeSync = out.initiative;
   const initiativeDelta = initiativeBeforeSync - initiativeBase;
   const initiativeNotesDetail = (notes.initiative || []).slice(1);
-  const reflexMilestoneBonus = milestone('reflex');
   const moBreakdown = (notes.mo || []).filter(n=>!/^Base\s*=/.test(n));
-  out.initiative = (out.mo ?? 0) + (reflexMilestoneBonus || 0) + initiativeDelta;
+  out.initiative = (out.mo ?? 0) + initiativeDelta;
   notes.initiative = [
     `Base = ${initiativeBase}`,
     ...initiativeNotesDetail,
   ];
-  if (reflexMilestoneBonus){
-    notes.initiative.push(`+${reflexMilestoneBonus} Initiative from REF milestone(s)`);
-  }
   notes.initiative.push('Synced to MO (modifiers included)', ...moBreakdown);
 
   // Tooltips with breakdown
@@ -16748,16 +16744,19 @@ function applyPassiveModifiersToDerived(base, currentEnc = 0){
 }
 
 /* Derived computations (use characteristic mods & skills that may be adjusted) */
-function milestone(key){
-  // milestone uses the **adjusted** characteristic mod, shifted to start at total 4
-  return Math.max(0, charAdjMod(key).mod + 3);
+function characteristicValueForDerived(key){
+  const invested = Math.max(0, Math.floor(investVal(CHAR?.stats?.[key]?.invest, 0)));
+  const { value } = applyOps(invested, PASSIVE.char[key]);
+  return Math.max(0, Math.floor(numOr(value, invested)));
 }
-function baseTalentMax(lvl){
-  return 2 + Math.floor(Math.max(1, lvl) / 10);
+function milestone(key){
+  return characteristicValueForDerived(key);
+}
+function baseTalentMax(){
+  return 1 + characteristicValueForDerived('wisdom');
 }
 function talentMax(){
-  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const base = TALENT_MAX || baseTalentMax(lvl);
+  const base = TALENT_MAX || baseTalentMax();
   const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.talent_skill || 0));
   return base + bonus;
 }
@@ -16766,15 +16765,13 @@ function talentCount(){
 }
 function updateTalentCounter(){
   if (!talentCounterEl) return;
-  const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
-  const baseLevel = 1 + Math.floor(lvl / 10);
-  const baselineBonus = 1;
+  const baseValue = baseTalentMax();
   const max = talentMax();
   const count = talentCount();
   const over = count > max;
   talentCounterEl.textContent = `Talents: ${count} / ${max}`;
   talentCounterEl.style.color = over ? '#f66' : '';
-  talentCounterEl.title = `Base ${baseLevel} + baseline +${baselineBonus} (+1 per Talent+Skill reward)`;
+  talentCounterEl.title = `Base ${baseValue} (1 + WIS) (+1 per Talent+Skill reward)`;
 }
 function expertiseMax(){
   return Math.max(0, Math.floor(numOr(DERIVED_CACHE?.max_expertise, 0)));
@@ -16841,43 +16838,53 @@ function updateDerived(){
   const lvl = Math.max(1, Math.floor(Number(levelEl.value)||1));
   const profile = levelProfile(lvl);
   const st = combatState();
-  const magTotal = totalFromInvest(investVal(CHAR.stats.magic?.invest, 0));
+  const dexVal = characteristicValueForDerived('dexterity');
+  const bodVal = characteristicValueForDerived('body');
+  const wilVal = characteristicValueForDerived('willpower');
+  const magVal = characteristicValueForDerived('magic');
+  const wisVal = characteristicValueForDerived('wisdom');
+  const preVal = characteristicValueForDerived('presence');
+  const tecVal = characteristicValueForDerived('tech');
 
   // Base
   const base = {};
-  base.hp = Math.max(0, Math.floor(numOr(profile.hpPlus, lvl * 5)));
-  base.en = Math.max(0, Math.floor(numOr(profile.enPlus, lvl)));
-  base.fo = Math.max(0, Math.floor(numOr(profile.foPlus, lvl)));
-    base.mo = 4;
-    base.initiative = base.mo;
-    base.spcap = Math.floor(base.hp * 0.10);
-    const complexSchools = magTotal >= 10 ? (1 + Math.floor((magTotal - 10) / 2)) : 0;
-    base.complex_schools = complexSchools;
-  base.enc = 10;
+  base.hp = Math.max(0, Math.floor((25 + (lvl * 5)) + (12 * bodVal) + (6 * wilVal)));
+  base.en = Math.max(0, Math.floor((5 + lvl) + wilVal + (2 * magVal)));
+  base.fo = Math.max(0, Math.floor((1 + lvl) + wilVal + preVal));
+  base.mo = Math.max(0, Math.floor(4 + dexVal));
+  base.initiative = base.mo;
+  base.spcap = Math.floor(base.hp * 0.10);
+  const complexSchools = magVal >= 10 ? (1 + Math.floor((magVal - 10) / 2)) : 0;
+  base.complex_schools = complexSchools;
+  base.enc = Math.max(0, Math.floor(10 + (5 * bodVal) + (2 * wilVal)));
   const invEnc = LINKED_INV?.enc_total || 0;
-  base.et = Math.max(0, Math.floor(numOr(profile.etPlus, Math.floor(lvl / 2))));
+  base.et = Math.max(0, Math.floor(1 + Math.floor(lvl / 2) + magVal));
   base.nature_slots = 1;
   base._notes = Object.assign(base._notes || {}, {
-    et: [`Level profile ET +${base.et}`],
-    hp: [`Level profile HP +${base.hp}`],
-    en: [`Level profile EN +${base.en}`],
-    fo: [`Level profile FO +${base.fo}`],
-    sublimation_slots: [`Level profile slots ${slotsForLevel(lvl)}`],
-    complex_schools: [`MAG total ${magTotal} -> ${complexSchools}`],
+    et: [`1 + floor(level/2) + MAG(${magVal}) = ${base.et}`],
+    hp: [`25 + level*5 + 12*BOD(${bodVal}) + 6*WIL(${wilVal}) = ${base.hp}`],
+    en: [`5 + level + WIL(${wilVal}) + 2*MAG(${magVal}) = ${base.en}`],
+    fo: [`1 + level + WIL(${wilVal}) + PRE(${preVal}) = ${base.fo}`],
+    mo: [`4 + DEX(${dexVal}) = ${base.mo}`],
+    enc: [`10 + 5*BOD(${bodVal}) + 2*WIL(${wilVal}) = ${base.enc}`],
+    sublimation_slots: [`floor(level/2) + PRE(${preVal}) + bonus = ${slotsForLevel(lvl)}`],
+    complex_schools: [`MAG value ${magVal} -> ${complexSchools}`],
+    tx: [`2 + BOD(${bodVal}) + TEC(${tecVal}) = ${2 + bodVal + tecVal}`],
+    talent_max: [`1 + WIS(${wisVal}) = ${1 + wisVal}`],
+    weapon_neutral: [`DEX(${dexVal}) = ${dexVal}`],
   });
   base._notes = Object.assign(base._notes || {}, { nature_slots: [`Base ${base.nature_slots}`] });
-  base.tx = Math.max(0, Math.floor(numOr(profile.tensionCap, tensionCapForLevel(lvl))));
-  base.talent_max = baseTalentMax(lvl);
+  base.tx = Math.max(0, Math.floor(2 + bodVal + tecVal));
+  base.talent_max = baseTalentMax();
   base.max_expertise = 0;
   base.max_divine_manifestation = 0;
   base.max_awakenings = 0;
   base.skill_points = skillPointPool(lvl);
-    base.stat_points = statPointPool(lvl);
-    base.sublimation_slots = slotsForLevel(lvl);
-    base.weapon_neutral = 0;
-    base.craftomancy_max = Math.max(0, Math.floor(numOr(profile.maxCraftomancy, 0)));
-    base._notes = Object.assign(base._notes || {}, { weapon_neutral: ['Fixed 0 (no milestone bonus)'] });
-    base._notes = Object.assign(base._notes || {}, { craftomancy_max: [`Level profile craftomancy max ${base.craftomancy_max}`] });
+  base.stat_points = statPointPool(lvl);
+  base.sublimation_slots = slotsForLevel(lvl);
+  base.weapon_neutral = Math.max(0, Math.floor(dexVal));
+  base.craftomancy_max = Math.max(0, Math.floor(numOr(profile.maxCraftomancy, 0)));
+  base._notes = Object.assign(base._notes || {}, { craftomancy_max: [`Level profile craftomancy max ${base.craftomancy_max}`] });
 
     // Apply passive modifiers to derived
     const final = applyPassiveModifiersToDerived(base, invEnc);
@@ -16968,12 +16975,7 @@ function updateDerived(){
     initEl.textContent = maxVals.initiative ?? final.initiative;
     spcapEl.textContent = `${displayCurrent.sp} / ${maxVals.spcap}`;
   encEl.textContent = `${Number(final.current_enc || 0).toFixed(1)} / ${maxVals.enc ?? final.enc}`;
-  const etDisplay = (()=> {
-    const etVal = maxVals.et ?? final.et;
-    const etTech = 1 + Math.floor(lvl / 2) + milestone('tech');
-    return `${etVal} (TEC ${etTech})`;
-  })();
-  etEl.textContent = etDisplay;
+  etEl.textContent = maxVals.et ?? final.et;
     txEl.textContent = maxVals.tx ?? final.tx;
     if (weaponNeutralEl) weaponNeutralEl.textContent = maxVals.weapon_neutral ?? final.weapon_neutral ?? 0;
     updatePointCounters();
