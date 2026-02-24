@@ -65,6 +65,7 @@ from server.src.modules.campaign_chat_helpers import (
 from server.src.modules.wiki_api import router as wiki_router
 from server.src.modules.assets_api import router as assets_router
 from server.src.modules.quests_api import router as quests_router
+from server.src.modules.r2_storage import R2Storage
 from server.src.modules.campaign_combat import (
     end_combat,
     create_combat_doc,
@@ -97,6 +98,7 @@ def _avatar_field(payload: dict, field_name: str = "default_avatar") -> tuple[st
         return key, False
     return None, True
 CAMPAIGN_COL = get_col("campaigns")
+R2_STORAGE = R2Storage()
 
 
 def _campaign_character_id(entry: Any) -> str:
@@ -879,13 +881,52 @@ async def upload_campaign_avatar(cid: str, file: UploadFile = File(...), request
     if doc.get("owner") != user and (role or "").lower() != "admin":
         raise HTTPException(403, "Only GM/admin can set avatar")
     content = await file.read()
-    CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"avatar": content}})
+    content_type = (file.content_type or "image/png").strip().lower()
+    if content_type == "image/jpg":
+        content_type = "image/jpeg"
+    if R2_STORAGE.is_ready():
+        prev_key = str(doc.get("avatar_r2_key") or "").strip()
+        next_key = R2_STORAGE.key_for_campaign_avatar(cid, content_type)
+        R2_STORAGE.put_bytes(
+            next_key,
+            content,
+            content_type=content_type,
+            cache_control="public, max-age=31536000, immutable",
+            metadata={"campaign_id": cid, "owner": user},
+        )
+        if prev_key and prev_key != next_key:
+            R2_STORAGE.delete(prev_key)
+        CAMPAIGN_COL.update_one(
+            {"id": cid},
+            {
+                "$set": {
+                    "avatar_r2_key": next_key,
+                    "avatar_content_type": content_type,
+                    "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
+                },
+                "$unset": {"avatar": ""},
+            },
+        )
+    else:
+        CAMPAIGN_COL.update_one({"id": cid}, {"$set": {"avatar": content}})
     return {"status":"success"}
 
 @app.get("/campaigns/{cid}/avatar")
 async def get_campaign_avatar(cid: str):
     doc = CAMPAIGN_COL.find_one({"id": cid})
-    if not doc or not doc.get("avatar"):
+    if not doc:
+        raise HTTPException(404, "No avatar")
+    r2_key = str(doc.get("avatar_r2_key") or "").strip()
+    if r2_key and R2_STORAGE.is_ready():
+        public_url = R2_STORAGE.public_url(r2_key)
+        if public_url:
+            return RedirectResponse(public_url, status_code=307)
+        try:
+            payload, content_type = R2_STORAGE.get_bytes(r2_key)
+            return Response(content=payload, media_type=content_type or "image/png")
+        except Exception:
+            pass
+    if not doc.get("avatar"):
         raise HTTPException(404, "No avatar")
     return Response(content=doc["avatar"], media_type="image/png")
 
@@ -7223,9 +7264,34 @@ async def _upload_character_avatar_common(
     content_type = file.content_type or ""
     if content_type not in ("image/png","image/jpeg","image/jpg"):
         raise HTTPException(status_code=400, detail="Only PNG/JPEG allowed")
+    if content_type == "image/jpg":
+        content_type = "image/jpeg"
     data = await file.read()
     if len(data) > 2 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Max file size is 2MB")
+    if R2_STORAGE.is_ready():
+        previous_key = str(ch.get("avatar_r2_key") or "").strip()
+        next_key = R2_STORAGE.key_for_character_avatar(collection_name, cid, content_type)
+        R2_STORAGE.put_bytes(
+            next_key,
+            data,
+            content_type=content_type,
+            cache_control="public, max-age=31536000, immutable",
+            metadata={"owner": username, "character_id": cid, "collection": collection_name},
+        )
+        if previous_key and previous_key != next_key:
+            R2_STORAGE.delete(previous_key)
+        col.update_one(
+            {"id": cid},
+            {
+                "$set": {
+                    "avatar_r2_key": next_key,
+                    "avatar_content_type": content_type,
+                    "updated_at": _utc_now_iso(),
+                }
+            },
+        )
+        return {"status":"success","avatar_r2_key": next_key}
     fs = _fs()
     # delete previous
     prev_id = ch.get("avatar_id")
@@ -7278,10 +7344,22 @@ def _get_character_avatar_common(
                 ch = legacy
         if not ch:
             raise HTTPException(status_code=404, detail="Character not found")
+    av_r2_key = str(ch.get("avatar_r2_key") or "").strip()
     av_id = str(ch.get("avatar_id") or "").strip()
     if not av_id and collection_name == CHARACTERS_0_3_5_COL:
-        legacy = get_col("characters").find_one({"id": cid}, {"_id": 0, "avatar_id": 1})
+        legacy = get_col("characters").find_one({"id": cid}, {"_id": 0, "avatar_id": 1, "avatar_r2_key": 1})
         av_id = str((legacy or {}).get("avatar_id") or "").strip()
+        if not av_r2_key:
+            av_r2_key = str((legacy or {}).get("avatar_r2_key") or "").strip()
+    if av_r2_key and R2_STORAGE.is_ready():
+        public_url = R2_STORAGE.public_url(av_r2_key)
+        if public_url:
+            return RedirectResponse(public_url, status_code=307)
+        try:
+            payload, content_type = R2_STORAGE.get_bytes(av_r2_key)
+            return Response(content=payload, media_type=content_type or "image/png")
+        except Exception:
+            pass
     if not av_id:
         raise HTTPException(status_code=404, detail="No avatar")
     fs = _fs()

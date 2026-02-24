@@ -10,3 +10,4 @@ certifi
 pydantic>=2.6,<3
 pydantic-settings>=2,<3
 python-multipart
+boto3==1.35.99

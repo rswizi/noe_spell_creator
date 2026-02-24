@@ -10,6 +10,7 @@ from pymongo.database import Database
 
 from db_mongo import get_db
 from settings import settings
+from server.src.modules.r2_storage import R2Storage
 
 
 def _image_dimensions(data: bytes) -> Tuple[Optional[int], Optional[int]]:
@@ -49,10 +50,22 @@ class GridFSStorage:
         self._is_mock = (settings.mongodb_uri or "").startswith("mongomock://")
         self._mock_store: dict[str, dict[str, Any]] | None = {} if self._is_mock else None
         self.fs = None if self._is_mock else GridFS(self.db, collection="wiki_assets_files")
+        self.r2 = R2Storage()
 
     def upload(self, *, data: bytes, filename: str, content_type: str, created_by: str) -> dict:
         width, height = _image_dimensions(data)
-        if self._is_mock and self._mock_store is not None:
+        r2_key = ""
+        if self.r2.is_ready():
+            asset_id = str(uuid4())
+            r2_key = self.r2.key_for_wiki_asset(asset_id, filename=filename, content_type=content_type)
+            self.r2.put_bytes(
+                r2_key,
+                data,
+                content_type=content_type,
+                cache_control="public, max-age=31536000, immutable",
+                metadata={"created_by": created_by},
+            )
+        elif self._is_mock and self._mock_store is not None:
             asset_id = str(uuid4())
             self._mock_store[asset_id] = {
                 "data": data,
@@ -78,10 +91,19 @@ class GridFSStorage:
             "created_at": datetime.utcnow(),
             "created_by": created_by,
         }
+        if r2_key:
+            doc["r2_key"] = r2_key
         self.meta.replace_one({"asset_id": asset_id}, doc, upsert=True)
         return doc
 
     def get_file(self, asset_id: str):
+        meta = self.meta.find_one({"asset_id": asset_id}) or {}
+        r2_key = str(meta.get("r2_key") or "").strip()
+        if r2_key:
+            try:
+                return self.r2.get_file(r2_key)
+            except Exception:
+                raise KeyError
         if self._is_mock and self._mock_store is not None:
             entry = self._mock_store.get(asset_id)
             if not entry:
