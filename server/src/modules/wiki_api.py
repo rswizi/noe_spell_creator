@@ -1,18 +1,21 @@
 import json
 import os
 import re
+import logging
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import case, func, or_, select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.src.modules.wiki_auth import require_wiki_admin
 from server.src.modules.wiki_db import WikiPage, WikiRevision, get_session
 MAX_DOC_BYTES = int(os.environ.get("WIKI_MAX_DOC_BYTES", "200000"))
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(
@@ -81,6 +84,20 @@ def resolve_slug(raw_slug: str, title: str) -> str:
     return validate_slug(raw_slug or title)
 
 
+def _wiki_db_error_detail(exc: Exception, operation: str) -> str:
+    raw = str(getattr(exc, "orig", exc) or "")
+    msg = raw.lower()
+    if ("wiki_pages" in msg and "does not exist" in msg) or ("no such table" in msg and "wiki_pages" in msg):
+        return "Wiki tables are missing. Run database migrations (alembic upgrade head)."
+    if "permission denied" in msg:
+        return "Wiki database permission error."
+    if "read-only" in msg or "readonly" in msg:
+        return "Wiki database is read-only."
+    if "uuid" in msg and ("character varying" in msg or "varchar" in msg):
+        return "Wiki ID type mismatch (UUID vs text)."
+    return f"Wiki database error during {operation}."
+
+
 def _page_to_dict(page: WikiPage) -> WikiPageOut:
     return WikiPageOut(
         id=str(page.id),
@@ -121,9 +138,21 @@ async def create_page(
 
     page = WikiPage(slug=slug, title=title, doc_json=doc_json)
     session.add(page)
-    await session.commit()
-    await session.refresh(page)
-    return _page_to_dict(page)
+    try:
+        await session.commit()
+        await session.refresh(page)
+        return _page_to_dict(page)
+    except IntegrityError as exc:
+        await session.rollback()
+        msg = str(getattr(exc, "orig", exc)).lower()
+        if "slug" in msg and ("unique" in msg or "duplicate" in msg):
+            raise HTTPException(status_code=409, detail="Slug already exists")
+        logger.exception("wiki create_page integrity failure")
+        raise HTTPException(status_code=500, detail="Wiki storage integrity error")
+    except SQLAlchemyError as exc:
+        await session.rollback()
+        logger.exception("wiki create_page database failure")
+        raise HTTPException(status_code=500, detail=_wiki_db_error_detail(exc, "page creation"))
 
 
 @router.get("/pages/{page_id}", response_model=WikiPageOut)
@@ -161,9 +190,21 @@ async def update_page(
     page.title = title
     page.doc_json = doc_json
     page.updated_at = datetime.utcnow()
-    await session.commit()
-    await session.refresh(page)
-    return _page_to_dict(page)
+    try:
+        await session.commit()
+        await session.refresh(page)
+        return _page_to_dict(page)
+    except IntegrityError as exc:
+        await session.rollback()
+        msg = str(getattr(exc, "orig", exc)).lower()
+        if "slug" in msg and ("unique" in msg or "duplicate" in msg):
+            raise HTTPException(status_code=409, detail="Slug already exists")
+        logger.exception("wiki update_page integrity failure")
+        raise HTTPException(status_code=500, detail="Wiki storage integrity error")
+    except SQLAlchemyError as exc:
+        await session.rollback()
+        logger.exception("wiki update_page database failure")
+        raise HTTPException(status_code=500, detail=_wiki_db_error_detail(exc, "page update"))
 
 
 @router.get("/pages", response_model=WikiListResponse)
@@ -242,9 +283,14 @@ async def create_revision(
         raise HTTPException(status_code=404, detail="Page not found")
     revision = WikiRevision(page_id=page.id, doc_json=page.doc_json, title=page.title, slug=page.slug)
     session.add(revision)
-    await session.commit()
-    await session.refresh(revision)
-    return _revision_to_dict(revision)
+    try:
+        await session.commit()
+        await session.refresh(revision)
+        return _revision_to_dict(revision)
+    except SQLAlchemyError as exc:
+        await session.rollback()
+        logger.exception("wiki create_revision database failure")
+        raise HTTPException(status_code=500, detail=_wiki_db_error_detail(exc, "revision creation"))
 
 
 @router.get("/pages/{page_id}/revisions", response_model=list[WikiRevisionOut])

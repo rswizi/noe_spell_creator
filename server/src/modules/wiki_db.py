@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import AsyncGenerator
 
 from sqlalchemy import Column, DateTime, ForeignKey, JSON, String, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -17,7 +17,7 @@ else:
 engine = create_async_engine(DATABASE_URL, future=True, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 DOC_JSON_TYPE = JSON().with_variant(JSONB(), "postgresql")
-ID_COLUMN_TYPE = String(36)
+ID_COLUMN_TYPE = String(36).with_variant(PG_UUID(as_uuid=False), "postgresql")
 
 
 def _new_id():
