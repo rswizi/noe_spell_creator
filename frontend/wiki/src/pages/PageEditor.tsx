@@ -5,9 +5,9 @@ import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
+import TextAlign from "@tiptap/extension-text-align";
 import TextStyle from "@tiptap/extension-text-style";
 import Table from "@tiptap/extension-table";
-import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TaskList from "@tiptap/extension-task-list";
@@ -16,6 +16,7 @@ import HeadingAnchors from "../extensions/HeadingAnchors";
 import TableOfContents from "../extensions/TableOfContents";
 import ExtendedLink from "../extensions/ExtendedLink";
 import ExtendedImage from "../extensions/ExtendedImage";
+import ExtendedTableRow from "../extensions/ExtendedTableRow";
 import ExitListOnBackspace from "../extensions/ExitListOnBackspace";
 import TablePicker from "../components/TablePicker";
 import {
@@ -44,6 +45,7 @@ const PageEditor: React.FC = () => {
     y: number;
     onTableCell: boolean;
     onLink: boolean;
+    onImage: boolean;
   };
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -78,10 +80,11 @@ const PageEditor: React.FC = () => {
       TableOfContents,
       StarterKit,
       TextStyle,
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
       Color.configure({ types: ["textStyle"] }),
       Highlight.configure({ multicolor: true }),
-      Table.configure({ resizable: true, lastColumnResizable: true }),
-      TableRow,
+      Table.configure({ resizable: true, lastColumnResizable: true, allowTableNodeSelection: true }),
+      ExtendedTableRow,
       TableHeader,
       TableCell,
       ExtendedImage,
@@ -277,11 +280,11 @@ const PageEditor: React.FC = () => {
           title,
           slug,
           category_id: categoryId,
-          entity_type: entityType || undefined,
-          template_id: templateId || undefined,
+          entity_type: entityType.trim() ? entityType.trim() : null,
+          template_id: templateId || null,
           fields,
           status: pageStatus,
-          summary,
+          summary: summary.trim() ? summary.trim() : null,
           tags: tagsText
             .split(",")
             .map((item) => item.trim())
@@ -377,6 +380,23 @@ const PageEditor: React.FC = () => {
   }, [editor, autoSave]);
 
   useEffect(() => {
+    if (!editor || !page) {
+      return;
+    }
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    timerRef.current = setTimeout(() => {
+      void autoSave();
+    }, 900);
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [autoSave, categoryId, editor, entityType, fieldsText, page, pageStatus, slug, summary, tagsText, templateId, title]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
@@ -432,8 +452,16 @@ const PageEditor: React.FC = () => {
     const onContextMenu = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       const cell = target?.closest("td,th");
+      const imageNode = target?.closest("figure.image-node,img");
       event.preventDefault();
-      if (cell) {
+      if (imageNode) {
+        try {
+          const pos = editor.view.posAtDOM(imageNode, 0);
+          editor.chain().focus().setNodeSelection(pos).run();
+        } catch {
+          editor.chain().focus().run();
+        }
+      } else if (cell) {
         try {
           const pos = editor.view.posAtDOM(cell, 0);
           editor.chain().focus().setTextSelection(pos + 1).run();
@@ -448,6 +476,7 @@ const PageEditor: React.FC = () => {
         y: event.clientY,
         onTableCell: Boolean(cell),
         onLink: editor.isActive("link"),
+        onImage: Boolean(imageNode) || editor.isActive("extendedImage"),
       });
     };
     dom.addEventListener("contextmenu", onContextMenu);
@@ -577,6 +606,34 @@ const PageEditor: React.FC = () => {
     }
     action(editor);
     setTableContextMenu(null);
+  };
+
+  const adjustRowHeight = (delta: number) => {
+    if (!editor) {
+      return;
+    }
+    const current = Number(editor.getAttributes("tableRow").rowHeight) || 40;
+    const next = Math.max(24, Math.min(360, current + delta));
+    editor.chain().focus().updateAttributes("tableRow", { rowHeight: next }).run();
+    setTableContextMenu(null);
+  };
+
+  const setImageWidthPercent = (percent: number) => {
+    if (!editor) {
+      return;
+    }
+    const next = Math.max(10, Math.min(100, percent));
+    editor.chain().focus().updateAttributes("extendedImage", { width: `${next}%` }).run();
+    setTableContextMenu(null);
+  };
+
+  const adjustImageWidth = (delta: number) => {
+    if (!editor) {
+      return;
+    }
+    const raw = String(editor.getAttributes("extendedImage").width || "100%");
+    const current = Number(raw.replace("%", "")) || 100;
+    setImageWidthPercent(current + delta);
   };
 
   return (
@@ -715,6 +772,18 @@ const PageEditor: React.FC = () => {
         <button onClick={() => editor?.chain().focus().unsetLink().run()} disabled={!editor}>
           Unlink
         </button>
+        <button className="toolbar-icon-button" onClick={() => editor?.chain().focus().setTextAlign("left").run()} disabled={!editor} title="Align Left">
+          <i className="fa-solid fa-align-left" aria-hidden="true" />
+        </button>
+        <button className="toolbar-icon-button" onClick={() => editor?.chain().focus().setTextAlign("center").run()} disabled={!editor} title="Align Center">
+          <i className="fa-solid fa-align-center" aria-hidden="true" />
+        </button>
+        <button className="toolbar-icon-button" onClick={() => editor?.chain().focus().setTextAlign("right").run()} disabled={!editor} title="Align Right">
+          <i className="fa-solid fa-align-right" aria-hidden="true" />
+        </button>
+        <button className="toolbar-icon-button" onClick={() => editor?.chain().focus().setTextAlign("justify").run()} disabled={!editor} title="Justify">
+          <i className="fa-solid fa-align-justify" aria-hidden="true" />
+        </button>
         <button className="toolbar-icon-button" onClick={() => editor?.chain().focus().undo().run()} disabled={!editor} title="Undo">
           <i className="fa-solid fa-rotate-left" aria-hidden="true" />
         </button>
@@ -777,6 +846,10 @@ const PageEditor: React.FC = () => {
           <button onClick={() => runTableAction((instance) => instance.chain().focus().toggleItalic().run())}>Italic</button>
           <button onClick={() => runTableAction((instance) => instance.chain().focus().toggleUnderline().run())}>Underline</button>
           <button onClick={() => runTableAction((instance) => instance.chain().focus().toggleStrike().run())}>Strikethrough</button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().setTextAlign("left").run())}>Align Left</button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().setTextAlign("center").run())}>Align Center</button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().setTextAlign("right").run())}>Align Right</button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().setTextAlign("justify").run())}>Justify</button>
           <button
             onClick={() => {
               setTableContextMenu(null);
@@ -799,6 +872,16 @@ const PageEditor: React.FC = () => {
           >
             Insert Image
           </button>
+          {tableContextMenu.onImage && (
+            <>
+              <button onClick={() => setImageWidthPercent(25)}>Image Width 25%</button>
+              <button onClick={() => setImageWidthPercent(50)}>Image Width 50%</button>
+              <button onClick={() => setImageWidthPercent(75)}>Image Width 75%</button>
+              <button onClick={() => setImageWidthPercent(100)}>Image Width 100%</button>
+              <button onClick={() => adjustImageWidth(-10)}>Image Width -10%</button>
+              <button onClick={() => adjustImageWidth(10)}>Image Width +10%</button>
+            </>
+          )}
           {tableContextMenu.onTableCell && (
             <>
           <button onClick={() => runTableAction((instance) => instance.chain().focus().addRowBefore().run())}>
@@ -822,6 +905,8 @@ const PageEditor: React.FC = () => {
           <button onClick={() => runTableAction((instance) => instance.chain().focus().toggleHeaderRow().run())}>
             Toggle Header
           </button>
+          <button onClick={() => adjustRowHeight(-10)}>Row Height -10px</button>
+          <button onClick={() => adjustRowHeight(10)}>Row Height +10px</button>
           <button onClick={() => runTableAction((instance) => instance.chain().focus().deleteTable().run())}>
             Delete Table
           </button>

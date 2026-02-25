@@ -50,11 +50,17 @@ body {
 
 .toolbar-select {
   border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
+  background: #11132a;
   color: inherit;
+  color-scheme: dark;
   padding: 6px 10px;
   border-radius: 8px;
   font-size: 13px;
+}
+
+.toolbar-select option {
+  background: #11132a;
+  color: #f5f7ff;
 }
 
 .toolbar-icon-button {
@@ -96,6 +102,10 @@ body {
   border-radius: 16px;
   padding: 20px;
   background: #0f1021;
+}
+
+.editor-wrapper .ProseMirror {
+  caret-color: #f5f7ff;
 }
 
 .status-pill {
@@ -264,8 +274,8 @@ body {
   position: relative;
   min-width: 64px;
   min-height: 32px;
-  resize: both;
-  overflow: auto;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .editor-wrapper .ProseMirror .column-resize-handle {
@@ -285,6 +295,10 @@ body {
 .editor-wrapper .ProseMirror td:hover,
 .editor-wrapper .ProseMirror th:hover {
   border-color: rgba(169, 178, 255, 0.55);
+}
+
+.editor-wrapper .ProseMirror .selectedCell {
+  background: rgba(169, 178, 255, 0.18);
 }
 
 .image-node {

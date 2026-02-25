@@ -5,17 +5,18 @@ import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
+import TextAlign from "@tiptap/extension-text-align";
 import TextStyle from "@tiptap/extension-text-style";
 import ExtendedLink from "../extensions/ExtendedLink";
 import ExtendedImage from "../extensions/ExtendedImage";
 import Table from "@tiptap/extension-table";
-import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import HeadingAnchors from "../extensions/HeadingAnchors";
 import TableOfContents from "../extensions/TableOfContents";
+import ExtendedTableRow from "../extensions/ExtendedTableRow";
 import { fetchPageContext, getPage, getPageBySlug, PagePayload } from "../utils/api";
 
 const ReadOnlyEditor: React.FC<{ content: any }> = ({ content }) => {
@@ -27,10 +28,11 @@ const ReadOnlyEditor: React.FC<{ content: any }> = ({ content }) => {
       TableOfContents,
       StarterKit,
       TextStyle,
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
       Color.configure({ types: ["textStyle"] }),
       Highlight.configure({ multicolor: true }),
       Table.configure({ resizable: true }),
-      TableRow,
+      ExtendedTableRow,
       TableHeader,
       TableCell,
       Underline,
