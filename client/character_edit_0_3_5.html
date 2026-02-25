@@ -2983,14 +2983,14 @@ function htmlToPlainText(html){
 
 /* Constants */
 const CHARACS = [
-  { key:'reflex',    code:'REF', name:'Reflex',    skills:['Technicity','Dodge','Counter','Reactivity'] },
-  { key:'dexterity', code:'DEX', name:'Dexterity', skills:['Accuracy','Evasion','Stealth','Acrobatics'] },
-  { key:'body',      code:'BOD', name:'Body',      skills:['Brutality','Blocking','Resistance','Athletics'] },
-  { key:'willpower', code:'WIL', name:'Willpower', skills:['Intimidation','Spirit','Instinct','Absorption'] },
-  { key:'wisdom',    code:'WIS', name:'Wisdom',    skills:['Survival','Education','Perception','Psychology','Investigation'] },
-  { key:'presence',  code:'PRE', name:'Presence',  skills:['Taming','Charm','Charisma','Deception','Persuasion'] },
-  { key:'magic',     code:'MAG', name:'Magic',     skills:['Aura','Incantation','Enchantment','Restoration','Potential'] },
-  { key:'tech',      code:'TEC',name:'Tech',      skills:['Crafting','Sleight of hand','Alchemy','Medicine','Engineering'] },
+  { key:'dexterity', code:'DEX', name:'Dexterity', skills:['Accuracy','Dodge','Stealth','Crafting','Sleight of Hand'] },
+  { key:'body',      code:'BOD', name:'Body',      skills:['Brutality','Resistance','Athletics'] },
+  { key:'willpower', code:'WIL', name:'Willpower', skills:['Absorption','Spirit','Subjugation'] },
+  { key:'magic',     code:'MAG', name:'Magic',     skills:[] },
+  { key:'wisdom',    code:'WIS', name:'Wisdom',    skills:['Investigation','Survival','Instinct','Perception','Psychology','Attunement'] },
+  { key:'presence',  code:'PRE', name:'Presence',  skills:['Aura','Persuasion','Charm','Taming','Deception'] },
+  { key:'intelligence', code:'INT', name:'Intelligence', skills:['Education','Cunning','Alchemy','Medicine','Engineering'] },
+  { key:'agility',   code:'AGI', name:'Agility',   skills:['Technicity','Reactivity','Acrobatics'] },
 ];
 
 const NATURES = ['Fire','Lightning','Water','Earth','Wind','Sun','Moon','Ki'];
@@ -3035,52 +3035,46 @@ function _archetypeRankForLevel(lvl){
 }
 const TARGET_GROUPS = [
   { label:'Characteristics', options:[
-    { value:'char.reflex', label:'Reflex (modifier)' },
     { value:'char.dexterity', label:'Dexterity (modifier)' },
     { value:'char.body', label:'Body (modifier)' },
+    { value:'char.willpower', label:'Willpower (modifier)' },
+    { value:'char.magic', label:'Magic (modifier)' },
     { value:'char.wisdom', label:'Wisdom (modifier)' },
     { value:'char.presence', label:'Presence (modifier)' },
-    { value:'char.magic', label:'Magic (modifier)' },
-    { value:'char.willpower', label:'Willpower (modifier)' },
-    { value:'char.tech', label:'Tech (modifier)' },
+    { value:'char.intelligence', label:'Intelligence (modifier)' },
+    { value:'char.agility', label:'Agility (modifier)' },
   ]},
   { label:'Skills', options:[
-    { value:'skills.reflex.Technicity', label:'Technicity (Reflex)' },
-    { value:'skills.reflex.Dodge', label:'Dodge (Reflex)' },
-    { value:'skills.reflex.Counter', label:'Counter (Reflex)' },
-    { value:'skills.reflex.Reactivity', label:'Reactivity (Reflex)' },
     { value:'skills.dexterity.Accuracy', label:'Accuracy (Dexterity)' },
-    { value:'skills.dexterity.Evasion', label:'Evasion (Dexterity)' },
+    { value:'skills.dexterity.Dodge', label:'Dodge (Dexterity)' },
     { value:'skills.dexterity.Stealth', label:'Stealth (Dexterity)' },
-    { value:'skills.dexterity.Acrobatics', label:'Acrobatics (Dexterity)' },
+    { value:'skills.dexterity.Crafting', label:'Crafting (Dexterity)' },
+    { value:'skills.dexterity.Sleight of Hand', label:'Sleight of Hand (Dexterity)' },
     { value:'skills.body.Brutality', label:'Brutality (Body)' },
-    { value:'skills.body.Blocking', label:'Blocking (Body)' },
     { value:'skills.body.Resistance', label:'Resistance (Body)' },
     { value:'skills.body.Athletics', label:'Athletics (Body)' },
+    { value:'skills.willpower.Absorption', label:'Absorption (Willpower)' },
+    { value:'skills.willpower.Spirit', label:'Spirit (Willpower)' },
+    { value:'skills.willpower.Subjugation', label:'Subjugation (Willpower)' },
+    { value:'skills.wisdom.Investigation', label:'Investigation (Wisdom)' },
     { value:'skills.wisdom.Survival', label:'Survival (Wisdom)' },
-    { value:'skills.wisdom.Education', label:'Education (Wisdom)' },
+    { value:'skills.wisdom.Instinct', label:'Instinct (Wisdom)' },
     { value:'skills.wisdom.Perception', label:'Perception (Wisdom)' },
     { value:'skills.wisdom.Psychology', label:'Psychology (Wisdom)' },
-    { value:'skills.wisdom.Investigation', label:'Investigation (Wisdom)' },
-    { value:'skills.presence.Taming', label:'Taming (Presence)' },
-    { value:'skills.presence.Charm', label:'Charm (Presence)' },
-    { value:'skills.presence.Charisma', label:'Charisma (Presence)' },
-    { value:'skills.presence.Deception', label:'Deception (Presence)' },
+    { value:'skills.wisdom.Attunement', label:'Attunement (Wisdom)' },
+    { value:'skills.presence.Aura', label:'Aura (Presence)' },
     { value:'skills.presence.Persuasion', label:'Persuasion (Presence)' },
-    { value:'skills.magic.Aura', label:'Aura (Magic)' },
-    { value:'skills.magic.Incantation', label:'Incantation (Magic)' },
-    { value:'skills.magic.Enchantment', label:'Enchantment (Magic)' },
-    { value:'skills.magic.Restoration', label:'Restoration (Magic)' },
-    { value:'skills.magic.Potential', label:'Potential (Magic)' },
-    { value:'skills.willpower.Intimidation', label:'Intimidation (Willpower)' },
-    { value:'skills.willpower.Spirit', label:'Spirit (Willpower)' },
-    { value:'skills.willpower.Instinct', label:'Instinct (Willpower)' },
-    { value:'skills.willpower.Absorption', label:'Absorption (Willpower)' },
-    { value:'skills.tech.Crafting', label:'Crafting (Tech)' },
-    { value:'skills.tech.Sleight of hand', label:'Sleight of hand (Tech)' },
-    { value:'skills.tech.Alchemy', label:'Alchemy (Tech)' },
-    { value:'skills.tech.Medicine', label:'Medicine (Tech)' },
-    { value:'skills.tech.Engineering', label:'Engineering (Tech)' },
+    { value:'skills.presence.Charm', label:'Charm (Presence)' },
+    { value:'skills.presence.Taming', label:'Taming (Presence)' },
+    { value:'skills.presence.Deception', label:'Deception (Presence)' },
+    { value:'skills.intelligence.Education', label:'Education (Intelligence)' },
+    { value:'skills.intelligence.Cunning', label:'Cunning (Intelligence)' },
+    { value:'skills.intelligence.Alchemy', label:'Alchemy (Intelligence)' },
+    { value:'skills.intelligence.Medicine', label:'Medicine (Intelligence)' },
+    { value:'skills.intelligence.Engineering', label:'Engineering (Intelligence)' },
+    { value:'skills.agility.Technicity', label:'Technicity (Agility)' },
+    { value:'skills.agility.Reactivity', label:'Reactivity (Agility)' },
+    { value:'skills.agility.Acrobatics', label:'Acrobatics (Agility)' },
   ]},
   { label:'Intensities', options: INTENSITIES.map(n=>({ value:`intensities.${n}`, label:`${n} (Magic)` })) },
   { label:'Derived / Resources', options:[
@@ -3121,7 +3115,7 @@ const COMBAT_SPECIAL_WEAPON_DEFS = {
   unarmed_technicity: {
     name: 'Unarmed (Technicity)',
     skill: 'Technicity',
-    damage: '1d6 + C(REF)',
+    damage: '1d6 + C(AGI)',
     attributes: ['Unarmed'],
   },
   improvised_brutality: {
@@ -3155,15 +3149,15 @@ const SPECIAL_ATTACKS = [
 const SIMPLE_ATTACK_DESC = "Simple Attack: roll your weapon skill vs defense with no penalty. On success, apply weapon damage. Each weapon can be used once per two actions.";
 
 const SECONDARY_ACTIONS = [
-  { name:'Intimidate', attack:'Intimidation', defense:'Spirit', effect:'Your target becomes Disturbed for one round. If the success is overwhelming, the target is Afraid of you instead for 1 round.' },
+  { name:'Intimidate', attack:'Subjugation', defense:'Spirit', effect:'Your target becomes Disturbed for one round. If the success is overwhelming, the target is Afraid of you instead for 1 round.' },
   { name:'Charm', attack:'Charm', defense:'Spirit', effect:'Your target becomes Disturbed for one round. If the success is overwhelming, the target is Charmed by you instead for 1 round.' },
   { name:'Insult', attack:'Persuasion', defense:'Spirit', effect:'Your target becomes Taunted by you for one round. If the success is overwhelming, the target is Obsessed with you instead for 1 round.' },
   { name:'Hide', attack:'Stealth', defense:'Perception', effect:'You can hide in the presence of a hiding place or in darkness. This will make you invisible to all those who fail their perception check. If the success is overwhelming, you are considered Slightly Motivated for your next attack.' },
   { name:'Feign', attack:'Deception', defense:'Psychology', effect:'You gain a bonus of 1 to your next attack. If the success is overwhelming, gain a bonus of 2 instead.' },
   { name:'Analyze', attack:'Investigation', defense:'Deception', effect:'You can analyze their movements and their way of acting. This allows you to gain the advantage on your next defensive act against them. If your success is overwhelming, gain the advantage on your next offensive act against them as well.' },
-  { name:'Gauge', attack:'Potential', defense:'Potential', effect:'Determine the level of magic mastery of an opponent, their nature of eclipse, and an approximation of their remaining EN. If the success is overwhelming, gain the Advantage on the Defensive Act against their next spell.' },
-  { name:'Command', attack:'Charisma', defense:'Intimidation', effect:'Give a concise command to your allies to perform a specific task. If you succeed on a charisma check against your opponents\' Intimidation, your allies will gain a bonus of 1 to the necessary acts to fulfill that order until your next round. If your success is overwhelming, they may take their turn immediately (but they will skip their next regular turn).' },
-  { name:'Detect', attack:'Instinct or Potential', defense:'Stealth or Potential', effect:'You can roll a Potential or Instinct check with Disadvantage to try to sense the energy or Aura of a concealed opponent against their Stealth or Potential. If you succeed, you guess their exact position if they are within 20m of you. If the success is overwhelming, you have no penalty against them because they are camouflaged or invisible, and they cannot conceal themselves from you for the next 5 Rounds.' }
+  { name:'Gauge', attack:'Attunement', defense:'Attunement', effect:'Determine the level of magic mastery of an opponent, their nature of eclipse, and an approximation of their remaining EN. If the success is overwhelming, gain the Advantage on the Defensive Act against their next spell.' },
+  { name:'Command', attack:'Aura', defense:'Subjugation', effect:'Give a concise command to your allies to perform a specific task. If you succeed on an Aura check against your opponents\' Subjugation, your allies will gain a bonus of 1 to the necessary acts to fulfill that order until your next round. If your success is overwhelming, they may take their turn immediately (but they will skip their next regular turn).' },
+  { name:'Detect', attack:'Instinct or Attunement', defense:'Stealth or Attunement', effect:'You can roll an Attunement or Instinct check with Disadvantage to try to sense the energy or Aura of a concealed opponent against their Stealth or Attunement. If you succeed, you guess their exact position if they are within 20m of you. If the success is overwhelming, you have no penalty against them because they are camouflaged or invisible, and they cannot conceal themselves from you for the next 5 Rounds.' }
 ];
 
 const CONTEXTUAL_ACTIONS = [
@@ -3201,7 +3195,7 @@ const SPECIAL_ACTIONS = [
   { tier:15, name:'Initiative Boost', effect:'Increase your initiative by 5. This will affect the ongoing initiative order.' },
   { tier:15, name:'Fighting Control', effect:'The other teams are unable to use a Special Action for one round.' },
   { tier:15, name:'Legendary Tempo', effect:'Reset all your cooldowns.' },
-  { tier:15, name:'Disruption', effect:'Your next Offensive Act will force one target to succeed a Resistance or Potential check vs your Condition DC, or drop one of their Active Ability that you chose.' },
+  { tier:15, name:'Disruption', effect:'Your next Offensive Act will force one target to succeed a Resistance or Attunement check vs your Condition DC, or drop one of their Active Ability that you chose.' },
   { tier:18, name:'Tactical Advantage', effect:'Use any of the lower Tension level Special Actions without being Exhausted. You may not use this Special Action again before using any other one.' },
   { tier:18, name:'Second Wind', effect:'With the agreement of the whole team, you may reset the Tension level to 0 and revive a KOed (not dead) ally and bring them back to 25% of their max HP.' },
   { tier:18, name:'Perfect Purification', effect:'Reset your Toxicity Level to 0 and cleanse all your negative effects.' },
@@ -5106,7 +5100,7 @@ function makeDefaultStats(){
   stats.combat = {
     max_hp_damage: 0,
     nen: 0,
-    defense_skills: ["Dodge", "Evasion", "Blocking", "Absorption"],
+    defense_skills: ["Dodge", "Absorption"],
     tension: 3,
     tension_strategy: "Offensive",
     exhausted: false,
@@ -5297,10 +5291,10 @@ function noe35ExcellenceSkills(){
 }
 function noe35ToLegacySkillAlias(){
   return {
-    'Subjugation': 'Intimidation',
-    'Sleight of Hand': 'Sleight of hand',
-    'Attunement': 'Potential',
-    'Cunning': 'Charisma'
+    'Intimidation': 'Subjugation',
+    'Sleight of hand': 'Sleight of Hand',
+    'Potential': 'Attunement',
+    'Charisma': 'Cunning'
   };
 }
 function legacyToNoe35SkillAlias(){
@@ -5314,45 +5308,55 @@ function legacyToNoe35SkillAlias(){
 function legacySkillToCharKeyMap(){
   return {
     'Brutality':'body',
-    'Technicity':'reflex',
+    'Technicity':'agility',
     'Accuracy':'dexterity',
-    'Dodge':'reflex',
+    'Dodge':'dexterity',
     'Absorption':'willpower',
     'Stealth':'dexterity',
-    'Reactivity':'reflex',
-    'Acrobatics':'dexterity',
+    'Reactivity':'agility',
+    'Acrobatics':'agility',
     'Resistance':'body',
     'Athletics':'body',
     'Spirit':'willpower',
-    'Aura':'magic',
+    'Aura':'presence',
     'Investigation':'wisdom',
-    'Education':'wisdom',
-    'Charisma':'presence',
+    'Education':'intelligence',
+    'Cunning':'intelligence',
     'Survival':'wisdom',
-    'Instinct':'willpower',
+    'Instinct':'wisdom',
     'Perception':'wisdom',
     'Psychology':'wisdom',
-    'Potential':'magic',
+    'Attunement':'wisdom',
     'Persuasion':'presence',
     'Charm':'presence',
     'Taming':'presence',
-    'Intimidation':'willpower',
+    'Subjugation':'willpower',
     'Deception':'presence',
-    'Crafting':'tech',
-    'Alchemy':'tech',
-    'Medicine':'tech',
-    'Engineering':'tech',
-    'Sleight of hand':'tech'
+    'Crafting':'dexterity',
+    'Alchemy':'intelligence',
+    'Medicine':'intelligence',
+    'Engineering':'intelligence',
+    'Sleight of Hand':'dexterity',
+    'Intimidation':'willpower',
+    'Potential':'wisdom',
+    'Charisma':'intelligence',
+    'Sleight of hand':'dexterity',
+    'Evasion':'dexterity',
+    'Blocking':'body',
+    'Counter':'agility',
+    'Incantation':'magic',
+    'Enchantment':'magic',
+    'Restoration':'magic'
   };
 }
 function resolveNoe35ExcellenceSkillPath(skillName){
   const display = String(skillName || '').trim();
   if (!display) return null;
-  const alias = noe35ToLegacySkillAlias();
-  const legacySkill = alias[display] || display;
-  const charKey = legacySkillToCharKeyMap()[legacySkill] || '';
+  const aliases = noe35ToLegacySkillAlias();
+  const canonicalSkill = aliases[display] || display;
+  const charKey = legacySkillToCharKeyMap()[canonicalSkill] || '';
   if (!charKey) return null;
-  return { value:`${charKey}|${legacySkill}`, label:display, legacySkill, charKey };
+  return { value:`${charKey}|${canonicalSkill}`, label:canonicalSkill, legacySkill:canonicalSkill, charKey };
 }
 function buildSkillOptions(){
   const opts = [];
@@ -6092,7 +6096,7 @@ function recomputePassiveAgg(){
       const origin = `${ab.name}${note}`;
       if (!t) continue;
 
-      const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
+      const cm = t.match(/^char\.(body|willpower|magic|presence|dexterity|wisdom|intelligence|agility|reflex|tech)$/i);
       if (cm){
         const key = cm[1].toLowerCase();
         const agg = ensureAgg(PASSIVE.char, key);
@@ -6101,7 +6105,7 @@ function recomputePassiveAgg(){
         continue;
       }
 
-      const sm = t.match(/^skills\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)\.(.+)$/i);
+      const sm = t.match(/^skills\.(body|willpower|magic|presence|dexterity|wisdom|intelligence|agility|reflex|tech)\.(.+)$/i);
       if (sm){
         const ckey = sm[1].toLowerCase();
         const skName = sm[2];
@@ -6183,7 +6187,7 @@ function recomputePassiveAgg(){
     const val = modEffectiveValue(m);
     const origin = m.origin || 'Inventory';
     if (!t) continue;
-    const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
+    const cm = t.match(/^char\.(body|willpower|magic|presence|dexterity|wisdom|intelligence|agility|reflex|tech)$/i);
     if (cm){
       const key = cm[1].toLowerCase();
       const agg = ensureAgg(PASSIVE.char, key);
@@ -6191,7 +6195,7 @@ function recomputePassiveAgg(){
       agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
       continue;
     }
-    const sm = t.match(/^skills\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)\.(.+)$/i);
+    const sm = t.match(/^skills\.(body|willpower|magic|presence|dexterity|wisdom|intelligence|agility|reflex|tech)\.(.+)$/i);
     if (sm){
       const ckey = sm[1].toLowerCase();
       const skName = sm[2];
@@ -6235,7 +6239,7 @@ function recomputePassiveAgg(){
     const val = modEffectiveValue(m);
     const origin = m.origin || 'Sublimation';
     if (!t) continue;
-    const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
+    const cm = t.match(/^char\.(body|willpower|magic|presence|dexterity|wisdom|intelligence|agility|reflex|tech)$/i);
     if (cm){
       const key = cm[1].toLowerCase();
       const agg = ensureAgg(PASSIVE.char, key);
@@ -6243,7 +6247,7 @@ function recomputePassiveAgg(){
       agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
       continue;
     }
-    const sm = t.match(/^skills\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)\.(.+)$/i);
+    const sm = t.match(/^skills\.(body|willpower|magic|presence|dexterity|wisdom|intelligence|agility|reflex|tech)\.(.+)$/i);
     if (sm){
       const ckey = sm[1].toLowerCase();
       const skName = sm[2];
@@ -6313,7 +6317,7 @@ function recomputePassiveAgg(){
     const val = modEffectiveValue(m);
     const origin = m.origin || 'Spell';
     if (!t) continue;
-    const cm = t.match(/^char\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)$/i);
+    const cm = t.match(/^char\.(body|willpower|magic|presence|dexterity|wisdom|intelligence|agility|reflex|tech)$/i);
     if (cm){
       const key = cm[1].toLowerCase();
       const agg = ensureAgg(PASSIVE.char, key);
@@ -6321,7 +6325,7 @@ function recomputePassiveAgg(){
       agg.notes.push(`${mode} ${val>=0?'+':''}${val} -> ${origin}`);
       continue;
     }
-    const sm = t.match(/^skills\.(body|willpower|magic|presence|reflex|dexterity|tech|wisdom)\.(.+)$/i);
+    const sm = t.match(/^skills\.(body|willpower|magic|presence|dexterity|wisdom|intelligence|agility|reflex|tech)\.(.+)$/i);
     if (sm){
       const ckey = sm[1].toLowerCase();
       const skName = sm[2];
@@ -10866,7 +10870,16 @@ avatarBackdrop?.addEventListener('click', (e)=>{ if (e.target===avatarBackdrop) 
 
 function normalizeIV(iv){
   const defN = {fire:0,water:0,wind:0,earth:0,sun:0,moon:0,lightning:0,ki:0};
-  const defS = {aura:0,incantation:0,enchantement:0,potential:0,restoration:0,stealth:0,investigation:0,charm:0,intimidation:0,absorption:0,spirit:0};
+  const defS = {
+    brutality:0, technicity:0, accuracy:0, dodge:0, absorption:0,
+    stealth:0, reactivity:0, acrobatics:0, resistance:0, athletics:0,
+    spirit:0, aura:0, investigation:0, education:0, cunning:0,
+    survival:0, instinct:0, perception:0, psychology:0, attunement:0,
+    persuasion:0, charm:0, taming:0, subjugation:0, deception:0,
+    crafting:0, alchemy:0, medicine:0, engineering:0, sleightofhand:0,
+    incantation:0, enchantement:0, enchantment:0, potential:0, restoration:0,
+    intimidation:0, charisma:0, evasion:0, blocking:0, counter:0
+  };
   const n = Object.assign({}, defN), s = Object.assign({}, defS);
   for (const k in (iv?.natures||{})) n[k.toLowerCase()] = +(iv.natures[k]||0);
   for (const k in (iv?.skills||{}))  s[k.toLowerCase()] = +(iv.skills[k]||0);
@@ -10887,6 +10900,9 @@ function fallbackSkillAliases(){
     icnantaion: "incantation",
     incatation: "incantation",
     resto: "restoration",
+    potential: "attunement",
+    intimidation: "subjugation",
+    charisma: "cunning",
   };
 }
 
@@ -10898,8 +10914,35 @@ const SKILL_ALIASES = {
   icnantaion: "incantation",
   incatation: "incantation",
   resto: "restoration",
+  potential: "attunement",
+  intimidation: "subjugation",
+  charisma: "cunning",
 };
 const SKILL_LABEL = {
+  brutality: "Brutality",
+  technicity: "Technicity",
+  accuracy: "Accuracy",
+  dodge: "Dodge",
+  reactivity: "Reactivity",
+  acrobatics: "Acrobatics",
+  resistance: "Resistance",
+  athletics: "Athletics",
+  education: "Education",
+  cunning: "Cunning",
+  survival: "Survival",
+  instinct: "Instinct",
+  perception: "Perception",
+  psychology: "Psychology",
+  attunement: "Attunement",
+  persuasion: "Persuasion",
+  taming: "Taming",
+  subjugation: "Subjugation",
+  deception: "Deception",
+  crafting: "Crafting",
+  alchemy: "Alchemy",
+  medicine: "Medicine",
+  engineering: "Engineering",
+  sleightofhand: "Sleight of Hand",
   aura: "Aura",
   incantation: "Incantation",
   enchantement: "Enchantment",
@@ -10913,17 +10956,46 @@ const SKILL_LABEL = {
   spirit: "Spirit",
 };
 const SKILL_TO_CHAR = {
-  aura: "magic",
+  brutality: "body",
+  technicity: "agility",
+  accuracy: "dexterity",
+  dodge: "dexterity",
+  absorption: "willpower",
+  stealth: "dexterity",
+  reactivity: "agility",
+  acrobatics: "agility",
+  resistance: "body",
+  athletics: "body",
+  spirit: "willpower",
+  aura: "presence",
+  investigation: "wisdom",
+  education: "intelligence",
+  cunning: "intelligence",
+  survival: "wisdom",
+  instinct: "wisdom",
+  perception: "wisdom",
+  psychology: "wisdom",
+  attunement: "wisdom",
+  persuasion: "presence",
+  charm: "presence",
+  taming: "presence",
+  subjugation: "willpower",
+  deception: "presence",
+  crafting: "dexterity",
+  alchemy: "intelligence",
+  medicine: "intelligence",
+  engineering: "intelligence",
+  sleightofhand: "dexterity",
   incantation: "magic",
   enchantement: "magic",
-  potential: "magic",
+  enchantment: "magic",
+  potential: "wisdom",
   restoration: "magic",
-  stealth: "dexterity",
-  investigation: "wisdom",
-  charm: "presence",
   intimidation: "willpower",
-  absorption: "willpower",
-  spirit: "willpower",
+  charisma: "intelligence",
+  evasion: "dexterity",
+  blocking: "body",
+  counter: "agility",
 };
 function normSkillKey(s){
   const cleaned = (s || "").toString().trim().toLowerCase().replace(/[^a-z]/g, "");
@@ -12402,7 +12474,7 @@ function linkedSkillRank(sourceDoc){
 function prereqErrorsForRules(rules, stats){
   const out = [];
   if (!rules || !stats) return out;
-  const charKeys = ["reflex","dexterity","body","wisdom","presence","magic","willpower","tech"];
+  const charKeys = ["dexterity","body","willpower","magic","wisdom","presence","intelligence","agility"];
   const modMap = {};
   charKeys.forEach(k=>{
     const invest = investVal(stats?.[k]?.invest, 0);
@@ -14247,7 +14319,20 @@ function weaponDamageParts(it){
 }
 
 function characteristicKeyFromCode(code){
-  const map = { REF:'reflex', DEX:'dexterity', BODY:'body', WIS:'wisdom', PRE:'presence', MAG:'magic', WIL:'willpower', TEC:'tech' };
+  const map = {
+    DEX:'dexterity',
+    BOD:'body',
+    BODY:'body',
+    WIL:'willpower',
+    MAG:'magic',
+    WIS:'wisdom',
+    PRE:'presence',
+    INT:'intelligence',
+    AGI:'agility',
+    REF:'agility',
+    TEC:'intelligence',
+    TECH:'intelligence'
+  };
   return map[String(code || '').toUpperCase()] || '';
 }
 function resolveCharacteristicCodes(codes){
@@ -16867,7 +16952,7 @@ function updateDerived(){
   const wisPrestige = prestigeValueForDerived('wisdom');
   const prePrestige = prestigeValueForDerived('presence');
   const dexPrestige = prestigeValueForDerived('dexterity');
-  const alchemyVal = skillInvestForDerived('tech', 'Alchemy');
+  const alchemyVal = skillInvestForDerived('intelligence', 'Alchemy');
   const resistanceVal = skillInvestForDerived('body', 'Resistance');
   const hpBodTerm = bodVal + bodPrestige;
   const hpWilTerm = wilVal + wilPrestige;
@@ -19677,11 +19762,7 @@ const autoBuildSelections = {
   worstSkills: [],
 };
 let autoBuildProposal = null;
-const SKILL_CONFLICTS = {
-  Dodge: ['Evasion','Blocking'],
-  Evasion: ['Dodge','Blocking'],
-  Blocking: ['Dodge','Evasion'],
-};
+const SKILL_CONFLICTS = {};
 
 function setAutoBuildError(msg){
   if (!autoBuildErrorEl) return;
@@ -20121,10 +20202,18 @@ initRichTextToolbar();
     { key:'magic', code:'MAG', name:'Magic' },
     { key:'wisdom', code:'WIS', name:'Wisdom' },
     { key:'presence', code:'PRE', name:'Presence' },
+    { key:'intelligence', code:'INT', name:'Intelligence' },
+    { key:'agility', code:'AGI', name:'Agility' },
   ];
   const NOE35_CHAR_BY_KEY = new Map(NOE35_CHARACTERISTICS.map(c=> [c.key, c]));
   const NOE35_NATURES = ['Fire','Water','Wind','Earth','Lightning','Sun','Moon','Ki'];
   const NOE35_SKILL_ALIAS = {
+    'Intimidation': 'Subjugation',
+    'Sleight of hand': 'Sleight of Hand',
+    'Potential': 'Attunement',
+    'Charisma': 'Cunning'
+  };
+  const NOE35_REVERSE_SKILL_ALIAS = {
     'Subjugation': 'Intimidation',
     'Sleight of Hand': 'Sleight of hand',
     'Attunement': 'Potential',
@@ -20136,9 +20225,9 @@ initRichTextToolbar();
       title:'Combat Skills',
       skills: [
         { name:'Brutality', defaults:['body'] },
-        { name:'Technicity', defaults:['dexterity'] },
+        { name:'Technicity', defaults:['agility'] },
         { name:'Accuracy', defaults:['dexterity'] },
-        { name:'Dodge', defaults:['dexterity','body'] },
+        { name:'Dodge', defaults:['dexterity','body','agility'] },
         { name:'Absorption', defaults:['willpower'] },
       ]
     },
@@ -20146,9 +20235,9 @@ initRichTextToolbar();
       key:'physical',
       title:'Physical Skills',
       skills: [
-        { name:'Stealth', defaults:['dexterity'] },
-        { name:'Reactivity', defaults:['dexterity'] },
-        { name:'Acrobatics', defaults:['dexterity','body'] },
+        { name:'Stealth', defaults:['dexterity','agility'] },
+        { name:'Reactivity', defaults:['agility'] },
+        { name:'Acrobatics', defaults:['agility','body'] },
         { name:'Resistance', defaults:['body'] },
         { name:'Athletics', defaults:['body'] },
       ]
@@ -20160,26 +20249,26 @@ initRichTextToolbar();
         { name:'Spirit', defaults:['willpower'] },
         { name:'Aura', defaults:['presence'] },
         { name:'Investigation', defaults:['wisdom'] },
-        { name:'Education', defaults:['wisdom'] },
-        { name:'Cunning', defaults:['wisdom'] },
+        { name:'Education', defaults:['intelligence'] },
+        { name:'Cunning', defaults:['intelligence'] },
       ]
     },
     {
       key:'awareness',
       title:'Awareness Skills',
       skills: [
-        { name:'Survival', defaults:['willpower'] },
+        { name:'Survival', defaults:['wisdom'] },
         { name:'Instinct', defaults:['wisdom','willpower'] },
         { name:'Perception', defaults:['wisdom'] },
         { name:'Psychology', defaults:['wisdom','presence'] },
-        { name:'Attunement', defaults:['willpower','magic'] },
+        { name:'Attunement', defaults:['wisdom','magic'] },
       ]
     },
     {
       key:'social',
       title:'Social Skills',
       skills: [
-        { name:'Persuasion', defaults:['presence','wisdom'] },
+        { name:'Persuasion', defaults:['presence','intelligence'] },
         { name:'Charm', defaults:['presence'] },
         { name:'Taming', defaults:['presence'] },
         { name:'Subjugation', defaults:['willpower'] },
@@ -20191,9 +20280,9 @@ initRichTextToolbar();
       title:'Technical Skills',
       skills: [
         { name:'Crafting', defaults:['dexterity'] },
-        { name:'Alchemy', defaults:['wisdom'] },
-        { name:'Medicine', defaults:['wisdom'] },
-        { name:'Engineering', defaults:['wisdom'] },
+        { name:'Alchemy', defaults:['intelligence'] },
+        { name:'Medicine', defaults:['intelligence'] },
+        { name:'Engineering', defaults:['intelligence'] },
         { name:'Sleight of Hand', defaults:['dexterity'] },
       ]
     },
@@ -20469,15 +20558,28 @@ initRichTextToolbar();
   }
 
   function resolveLegacySkillPath(skillName){
-    const legacySkill = NOE35_SKILL_ALIAS[skillName] || skillName;
-    let charKey = charKeyForSkillName(legacySkill);
+    const canonicalSkill = NOE35_SKILL_ALIAS[skillName] || skillName;
+    let charKey = charKeyForSkillName(canonicalSkill);
     if (!charKey){
-      const target = String(legacySkill || '').toLowerCase();
+      const target = String(canonicalSkill || '').toLowerCase();
       const hit = CHARACS.find(c=> (c.skills || []).some(s=> String(s || '').toLowerCase() === target));
       charKey = hit ? hit.key : '';
     }
     if (!charKey) return null;
-    return { charKey, skill: legacySkill };
+    return { charKey, skill: canonicalSkill };
+  }
+
+  function resolveLegacySkillValue(skillName){
+    const canonicalPath = resolveLegacySkillPath(skillName);
+    if (!canonicalPath) return 0;
+    const primary = CHAR?.stats?.[canonicalPath.charKey]?.skills?.[canonicalPath.skill];
+    const primaryVal = clampInvested(primary);
+    if (primaryVal > 0) return primaryVal;
+    const legacySkill = NOE35_REVERSE_SKILL_ALIAS[canonicalPath.skill];
+    if (!legacySkill) return primaryVal;
+    const fallbackCharKey = charKeyForSkillName(legacySkill) || canonicalPath.charKey;
+    const fallback = CHAR?.stats?.[fallbackCharKey]?.skills?.[legacySkill];
+    return clampInvested(fallback);
   }
 
   function currentStatPools(){
@@ -20549,9 +20651,7 @@ initRichTextToolbar();
     NOE35_SKILL_CATEGORIES.forEach(category=>{
       category.skills.forEach(skill=>{
         if (box.skills[skill.name] == null){
-          const path = resolveLegacySkillPath(skill.name);
-          const fromLegacy = path ? CHAR?.stats?.[path.charKey]?.skills?.[path.skill] : 0;
-          box.skills[skill.name] = clampInvested(fromLegacy);
+          box.skills[skill.name] = resolveLegacySkillValue(skill.name);
         }else{
           box.skills[skill.name] = clampInvested(box.skills[skill.name]);
         }
@@ -20995,6 +21095,7 @@ initRichTextToolbar();
   installNoe35RollCharacteristicPicker();
 })();
 </script>
+
 
 
 
