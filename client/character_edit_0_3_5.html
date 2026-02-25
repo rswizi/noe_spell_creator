@@ -20300,7 +20300,7 @@ initRichTextToolbar();
       #stats-grid { display:grid; grid-template-columns:1fr; gap:14px; }
       .ns35-char-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; }
       .ns35-char-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:10px; }
-      .ns35-char-line { display:grid; grid-template-columns:minmax(0, 1fr) auto auto auto; align-items:center; gap:8px; }
+      .ns35-char-line { display:grid; grid-template-columns:minmax(0, 1fr) auto auto; align-items:center; gap:8px; }
       .ns35-char-hdr { display:inline-flex; align-items:center; gap:8px; }
       .ns35-prestige-icon-btn { width:28px; height:28px; min-width:28px; padding:0; display:inline-grid; place-items:center; }
       .ns35-char-value { min-width:44px; text-align:center; }
@@ -20319,15 +20319,16 @@ initRichTextToolbar();
       .ns35-skill-cat-hdr { padding:12px 14px 7px; }
       .ns35-skill-cat-hdr strong { color:#9aa0b3; font-style:italic; font-weight:600; }
       .ns35-skill-grid { display:grid; grid-template-columns:1fr; gap:8px; }
-      .ns35-skill-row { display:grid; grid-template-columns:minmax(0, 1fr) 40px; align-items:center; gap:8px; }
+      .ns35-skill-row { display:grid; grid-template-columns:minmax(0, 1fr) 20px; align-items:center; gap:8px; }
       .ns35-skill-row .skill-name { font-weight:600; text-align:left; }
-      .ns35-skill-row input { width:40px; max-width:40px; text-align:center; justify-self:end; padding:2px 4px; }
+      .ns35-skill-row input { width:20px; max-width:20px; text-align:center; justify-self:end; padding:2px 2px; }
       .ns35-nature-grid { display:grid; grid-template-columns:repeat(8, minmax(0, 1fr)); gap:8px; }
       .ns35-nature-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:8px; }
       .ns35-nature-row { display:grid; grid-template-columns:24px max-content 1fr; gap:6px; align-items:center; }
       .ns35-nature-row img { width:24px; height:24px; }
-      .ns35-id-chip { border:1px solid #2f2f3f; border-radius:999px; padding:2px 8px; font-size:.8rem; white-space:nowrap; width:max-content; justify-self:start; display:inline-flex; }
-      .ns35-nature-row input { width:34px; max-width:34px; justify-self:end; text-align:left; padding:2px 4px; }
+      .ns35-id-chip { border:1px solid #2f2f3f; border-radius:999px; padding:2px 6px; font-size:.8rem; white-space:nowrap; width:max-content; justify-self:start; display:inline-flex; align-items:center; justify-content:center; min-width:26px; min-height:20px; }
+      .ns35-id-chip img { width:14px; height:14px; display:block; }
+      .ns35-nature-row input { width:20px; max-width:20px; justify-self:end; text-align:left; padding:2px 2px; }
       .ns35-roll-char { display:grid; gap:4px; }
       .ns35-roll-char select { min-width:200px; }
       @media (max-width: 1160px){
@@ -20355,6 +20356,22 @@ initRichTextToolbar();
     if (value <= 15) return '1d8';
     if (value <= 17) return '1d10';
     return '1d12';
+  }
+
+  function natureDiceAssetFromBaseValue(raw){
+    const id = natureIdFromBaseValue(raw);
+    if (id === '1d4') return { key:'d4', label:'1d4' };
+    if (id === '1d6') return { key:'d6', label:'1d6' };
+    if (id === '1d8') return { key:'d8', label:'1d8' };
+    if (id === '1d10') return { key:'d10', label:'1d10' };
+    if (id === '1d12') return { key:'d12', label:'1d12' };
+    return null;
+  }
+
+  function natureDiceChipMarkup(raw){
+    const die = natureDiceAssetFromBaseValue(raw);
+    if (!die) return '-';
+    return `<img src="/assets/dice/${die.key}.svg" alt="${die.label}" title="${die.label}">`;
   }
 
   function noe35CharacteristicCapLabel(rawCap){
@@ -20927,8 +20944,7 @@ initRichTextToolbar();
       const prestigeRem = Math.max(0, Math.floor(Number(box.prestige_remaining?.[ch.key] || 0)));
       cell.innerHTML = `
         <div class="ns35-char-line">
-          <strong>${ch.name}</strong>
-          <span class="pill">${ch.code}</span>
+          <strong>${ch.code}</strong>
           <span class="pill ns35-char-value">${value}</span>
           <span class="ns35-prestige-star" data-level="${prestigeLevel}" title="${prestigeLevel > 0 ? `${prestigeRem}/${prestigeLevel} prestige rerolls left` : 'No prestige'}">
             <i class="fa-regular fa-star"></i>
@@ -21011,7 +21027,7 @@ initRichTextToolbar();
       cell.innerHTML = `
         <div class="ns35-nature-row">
           <img src="/assets/natures/${iconName}.svg" alt="${nature}" title="${nature}">
-          <span class="ns35-id-chip">${natureId}</span>
+          <span class="ns35-id-chip">${natureDiceChipMarkup(invested)}</span>
           <input id="${inputId}" class="num" type="number" min="0" max="${pools.skillCap}" value="${invested}" title="${natureId}">
         </div>
       `;
@@ -21042,7 +21058,8 @@ initRichTextToolbar();
         }
         if (!OVERRIDE_ENABLED) input.value = val;
         box.natures[nature] = val;
-        if (chip) chip.textContent = natureIdFromBaseValue(val);
+        if (chip) chip.innerHTML = natureDiceChipMarkup(val);
+        input.title = natureIdFromBaseValue(val);
         syncNoe35ToLegacy(box);
         updatePointCounters();
         updateDerived();
