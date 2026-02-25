@@ -4,6 +4,24 @@ import { collectHeadings, HeadingItem } from "../utils/text";
 
 const tocKey = new PluginKey("tableOfContents");
 
+const renderTocItems = (items: HeadingItem[]) => {
+  if (!items.length) {
+    return [["li", {}, "Add headings to generate links"]];
+  }
+  return items.map((item) => [
+    "li",
+    { style: "margin-bottom:4px;font-size:13px;" },
+    [
+      "a",
+      {
+        href: `#${item.id}`,
+        style: "color:#a9b2ff;text-decoration:none;",
+      },
+      `${"  ".repeat(item.level - 1)}${item.text}`,
+    ],
+  ]);
+};
+
 const TableOfContents = Node.create({
   name: "tableOfContents",
   group: "block",
@@ -27,7 +45,7 @@ const TableOfContents = Node.create({
         { style: "display:block;margin-bottom:8px;font-size:14px;color:#a9b2ff;" },
         "Table of Contents",
       ],
-      ["ul", { style: "padding-left:16px" }, ...this.renderItems(HTMLAttributes.items || [])],
+      ["ul", { style: "padding-left:16px" }, ...renderTocItems(HTMLAttributes.items || [])],
     ];
   },
   addCommands() {
@@ -70,23 +88,6 @@ const TableOfContents = Node.create({
         },
       }),
     ];
-  },
-  renderItems(items: HeadingItem[]) {
-    if (!items.length) {
-      return [["li", {}, "Add headings to generate links"]];
-    }
-    return items.map((item) => [
-      "li",
-      { style: `margin-bottom:4px;font-size:13px;` },
-      [
-        "a",
-        {
-          href: `#${item.id}`,
-          style: "color:#a9b2ff;text-decoration:none;",
-        },
-        `${"  ".repeat(item.level - 1)}${item.text}`,
-      ],
-    ]);
   },
 });
 

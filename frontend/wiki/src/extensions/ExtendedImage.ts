@@ -28,11 +28,7 @@ const ExtendedImage = Image.extend({
   },
   renderHTML({ HTMLAttributes }) {
     const { caption, alignment, width, height, ...attrs } = HTMLAttributes;
-    return [
-      "figure",
-      {
-        class: `image-node image-node--${alignment}`,
-      },
+    const content: any[] = [
       [
         "img",
         mergeAttributes(this.options.HTMLAttributes, {
@@ -41,7 +37,16 @@ const ExtendedImage = Image.extend({
           height: height || null,
         }),
       ],
-      caption ? ["figcaption", { class: "image-caption" }, caption] : [],
+    ];
+    if (caption) {
+      content.push(["figcaption", { class: "image-caption" }, caption]);
+    }
+    return [
+      "figure",
+      {
+        class: `image-node image-node--${alignment}`,
+      },
+      ...content,
     ];
   },
 });

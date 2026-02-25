@@ -3,6 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Editor, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
+import Color from "@tiptap/extension-color";
+import Highlight from "@tiptap/extension-highlight";
+import TextStyle from "@tiptap/extension-text-style";
 import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
@@ -13,6 +16,7 @@ import HeadingAnchors from "../extensions/HeadingAnchors";
 import TableOfContents from "../extensions/TableOfContents";
 import ExtendedLink from "../extensions/ExtendedLink";
 import ExtendedImage from "../extensions/ExtendedImage";
+import ExitListOnBackspace from "../extensions/ExitListOnBackspace";
 import TablePicker from "../components/TablePicker";
 import {
   createPageRevision,
@@ -32,27 +36,15 @@ import {
   WikiTemplate,
 } from "../utils/api";
 
-const toolbarActions = [
-  { label: "H1", action: (editor: Editor) => editor.chain().focus().toggleHeading({ level: 1 }).run() },
-  { label: "H2", action: (editor: Editor) => editor.chain().focus().toggleHeading({ level: 2 }).run() },
-  { label: "H3", action: (editor: Editor) => editor.chain().focus().toggleHeading({ level: 3 }).run() },
-  { label: "B", action: (editor: Editor) => editor.chain().focus().toggleBold().run() },
-  { label: "I", action: (editor: Editor) => editor.chain().focus().toggleItalic().run() },
-  { label: "U", action: (editor: Editor) => editor.chain().focus().toggleUnderline().run() },
-  { label: "S", action: (editor: Editor) => editor.chain().focus().toggleStrike().run() },
-  { label: "• List", action: (editor: Editor) => editor.chain().focus().toggleBulletList().run() },
-  { label: "1. List", action: (editor: Editor) => editor.chain().focus().toggleOrderedList().run() },
-  { label: "Checklist", action: (editor: Editor) => editor.chain().focus().toggleTaskList().run() },
-  { label: "Quote", action: (editor: Editor) => editor.chain().focus().toggleBlockquote().run() },
-  { label: "</>", action: (editor: Editor) => editor.chain().focus().toggleCodeBlock().run() },
-  { label: "Link", action: (editor: Editor) => editor.chain().focus().extendMarkRange("link").setLink({ href: prompt("Enter link URL") || "" }).run() },
-  { label: "Undo", action: (editor: Editor) => editor.chain().focus().undo().run() },
-  { label: "Redo", action: (editor: Editor) => editor.chain().focus().redo().run() },
-  { label: "TOC", action: (editor: Editor) => editor.chain().focus().insertTableOfContents().run() },
-];
-
-
+type HeadingValue = "paragraph" | "h1" | "h2" | "h3" | "h4";
+type ListValue = "none" | "bullet" | "ordered" | "checklist";
 const PageEditor: React.FC = () => {
+  type TableContextMenuState = {
+    x: number;
+    y: number;
+    onTableCell: boolean;
+    onLink: boolean;
+  };
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [page, setPage] = useState<PagePayload | null>(null);
@@ -74,13 +66,21 @@ const PageEditor: React.FC = () => {
   const [aclEditRoles, setAclEditRoles] = useState("editor,admin");
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [revisions, setRevisions] = useState<any[]>([]);
+  const [textColor, setTextColor] = useState("#f5f7ff");
+  const [highlightColor, setHighlightColor] = useState("#fff59d");
+  const [tableContextMenu, setTableContextMenu] = useState<TableContextMenuState | null>(null);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkValue, setLinkValue] = useState("");
 
   const editor = useEditor({
     extensions: [
       HeadingAnchors,
       TableOfContents,
       StarterKit,
-      Table.configure({ resizable: true }),
+      TextStyle,
+      Color.configure({ types: ["textStyle"] }),
+      Highlight.configure({ multicolor: true }),
+      Table.configure({ resizable: true, lastColumnResizable: true }),
       TableRow,
       TableHeader,
       TableCell,
@@ -89,6 +89,7 @@ const PageEditor: React.FC = () => {
       ExtendedLink.configure({ openOnClick: false }),
       TaskList,
       TaskItem,
+      ExitListOnBackspace,
     ],
     editable: true,
     content: "",
@@ -125,6 +126,95 @@ const PageEditor: React.FC = () => {
       return null;
     }
   }, [fieldsText]);
+
+  const getHeadingValue = (): HeadingValue => {
+    if (!editor) {
+      return "paragraph";
+    }
+    if (editor.isActive("heading", { level: 1 })) return "h1";
+    if (editor.isActive("heading", { level: 2 })) return "h2";
+    if (editor.isActive("heading", { level: 3 })) return "h3";
+    if (editor.isActive("heading", { level: 4 })) return "h4";
+    return "paragraph";
+  };
+
+  const applyHeadingValue = (value: HeadingValue) => {
+    if (!editor) {
+      return;
+    }
+    if (value === "paragraph") {
+      editor.chain().focus().setParagraph().run();
+      return;
+    }
+    const level = Number(value.replace("h", "")) as 1 | 2 | 3 | 4;
+    editor.chain().focus().setHeading({ level }).run();
+  };
+
+  const getListValue = (): ListValue => {
+    if (!editor) {
+      return "none";
+    }
+    if (editor.isActive("taskList")) return "checklist";
+    if (editor.isActive("orderedList")) return "ordered";
+    if (editor.isActive("bulletList")) return "bullet";
+    return "none";
+  };
+
+  const applyListValue = (value: ListValue) => {
+    if (!editor) {
+      return;
+    }
+    if (value === "none") {
+      if (editor.isActive("taskList")) editor.chain().focus().toggleTaskList().run();
+      else if (editor.isActive("orderedList")) editor.chain().focus().toggleOrderedList().run();
+      else if (editor.isActive("bulletList")) editor.chain().focus().toggleBulletList().run();
+      else editor.chain().focus().setParagraph().run();
+      return;
+    }
+    if (value === "bullet") {
+      if (editor.isActive("orderedList")) editor.chain().focus().toggleOrderedList().run();
+      if (editor.isActive("taskList")) editor.chain().focus().toggleTaskList().run();
+      if (!editor.isActive("bulletList")) editor.chain().focus().toggleBulletList().run();
+      return;
+    }
+    if (value === "ordered") {
+      if (editor.isActive("bulletList")) editor.chain().focus().toggleBulletList().run();
+      if (editor.isActive("taskList")) editor.chain().focus().toggleTaskList().run();
+      if (!editor.isActive("orderedList")) editor.chain().focus().toggleOrderedList().run();
+      return;
+    }
+    if (editor.isActive("bulletList")) editor.chain().focus().toggleBulletList().run();
+    if (editor.isActive("orderedList")) editor.chain().focus().toggleOrderedList().run();
+    if (!editor.isActive("taskList")) editor.chain().focus().toggleTaskList().run();
+  };
+
+  const openLinkDialog = () => {
+    if (!editor) {
+      return;
+    }
+    const currentHref = (editor.getAttributes("link").href as string | undefined) || "";
+    setLinkValue(currentHref);
+    setLinkDialogOpen(true);
+  };
+
+  const closeLinkDialog = () => {
+    setLinkDialogOpen(false);
+    setLinkValue("");
+  };
+
+  const applyLink = () => {
+    if (!editor) {
+      closeLinkDialog();
+      return;
+    }
+    const normalized = linkValue.trim();
+    if (!normalized) {
+      editor.chain().focus().unsetLink().run();
+    } else {
+      editor.chain().focus().extendMarkRange("link").setLink({ href: normalized }).run();
+    }
+    closeLinkDialog();
+  };
 
   const handleImageFile = useCallback(
     async (file: File) => {
@@ -334,6 +424,60 @@ const PageEditor: React.FC = () => {
     };
   }, [editor, handleImageFile]);
 
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+    const dom = editor.view.dom as HTMLElement;
+    const onContextMenu = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const cell = target?.closest("td,th");
+      event.preventDefault();
+      if (cell) {
+        try {
+          const pos = editor.view.posAtDOM(cell, 0);
+          editor.chain().focus().setTextSelection(pos + 1).run();
+        } catch {
+          editor.chain().focus().run();
+        }
+      } else {
+        editor.chain().focus().run();
+      }
+      setTableContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        onTableCell: Boolean(cell),
+        onLink: editor.isActive("link"),
+      });
+    };
+    dom.addEventListener("contextmenu", onContextMenu);
+    return () => {
+      dom.removeEventListener("contextmenu", onContextMenu);
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    if (!tableContextMenu) {
+      return;
+    }
+    const close = () => setTableContextMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        close();
+      }
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [tableContextMenu]);
+
   if (!page) {
     return <p>Loading editor…</p>;
   }
@@ -427,6 +571,14 @@ const PageEditor: React.FC = () => {
     }
   };
 
+  const runTableAction = (action: (instance: Editor) => void) => {
+    if (!editor) {
+      return;
+    }
+    action(editor);
+    setTableContextMenu(null);
+  };
+
   return (
     <div>
       <header>
@@ -516,15 +668,82 @@ const PageEditor: React.FC = () => {
       </div>
 
       <div className="toolbar">
-        {toolbarActions.map((action) => (
-          <button
-            key={action.label}
-            onClick={() => editor && action.action(editor)}
-            disabled={!editor}
-          >
-            {action.label}
-          </button>
-        ))}
+        <select
+          className="toolbar-select"
+          value={getHeadingValue()}
+          onChange={(event) => applyHeadingValue(event.target.value as HeadingValue)}
+          disabled={!editor}
+        >
+          <option value="paragraph">Paragraph</option>
+          <option value="h1">H1</option>
+          <option value="h2">H2</option>
+          <option value="h3">H3</option>
+          <option value="h4">H4</option>
+        </select>
+        <select
+          className="toolbar-select"
+          value={getListValue()}
+          onChange={(event) => applyListValue(event.target.value as ListValue)}
+          disabled={!editor}
+        >
+          <option value="none">No List</option>
+          <option value="bullet">Bullet List</option>
+          <option value="ordered">Numbered List</option>
+          <option value="checklist">Checklist</option>
+        </select>
+        <button onClick={() => editor?.chain().focus().toggleBold().run()} disabled={!editor}>
+          B
+        </button>
+        <button onClick={() => editor?.chain().focus().toggleItalic().run()} disabled={!editor}>
+          I
+        </button>
+        <button onClick={() => editor?.chain().focus().toggleUnderline().run()} disabled={!editor}>
+          U
+        </button>
+        <button onClick={() => editor?.chain().focus().toggleStrike().run()} disabled={!editor}>
+          S
+        </button>
+        <button onClick={() => editor?.chain().focus().toggleBlockquote().run()} disabled={!editor}>
+          Quote
+        </button>
+        <button onClick={() => editor?.chain().focus().toggleCodeBlock().run()} disabled={!editor}>
+          {"</>"}
+        </button>
+        <button onClick={() => openLinkDialog()} disabled={!editor}>
+          Link
+        </button>
+        <button onClick={() => editor?.chain().focus().unsetLink().run()} disabled={!editor}>
+          Unlink
+        </button>
+        <button className="toolbar-icon-button" onClick={() => editor?.chain().focus().undo().run()} disabled={!editor} title="Undo">
+          <i className="fa-solid fa-rotate-left" aria-hidden="true" />
+        </button>
+        <button className="toolbar-icon-button" onClick={() => editor?.chain().focus().redo().run()} disabled={!editor} title="Redo">
+          <i className="fa-solid fa-rotate-right" aria-hidden="true" />
+        </button>
+        <button onClick={() => editor?.chain().focus().insertTableOfContents().run()} disabled={!editor}>
+          TOC
+        </button>
+        <label className="toolbar-color-control">
+          Text
+          <input type="color" value={textColor} onChange={(event) => setTextColor(event.target.value)} />
+        </label>
+        <button onClick={() => editor?.chain().focus().setColor(textColor).run()} disabled={!editor}>
+          Apply Text
+        </button>
+        <button onClick={() => editor?.chain().focus().unsetColor().run()} disabled={!editor}>
+          Clear Text
+        </button>
+        <label className="toolbar-color-control">
+          Highlight
+          <input type="color" value={highlightColor} onChange={(event) => setHighlightColor(event.target.value)} />
+        </label>
+        <button onClick={() => editor?.chain().focus().setHighlight({ color: highlightColor }).run()} disabled={!editor}>
+          Apply Highlight
+        </button>
+        <button onClick={() => editor?.chain().focus().unsetHighlight().run()} disabled={!editor}>
+          Clear Highlight
+        </button>
         <button onClick={openImagePicker} disabled={!editor}>
           Image
         </button>
@@ -547,12 +766,108 @@ const PageEditor: React.FC = () => {
 
       <div className="editor-wrapper">
         <EditorContent editor={editor} />
-        
-        
       </div>
+      {tableContextMenu && editor && (
+        <div
+          className="editor-right-click-menu"
+          style={{ top: `${tableContextMenu.y}px`, left: `${tableContextMenu.x}px` }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().toggleBold().run())}>Bold</button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().toggleItalic().run())}>Italic</button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().toggleUnderline().run())}>Underline</button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().toggleStrike().run())}>Strikethrough</button>
+          <button
+            onClick={() => {
+              setTableContextMenu(null);
+              openLinkDialog();
+            }}
+          >
+            {tableContextMenu.onLink ? "Edit Link" : "Add Link"}
+          </button>
+          {tableContextMenu.onLink && (
+            <button onClick={() => runTableAction((instance) => instance.chain().focus().unsetLink().run())}>Remove Link</button>
+          )}
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())}>
+            Insert Table (3x3)
+          </button>
+          <button
+            onClick={() => {
+              setTableContextMenu(null);
+              openImagePicker();
+            }}
+          >
+            Insert Image
+          </button>
+          {tableContextMenu.onTableCell && (
+            <>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().addRowBefore().run())}>
+            Add Row Above
+          </button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().addRowAfter().run())}>
+            Add Row Below
+          </button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().deleteRow().run())}>
+            Delete Row
+          </button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().addColumnBefore().run())}>
+            Add Col Left
+          </button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().addColumnAfter().run())}>
+            Add Col Right
+          </button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().deleteColumn().run())}>
+            Delete Col
+          </button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().toggleHeaderRow().run())}>
+            Toggle Header
+          </button>
+          <button onClick={() => runTableAction((instance) => instance.chain().focus().deleteTable().run())}>
+            Delete Table
+          </button>
+            </>
+          )}
+        </div>
+      )}
+      {linkDialogOpen && (
+        <div className="link-modal-backdrop" onClick={closeLinkDialog}>
+          <div className="link-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Set Hyperlink</h3>
+            <input
+              value={linkValue}
+              onChange={(event) => setLinkValue(event.target.value)}
+              placeholder="https://example.com"
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  applyLink();
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  closeLinkDialog();
+                }
+              }}
+              autoFocus
+            />
+            <div className="link-modal-actions">
+              <button onClick={closeLinkDialog}>Cancel</button>
+              <button
+                onClick={() => {
+                  editor?.chain().focus().unsetLink().run();
+                  closeLinkDialog();
+                }}
+              >
+                Remove
+              </button>
+              <button onClick={applyLink}>Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default PageEditor;
+
 

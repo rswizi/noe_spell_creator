@@ -3,6 +3,9 @@ import { useParams } from "react-router-dom";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
+import Color from "@tiptap/extension-color";
+import Highlight from "@tiptap/extension-highlight";
+import TextStyle from "@tiptap/extension-text-style";
 import ExtendedLink from "../extensions/ExtendedLink";
 import ExtendedImage from "../extensions/ExtendedImage";
 import Table from "@tiptap/extension-table";
@@ -23,6 +26,9 @@ const ReadOnlyEditor: React.FC<{ content: any }> = ({ content }) => {
       HeadingAnchors,
       TableOfContents,
       StarterKit,
+      TextStyle,
+      Color.configure({ types: ["textStyle"] }),
+      Highlight.configure({ multicolor: true }),
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
