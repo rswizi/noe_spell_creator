@@ -1,6 +1,7 @@
 import Suggestion from "@tiptap/suggestion";
 import { Editor } from "@tiptap/react";
 import { Extension } from "@tiptap/core";
+import { PluginKey } from "prosemirror-state";
 
 type SlashItem = {
   title: string;
@@ -50,6 +51,8 @@ const items: SlashItem[] = [
   },
 ];
 
+const slashPluginKey = new PluginKey("slash-command");
+
 const SlashCommand = Extension.create({
   name: "slashCommand",
   addOptions() {
@@ -68,8 +71,9 @@ const SlashCommand = Extension.create({
       Suggestion({
         editor: this.editor,
         char: "/",
-        pluginKey: "slash-command",
+        pluginKey: slashPluginKey,
         command: ({ editor, range, props }) => {
+          editor.chain().focus().deleteRange(range).run();
           props.command(editor);
         },
         items: ({ query }) => {
@@ -83,21 +87,22 @@ const SlashCommand = Extension.create({
         },
         render: () => {
           let component: HTMLDivElement;
-          let popup: HTMLDivElement;
-          let editor: Editor;
 
           return {
             onStart: (props) => {
-              editor = props.editor;
               component = document.createElement("div");
               component.classList.add("slash-menu");
               updateList(props);
               document.body.appendChild(component);
+              setPosition(props);
             },
-            onUpdate: (props) => updateList(props),
+            onUpdate: (props) => {
+              updateList(props);
+              setPosition(props);
+            },
             onKeyDown: (props) => {
               if (props.event.key === "Escape") {
-                popup?.remove();
+                component?.remove();
                 return true;
               }
               return false;
@@ -116,12 +121,21 @@ const SlashCommand = Extension.create({
               const button = document.createElement("button");
               button.textContent = item.title;
               button.onclick = () => {
-                item.command({ editor, range: props.range });
                 props.command(item);
               };
               component.appendChild(button);
             });
-            const { left, top } = props.client.rect;
+          }
+
+          function setPosition(props: any) {
+            if (!component) {
+              return;
+            }
+            const rect = typeof props.clientRect === "function" ? props.clientRect() : null;
+            if (!rect) {
+              return;
+            }
+            const { left, top } = rect;
             component.style.left = `${left}px`;
             component.style.top = `${top + 24}px`;
           }

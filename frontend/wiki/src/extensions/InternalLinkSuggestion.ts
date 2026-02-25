@@ -88,7 +88,11 @@ const InternalLinkSuggestion = Extension.create({
           }
 
           function setPosition(props: any) {
-            const { left, top } = props.client.rect;
+            const rect = typeof props.clientRect === "function" ? props.clientRect() : null;
+            if (!rect) {
+              return;
+            }
+            const { left, top } = rect;
             component.style.left = `${left}px`;
             component.style.top = `${top + 24}px`;
           }

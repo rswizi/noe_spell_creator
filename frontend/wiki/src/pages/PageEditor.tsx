@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Editor, EditorContent, FloatingMenu, useEditor } from "@tiptap/react";
+import { PluginKey } from "prosemirror-state";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Table from "@tiptap/extension-table";
@@ -9,8 +10,6 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import BubbleMenu from "@tiptap/extension-bubble-menu";
-import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import SlashCommand from "../extensions/SlashCommand";
 import HeadingAnchors from "../extensions/HeadingAnchors";
 import TableOfContents from "../extensions/TableOfContents";
@@ -55,6 +54,9 @@ const toolbarActions = [
   { label: "TOC", action: (editor: Editor) => editor.chain().focus().insertTableOfContents().run() },
 ];
 
+const tableFloatingMenuKey = new PluginKey("table-floating-menu");
+const imageFloatingMenuKey = new PluginKey("image-floating-menu");
+
 const PageEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -93,17 +95,7 @@ const PageEditor: React.FC = () => {
       TaskList,
       TaskItem,
       InternalLinkSuggestion,
-      BubbleMenu.configure({
-        component: ({ editor }) => (
-          <div className="bubble-menu">
-            <button onClick={() => editor.chain().focus().toggleBold().run()}>B</button>
-            <button onClick={() => editor.chain().focus().toggleItalic().run()}>I</button>
-            <button onClick={() => editor.chain().focus().setLink({ href: prompt("URL") || "" }).run()}>Link</button>
-          </div>
-        ),
-      }),
       SlashCommand,
-      HorizontalRule,
     ],
     editable: true,
     content: "",
@@ -280,7 +272,7 @@ const PageEditor: React.FC = () => {
         reloadRevisions(data.id);
       })
       .catch(() => {
-        navigate("/wiki");
+        navigate("/");
       });
   }, [id, editor, navigate, reloadRevisions]);
 
@@ -391,7 +383,7 @@ const PageEditor: React.FC = () => {
     }
     try {
       await deletePage(page.id);
-      navigate("/wiki");
+      navigate("/");
     } catch (err) {
       setStatus("error");
     }
@@ -565,6 +557,7 @@ const PageEditor: React.FC = () => {
         {editor && (
           <FloatingMenu
             editor={editor}
+            pluginKey={tableFloatingMenuKey}
             tippyOptions={{ duration: 120 }}
             shouldShow={({ editor }) => editor.isActive("table")}
           >
@@ -582,6 +575,7 @@ const PageEditor: React.FC = () => {
         {editor && (
           <FloatingMenu
             editor={editor}
+            pluginKey={imageFloatingMenuKey}
             tippyOptions={{ duration: 120 }}
             shouldShow={({ editor }) => editor.isActive("extendedImage")}
           >

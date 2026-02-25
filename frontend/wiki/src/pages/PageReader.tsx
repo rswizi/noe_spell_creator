@@ -11,7 +11,6 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import HeadingAnchors from "../extensions/HeadingAnchors";
 import TableOfContents from "../extensions/TableOfContents";
 import { fetchPageContext, getPage, getPageBySlug, PagePayload } from "../utils/api";
@@ -33,7 +32,6 @@ const ReadOnlyEditor: React.FC<{ content: any }> = ({ content }) => {
       ExtendedImage,
       TaskList,
       TaskItem,
-      HorizontalRule,
     ],
   });
 
