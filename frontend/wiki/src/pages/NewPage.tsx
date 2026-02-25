@@ -1,6 +1,6 @@
 import React, { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createPage, fetchCategories, fetchTemplates, WikiCategory, WikiTemplate } from "../utils/api";
+import { createPage, fetchCategories, fetchTemplates, fetchWikiIdentity, WikiCategory, WikiTemplate } from "../utils/api";
 
 const slugify = (value: string): string =>
   value
@@ -17,6 +17,8 @@ const NewPage: React.FC = () => {
   const [slugTouched, setSlugTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<{ wiki_role: "viewer" | "editor" | "admin" } | null>(null);
+  const [identityLoading, setIdentityLoading] = useState(true);
   const [categories, setCategories] = useState<WikiCategory[]>([]);
   const [templates, setTemplates] = useState<WikiTemplate[]>([]);
   const [categoryId, setCategoryId] = useState("general");
@@ -37,6 +39,10 @@ const NewPage: React.FC = () => {
   };
 
   React.useEffect(() => {
+    fetchWikiIdentity()
+      .then((me) => setIdentity(me))
+      .catch(() => setIdentity(null))
+      .finally(() => setIdentityLoading(false));
     fetchCategories()
       .then((rows) => {
         setCategories(rows);
@@ -50,8 +56,14 @@ const NewPage: React.FC = () => {
     fetchTemplates().then(setTemplates).catch(() => setTemplates([]));
   }, []);
 
+  const canEdit = identity?.wiki_role === "editor" || identity?.wiki_role === "admin";
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!canEdit) {
+      setError("Editor access required.");
+      return;
+    }
     setSaving(true);
     setError(null);
     const normalizedSlug = slugify(slug || title);
@@ -75,6 +87,14 @@ const NewPage: React.FC = () => {
       setSaving(false);
     }
   };
+
+  if (identityLoading) {
+    return <p>Loading...</p>;
+  }
+
+  if (!canEdit) {
+    return <p>Editor access required.</p>;
+  }
 
   return (
     <div>

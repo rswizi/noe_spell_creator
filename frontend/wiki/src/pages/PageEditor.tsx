@@ -185,6 +185,9 @@ const PageEditor: React.FC = () => {
   const [templates, setTemplates] = useState<WikiTemplate[]>([]);
   const [fieldsText, setFieldsText] = useState("{}");
   const [identity, setIdentity] = useState<{ wiki_role: "viewer" | "editor" | "admin" } | null>(null);
+  const [identityLoading, setIdentityLoading] = useState(true);
+  const canEdit = identity?.wiki_role === "editor" || identity?.wiki_role === "admin";
+  const isAdmin = identity?.wiki_role === "admin";
   const [aclOverride, setAclOverride] = useState(false);
   const [aclViewRoles, setAclViewRoles] = useState<string[]>(["viewer", "editor", "admin"]);
   const [aclEditRoles, setAclEditRoles] = useState<string[]>(["editor", "admin"]);
@@ -539,7 +542,7 @@ const PageEditor: React.FC = () => {
 
   const autoSave = useCallback(
     async (force: boolean = false) => {
-      if (!editor || !page) {
+      if (!canEdit || !editor || !page) {
         return;
       }
       const doc = editor.getJSON();
@@ -596,14 +599,35 @@ const PageEditor: React.FC = () => {
         setStatus("error");
       }
     },
-    [categoryId, editor, entityType, fieldsText, page, pageStatus, parseFieldsJson, slug, summary, tagsText, templateId, title]
+    [canEdit, categoryId, editor, entityType, fieldsText, page, pageStatus, parseFieldsJson, slug, summary, tagsText, templateId, title]
   );
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(() => setCategories([]));
     fetchTemplates().then(setTemplates).catch(() => setTemplates([]));
-    fetchWikiIdentity().then(setIdentity).catch(() => setIdentity(null));
+    fetchWikiIdentity()
+      .then(setIdentity)
+      .catch(() => setIdentity(null))
+      .finally(() => setIdentityLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+    editor.setEditable(Boolean(canEdit));
+  }, [canEdit, editor]);
+
+  useEffect(() => {
+    if (identityLoading || canEdit) {
+      return;
+    }
+    if (id) {
+      navigate(`/${id}`, { replace: true });
+      return;
+    }
+    navigate("/", { replace: true });
+  }, [canEdit, id, identityLoading, navigate]);
 
   useEffect(() => {
     const specs = templateFieldSpecs(activeTemplate);
@@ -632,7 +656,7 @@ const PageEditor: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!id) {
+    if (!id || identityLoading || !canEdit) {
       return;
     }
     getPage(id)
@@ -671,7 +695,7 @@ const PageEditor: React.FC = () => {
       .catch(() => {
         navigate("/");
       });
-  }, [id, editor, navigate, reloadRevisions]);
+  }, [canEdit, id, identityLoading, editor, navigate, reloadRevisions]);
 
   useEffect(() => {
     if (!editor) {
@@ -931,12 +955,19 @@ const PageEditor: React.FC = () => {
     return () => window.removeEventListener("mousedown", close);
   }, [openColorPicker]);
 
+  if (identityLoading) {
+    return <p>Loading...</p>;
+  }
+
+  if (!canEdit) {
+    return <p>Editor access required.</p>;
+  }
+
   if (!page) {
-    return <p>Loading editor…</p>;
+    return <p>Loading editor...</p>;
   }
 
   const openImagePicker = () => fileInputRef.current?.click();
-  const isAdmin = identity?.wiki_role === "admin";
 
   const toggleAclRole = (roles: string[], role: string, setter: (next: string[]) => void) => {
     if (roles.includes(role)) {

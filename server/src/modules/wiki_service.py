@@ -283,8 +283,14 @@ def resolve_page_acl(page_doc: dict[str, Any] | None) -> dict[str, tuple[str, ..
 
 
 def can_view_page(role: str, page_doc: dict[str, Any] | None) -> bool:
+    if not isinstance(page_doc, dict):
+        return False
+    clean_role = normalize_wiki_role(role)
+    status = str(page_doc.get("status") or "draft").strip().lower()
+    if clean_role == "viewer" and status != "published":
+        return False
     acl = resolve_page_acl(page_doc)
-    return normalize_wiki_role(role) in acl["view_roles"]
+    return clean_role in acl["view_roles"]
 
 
 def can_edit_page(
@@ -335,4 +341,7 @@ def build_page_view_filter(role: str) -> dict[str, Any]:
         )
     else:
         filters.append({"acl_override": True, "acl.view_roles": clean_role})
-    return {"$or": filters}
+    acl_filter = {"$or": filters}
+    if clean_role == "viewer":
+        return {"$and": [{"status": "published"}, acl_filter]}
+    return acl_filter

@@ -110,6 +110,7 @@ const rowsFromFields = (fields: Record<string, any>): FieldBuilderRow[] => {
 
 const WikiAdmin: React.FC = () => {
   const [role, setRole] = useState<string>("");
+  const [roleLoading, setRoleLoading] = useState(true);
   const [categories, setCategories] = useState<WikiCategory[]>([]);
   const [templates, setTemplates] = useState<WikiTemplate[]>([]);
   const [wikiUsers, setWikiUsers] = useState<WikiUserRole[]>([]);
@@ -180,11 +181,18 @@ const WikiAdmin: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchWikiIdentity().then((me) => setRole(me.wiki_role)).catch(() => setRole(""));
+    fetchWikiIdentity()
+      .then((me) => setRole(me.wiki_role))
+      .catch(() => setRole(""))
+      .finally(() => setRoleLoading(false));
     reload();
   }, []);
 
-  if (role && role !== "admin") {
+  if (roleLoading) {
+    return <p>Loading...</p>;
+  }
+
+  if (role !== "admin") {
     return <p>Admin access required.</p>;
   }
 
