@@ -1,5 +1,6 @@
 import Suggestion from "@tiptap/suggestion";
 import { Extension } from "@tiptap/core";
+import { PluginKey } from "prosemirror-state";
 import { parseInternalLink } from "../utils/text";
 
 type SuggestionItem = {
@@ -12,18 +13,20 @@ type SuggestionItem = {
 const InternalLinkSuggestion = Extension.create({
   name: "internalLinkSuggestion",
   addProseMirrorPlugins() {
+    const internalLinkSuggestionKey = new PluginKey("internal-link-suggestion");
     return [
       Suggestion({
+        pluginKey: internalLinkSuggestionKey,
         char: "[[",
         startOfLine: false,
         command: ({ editor, range, props }) => {
           const fragmentSuffix = props.fragment ? `#${props.fragment}` : "";
           const href = `/wiki/slug/${props.slug}${fragmentSuffix}`;
-          editor.chain().focus().deleteRange(range);
-          editor.chain().focus().insertContent(props.title);
           editor
             .chain()
             .focus()
+            .deleteRange(range)
+            .insertContent(props.title)
             .extendMarkRange("link")
             .setLink({
               href,
@@ -57,7 +60,6 @@ const InternalLinkSuggestion = Extension.create({
         },
         render: () => {
           let component: HTMLDivElement;
-          const list: HTMLButtonElement[] = [];
 
           return {
             onStart: (props) => {
@@ -84,7 +86,6 @@ const InternalLinkSuggestion = Extension.create({
               props.command(item);
             };
             component.appendChild(button);
-            list.push(button);
           }
 
           function setPosition(props: any) {

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Editor, EditorContent, FloatingMenu, useEditor } from "@tiptap/react";
-import { PluginKey } from "prosemirror-state";
+import { Editor, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Table from "@tiptap/extension-table";
@@ -10,10 +9,8 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import SlashCommand from "../extensions/SlashCommand";
 import HeadingAnchors from "../extensions/HeadingAnchors";
 import TableOfContents from "../extensions/TableOfContents";
-import InternalLinkSuggestion from "../extensions/InternalLinkSuggestion";
 import ExtendedLink from "../extensions/ExtendedLink";
 import ExtendedImage from "../extensions/ExtendedImage";
 import TablePicker from "../components/TablePicker";
@@ -54,8 +51,6 @@ const toolbarActions = [
   { label: "TOC", action: (editor: Editor) => editor.chain().focus().insertTableOfContents().run() },
 ];
 
-const tableFloatingMenuKey = new PluginKey("table-floating-menu");
-const imageFloatingMenuKey = new PluginKey("image-floating-menu");
 
 const PageEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -94,8 +89,6 @@ const PageEditor: React.FC = () => {
       ExtendedLink.configure({ openOnClick: false }),
       TaskList,
       TaskItem,
-      InternalLinkSuggestion,
-      SlashCommand,
     ],
     editable: true,
     content: "",
@@ -554,68 +547,12 @@ const PageEditor: React.FC = () => {
 
       <div className="editor-wrapper">
         <EditorContent editor={editor} />
-        {editor && (
-          <FloatingMenu
-            editor={editor}
-            pluginKey={tableFloatingMenuKey}
-            tippyOptions={{ duration: 120 }}
-            shouldShow={({ editor }) => editor.isActive("table")}
-          >
-            <div className="table-context-menu">
-              <button onClick={() => editor.chain().focus().addRowBefore().run()}>Row ↑</button>
-              <button onClick={() => editor.chain().focus().addRowAfter().run()}>Row ↓</button>
-              <button onClick={() => editor.chain().focus().addColumnBefore().run()}>Col ←</button>
-              <button onClick={() => editor.chain().focus().addColumnAfter().run()}>Col →</button>
-              <button onClick={() => editor.chain().focus().deleteColumn().run()}>Remove Col</button>
-              <button onClick={() => editor.chain().focus().toggleHeaderRow().run()}>Header</button>
-              <button onClick={() => editor.chain().focus().deleteTable().run()}>Delete</button>
-            </div>
-          </FloatingMenu>
-        )}
-        {editor && (
-          <FloatingMenu
-            editor={editor}
-            pluginKey={imageFloatingMenuKey}
-            tippyOptions={{ duration: 120 }}
-            shouldShow={({ editor }) => editor.isActive("extendedImage")}
-          >
-            <div className="image-context-menu">
-              <button
-                onClick={() => {
-                  const current = editor.getAttributes("extendedImage").caption || "";
-                  const caption = prompt("Caption", current);
-                  if (caption !== null) {
-                    editor.chain().focus().updateAttributes("extendedImage", { caption }).run();
-                  }
-                }}
-              >
-                Caption
-              </button>
-              <button onClick={() => editor.chain().focus().updateAttributes("extendedImage", { width: "100%" }).run()}>
-                Full
-              </button>
-              <button onClick={() => editor.chain().focus().updateAttributes("extendedImage", { width: "50%" }).run()}>
-                Half
-              </button>
-              <button onClick={() => editor.chain().focus().updateAttributes("extendedImage", { alignment: "left" }).run()}>
-                Left
-              </button>
-              <button
-                onClick={() =>
-                  editor.chain().focus().updateAttributes("extendedImage", { alignment: "center" }).run()
-                }
-              >
-                Center
-              </button>
-              <button onClick={() => editor.chain().focus().updateAttributes("extendedImage", { alignment: "right" }).run()}>
-                Right
-              </button>
-            </div>
-          </FloatingMenu>
-        )}
+        
+        
       </div>
     </div>
   );
 };
 
 export default PageEditor;
+
