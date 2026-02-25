@@ -32,6 +32,7 @@ import {
   PagePayload,
   updatePage,
   updatePageAcl,
+  updatePageEditors,
   uploadAsset,
   WikiCategory,
   WikiTemplate,
@@ -39,6 +40,126 @@ import {
 
 type HeadingValue = "paragraph" | "h1" | "h2" | "h3" | "h4";
 type ListValue = "none" | "bullet" | "ordered" | "checklist";
+type ColorPickerMode = "text" | "highlight";
+
+const PAGE_PALETTE_TEXT_KEY = "__page_palette_text";
+const PAGE_PALETTE_HIGHLIGHT_KEY = "__page_palette_highlight";
+const DEFAULT_CUSTOM_COLOR = "#ec407a";
+const HEX_COLOR_RE = /^#([0-9a-f]{6}|[0-9a-f]{3})$/i;
+const PRESET_GRADIENT_COLORS: string[] = [
+  "#101010",
+  "#2f2f2f",
+  "#4a4a4a",
+  "#696969",
+  "#8b8b8b",
+  "#a5a5a5",
+  "#bdbdbd",
+  "#d5d5d5",
+  "#ececec",
+  "#b00000",
+  "#ff2020",
+  "#ff7a00",
+  "#ffca00",
+  "#18d600",
+  "#14d1d7",
+  "#248cff",
+  "#2735d8",
+  "#9124e6",
+  "#d824d8",
+  "#efb9ac",
+  "#f2c8bf",
+  "#f0d6ba",
+  "#eee0b3",
+  "#d8e5b8",
+  "#c5dfc8",
+  "#bad5d8",
+  "#b8cce3",
+  "#bcbfe6",
+  "#d2bfd8",
+  "#d64a2b",
+  "#e06666",
+  "#ef9a4f",
+  "#efc05c",
+  "#7cb760",
+  "#6ea4ad",
+  "#5f99d4",
+  "#7698d8",
+  "#8f7cc2",
+  "#9f648e",
+  "#ad1f0f",
+  "#c0392b",
+  "#d08a1e",
+  "#b78f13",
+  "#2e7d32",
+  "#2e7d88",
+  "#1e66b3",
+  "#1d4f8c",
+  "#4b2a7c",
+  "#6a2145",
+  "#741808",
+  "#7d2d00",
+  "#8a5a00",
+  "#6d5200",
+  "#1f5a1f",
+  "#1b4d59",
+  "#143d78",
+  "#102c59",
+  "#2e184f",
+  "#4a1730",
+];
+
+const normalizePaletteColors = (value: any): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out: string[] = [];
+  const seen = new Set<string>();
+  value.forEach((item) => {
+    const clean = String(item || "").trim().toLowerCase();
+    if (!HEX_COLOR_RE.test(clean) || seen.has(clean)) {
+      return;
+    }
+    seen.add(clean);
+    out.push(clean);
+  });
+  return out.slice(0, 30);
+};
+
+const parseImageWidthPercent = (raw: any, imageEl?: HTMLElement | null): number => {
+  const getContainerWidth = (): number => {
+    const container = imageEl?.closest(".ProseMirror, .editor-wrapper") as HTMLElement | null;
+    return Math.max(1, container?.clientWidth || 1);
+  };
+  const input = String(raw || "100%").trim().toLowerCase();
+  if (input.endsWith("%")) {
+    const parsed = Number(input.slice(0, -1));
+    if (Number.isFinite(parsed)) {
+      return Math.max(10, Math.min(100, Math.round(parsed)));
+    }
+  }
+  if (input.endsWith("px")) {
+    const px = Number(input.slice(0, -2));
+    if (Number.isFinite(px)) {
+      const percent = (px / getContainerWidth()) * 100;
+      return Math.max(10, Math.min(100, Math.round(percent)));
+    }
+  }
+  const parsed = Number(input);
+  if (!Number.isFinite(parsed)) {
+    if (imageEl) {
+      const rect = imageEl.getBoundingClientRect();
+      const percent = (rect.width / getContainerWidth()) * 100;
+      return Math.max(10, Math.min(100, Math.round(percent)));
+    }
+    return 100;
+  }
+  if (parsed > 1 && parsed <= 100 && !imageEl) {
+    return Math.max(10, Math.min(100, Math.round(parsed)));
+  }
+  const percent = (parsed / getContainerWidth()) * 100;
+  return Math.max(10, Math.min(100, Math.round(percent)));
+};
+
 const PageEditor: React.FC = () => {
   type TableContextMenuState = {
     x: number;
@@ -46,6 +167,7 @@ const PageEditor: React.FC = () => {
     onTableCell: boolean;
     onLink: boolean;
     onImage: boolean;
+    imageWidth: number;
   };
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -64,12 +186,17 @@ const PageEditor: React.FC = () => {
   const [fieldsText, setFieldsText] = useState("{}");
   const [identity, setIdentity] = useState<{ wiki_role: "viewer" | "editor" | "admin" } | null>(null);
   const [aclOverride, setAclOverride] = useState(false);
-  const [aclViewRoles, setAclViewRoles] = useState("viewer,editor,admin");
-  const [aclEditRoles, setAclEditRoles] = useState("editor,admin");
+  const [aclViewRoles, setAclViewRoles] = useState<string[]>(["viewer", "editor", "admin"]);
+  const [aclEditRoles, setAclEditRoles] = useState<string[]>(["editor", "admin"]);
+  const [editorUsersText, setEditorUsersText] = useState("");
+  const [showAccessOptions, setShowAccessOptions] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [revisions, setRevisions] = useState<any[]>([]);
-  const [textColor, setTextColor] = useState("#f5f7ff");
-  const [highlightColor, setHighlightColor] = useState("#fff59d");
+  const [openColorPicker, setOpenColorPicker] = useState<ColorPickerMode | null>(null);
+  const [textCustomColors, setTextCustomColors] = useState<string[]>([]);
+  const [highlightCustomColors, setHighlightCustomColors] = useState<string[]>([]);
+  const [newCustomTextColor, setNewCustomTextColor] = useState(DEFAULT_CUSTOM_COLOR);
+  const [newCustomHighlightColor, setNewCustomHighlightColor] = useState(DEFAULT_CUSTOM_COLOR);
   const [tableContextMenu, setTableContextMenu] = useState<TableContextMenuState | null>(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkValue, setLinkValue] = useState("");
@@ -129,6 +256,168 @@ const PageEditor: React.FC = () => {
       return null;
     }
   }, [fieldsText]);
+
+  type TemplateFieldSpec = {
+    key: string;
+    label: string;
+    type: "text" | "number" | "boolean" | "json" | "select";
+    options: string[];
+    defaultValue: any;
+  };
+
+  const activeTemplate = templates.find((tpl) => tpl.id === templateId);
+
+  const templateFieldSpecs = useCallback(
+    (template: WikiTemplate | undefined): TemplateFieldSpec[] => {
+      if (!template || !template.fields || typeof template.fields !== "object") {
+        return [];
+      }
+      return Object.entries(template.fields)
+        .map(([key, raw]) => {
+          const cleanKey = String(key || "").trim();
+          if (!cleanKey) {
+            return null;
+          }
+          if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+            const typeRaw = String((raw as Record<string, any>).type || "").toLowerCase();
+            if (["text", "number", "boolean", "json", "select"].includes(typeRaw)) {
+              return {
+                key: cleanKey,
+                label: String((raw as Record<string, any>).label || cleanKey),
+                type: typeRaw as "text" | "number" | "boolean" | "json" | "select",
+                options: Array.isArray((raw as Record<string, any>).options)
+                  ? (raw as Record<string, any>).options.map((item: any) => String(item))
+                  : [],
+                defaultValue: Object.prototype.hasOwnProperty.call(raw, "default") ? (raw as Record<string, any>).default : "",
+              };
+            }
+          }
+          const inferredType = typeof raw === "number" ? "number" : typeof raw === "boolean" ? "boolean" : "text";
+          return {
+            key: cleanKey,
+            label: cleanKey,
+            type: inferredType,
+            options: [],
+            defaultValue: raw,
+          } as TemplateFieldSpec;
+        })
+        .filter(Boolean) as TemplateFieldSpec[];
+    },
+    []
+  );
+
+  const readFieldsForUi = useCallback((): Record<string, any> => {
+    try {
+      const parsed = JSON.parse((fieldsText || "").trim() || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return {};
+      }
+      return parsed;
+    } catch {
+      return {};
+    }
+  }, [fieldsText]);
+
+  const setFieldValue = useCallback(
+    (key: string, value: any) => {
+      const next = readFieldsForUi();
+      next[key] = value;
+      setFieldsText(JSON.stringify(next, null, 2));
+    },
+    [readFieldsForUi]
+  );
+
+  const setPaletteMeta = useCallback((mode: ColorPickerMode, colors: string[]) => {
+    const key = mode === "text" ? PAGE_PALETTE_TEXT_KEY : PAGE_PALETTE_HIGHLIGHT_KEY;
+    const normalized = normalizePaletteColors(colors);
+    if (mode === "text") {
+      setTextCustomColors(normalized);
+    } else {
+      setHighlightCustomColors(normalized);
+    }
+    setFieldsText((previous) => {
+      let nextObj: Record<string, any> = {};
+      try {
+        const parsed = JSON.parse((previous || "").trim() || "{}");
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          nextObj = { ...parsed };
+        }
+      } catch {
+        nextObj = {};
+      }
+      nextObj[key] = normalized;
+      return JSON.stringify(nextObj, null, 2);
+    });
+  }, []);
+
+  const addCustomPaletteColor = useCallback(
+    (mode: ColorPickerMode, color: string) => {
+      const clean = String(color || "").trim().toLowerCase();
+      if (!HEX_COLOR_RE.test(clean)) {
+        return;
+      }
+      const current = mode === "text" ? textCustomColors : highlightCustomColors;
+      if (current.includes(clean) || PRESET_GRADIENT_COLORS.includes(clean)) {
+        return;
+      }
+      setPaletteMeta(mode, [...current, clean]);
+    },
+    [highlightCustomColors, setPaletteMeta, textCustomColors]
+  );
+
+  const removeCustomPaletteColor = useCallback(
+    (mode: ColorPickerMode, color: string) => {
+      const current = mode === "text" ? textCustomColors : highlightCustomColors;
+      setPaletteMeta(
+        mode,
+        current.filter((item) => item !== String(color || "").trim().toLowerCase())
+      );
+    },
+    [highlightCustomColors, setPaletteMeta, textCustomColors]
+  );
+
+  const applyColor = useCallback(
+    (mode: ColorPickerMode, color: string) => {
+      if (!editor) {
+        return;
+      }
+      if (mode === "text") {
+        editor.chain().focus().setColor(color).run();
+        return;
+      }
+      editor.chain().focus().setHighlight({ color }).run();
+    },
+    [editor]
+  );
+
+  const clearColor = useCallback(
+    (mode: ColorPickerMode) => {
+      if (!editor) {
+        return;
+      }
+      if (mode === "text") {
+        editor.chain().focus().unsetColor().run();
+        return;
+      }
+      editor.chain().focus().unsetHighlight().run();
+    },
+    [editor]
+  );
+
+  const categoryLabel = useCallback(
+    (category: WikiCategory): string => {
+      const seen = new Set<string>();
+      let cursor: WikiCategory | undefined = category;
+      const parts: string[] = [];
+      while (cursor && !seen.has(cursor.id)) {
+        seen.add(cursor.id);
+        parts.unshift(cursor.label);
+        cursor = categories.find((item) => item.id === cursor?.parent_id);
+      }
+      return parts.join(" / ");
+    },
+    [categories]
+  );
 
   const getHeadingValue = (): HeadingValue => {
     if (!editor) {
@@ -316,6 +605,25 @@ const PageEditor: React.FC = () => {
     fetchWikiIdentity().then(setIdentity).catch(() => setIdentity(null));
   }, []);
 
+  useEffect(() => {
+    const specs = templateFieldSpecs(activeTemplate);
+    if (!specs.length) {
+      return;
+    }
+    const next = readFieldsForUi();
+    let changed = false;
+    specs.forEach((spec) => {
+      if (Object.prototype.hasOwnProperty.call(next, spec.key)) {
+        return;
+      }
+      next[spec.key] = spec.defaultValue;
+      changed = true;
+    });
+    if (changed) {
+      setFieldsText(JSON.stringify(next, null, 2));
+    }
+  }, [activeTemplate, readFieldsForUi, templateFieldSpecs]);
+
   const reloadRevisions = useCallback(
     (pageId: string) => {
       fetchPageRevisions(pageId).then(setRevisions).catch(() => setRevisions([]));
@@ -339,9 +647,12 @@ const PageEditor: React.FC = () => {
         setSummary(data.summary || "");
         setTagsText((data.tags || []).join(", "));
         setFieldsText(JSON.stringify(data.fields || {}, null, 2));
+        setTextCustomColors(normalizePaletteColors((data.fields || {})[PAGE_PALETTE_TEXT_KEY]));
+        setHighlightCustomColors(normalizePaletteColors((data.fields || {})[PAGE_PALETTE_HIGHLIGHT_KEY]));
         setAclOverride(Boolean(data.acl_override));
-        setAclViewRoles((data.acl?.view_roles || ["viewer", "editor", "admin"]).join(","));
-        setAclEditRoles((data.acl?.edit_roles || ["editor", "admin"]).join(","));
+        setAclViewRoles(data.acl?.view_roles || ["viewer", "editor", "admin"]);
+        setAclEditRoles(data.acl?.edit_roles || ["editor", "admin"]);
+        setEditorUsersText((data.editor_usernames || []).join(", "));
         editor?.commands.setContent(data.doc_json || { type: "doc", content: [] });
         docRef.current = JSON.stringify(data.doc_json);
         metaRef.current = {
@@ -471,12 +782,16 @@ const PageEditor: React.FC = () => {
       } else {
         editor.chain().focus().run();
       }
+      const imageRoot = imageNode ? ((imageNode as HTMLElement).closest("figure.image-node") as HTMLElement | null) : null;
+      const imageEl = (imageRoot?.querySelector("img") as HTMLElement | null) || null;
+      const imageWidth = parseImageWidthPercent(editor.getAttributes("extendedImage").width, imageEl);
       setTableContextMenu({
         x: event.clientX,
         y: event.clientY,
         onTableCell: Boolean(cell),
         onLink: editor.isActive("link"),
         onImage: Boolean(imageNode) || editor.isActive("extendedImage"),
+        imageWidth,
       });
     };
     dom.addEventListener("contextmenu", onContextMenu);
@@ -507,6 +822,115 @@ const PageEditor: React.FC = () => {
     };
   }, [tableContextMenu]);
 
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+    const dom = editor.view.dom as HTMLElement;
+    const onPointerDown = (event: PointerEvent) => {
+      const handle = (event.target as HTMLElement | null)?.closest(".image-resize-handle") as HTMLElement | null;
+      if (!handle) {
+        return;
+      }
+      const handleType = String(handle.getAttribute("data-handle") || "");
+      if (!["right", "bottom", "corner"].includes(handleType)) {
+        return;
+      }
+      const figure = handle.closest("figure.image-node") as HTMLElement | null;
+      const imageEl = figure?.querySelector("img") as HTMLElement | null;
+      if (!figure || !imageEl) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+
+      try {
+        const pos = editor.view.posAtDOM(figure, 0);
+        editor.chain().focus().setNodeSelection(pos).run();
+      } catch {
+        editor.chain().focus().run();
+      }
+
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const rect = imageEl.getBoundingClientRect();
+      const startWidth = Math.max(20, rect.width);
+      const startHeight = Math.max(20, rect.height);
+      const ratio = startWidth / Math.max(1, startHeight);
+
+      const onMove = (moveEvent: PointerEvent) => {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+        let nextWidth = startWidth;
+        let nextHeight = startHeight;
+
+        if (handleType === "right") {
+          nextWidth = Math.max(20, startWidth + dx);
+          editor
+            .chain()
+            .focus()
+            .updateAttributes("extendedImage", { width: `${Math.round(nextWidth)}px` })
+            .run();
+          return;
+        }
+
+        if (handleType === "bottom") {
+          nextHeight = Math.max(20, startHeight + dy);
+          editor
+            .chain()
+            .focus()
+            .updateAttributes("extendedImage", { height: `${Math.round(nextHeight)}px` })
+            .run();
+          return;
+        }
+
+        const deltaFromX = dx;
+        const deltaFromY = dy * ratio;
+        const chosenDelta = Math.abs(deltaFromX) >= Math.abs(deltaFromY) ? deltaFromX : deltaFromY;
+        nextWidth = Math.max(20, startWidth + chosenDelta);
+        nextHeight = Math.max(20, nextWidth / Math.max(0.01, ratio));
+        editor
+          .chain()
+          .focus()
+          .updateAttributes("extendedImage", {
+            width: `${Math.round(nextWidth)}px`,
+            height: `${Math.round(nextHeight)}px`,
+          })
+          .run();
+      };
+
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    };
+
+    dom.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      dom.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    if (!openColorPicker) {
+      return;
+    }
+    const close = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".toolbar-color-picker-group")) {
+        return;
+      }
+      setOpenColorPicker(null);
+    };
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [openColorPicker]);
+
   if (!page) {
     return <p>Loading editor…</p>;
   }
@@ -514,27 +938,34 @@ const PageEditor: React.FC = () => {
   const openImagePicker = () => fileInputRef.current?.click();
   const isAdmin = identity?.wiki_role === "admin";
 
-  const saveAcl = async () => {
+  const toggleAclRole = (roles: string[], role: string, setter: (next: string[]) => void) => {
+    if (roles.includes(role)) {
+      setter(roles.filter((item) => item !== role));
+      return;
+    }
+    setter([...roles, role]);
+  };
+
+  const saveAccessOptions = async () => {
     if (!page || !isAdmin) {
       return;
     }
     try {
-      const viewRoles = aclViewRoles
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-      const editRoles = aclEditRoles
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
       const updated = await updatePageAcl(page.id, {
         acl_override: aclOverride,
-        view_roles: viewRoles,
-        edit_roles: editRoles,
+        view_roles: aclViewRoles,
+        edit_roles: aclEditRoles,
       });
+      const editors = editorUsersText
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+      const withEditors = await updatePageEditors(page.id, editors);
       setAclOverride(Boolean(updated.acl_override));
-      setAclViewRoles((updated.acl?.view_roles || []).join(","));
-      setAclEditRoles((updated.acl?.edit_roles || []).join(","));
+      setAclViewRoles(updated.acl?.view_roles || []);
+      setAclEditRoles(updated.acl?.edit_roles || []);
+      setEditorUsersText((withEditors.editor_usernames || []).join(", "));
+      setPage(withEditors);
     } catch (err) {
       setStatus("error");
     }
@@ -593,6 +1024,8 @@ const PageEditor: React.FC = () => {
       setSummary(restored.summary || "");
       setTagsText((restored.tags || []).join(", "));
       setFieldsText(JSON.stringify(restored.fields || {}, null, 2));
+      setTextCustomColors(normalizePaletteColors((restored.fields || {})[PAGE_PALETTE_TEXT_KEY]));
+      setHighlightCustomColors(normalizePaletteColors((restored.fields || {})[PAGE_PALETTE_HIGHLIGHT_KEY]));
       editor?.commands.setContent(restored.doc_json || { type: "doc", content: [] });
       reloadRevisions(page.id);
     } catch (err) {
@@ -618,13 +1051,16 @@ const PageEditor: React.FC = () => {
     setTableContextMenu(null);
   };
 
-  const setImageWidthPercent = (percent: number) => {
+  const setImageWidthPercent = (percent: number, closeMenu: boolean = true) => {
     if (!editor) {
       return;
     }
     const next = Math.max(10, Math.min(100, percent));
     editor.chain().focus().updateAttributes("extendedImage", { width: `${next}%` }).run();
-    setTableContextMenu(null);
+    setTableContextMenu((current) => (current ? { ...current, imageWidth: next } : current));
+    if (closeMenu) {
+      setTableContextMenu(null);
+    }
   };
 
   const adjustImageWidth = (delta: number) => {
@@ -633,8 +1069,19 @@ const PageEditor: React.FC = () => {
     }
     const raw = String(editor.getAttributes("extendedImage").width || "100%");
     const current = Number(raw.replace("%", "")) || 100;
-    setImageWidthPercent(current + delta);
+    setImageWidthPercent(current + delta, true);
   };
+
+  const activeTemplateSpecs = templateFieldSpecs(activeTemplate);
+  const uiFields = readFieldsForUi();
+  const activeTextColor = String(editor?.getAttributes("textStyle").color || "")
+    .trim()
+    .toLowerCase();
+  const activeHighlightColor = String(editor?.getAttributes("highlight").color || "")
+    .trim()
+    .toLowerCase();
+  const textPalette = [...PRESET_GRADIENT_COLORS, ...textCustomColors.filter((color) => !PRESET_GRADIENT_COLORS.includes(color))];
+  const highlightPalette = [...PRESET_GRADIENT_COLORS, ...highlightCustomColors.filter((color) => !PRESET_GRADIENT_COLORS.includes(color))];
 
   return (
     <div>
@@ -657,7 +1104,7 @@ const PageEditor: React.FC = () => {
             : [{ id: "general", key: "general", label: "General", slug: "general", sort_order: 0, created_at: "", updated_at: "" }]
           ).map((category) => (
             <option key={category.id} value={category.id}>
-              {category.label}
+              {categoryLabel(category)}
             </option>
           ))}
         </select>
@@ -681,24 +1128,127 @@ const PageEditor: React.FC = () => {
         <input value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="Tags (comma-separated)" />
       </div>
       <div style={{ marginBottom: "16px" }}>
-        <label style={{ display: "block", marginBottom: "6px" }}>Entity fields (JSON object)</label>
-        <textarea
-          value={fieldsText}
-          onChange={(event) => setFieldsText(event.target.value)}
-          rows={6}
-          style={{ width: "100%", fontFamily: "monospace" }}
-        />
+        <label style={{ display: "block", marginBottom: "6px" }}>Template fields</label>
+        {activeTemplateSpecs.length ? (
+          <div style={{ display: "grid", gap: "8px" }}>
+            {activeTemplateSpecs.map((spec) => {
+              const currentValue = Object.prototype.hasOwnProperty.call(uiFields, spec.key) ? uiFields[spec.key] : spec.defaultValue;
+              if (spec.type === "boolean") {
+                return (
+                  <label key={spec.key} style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(currentValue)}
+                      onChange={(event) => setFieldValue(spec.key, event.target.checked)}
+                    />
+                    {spec.label}
+                  </label>
+                );
+              }
+              if (spec.type === "number") {
+                return (
+                  <label key={spec.key} style={{ display: "grid", gap: "4px" }}>
+                    {spec.label}
+                    <input
+                      type="number"
+                      value={Number(currentValue ?? 0)}
+                      onChange={(event) => setFieldValue(spec.key, Number(event.target.value || 0))}
+                    />
+                  </label>
+                );
+              }
+              if (spec.type === "select") {
+                return (
+                  <label key={spec.key} style={{ display: "grid", gap: "4px" }}>
+                    {spec.label}
+                    <select value={String(currentValue ?? "")} onChange={(event) => setFieldValue(spec.key, event.target.value)}>
+                      <option value="">Select...</option>
+                      {spec.options.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              }
+              if (spec.type === "json") {
+                return (
+                  <label key={spec.key} style={{ display: "grid", gap: "4px" }}>
+                    {spec.label}
+                    <textarea
+                      rows={4}
+                      value={typeof currentValue === "string" ? currentValue : JSON.stringify(currentValue ?? {}, null, 2)}
+                      onChange={(event) => {
+                        try {
+                          const parsed = JSON.parse(event.target.value || "{}");
+                          setFieldValue(spec.key, parsed);
+                          setFieldError(null);
+                        } catch {
+                          setFieldError(`Invalid JSON in ${spec.label}`);
+                        }
+                      }}
+                    />
+                  </label>
+                );
+              }
+              return (
+                <label key={spec.key} style={{ display: "grid", gap: "4px" }}>
+                  {spec.label}
+                  <input value={String(currentValue ?? "")} onChange={(event) => setFieldValue(spec.key, event.target.value)} />
+                </label>
+              );
+            })}
+          </div>
+        ) : (
+          <p style={{ fontSize: "13px", opacity: 0.85 }}>Entity fields JSON is hidden. Select a template to edit structured fields.</p>
+        )}
         {fieldError && <div className="error-text">{fieldError}</div>}
       </div>
       {isAdmin && (
-        <div style={{ display: "flex", gap: "12px", marginBottom: "16px", alignItems: "center" }}>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-            <input type="checkbox" checked={aclOverride} onChange={(event) => setAclOverride(event.target.checked)} />
-            ACL override
-          </label>
-          <input value={aclViewRoles} onChange={(event) => setAclViewRoles(event.target.value)} placeholder="view roles csv" />
-          <input value={aclEditRoles} onChange={(event) => setAclEditRoles(event.target.value)} placeholder="edit roles csv" />
-          <button onClick={saveAcl}>Save ACL</button>
+        <div style={{ marginBottom: "16px" }}>
+          <button onClick={() => setShowAccessOptions((value) => !value)}>{showAccessOptions ? "Hide Page Access" : "Page Access Options"}</button>
+          {showAccessOptions && (
+            <div style={{ marginTop: "10px", display: "grid", gap: "10px" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <input type="checkbox" checked={aclOverride} onChange={(event) => setAclOverride(event.target.checked)} />
+                ACL override
+              </label>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                {["viewer", "editor", "admin"].map((roleName) => (
+                  <label key={`view-${roleName}`} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <input
+                      type="checkbox"
+                      checked={aclViewRoles.includes(roleName)}
+                      onChange={() => toggleAclRole(aclViewRoles, roleName, setAclViewRoles)}
+                    />
+                    View: {roleName}
+                  </label>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                {["viewer", "editor", "admin"].map((roleName) => (
+                  <label key={`edit-${roleName}`} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <input
+                      type="checkbox"
+                      checked={aclEditRoles.includes(roleName)}
+                      onChange={() => toggleAclRole(aclEditRoles, roleName, setAclEditRoles)}
+                    />
+                    Edit: {roleName}
+                  </label>
+                ))}
+              </div>
+              <label style={{ display: "grid", gap: "4px" }}>
+                Explicit editors (usernames, comma-separated)
+                <input
+                  value={editorUsersText}
+                  onChange={(event) => setEditorUsersText(event.target.value)}
+                  placeholder="alice, bob, charlie"
+                />
+              </label>
+              <button onClick={saveAccessOptions}>Save Page Access</button>
+            </div>
+          )}
         </div>
       )}
       <div style={{ marginBottom: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -793,26 +1343,106 @@ const PageEditor: React.FC = () => {
         <button onClick={() => editor?.chain().focus().insertTableOfContents().run()} disabled={!editor}>
           TOC
         </button>
-        <label className="toolbar-color-control">
-          Text
-          <input type="color" value={textColor} onChange={(event) => setTextColor(event.target.value)} />
-        </label>
-        <button onClick={() => editor?.chain().focus().setColor(textColor).run()} disabled={!editor}>
-          Apply Text
-        </button>
-        <button onClick={() => editor?.chain().focus().unsetColor().run()} disabled={!editor}>
-          Clear Text
-        </button>
-        <label className="toolbar-color-control">
-          Highlight
-          <input type="color" value={highlightColor} onChange={(event) => setHighlightColor(event.target.value)} />
-        </label>
-        <button onClick={() => editor?.chain().focus().setHighlight({ color: highlightColor }).run()} disabled={!editor}>
-          Apply Highlight
-        </button>
-        <button onClick={() => editor?.chain().focus().unsetHighlight().run()} disabled={!editor}>
-          Clear Highlight
-        </button>
+        <div className="toolbar-color-picker-group">
+          <button onClick={() => setOpenColorPicker((current) => (current === "text" ? null : "text"))} disabled={!editor}>
+            Text Color
+          </button>
+          {openColorPicker === "text" && (
+            <div className="toolbar-color-popover" onClick={(event) => event.stopPropagation()}>
+              <div className="toolbar-color-grid">
+                {textPalette.map((color) => (
+                  <button
+                    key={`text-${color}`}
+                    className={`toolbar-color-swatch${activeTextColor === color ? " active" : ""}`}
+                    style={{ background: color }}
+                    title={color}
+                    onClick={() => applyColor("text", color)}
+                  />
+                ))}
+              </div>
+              {activeTextColor && (
+                <button className="toolbar-color-clear" onClick={() => clearColor("text")}>
+                  Clear
+                </button>
+              )}
+              <div className="toolbar-custom-colors">
+                {textCustomColors.map((color) => (
+                  <button
+                    key={`text-custom-${color}`}
+                    className={`toolbar-color-swatch custom${activeTextColor === color ? " active" : ""}`}
+                    style={{ background: color }}
+                    title={`${color} (right-click to delete)`}
+                    onClick={() => applyColor("text", color)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      removeCustomPaletteColor("text", color);
+                    }}
+                  />
+                ))}
+                <input type="color" value={newCustomTextColor} onChange={(event) => setNewCustomTextColor(event.target.value)} />
+                <button
+                  className="toolbar-custom-add"
+                  onClick={() => {
+                    addCustomPaletteColor("text", newCustomTextColor);
+                  }}
+                  title="Add custom color"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="toolbar-color-picker-group">
+          <button onClick={() => setOpenColorPicker((current) => (current === "highlight" ? null : "highlight"))} disabled={!editor}>
+            Highlight
+          </button>
+          {openColorPicker === "highlight" && (
+            <div className="toolbar-color-popover" onClick={(event) => event.stopPropagation()}>
+              <div className="toolbar-color-grid">
+                {highlightPalette.map((color) => (
+                  <button
+                    key={`highlight-${color}`}
+                    className={`toolbar-color-swatch${activeHighlightColor === color ? " active" : ""}`}
+                    style={{ background: color }}
+                    title={color}
+                    onClick={() => applyColor("highlight", color)}
+                  />
+                ))}
+              </div>
+              {activeHighlightColor && (
+                <button className="toolbar-color-clear" onClick={() => clearColor("highlight")}>
+                  Clear
+                </button>
+              )}
+              <div className="toolbar-custom-colors">
+                {highlightCustomColors.map((color) => (
+                  <button
+                    key={`highlight-custom-${color}`}
+                    className={`toolbar-color-swatch custom${activeHighlightColor === color ? " active" : ""}`}
+                    style={{ background: color }}
+                    title={`${color} (right-click to delete)`}
+                    onClick={() => applyColor("highlight", color)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      removeCustomPaletteColor("highlight", color);
+                    }}
+                  />
+                ))}
+                <input type="color" value={newCustomHighlightColor} onChange={(event) => setNewCustomHighlightColor(event.target.value)} />
+                <button
+                  className="toolbar-custom-add"
+                  onClick={() => {
+                    addCustomPaletteColor("highlight", newCustomHighlightColor);
+                  }}
+                  title="Add custom color"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <button onClick={openImagePicker} disabled={!editor}>
           Image
         </button>
@@ -880,6 +1510,17 @@ const PageEditor: React.FC = () => {
               <button onClick={() => setImageWidthPercent(100)}>Image Width 100%</button>
               <button onClick={() => adjustImageWidth(-10)}>Image Width -10%</button>
               <button onClick={() => adjustImageWidth(10)}>Image Width +10%</button>
+              <label className="image-resize-slider">
+                Resize image ({tableContextMenu.imageWidth}%)
+                <input
+                  type="range"
+                  min={10}
+                  max={100}
+                  step={1}
+                  value={tableContextMenu.imageWidth}
+                  onChange={(event) => setImageWidthPercent(Number(event.target.value), false)}
+                />
+              </label>
             </>
           )}
           {tableContextMenu.onTableCell && (

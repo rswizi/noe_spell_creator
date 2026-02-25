@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
+from db_mongo import get_col
 from server.src.modules.wiki_auth import require_wiki_admin, require_wiki_editor, require_wiki_viewer
 from server.src.modules.wiki_repo import WikiMongoRepo
 from server.src.modules.wiki_service import (
@@ -17,7 +18,9 @@ from server.src.modules.wiki_service import (
     normalize_entity_fields,
     normalize_entity_type,
     normalize_status,
+    normalize_wiki_role,
     resolve_slug,
+    resolve_wiki_role,
     sanitize_doc,
 )
 
@@ -31,6 +34,7 @@ class WikiCategoryPayload(BaseModel):
     label: str
     slug: str = ""
     icon: str | None = None
+    parent_id: str | None = None
     sort_order: int = 0
 
 
@@ -38,6 +42,7 @@ class WikiCategoryUpdatePayload(BaseModel):
     label: str | None = None
     slug: str | None = None
     icon: str | None = None
+    parent_id: str | None = None
     sort_order: int | None = None
 
 
@@ -47,6 +52,7 @@ class WikiCategoryOut(BaseModel):
     label: str
     slug: str
     icon: str | None = None
+    parent_id: str | None = None
     sort_order: int = 0
     created_at: str
     updated_at: str
@@ -102,6 +108,7 @@ class WikiPageOut(BaseModel):
     status: str = "draft"
     acl_override: bool = False
     acl: dict[str, list[str]] | None = None
+    editor_usernames: list[str] = []
     created_at: str
     updated_at: str
 
@@ -138,6 +145,30 @@ class WikiFieldsPatchPayload(BaseModel):
     fields: dict[str, Any] = {}
 
 
+class WikiPageEditorsPayload(BaseModel):
+    editor_usernames: list[str] = []
+
+
+class WikiSiteSettingsPayload(BaseModel):
+    editor_access_mode: str
+
+
+class WikiSiteSettingsOut(BaseModel):
+    id: str = "site"
+    editor_access_mode: str = "all"
+    updated_at: str
+
+
+class WikiUserRoleOut(BaseModel):
+    username: str
+    role: str
+    wiki_role: str
+
+
+class WikiUserRolePayload(BaseModel):
+    wiki_role: str
+
+
 def _repo() -> WikiMongoRepo:
     return WikiMongoRepo()
 
@@ -149,6 +180,7 @@ def _category_to_out(row: dict[str, Any]) -> WikiCategoryOut:
         label=str(row.get("label") or ""),
         slug=str(row.get("slug") or ""),
         icon=(str(row.get("icon")) if row.get("icon") else None),
+        parent_id=(str(row.get("parent_id")) if row.get("parent_id") else None),
         sort_order=int(row.get("sort_order") or 0),
         created_at=iso_utc(row.get("created_at")),
         updated_at=iso_utc(row.get("updated_at")),
@@ -185,6 +217,7 @@ def _page_to_out(page: dict[str, Any]) -> WikiPageOut:
         status=str(page.get("status") or "draft"),
         acl_override=bool(page.get("acl_override")),
         acl={"view_roles": view_roles, "edit_roles": edit_roles},
+        editor_usernames=[str(item).strip().lower() for item in (page.get("editor_usernames") or []) if str(item).strip()],
         created_at=iso_utc(page.get("created_at")),
         updated_at=iso_utc(page.get("updated_at")),
     )
@@ -198,6 +231,51 @@ def _revision_to_out(revision: dict[str, Any]) -> WikiRevisionOut:
         slug=str(revision.get("slug") or ""),
         doc_json=revision.get("doc_json") or {"type": "doc", "content": []},
         created_at=iso_utc(revision.get("saved_at") or revision.get("created_at")),
+    )
+
+
+def _site_settings_to_out(row: dict[str, Any]) -> WikiSiteSettingsOut:
+    mode = str(row.get("editor_access_mode") or "all").strip().lower()
+    return WikiSiteSettingsOut(
+        id="site",
+        editor_access_mode=mode if mode in {"all", "own"} else "all",
+        updated_at=iso_utc(row.get("updated_at")),
+    )
+
+
+def _clean_username_list(items: Any) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in (items or []):
+        clean = str(raw or "").strip().lower()
+        if not clean or clean in seen:
+            continue
+        seen.add(clean)
+        out.append(clean[:64])
+    return out
+
+
+def _list_wiki_users() -> list[WikiUserRoleOut]:
+    rows = list(get_col("users").find({}, {"_id": 0, "username": 1, "role": 1, "wiki_role": 1}))
+    out: list[WikiUserRoleOut] = []
+    for row in rows:
+        username = str(row.get("username") or "").strip()
+        if not username:
+            continue
+        app_role = str(row.get("role") or "user").strip().lower() or "user"
+        wiki_role = normalize_wiki_role(resolve_wiki_role(app_role, row))
+        out.append(WikiUserRoleOut(username=username, role=app_role, wiki_role=wiki_role))
+    out.sort(key=lambda item: item.username.lower())
+    return out
+
+
+def _can_edit_with_auth(repo: WikiMongoRepo, auth: dict[str, Any], page: dict[str, Any]) -> bool:
+    settings = repo.get_site_settings()
+    return can_edit_page(
+        str(auth.get("wiki_role") or "viewer"),
+        page,
+        username=str(auth.get("username") or ""),
+        editor_access_mode=str(settings.get("editor_access_mode") or "all"),
     )
 
 
@@ -227,6 +305,7 @@ async def create_category(
             label=label,
             slug=payload.slug,
             icon=payload.icon,
+            parent_id=payload.parent_id,
             sort_order=payload.sort_order,
         )
     except DuplicateKeyError:
@@ -257,10 +336,13 @@ async def update_category(
             label=payload.label,
             slug=payload.slug,
             icon=payload.icon,
+            parent_id=payload.parent_id,
             sort_order=payload.sort_order,
         )
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Category slug already exists")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
         logger.exception("wiki update_category failure")
         raise HTTPException(status_code=500, detail="Wiki database error during category update.")
@@ -367,6 +449,72 @@ async def get_wiki_me(auth: dict[str, Any] = Depends(require_wiki_viewer)):
     }
 
 
+@router.get("/settings", response_model=WikiSiteSettingsOut)
+async def get_wiki_settings_route(auth: dict[str, Any] = Depends(require_wiki_admin)):
+    _ = auth
+    try:
+        return _site_settings_to_out(_repo().get_site_settings())
+    except Exception:
+        logger.exception("wiki get settings failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during settings load.")
+
+
+@router.put("/settings", response_model=WikiSiteSettingsOut)
+async def update_wiki_settings_route(
+    payload: WikiSiteSettingsPayload,
+    auth: dict[str, Any] = Depends(require_wiki_admin),
+):
+    _ = auth
+    try:
+        row = _repo().update_site_settings(editor_access_mode=payload.editor_access_mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        logger.exception("wiki update settings failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during settings update.")
+    return _site_settings_to_out(row)
+
+
+@router.get("/users", response_model=list[WikiUserRoleOut])
+async def list_wiki_users(auth: dict[str, Any] = Depends(require_wiki_admin)):
+    _ = auth
+    try:
+        return _list_wiki_users()
+    except Exception:
+        logger.exception("wiki list users failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during user listing.")
+
+
+@router.put("/users/{username}/role", response_model=WikiUserRoleOut)
+async def update_wiki_user_role(
+    username: str,
+    payload: WikiUserRolePayload,
+    auth: dict[str, Any] = Depends(require_wiki_admin),
+):
+    _ = auth
+    clean_username = str(username or "").strip()
+    if not clean_username:
+        raise HTTPException(status_code=400, detail="username is required")
+    clean_wiki_role = str(payload.wiki_role or "").strip().lower()
+    if clean_wiki_role not in {"viewer", "editor", "admin"}:
+        raise HTTPException(status_code=400, detail="Invalid wiki_role")
+    try:
+        users = get_col("users")
+        current = users.find_one({"username": clean_username}, {"_id": 0, "username": 1, "role": 1, "wiki_role": 1})
+        if not current:
+            raise HTTPException(status_code=404, detail="User not found")
+        users.update_one({"username": clean_username}, {"$set": {"wiki_role": clean_wiki_role}})
+        updated = users.find_one({"username": clean_username}, {"_id": 0, "username": 1, "role": 1, "wiki_role": 1}) or {}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("wiki update user role failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during user role update.")
+    app_role = str(updated.get("role") or "user").strip().lower() or "user"
+    effective_wiki_role = normalize_wiki_role(resolve_wiki_role(app_role, updated))
+    return WikiUserRoleOut(username=clean_username, role=app_role, wiki_role=effective_wiki_role)
+
+
 @router.post("/pages", response_model=WikiPageOut)
 async def create_page(
     payload: WikiPagePayload,
@@ -425,7 +573,7 @@ async def update_page(
     existing = repo.get_page_by_id(page_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Page not found")
-    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), existing):
+    if not _can_edit_with_auth(repo, auth, existing):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     title = payload.title.strip()
@@ -473,7 +621,7 @@ async def patch_page_fields(
     existing = repo.get_page_by_id(page_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Page not found")
-    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), existing):
+    if not _can_edit_with_auth(repo, auth, existing):
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         page = repo.patch_page_fields(page_id=page_id, fields=normalize_entity_fields(payload.fields))
@@ -494,7 +642,7 @@ async def delete_page(
     existing = repo.get_page_by_id(page_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Page not found")
-    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), existing):
+    if not _can_edit_with_auth(repo, auth, existing):
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         ok = repo.delete_page(page_id)
@@ -527,6 +675,25 @@ async def update_page_acl(
     except Exception:
         logger.exception("wiki update_page_acl failure")
         raise HTTPException(status_code=500, detail="Wiki database error during ACL update.")
+    return _page_to_out(page)
+
+
+@router.put("/pages/{page_id}/editors", response_model=WikiPageOut)
+async def update_page_editors(
+    page_id: str,
+    payload: WikiPageEditorsPayload,
+    auth: dict[str, Any] = Depends(require_wiki_admin),
+):
+    _ = auth
+    repo = _repo()
+    existing = repo.get_page_by_id(page_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Page not found")
+    try:
+        page = repo.set_page_editors(page_id=page_id, editor_usernames=_clean_username_list(payload.editor_usernames))
+    except Exception:
+        logger.exception("wiki update_page_editors failure")
+        raise HTTPException(status_code=500, detail="Wiki database error during editors update.")
     return _page_to_out(page)
 
 
@@ -597,7 +764,7 @@ async def rebuild_links(page_id: str, auth: dict[str, Any] = Depends(require_wik
     page = repo.get_page_by_id(page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
-    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), page):
+    if not _can_edit_with_auth(repo, auth, page):
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         count = repo.rebuild_links_for_page(page_id)
@@ -663,7 +830,7 @@ async def create_revision(page_id: str, auth: dict[str, Any] = Depends(require_w
     page = repo.get_page_by_id(page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
-    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), page):
+    if not _can_edit_with_auth(repo, auth, page):
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         revision = repo.create_revision(page_id=page_id, saved_by=str(auth.get("username") or "unknown"))
@@ -699,7 +866,7 @@ async def restore_revision(
     page = repo.get_page_by_id(page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
-    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), page):
+    if not _can_edit_with_auth(repo, auth, page):
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         restored = repo.restore_revision(
@@ -741,7 +908,7 @@ async def create_relation(
     target = repo.get_page_by_id(payload.to_page_id)
     if not source or not target:
         raise HTTPException(status_code=404, detail="Page not found")
-    if not can_edit_page(str(auth.get("wiki_role") or "viewer"), source):
+    if not _can_edit_with_auth(repo, auth, source):
         raise HTTPException(status_code=403, detail="Forbidden")
     rel_type = str(payload.relation_type or "").strip().lower()
     if not rel_type:

@@ -287,9 +287,35 @@ def can_view_page(role: str, page_doc: dict[str, Any] | None) -> bool:
     return normalize_wiki_role(role) in acl["view_roles"]
 
 
-def can_edit_page(role: str, page_doc: dict[str, Any] | None) -> bool:
+def can_edit_page(
+    role: str,
+    page_doc: dict[str, Any] | None,
+    *,
+    username: str | None = None,
+    editor_access_mode: str = "all",
+) -> bool:
+    if not isinstance(page_doc, dict):
+        return False
+    clean_role = normalize_wiki_role(role)
+    if clean_role == "admin":
+        return True
+    clean_username = str(username or "").strip().lower()
+    page_editors = {
+        str(item).strip().lower()
+        for item in (page_doc.get("editor_usernames") or [])
+        if str(item).strip()
+    }
+    if clean_username and clean_username in page_editors:
+        return True
     acl = resolve_page_acl(page_doc)
-    return normalize_wiki_role(role) in acl["edit_roles"]
+    acl_allows = clean_role in acl["edit_roles"]
+    if clean_role != "editor":
+        return acl_allows
+    mode = str(editor_access_mode or "all").strip().lower()
+    if mode != "own":
+        return acl_allows
+    page_owner = str(page_doc.get("created_by") or "").strip().lower()
+    return bool(clean_username) and clean_username == page_owner
 
 
 def build_page_view_filter(role: str) -> dict[str, Any]:

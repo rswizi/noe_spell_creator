@@ -24,6 +24,18 @@ const NewPage: React.FC = () => {
   const [templateId, setTemplateId] = useState("");
   const navigate = useNavigate();
 
+  const categoryLabel = (category: WikiCategory): string => {
+    const seen = new Set<string>();
+    let cursor: WikiCategory | undefined = category;
+    const parts: string[] = [];
+    while (cursor && !seen.has(cursor.id)) {
+      seen.add(cursor.id);
+      parts.unshift(cursor.label);
+      cursor = categories.find((item) => item.id === cursor?.parent_id);
+    }
+    return parts.join(" / ");
+  };
+
   React.useEffect(() => {
     fetchCategories()
       .then((rows) => {
@@ -102,7 +114,7 @@ const NewPage: React.FC = () => {
               : [{ id: "general", key: "general", label: "General", slug: "general", sort_order: 0, created_at: "", updated_at: "" }]
             ).map((category) => (
               <option key={category.id} value={category.id}>
-                {category.label}
+                {categoryLabel(category)}
               </option>
             ))}
           </select>

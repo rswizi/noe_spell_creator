@@ -1,5 +1,6 @@
 import pytest
 
+from db_mongo import get_db
 from tests.conftest import wiki_client
 from tests.helpers import create_page
 
@@ -58,6 +59,23 @@ async def test_category_crud_admin_only():
 
         removed = await client.delete("/api/wiki/categories/people")
         assert removed.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_subcategory_creation_and_update():
+    async with wiki_client() as client:
+        parent = await client.post("/api/wiki/categories", json={"key": "lore", "label": "Lore"})
+        assert parent.status_code == 200
+        child = await client.post(
+            "/api/wiki/categories",
+            json={"key": "kingdoms", "label": "Kingdoms", "parent_id": "lore"},
+        )
+        assert child.status_code == 200
+        assert child.json()["parent_id"] == "lore"
+
+        updated = await client.put("/api/wiki/categories/kingdoms", json={"parent_id": "general"})
+        assert updated.status_code == 200
+        assert updated.json()["parent_id"] == "general"
 
 
 @pytest.mark.asyncio
@@ -335,3 +353,60 @@ async def test_page_context_returns_enriched_references():
         assert payload["backlinks"]
         assert payload["backlinks"][0]["from_page"]["title"] == "Source Two"
         assert payload["relations"]
+
+
+@pytest.mark.asyncio
+async def test_wiki_user_roles_and_settings_endpoints():
+    get_db()["users"].insert_one({"username": "writer", "role": "user"})
+    async with wiki_client(wiki_role="admin") as client:
+        settings = await client.get("/api/wiki/settings")
+        assert settings.status_code == 200
+        assert settings.json()["editor_access_mode"] in {"all", "own"}
+
+        changed = await client.put("/api/wiki/settings", json={"editor_access_mode": "own"})
+        assert changed.status_code == 200
+        assert changed.json()["editor_access_mode"] == "own"
+
+        users = await client.get("/api/wiki/users")
+        assert users.status_code == 200
+        usernames = [row["username"] for row in users.json()]
+        assert "writer" in usernames
+
+        role_update = await client.put("/api/wiki/users/writer/role", json={"wiki_role": "editor"})
+        assert role_update.status_code == 200
+        assert role_update.json()["wiki_role"] == "editor"
+
+
+@pytest.mark.asyncio
+async def test_editor_access_mode_own_requires_owner_or_assigned_editor():
+    async with wiki_client(wiki_role="admin") as admin_client:
+        created = await create_page(admin_client, "Guarded", "guarded")
+        settings = await admin_client.put("/api/wiki/settings", json={"editor_access_mode": "own"})
+        assert settings.status_code == 200
+        grant = await admin_client.put(
+            f"/api/wiki/pages/{created['id']}/editors",
+            json={"editor_usernames": ["alice"]},
+        )
+        assert grant.status_code == 200
+
+    async with wiki_client(role="user", wiki_role="editor", username="alice") as editor_client:
+        can_update = await editor_client.put(
+            f"/api/wiki/pages/{created['id']}",
+            json={
+                "title": "Guarded Updated",
+                "slug": "guarded-updated",
+                "doc_json": {"type": "doc", "content": []},
+            },
+        )
+        assert can_update.status_code == 200
+
+    async with wiki_client(role="user", wiki_role="editor", username="bob") as other_editor_client:
+        forbidden = await other_editor_client.put(
+            f"/api/wiki/pages/{created['id']}",
+            json={
+                "title": "Bob Update",
+                "slug": "bob-update",
+                "doc_json": {"type": "doc", "content": []},
+            },
+        )
+        assert forbidden.status_code == 403

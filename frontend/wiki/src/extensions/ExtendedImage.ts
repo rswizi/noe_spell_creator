@@ -28,16 +28,45 @@ const ExtendedImage = Image.extend({
   },
   renderHTML({ HTMLAttributes }) {
     const { caption, alignment, width, height, ...attrs } = HTMLAttributes;
+    const toCssSize = (value: any): string => {
+      if (value === null || value === undefined || value === "") {
+        return "";
+      }
+      const raw = String(value).trim();
+      if (!raw) {
+        return "";
+      }
+      if (/^\d+(\.\d+)?$/.test(raw)) {
+        return `${raw}px`;
+      }
+      return raw;
+    };
+    const styleParts: string[] = [];
+    if (attrs.style) {
+      styleParts.push(String(attrs.style));
+    }
+    const cssWidth = toCssSize(width);
+    const cssHeight = toCssSize(height);
+    if (cssWidth) {
+      styleParts.push(`width:${cssWidth}`);
+    }
+    if (cssHeight) {
+      styleParts.push(`height:${cssHeight}`);
+    } else {
+      styleParts.push("height:auto");
+    }
     const content: any[] = [
       [
         "img",
         mergeAttributes(this.options.HTMLAttributes, {
           ...attrs,
-          width: width || null,
-          height: height || null,
+          style: styleParts.join(";"),
         }),
       ],
     ];
+    content.push(["span", { class: "image-resize-handle image-resize-handle--right", "data-handle": "right" }]);
+    content.push(["span", { class: "image-resize-handle image-resize-handle--bottom", "data-handle": "bottom" }]);
+    content.push(["span", { class: "image-resize-handle image-resize-handle--corner", "data-handle": "corner" }]);
     if (caption) {
       content.push(["figcaption", { class: "image-caption" }, caption]);
     }

@@ -66,6 +66,7 @@ export type PagePayload = {
   status: "draft" | "published" | "archived";
   acl_override?: boolean;
   acl?: { view_roles: string[]; edit_roles: string[] } | null;
+  editor_usernames?: string[];
   created_at: string;
   updated_at: string;
 };
@@ -158,6 +159,13 @@ export async function updatePageAcl(
   });
 }
 
+export async function updatePageEditors(id: string, editor_usernames: string[]): Promise<PagePayload> {
+  return fetcher(`/api/wiki/pages/${id}/editors`, {
+    method: "PUT",
+    body: JSON.stringify({ editor_usernames }),
+  });
+}
+
 export async function deletePage(id: string): Promise<{ ok: boolean }> {
   return fetcher(`/api/wiki/pages/${id}`, { method: "DELETE" });
 }
@@ -168,6 +176,7 @@ export type WikiCategory = {
   label: string;
   slug: string;
   icon?: string | null;
+  parent_id?: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -182,6 +191,7 @@ export async function createCategory(payload: {
   label: string;
   slug?: string;
   icon?: string | null;
+  parent_id?: string | null;
   sort_order?: number;
 }): Promise<WikiCategory> {
   return fetcher("/api/wiki/categories", {
@@ -192,7 +202,7 @@ export async function createCategory(payload: {
 
 export async function updateCategory(
   id: string,
-  payload: { label?: string; slug?: string; icon?: string | null; sort_order?: number }
+  payload: { label?: string; slug?: string; icon?: string | null; parent_id?: string | null; sort_order?: number }
 ): Promise<WikiCategory> {
   return fetcher(`/api/wiki/categories/${encodeURIComponent(id)}`, {
     method: "PUT",
@@ -257,6 +267,40 @@ export type WikiIdentity = {
 
 export async function fetchWikiIdentity(): Promise<WikiIdentity> {
   return fetcher("/api/wiki/me");
+}
+
+export type WikiSiteSettings = {
+  id: "site";
+  editor_access_mode: "all" | "own";
+  updated_at: string;
+};
+
+export async function fetchWikiSettings(): Promise<WikiSiteSettings> {
+  return fetcher("/api/wiki/settings");
+}
+
+export async function updateWikiSettings(payload: { editor_access_mode: "all" | "own" }): Promise<WikiSiteSettings> {
+  return fetcher("/api/wiki/settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type WikiUserRole = {
+  username: string;
+  role: string;
+  wiki_role: "viewer" | "editor" | "admin";
+};
+
+export async function fetchWikiUsers(): Promise<WikiUserRole[]> {
+  return fetcher("/api/wiki/users");
+}
+
+export async function updateWikiUserRole(username: string, wiki_role: "viewer" | "editor" | "admin"): Promise<WikiUserRole> {
+  return fetcher(`/api/wiki/users/${encodeURIComponent(username)}/role`, {
+    method: "PUT",
+    body: JSON.stringify({ wiki_role }),
+  });
 }
 
 export async function fetchBacklinks(id: string): Promise<any[]> {

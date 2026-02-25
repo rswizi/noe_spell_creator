@@ -20,6 +20,18 @@ const PageList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const categoryLabel = (category: WikiCategory): string => {
+    const seen = new Set<string>();
+    let cursor: WikiCategory | undefined = category;
+    const parts: string[] = [];
+    while (cursor && !seen.has(cursor.id)) {
+      seen.add(cursor.id);
+      parts.unshift(cursor.label);
+      cursor = categories.find((item) => item.id === cursor?.parent_id);
+    }
+    return parts.join(" / ");
+  };
+
   useEffect(() => {
     let active = true;
     fetchPages({
@@ -68,7 +80,7 @@ const PageList: React.FC = () => {
               <option value="">All</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.label}
+                  {categoryLabel(category)}
                 </option>
               ))}
             </select>

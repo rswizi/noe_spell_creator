@@ -17,7 +17,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import HeadingAnchors from "../extensions/HeadingAnchors";
 import TableOfContents from "../extensions/TableOfContents";
 import ExtendedTableRow from "../extensions/ExtendedTableRow";
-import { fetchPageContext, getPage, getPageBySlug, PagePayload } from "../utils/api";
+import { fetchPageContext, fetchWikiIdentity, getPage, getPageBySlug, PagePayload, updatePageAcl, updatePageEditors } from "../utils/api";
 
 const ReadOnlyEditor: React.FC<{ content: any }> = ({ content }) => {
   const editor = useEditor({
@@ -52,12 +52,34 @@ const PageReader: React.FC = () => {
   const [backlinks, setBacklinks] = useState<any[]>([]);
   const [relations, setRelations] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<{ wiki_role: "viewer" | "editor" | "admin" } | null>(null);
+  const [showAccessOptions, setShowAccessOptions] = useState(false);
+  const [aclOverride, setAclOverride] = useState(false);
+  const [aclViewRoles, setAclViewRoles] = useState<string[]>(["viewer", "editor", "admin"]);
+  const [aclEditRoles, setAclEditRoles] = useState<string[]>(["editor", "admin"]);
+  const [editorUsersText, setEditorUsersText] = useState("");
+
+  const toggleAclRole = (roles: string[], role: string, setter: (next: string[]) => void) => {
+    if (roles.includes(role)) {
+      setter(roles.filter((item) => item !== role));
+      return;
+    }
+    setter([...roles, role]);
+  };
+
+  useEffect(() => {
+    fetchWikiIdentity().then(setIdentity).catch(() => setIdentity(null));
+  }, []);
 
   useEffect(() => {
     if (id) {
       getPage(id)
         .then((payload) => {
           setPage(payload);
+          setAclOverride(Boolean(payload.acl_override));
+          setAclViewRoles(payload.acl?.view_roles || ["viewer", "editor", "admin"]);
+          setAclEditRoles(payload.acl?.edit_roles || ["editor", "admin"]);
+          setEditorUsersText((payload.editor_usernames || []).join(", "));
           setError(null);
         })
         .catch((err) => setError(err instanceof Error ? err.message : "Failed to load page"));
@@ -67,6 +89,10 @@ const PageReader: React.FC = () => {
       getPageBySlug(slug)
         .then((payload) => {
           setPage(payload);
+          setAclOverride(Boolean(payload.acl_override));
+          setAclViewRoles(payload.acl?.view_roles || ["viewer", "editor", "admin"]);
+          setAclEditRoles(payload.acl?.edit_roles || ["editor", "admin"]);
+          setEditorUsersText((payload.editor_usernames || []).join(", "));
           setError(null);
         })
         .catch((err) => setError(err instanceof Error ? err.message : "Failed to load page"));
@@ -97,6 +123,28 @@ const PageReader: React.FC = () => {
     return <p>Loading...</p>;
   }
 
+  const saveAccessOptions = async () => {
+    if (!page || identity?.wiki_role !== "admin") {
+      return;
+    }
+    try {
+      await updatePageAcl(page.id, { acl_override: aclOverride, view_roles: aclViewRoles, edit_roles: aclEditRoles });
+      const editors = editorUsersText
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+      const updated = await updatePageEditors(page.id, editors);
+      setPage(updated);
+      setAclOverride(Boolean(updated.acl_override));
+      setAclViewRoles(updated.acl?.view_roles || []);
+      setAclEditRoles(updated.acl?.edit_roles || []);
+      setEditorUsersText((updated.editor_usernames || []).join(", "));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update page access");
+    }
+  };
+
   return (
     <div>
       <h1>{page.title}</h1>
@@ -104,6 +152,52 @@ const PageReader: React.FC = () => {
       <p style={{ fontSize: "13px", color: "#9ba5ff" }}>
         {page.category_id} {page.entity_type ? `- ${page.entity_type}` : ""} {page.status ? `- ${page.status}` : ""}
       </p>
+      {identity?.wiki_role === "admin" && (
+        <div style={{ marginBottom: "12px" }}>
+          <button onClick={() => setShowAccessOptions((value) => !value)}>{showAccessOptions ? "Hide Page Access" : "Page Access Options"}</button>
+          {showAccessOptions && (
+            <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+              <label style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
+                <input type="checkbox" checked={aclOverride} onChange={(event) => setAclOverride(event.target.checked)} />
+                ACL override
+              </label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
+                {["viewer", "editor", "admin"].map((roleName) => (
+                  <label key={`view-${roleName}`} style={{ display: "inline-flex", gap: "6px", alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={aclViewRoles.includes(roleName)}
+                      onChange={() => toggleAclRole(aclViewRoles, roleName, setAclViewRoles)}
+                    />
+                    View: {roleName}
+                  </label>
+                ))}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
+                {["viewer", "editor", "admin"].map((roleName) => (
+                  <label key={`edit-${roleName}`} style={{ display: "inline-flex", gap: "6px", alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={aclEditRoles.includes(roleName)}
+                      onChange={() => toggleAclRole(aclEditRoles, roleName, setAclEditRoles)}
+                    />
+                    Edit: {roleName}
+                  </label>
+                ))}
+              </div>
+              <label style={{ display: "grid", gap: "4px" }}>
+                Explicit editors (usernames, comma-separated)
+                <input
+                  value={editorUsersText}
+                  onChange={(event) => setEditorUsersText(event.target.value)}
+                  placeholder="alice, bob, charlie"
+                />
+              </label>
+              <button onClick={saveAccessOptions}>Save Page Access</button>
+            </div>
+          )}
+        </div>
+      )}
       <div className="editor-wrapper">
         <ReadOnlyEditor content={page.doc_json} />
       </div>

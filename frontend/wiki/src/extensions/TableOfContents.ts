@@ -10,14 +10,14 @@ const renderTocItems = (items: HeadingItem[]) => {
   }
   return items.map((item) => [
     "li",
-    { style: "margin-bottom:4px;font-size:13px;" },
+    { style: `margin-bottom:4px;font-size:13px;margin-left:${Math.max(0, item.level - 1) * 16}px;` },
     [
       "a",
       {
         href: `#${item.id}`,
-        style: "color:#a9b2ff;text-decoration:none;",
+        style: "color:#a9b2ff;text-decoration:none;display:inline-block;",
       },
-      `${"  ".repeat(item.level - 1)}${item.text}`,
+      `${item.text}`,
     ],
   ]);
 };
@@ -45,7 +45,7 @@ const TableOfContents = Node.create({
         { style: "display:block;margin-bottom:8px;font-size:14px;color:#a9b2ff;" },
         "Table of Contents",
       ],
-      ["ul", { style: "padding-left:16px" }, ...renderTocItems(HTMLAttributes.items || [])],
+      ["ul", { style: "padding-left:0;list-style:none;" }, ...renderTocItems(HTMLAttributes.items || [])],
     ];
   },
   addCommands() {

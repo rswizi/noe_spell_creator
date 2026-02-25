@@ -33,6 +33,7 @@ WIKI_LINKS_COL = "wiki_links"
 WIKI_RELATIONS_COL = "wiki_relations"
 WIKI_ASSETS_COL = "wiki_assets"
 WIKI_TEMPLATES_COL = "wiki_entity_templates"
+WIKI_SETTINGS_COL = "wiki_settings"
 
 
 def _is_mock() -> bool:
@@ -67,6 +68,7 @@ def _validator_for(name: str) -> dict[str, Any]:
                     "label": {"bsonType": "string"},
                     "slug": {"bsonType": "string"},
                     "icon": {"bsonType": ["string", "null"]},
+                    "parent_id": {"bsonType": ["string", "null"]},
                     "sort_order": {"bsonType": "int"},
                     "created_at": {"bsonType": ["date", "string"]},
                     "updated_at": {"bsonType": ["date", "string"]},
@@ -94,6 +96,7 @@ def _validator_for(name: str) -> dict[str, Any]:
                     "version": {"bsonType": "int"},
                     "acl_override": {"bsonType": ["bool", "null"]},
                     "acl": acl_schema,
+                    "editor_usernames": {"bsonType": ["array", "null"], "items": {"bsonType": "string"}},
                     "created_at": {"bsonType": ["date", "string"]},
                     "updated_at": {"bsonType": ["date", "string"]},
                 },
@@ -197,6 +200,18 @@ def _validator_for(name: str) -> dict[str, Any]:
                 },
             }
         }
+    if name == WIKI_SETTINGS_COL:
+        return {
+            "$jsonSchema": {
+                "bsonType": "object",
+                "required": ["id", "editor_access_mode", "updated_at"],
+                "properties": {
+                    "id": {"enum": ["site"]},
+                    "editor_access_mode": {"enum": ["all", "own"]},
+                    "updated_at": {"bsonType": ["date", "string"]},
+                },
+            }
+        }
     return {}
 
 
@@ -239,6 +254,7 @@ def ensure_wiki_collections_and_indexes() -> None:
         WIKI_RELATIONS_COL,
         WIKI_ASSETS_COL,
         WIKI_TEMPLATES_COL,
+        WIKI_SETTINGS_COL,
     )
     for name in names:
         _ensure_collection_with_validator(db, name)
@@ -286,6 +302,7 @@ def ensure_wiki_collections_and_indexes() -> None:
     db[WIKI_ASSETS_COL].create_index([("page_id", ASCENDING)], name="ix_wiki_asset_page")
     db[WIKI_TEMPLATES_COL].create_index([("id", ASCENDING)], unique=True, name="ux_wiki_template_id")
     db[WIKI_TEMPLATES_COL].create_index([("key", ASCENDING)], unique=True, name="ux_wiki_template_key")
+    db[WIKI_SETTINGS_COL].create_index([("id", ASCENDING)], unique=True, name="ux_wiki_settings_id")
 
 
 class WikiMongoRepo:
@@ -299,7 +316,9 @@ class WikiMongoRepo:
         self.relations = self.db[WIKI_RELATIONS_COL]
         self.assets = self.db[WIKI_ASSETS_COL]
         self.templates = self.db[WIKI_TEMPLATES_COL]
+        self.settings = self.db[WIKI_SETTINGS_COL]
         self._ensure_default_category()
+        self._ensure_default_settings()
 
     @staticmethod
     def _doc_without_mongo_id(doc: dict[str, Any] | None) -> dict[str, Any]:
@@ -320,6 +339,7 @@ class WikiMongoRepo:
                     "label": "General",
                     "slug": "general",
                     "icon": None,
+                    "parent_id": None,
                     "sort_order": 0,
                     "created_at": now,
                 },
@@ -328,8 +348,76 @@ class WikiMongoRepo:
             upsert=True,
         )
 
+    def _ensure_default_settings(self) -> None:
+        self.settings.update_one(
+            {"id": "site"},
+            {"$setOnInsert": {"id": "site", "editor_access_mode": "all", "updated_at": utc_now()}},
+            upsert=True,
+        )
+
+    @staticmethod
+    def _normalize_username_list(usernames: list[str] | tuple[str, ...] | None) -> list[str]:
+        if not usernames:
+            return []
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in usernames:
+            clean = str(raw or "").strip().lower()
+            if not clean or clean in seen:
+                continue
+            seen.add(clean)
+            out.append(clean[:64])
+        return out
+
+    @staticmethod
+    def _template_defaults(fields: dict[str, Any] | None) -> dict[str, Any]:
+        if not isinstance(fields, dict):
+            return {}
+        out: dict[str, Any] = {}
+        for key, raw in fields.items():
+            clean_key = str(key or "").strip()
+            if not clean_key:
+                continue
+            if isinstance(raw, dict):
+                raw_type = str(raw.get("type") or "").strip().lower()
+                if raw_type in {"text", "number", "boolean", "json", "select"}:
+                    if "default" in raw:
+                        out[clean_key] = raw.get("default")
+                    elif raw_type == "boolean":
+                        out[clean_key] = False
+                    elif raw_type == "number":
+                        out[clean_key] = 0
+                    elif raw_type == "json":
+                        out[clean_key] = {}
+                    else:
+                        out[clean_key] = ""
+                    continue
+            out[clean_key] = raw
+        return normalize_entity_fields(out)
+
+    def get_site_settings(self) -> dict[str, Any]:
+        self._ensure_default_settings()
+        doc = self.settings.find_one({"id": "site"}, {"_id": 0})
+        out = self._doc_without_mongo_id(doc)
+        mode = str(out.get("editor_access_mode") or "all").strip().lower()
+        out["id"] = "site"
+        out["editor_access_mode"] = mode if mode in {"all", "own"} else "all"
+        return out
+
+    def update_site_settings(self, *, editor_access_mode: str) -> dict[str, Any]:
+        clean_mode = str(editor_access_mode or "").strip().lower()
+        if clean_mode not in {"all", "own"}:
+            raise ValueError("Invalid editor_access_mode")
+        self.settings.update_one(
+            {"id": "site"},
+            {"$set": {"editor_access_mode": clean_mode, "updated_at": utc_now()}},
+            upsert=True,
+        )
+        return self.get_site_settings()
+
     def list_categories(self) -> list[dict[str, Any]]:
-        return [self._doc_without_mongo_id(row) for row in self.categories.find({}, {"_id": 0}).sort("sort_order", ASCENDING)]
+        rows = list(self.categories.find({}, {"_id": 0}).sort([("sort_order", ASCENDING), ("label", ASCENDING)]))
+        return [self._doc_without_mongo_id(row) for row in rows]
 
     def get_category(self, category_id: str) -> dict[str, Any]:
         clean_id = str(category_id or "").strip()
@@ -345,6 +433,7 @@ class WikiMongoRepo:
         label: str,
         slug: str = "",
         icon: str | None = None,
+        parent_id: str | None = None,
         sort_order: int = 0,
     ) -> dict[str, Any]:
         now = utc_now()
@@ -352,12 +441,21 @@ class WikiMongoRepo:
         if not clean_key:
             raise ValueError("Invalid category key")
         clean_slug = normalize_slug(slug or label or key)
+        clean_parent_id = str(parent_id or "").strip() or None
+        if clean_parent_id:
+            if clean_parent_id == clean_key:
+                raise ValueError("A category cannot be its own parent")
+            parent = self.get_category(clean_parent_id)
+            if not parent:
+                raise ValueError("Parent category not found")
+            clean_parent_id = str(parent.get("id") or "").strip() or None
         doc = {
             "id": clean_key,
             "key": clean_key,
             "label": str(label or "").strip(),
             "slug": clean_slug,
             "icon": (str(icon).strip() if icon else None),
+            "parent_id": clean_parent_id,
             "sort_order": int(sort_order),
             "created_at": now,
             "updated_at": now,
@@ -372,6 +470,7 @@ class WikiMongoRepo:
         label: str | None = None,
         slug: str | None = None,
         icon: str | None = None,
+        parent_id: str | None = None,
         sort_order: int | None = None,
     ) -> dict[str, Any]:
         current = self.get_category(category_id)
@@ -384,6 +483,18 @@ class WikiMongoRepo:
             update_doc["slug"] = normalize_slug(slug or current.get("label") or current.get("slug") or "")
         if icon is not None:
             update_doc["icon"] = str(icon).strip() if str(icon).strip() else None
+        if parent_id is not None:
+            clean_parent_id = str(parent_id or "").strip()
+            if not clean_parent_id:
+                update_doc["parent_id"] = None
+            else:
+                parent = self.get_category(clean_parent_id)
+                if not parent:
+                    raise ValueError("Parent category not found")
+                parent_real_id = str(parent.get("id") or "").strip()
+                if parent_real_id == str(current.get("id") or "").strip():
+                    raise ValueError("A category cannot be its own parent")
+                update_doc["parent_id"] = parent_real_id
         if sort_order is not None:
             update_doc["sort_order"] = int(sort_order)
         self.categories.update_one({"id": current["id"]}, {"$set": update_doc})
@@ -396,6 +507,7 @@ class WikiMongoRepo:
         if current.get("id") == "general":
             return False
         self.pages.update_many({"category_id": current.get("id")}, {"$set": {"category_id": "general", "updated_at": utc_now()}})
+        self.categories.update_many({"parent_id": current.get("id")}, {"$set": {"parent_id": "general", "updated_at": utc_now()}})
         self.categories.delete_one({"id": current.get("id")})
         return True
 
@@ -529,6 +641,7 @@ class WikiMongoRepo:
         status: str = "draft",
         acl_override: bool = False,
         acl: dict[str, Any] | None = None,
+        editor_usernames: list[str] | tuple[str, ...] | None = None,
     ) -> dict[str, Any]:
         now = utc_now()
         page_id = str(uuid4())
@@ -538,7 +651,7 @@ class WikiMongoRepo:
         if normalized_template_id and not normalized_fields:
             tpl = self.get_template(normalized_template_id)
             if tpl and isinstance(tpl.get("fields"), dict):
-                normalized_fields = normalize_entity_fields(tpl.get("fields"))
+                normalized_fields = self._template_defaults(tpl.get("fields"))
         page_doc = {
             "id": page_id,
             "title": str(title or "").strip(),
@@ -555,6 +668,7 @@ class WikiMongoRepo:
             "version": 1,
             "acl_override": bool(acl_override),
             "acl": {"view_roles": list(acl_doc["view_roles"]), "edit_roles": list(acl_doc["edit_roles"])},
+            "editor_usernames": self._normalize_username_list(editor_usernames),
             "created_at": now,
             "updated_at": now,
         }
@@ -608,6 +722,7 @@ class WikiMongoRepo:
                     "tags": normalize_tags(tags if tags is not None else existing.get("tags")),
                     "status": normalize_status(status if status is not None else existing.get("status", "draft")),
                     "updated_by": (str(updated_by).strip() if updated_by else None),
+                    "editor_usernames": self._normalize_username_list(existing.get("editor_usernames") or []),
                     "updated_at": now,
                     "version": next_version,
                 }
@@ -637,9 +752,21 @@ class WikiMongoRepo:
                 "$set": {
                     "acl_override": bool(acl_override),
                     "acl": {"view_roles": list(acl_doc["view_roles"]), "edit_roles": list(acl_doc["edit_roles"])},
+                    "editor_usernames": self._normalize_username_list(existing.get("editor_usernames") or []),
                     "updated_at": utc_now(),
                 }
             },
+        )
+        return self.get_page_by_id(clean_id)
+
+    def set_page_editors(self, *, page_id: str, editor_usernames: list[str] | tuple[str, ...] | None) -> dict[str, Any]:
+        clean_id = str(page_id or "").strip()
+        existing = self.get_page_by_id(clean_id)
+        if not existing:
+            return {}
+        self.pages.update_one(
+            {"id": clean_id},
+            {"$set": {"editor_usernames": self._normalize_username_list(editor_usernames), "updated_at": utc_now()}},
         )
         return self.get_page_by_id(clean_id)
 
