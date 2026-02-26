@@ -3484,8 +3484,10 @@ function levelProfile(lvl){
   };
 }
 function xpForLevel(level){
-  const lvl = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level||1)));
-  return 10 * ((lvl-1) * lvl / 2);
+  const lvl = Math.max(1, Math.floor(level || 1));
+  // Total XP needed to be at level L:
+  // L1=0, L2=10, L3=30, L4=60 ... (delta is +10 per level step)
+  return 5 * (lvl - 1) * lvl;
 }
 function levelFromXp(xp){
   const val = Math.max(0, Math.floor(xp||0));
@@ -11116,8 +11118,19 @@ function toggleXpLedger(open){
 
 function renderXpProgress(){
   if (!xpProgressEl) return;
-  const lvl = Math.max(1, Math.floor(Number(CHAR.level)||1));
   const xp = Math.max(0, Math.floor(Number(XP)||0));
+  const levelByXp = levelFromXp(xp);
+  let lvl = Math.max(1, Math.floor(Number(CHAR?.level) || 1));
+  if (!Number.isFinite(lvl) || lvl < 1) lvl = levelByXp;
+  if (lvl !== levelByXp){
+    lvl = levelByXp;
+    if (CHAR){
+      CHAR.level = lvl;
+      if (!CHAR.stats || typeof CHAR.stats !== 'object') CHAR.stats = {};
+      CHAR.stats.level = lvl;
+    }
+    if (levelEl) levelEl.value = lvl;
+  }
   const maxed = lvl >= MAX_LEVEL;
   const curCap = xpForLevel(lvl);
   const nextCap = maxed ? curCap : xpForLevel(lvl+1);
@@ -13085,6 +13098,11 @@ async function createAndLinkSpellList(){
 }
 
 function charBaseMod(key){
+  if (CHAR?.stats?.noe_0_3_5_stats){
+    const base = characteristicContribution(key);
+    const prestige = prestigeValueForDerived(key);
+    return Math.max(0, Math.floor(numOr(base, 0) + numOr(prestige, 0)));
+  }
   const invest = investVal(CHAR.stats?.[key]?.invest, 0);
   return modFromTotal(totalFromInvest(invest));
 }
@@ -20340,14 +20358,14 @@ initRichTextToolbar();
       .ns35-skill-grid { display:grid; grid-template-columns:1fr; gap:8px; }
       .ns35-skill-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:8px; }
       .ns35-skill-row .skill-name { font-weight:600; text-align:left; }
-      .ns35-invest-pill { min-width:120px; padding:4px 8px; text-align:center; font-variant-numeric:tabular-nums; }
+      .ns35-invest-pill { min-width:34px; padding:2px 8px; text-align:center; font-variant-numeric:tabular-nums; }
       .ns35-nature-grid { display:grid; grid-template-columns:repeat(8, minmax(0, 1fr)); gap:8px; }
       .ns35-nature-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:8px; }
       .ns35-nature-row { display:grid; grid-template-columns:24px max-content auto; gap:6px; align-items:center; }
       .ns35-nature-row img { width:24px; height:24px; }
       .ns35-id-chip { border:1px solid #2f2f3f; border-radius:999px; padding:2px 6px; font-size:.8rem; white-space:nowrap; width:max-content; justify-self:start; display:inline-flex; align-items:center; justify-content:center; min-width:26px; min-height:20px; }
       .ns35-id-chip img { width:14px; height:14px; display:block; }
-      .ns35-nature-pill { min-width:108px; }
+      .ns35-nature-pill { min-width:34px; }
       .ns35-invest-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:11000; }
       .ns35-invest-backdrop.hidden { display:none; }
       .ns35-invest-modal { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:min(420px, 92vw); background:#12131b; border:1px solid #2e3342; border-radius:12px; padding:12px; z-index:11001; display:grid; gap:10px; }
@@ -21055,9 +21073,15 @@ initRichTextToolbar();
     if (path){
       const adjusted = skillAdjTotal(path.charKey, path.skill);
       const total = Number(adjusted?.total);
-      if (Number.isFinite(total)) skillVal = Math.max(0, Math.floor(total));
+      if (Number.isFinite(total)){
+        // skillAdjTotal already includes characteristic contribution; remove it for NoE35 roll base
+        const charContribution = Number(charBaseMod(path.charKey)) || 0;
+        skillVal = Math.max(0, Math.floor(total - charContribution));
+      }
     }
-    const charVal = clampInvested(box?.characteristics?.[charKey]);
+    const charVal = Math.max(0, Math.floor(
+      Number(characteristicValueForDerived(charKey) || 0) + Number(prestigeValueForDerived(charKey) || 0)
+    ));
     return { skillVal, charVal, base: skillVal + charVal };
   }
 
@@ -21237,7 +21261,7 @@ initRichTextToolbar();
         const investBtn = document.createElement('button');
         investBtn.type = 'button';
         investBtn.className = 'btn small ns35-invest-pill';
-        investBtn.textContent = formatNoe35InvestLabel(info.invested, info.effective);
+        investBtn.textContent = String(info.effective);
         investBtn.title = `Click to invest points into ${skill.name}.`;
         row.appendChild(skillBtn);
         row.appendChild(investBtn);
@@ -21277,7 +21301,7 @@ initRichTextToolbar();
       const investBtn = document.createElement('button');
       investBtn.type = 'button';
       investBtn.className = 'btn small ns35-invest-pill ns35-nature-pill';
-      investBtn.textContent = formatNoe35InvestLabel(info.invested, info.effective);
+      investBtn.textContent = String(info.effective);
       investBtn.title = `Click to invest points into ${nature}.`;
       row?.appendChild(investBtn);
       natureGrid.appendChild(cell);
