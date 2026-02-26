@@ -5288,7 +5288,8 @@ function noe35ExcellenceSkills(){
     'Spirit','Aura','Investigation','Education','Cunning',
     'Survival','Instinct','Perception','Psychology','Attunement',
     'Persuasion','Charm','Taming','Subjugation','Deception',
-    'Crafting','Alchemy','Medicine','Engineering','Sleight of Hand'
+    'Crafting','Alchemy','Medicine','Engineering','Sleight of Hand',
+    ...INTENSITIES
   ];
 }
 function noe35ToLegacySkillAlias(){
@@ -5356,6 +5357,11 @@ function resolveNoe35ExcellenceSkillPath(skillName){
   if (!display) return null;
   const aliases = noe35ToLegacySkillAlias();
   const canonicalSkill = aliases[display] || display;
+  const natureHit = INTENSITIES.find(n => String(n || '').toLowerCase() === String(canonicalSkill || '').toLowerCase())
+    || NATURES.find(n => String(n || '').toLowerCase() === String(canonicalSkill || '').toLowerCase());
+  if (natureHit){
+    return { value:`magic|${natureHit}`, label:`${natureHit} (Nature)`, legacySkill:natureHit, charKey:'magic' };
+  }
   const charKey = legacySkillToCharKeyMap()[canonicalSkill] || '';
   if (!charKey) return null;
   return { value:`${charKey}|${canonicalSkill}`, label:canonicalSkill, legacySkill:canonicalSkill, charKey };
@@ -5434,7 +5440,13 @@ function skillLabelFromValue(value){
   if (hit?.label) return hit.label;
   const parts = target.split('|');
   if (parts.length >= 2){
+    const head = String(parts[0] || '').trim().toLowerCase();
     const raw = String(parts[1] || '').trim();
+    if (head === 'magic'){
+      const natureHit = INTENSITIES.find(n => String(n || '').toLowerCase() === String(raw || '').toLowerCase())
+        || NATURES.find(n => String(n || '').toLowerCase() === String(raw || '').toLowerCase());
+      if (natureHit) return `${natureHit} (Nature)`;
+    }
     const alias = legacyToNoe35SkillAlias();
     return alias[raw] || raw || target;
   }
@@ -6531,7 +6543,12 @@ function getSublimationEffects(){
       if (!s.skill) continue;
       const [ckey, sk] = s.skill.split('|');
       if (!ckey || !sk) continue;
-      mods.push({ target:`skills.${ckey}.${sk}`, mode:'add', value:tier, origin:`${origin} (${sk})` });
+      const natureHit = INTENSITIES.find(n => String(n || '').toLowerCase() === String(sk || '').toLowerCase());
+      if (String(ckey).toLowerCase() === 'magic' && natureHit){
+        mods.push({ target:`intensities.${natureHit}`, mode:'add', value:tier, origin:`${origin} (${natureHit})` });
+      }else{
+        mods.push({ target:`skills.${ckey}.${sk}`, mode:'add', value:tier, origin:`${origin} (${sk})` });
+      }
       continue;
     }
     if (t === 'defense'){
@@ -20321,16 +20338,27 @@ initRichTextToolbar();
       .ns35-skill-cat-hdr { padding:12px 14px 7px; }
       .ns35-skill-cat-hdr strong { color:#9aa0b3; font-style:italic; font-weight:600; }
       .ns35-skill-grid { display:grid; grid-template-columns:1fr; gap:8px; }
-      .ns35-skill-row { display:grid; grid-template-columns:minmax(0, 1fr) 20px; align-items:center; gap:8px; }
+      .ns35-skill-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:8px; }
       .ns35-skill-row .skill-name { font-weight:600; text-align:left; }
-      .ns35-skill-row input { width:20px; max-width:20px; text-align:center; justify-self:end; padding:2px 2px; }
+      .ns35-invest-pill { min-width:120px; padding:4px 8px; text-align:center; font-variant-numeric:tabular-nums; }
       .ns35-nature-grid { display:grid; grid-template-columns:repeat(8, minmax(0, 1fr)); gap:8px; }
       .ns35-nature-cell { border:1px solid var(--border); border-radius:12px; background:#14141d; padding:8px; }
-      .ns35-nature-row { display:grid; grid-template-columns:24px max-content 1fr; gap:6px; align-items:center; }
+      .ns35-nature-row { display:grid; grid-template-columns:24px max-content auto; gap:6px; align-items:center; }
       .ns35-nature-row img { width:24px; height:24px; }
       .ns35-id-chip { border:1px solid #2f2f3f; border-radius:999px; padding:2px 6px; font-size:.8rem; white-space:nowrap; width:max-content; justify-self:start; display:inline-flex; align-items:center; justify-content:center; min-width:26px; min-height:20px; }
       .ns35-id-chip img { width:14px; height:14px; display:block; }
-      .ns35-nature-row input { width:20px; max-width:20px; justify-self:end; text-align:left; padding:2px 2px; }
+      .ns35-nature-pill { min-width:108px; }
+      .ns35-invest-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:11000; }
+      .ns35-invest-backdrop.hidden { display:none; }
+      .ns35-invest-modal { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:min(420px, 92vw); background:#12131b; border:1px solid #2e3342; border-radius:12px; padding:12px; z-index:11001; display:grid; gap:10px; }
+      .ns35-invest-modal.hidden { display:none; }
+      .ns35-invest-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .ns35-invest-title { font-weight:700; }
+      .ns35-invest-close { width:28px; height:28px; min-width:28px; display:grid; place-items:center; padding:0; }
+      .ns35-invest-controls { display:grid; grid-template-columns:32px minmax(0, 1fr) 32px; gap:8px; align-items:center; }
+      .ns35-invest-controls input { width:100%; text-align:center; }
+      .ns35-invest-summary { font-variant-numeric:tabular-nums; }
+      .ns35-invest-mods { margin:0; padding-left:16px; max-height:220px; overflow:auto; display:grid; gap:4px; }
       .ns35-roll-char { display:grid; gap:4px; }
       .ns35-roll-char select { min-width:200px; }
       @media (max-width: 1160px){
@@ -20702,6 +20730,229 @@ initRichTextToolbar();
     queueSave();
   }
 
+  function normalizeNoe35EffectiveValue(raw, fallback = 0){
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return Math.max(0, Math.floor(Number(fallback) || 0));
+    return Math.max(0, Math.floor(parsed));
+  }
+
+  function extractNoe35ModifierLines(notes){
+    return (notes || [])
+      .map(line => String(line || '').trim())
+      .filter(Boolean)
+      .filter(line => !/^Base\s*=/i.test(line));
+  }
+
+  function formatNoe35InvestLabel(invested, effective){
+    const inv = Math.max(0, Math.floor(Number(invested) || 0));
+    const eff = Math.max(0, Math.floor(Number(effective) || 0));
+    const mod = eff - inv;
+    const sign = mod >= 0 ? '+' : '-';
+    return `${inv} ${sign} ${Math.abs(mod)} = ${eff}`;
+  }
+
+  function canonicalNoe35NatureName(raw){
+    const target = String(raw || '').trim().toLowerCase();
+    if (!target) return '';
+    return NOE35_NATURES.find(name => String(name || '').toLowerCase() === target) || '';
+  }
+
+  function noe35SkillEffectiveInfo(skillName, box){
+    const invested = clampInvested(box?.skills?.[skillName]);
+    const path = resolveLegacySkillPath(skillName);
+    if (!path){
+      return { invested, effective: invested, modifierLines: [] };
+    }
+    const adj = skillAdjTotal(path.charKey, path.skill);
+    const charDef = NOE35_CHAR_BY_KEY.get(path.charKey);
+    const charRaw = Number(charBaseMod(path.charKey));
+    const charMod = Number.isFinite(charRaw) ? Math.trunc(charRaw) : 0;
+    const charLine = charMod
+      ? [`${charMod >= 0 ? '+' : ''}${charMod} -> ${charDef?.name || path.charKey} characteristic`]
+      : [];
+    return {
+      invested,
+      effective: normalizeNoe35EffectiveValue(adj?.total, invested),
+      modifierLines: charLine.concat(extractNoe35ModifierLines(adj?.notes)),
+    };
+  }
+
+  function noe35NatureEffectiveInfo(natureName, box){
+    const nature = canonicalNoe35NatureName(natureName) || String(natureName || '').trim();
+    const invested = clampInvested(box?.natures?.[nature]);
+    const adj = skillAdjTotal('magic', nature);
+    const magicRaw = Number(charBaseMod('magic'));
+    const magicMod = Number.isFinite(magicRaw) ? Math.trunc(magicRaw) : 0;
+    const magicLine = magicMod ? [`${magicMod >= 0 ? '+' : ''}${magicMod} -> Magic characteristic`] : [];
+    return {
+      invested,
+      effective: normalizeNoe35EffectiveValue(adj?.total, invested),
+      modifierLines: magicLine.concat(extractNoe35ModifierLines(adj?.notes)),
+      nature,
+    };
+  }
+
+  function applyNoe35SkillInvestment(box, skillName, desiredRaw){
+    if (!box || !skillName) return false;
+    const livePools = currentStatPools();
+    const current = clampInvested(box.skills[skillName]);
+    const totalOther = totalNoe35Skills(box) - current;
+    const desired = clampInvested(desiredRaw);
+    const allowed = Math.max(0, livePools.skillPool - totalOther);
+    const next = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, livePools.skillCap);
+    if (!OVERRIDE_ENABLED && next < 0) return false;
+    if (next === current) return false;
+    box.skills[skillName] = next;
+    commitNoe35StatChanges(box);
+    return true;
+  }
+
+  function applyNoe35NatureInvestment(box, natureName, desiredRaw){
+    if (!box) return false;
+    const nature = canonicalNoe35NatureName(natureName);
+    if (!nature) return false;
+    const livePools = currentStatPools();
+    const current = clampInvested(box.natures[nature]);
+    const totalOther = totalNoe35Skills(box) - current;
+    const desired = clampInvested(desiredRaw);
+    const allowed = Math.max(0, livePools.skillPool - totalOther);
+    const next = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, livePools.skillCap);
+    if (current <= 0 && next > 0){
+      const limit = (typeof natureSlotLimit === 'function')
+        ? natureSlotLimit()
+        : NOE35_NATURES.length;
+      let positiveAfter = 0;
+      NOE35_NATURES.forEach(name=>{
+        const nextVal = name === nature ? next : clampInvested(box.natures[name]);
+        if (nextVal > 0) positiveAfter += 1;
+      });
+      if (positiveAfter > limit){
+        alert(`Only ${limit} nature${limit === 1 ? '' : 's'} can have invested points at once.`);
+        return false;
+      }
+    }
+    if (next === current) return false;
+    box.natures[nature] = next;
+    commitNoe35StatChanges(box);
+    return true;
+  }
+
+  let NOE35_INVEST_OVERLAY = null;
+  function ensureNoe35InvestOverlay(){
+    if (NOE35_INVEST_OVERLAY) return NOE35_INVEST_OVERLAY;
+    const backdrop = document.createElement('div');
+    backdrop.className = 'ns35-invest-backdrop hidden';
+    const modal = document.createElement('div');
+    modal.className = 'ns35-invest-modal hidden';
+    modal.innerHTML = `
+      <div class="ns35-invest-head">
+        <div class="ns35-invest-title" id="ns35-invest-title"></div>
+        <button type="button" class="btn small ns35-invest-close" id="ns35-invest-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="ns35-invest-controls">
+        <button type="button" class="btn small" id="ns35-invest-minus">-</button>
+        <input type="number" min="0" max="${MAX_INVEST}" id="ns35-invest-input" class="num">
+        <button type="button" class="btn small" id="ns35-invest-plus">+</button>
+      </div>
+      <div class="muted ns35-invest-summary" id="ns35-invest-summary"></div>
+      <div class="muted">Modifiers</div>
+      <ul class="ns35-invest-mods" id="ns35-invest-mods"></ul>
+    `;
+    document.body.appendChild(backdrop);
+    document.body.appendChild(modal);
+    const state = { kind:'', key:'', label:'' };
+    const titleEl = modal.querySelector('#ns35-invest-title');
+    const closeEl = modal.querySelector('#ns35-invest-close');
+    const minusEl = modal.querySelector('#ns35-invest-minus');
+    const plusEl = modal.querySelector('#ns35-invest-plus');
+    const inputEl = modal.querySelector('#ns35-invest-input');
+    const summaryEl = modal.querySelector('#ns35-invest-summary');
+    const modsEl = modal.querySelector('#ns35-invest-mods');
+
+    const close = ()=>{
+      backdrop.classList.add('hidden');
+      modal.classList.add('hidden');
+      state.kind = '';
+      state.key = '';
+      state.label = '';
+    };
+
+    const refresh = ()=>{
+      if (!state.kind || !state.key) return;
+      const liveBox = ensureNoe35StatsState();
+      if (!liveBox) return;
+      const info = state.kind === 'nature'
+        ? noe35NatureEffectiveInfo(state.key, liveBox)
+        : noe35SkillEffectiveInfo(state.key, liveBox);
+      titleEl.textContent = state.label || state.key;
+      summaryEl.textContent = `Total shown: ${formatNoe35InvestLabel(info.invested, info.effective)}`;
+      inputEl.value = String(info.invested);
+      modsEl.innerHTML = '';
+      const lines = info.modifierLines || [];
+      if (!lines.length){
+        const li = document.createElement('li');
+        li.textContent = 'No active modifiers';
+        modsEl.appendChild(li);
+      }else{
+        lines.forEach(line=>{
+          const li = document.createElement('li');
+          li.textContent = line;
+          modsEl.appendChild(li);
+        });
+      }
+    };
+
+    const applyValue = (raw)=>{
+      if (!state.kind || !state.key) return;
+      const liveBox = ensureNoe35StatsState();
+      if (!liveBox) return;
+      if (state.kind === 'nature'){
+        applyNoe35NatureInvestment(liveBox, state.key, raw);
+      }else{
+        applyNoe35SkillInvestment(liveBox, state.key, raw);
+      }
+      refresh();
+    };
+
+    closeEl?.addEventListener('click', close);
+    backdrop.addEventListener('click', (e)=>{ if (e.target === backdrop) close(); });
+    minusEl?.addEventListener('click', ()=>{
+      const current = Math.max(0, Math.floor(Number(inputEl.value) || 0));
+      applyValue(current - 1);
+    });
+    plusEl?.addEventListener('click', ()=>{
+      const current = Math.max(0, Math.floor(Number(inputEl.value) || 0));
+      applyValue(current + 1);
+    });
+    inputEl?.addEventListener('change', ()=> applyValue(inputEl.value));
+    inputEl?.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter'){
+        e.preventDefault();
+        applyValue(inputEl.value);
+      }
+      if (e.key === 'Escape'){
+        e.preventDefault();
+        close();
+      }
+    });
+
+    NOE35_INVEST_OVERLAY = { backdrop, modal, state, refresh, close };
+    return NOE35_INVEST_OVERLAY;
+  }
+
+  function openNoe35InvestOverlay(kind, key, label){
+    const cleanKind = kind === 'nature' ? 'nature' : 'skill';
+    const cleanKey = String(key || '').trim();
+    if (!cleanKey) return;
+    const overlay = ensureNoe35InvestOverlay();
+    overlay.state.kind = cleanKind;
+    overlay.state.key = cleanKind === 'nature' ? (canonicalNoe35NatureName(cleanKey) || cleanKey) : cleanKey;
+    overlay.state.label = String(label || cleanKey);
+    overlay.backdrop.classList.remove('hidden');
+    overlay.modal.classList.remove('hidden');
+    overlay.refresh();
+  }
+
   function renderNoe35AttributeConfigurator(targetLvl, options = {}){
     if (!levelRewardModal || !levelRewardBackdrop || !levelRewardSummary || !levelRewardOptionsGrid) return;
     const box = ensureNoe35StatsState();
@@ -20978,30 +21229,21 @@ initRichTextToolbar();
         const row = document.createElement('div');
         row.className = 'ns35-skill-row';
         const codes = characteristicCodes(skill.defaults);
-        const inputId = `noe35-skill-${skill.name.replace(/[^a-z0-9]+/gi, '-')}`;
-        row.innerHTML = `
-          <button type="button" class="roll-link skill-name">${skill.name} <span class="muted">(${codes})</span></button>
-          <input id="${inputId}" class="num" type="number" min="0" max="${pools.skillCap}" value="${clampInvested(box.skills[skill.name])}">
-        `;
+        const info = noe35SkillEffectiveInfo(skill.name, box);
+        const skillBtn = document.createElement('button');
+        skillBtn.type = 'button';
+        skillBtn.className = 'roll-link skill-name';
+        skillBtn.innerHTML = `${skill.name} <span class="muted">(${codes})</span>`;
+        const investBtn = document.createElement('button');
+        investBtn.type = 'button';
+        investBtn.className = 'btn small ns35-invest-pill';
+        investBtn.textContent = formatNoe35InvestLabel(info.invested, info.effective);
+        investBtn.title = `Click to invest points into ${skill.name}.`;
+        row.appendChild(skillBtn);
+        row.appendChild(investBtn);
         skillGrid.appendChild(row);
-        row.querySelector('.skill-name')?.addEventListener('click', ()=> openSkillRoll(skill.defaults[0], NOE35_CHAR_BY_KEY.get(skill.defaults[0])?.name || '', skill.name));
-        const input = row.querySelector(`#${inputId}`);
-        input.addEventListener('input', ()=>{
-          const livePools = currentStatPools();
-          const current = clampInvested(box.skills[skill.name]);
-          const totalOther = totalNoe35Skills(box) - current;
-          const desired = clampInvested(input.value);
-          const allowed = Math.max(0, livePools.skillPool - totalOther);
-          const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, livePools.skillCap);
-          if (!OVERRIDE_ENABLED) input.value = val;
-          box.skills[skill.name] = val;
-          syncNoe35ToLegacy(box);
-          updatePointCounters();
-          updateDerived();
-          renderAddedSchools();
-          refreshArchetypeAbilities();
-          queueSave();
-        });
+        skillBtn.addEventListener('click', ()=> openSkillRoll(skill.defaults[0], NOE35_CHAR_BY_KEY.get(skill.defaults[0])?.name || '', skill.name));
+        investBtn.addEventListener('click', ()=> openNoe35InvestOverlay('skill', skill.name, skill.name));
       });
       body.appendChild(skillGrid);
       panel.appendChild(body);
@@ -21021,54 +21263,25 @@ initRichTextToolbar();
     natureGrid.className = 'ns35-nature-grid';
     NOE35_NATURES.forEach(nature=>{
       const iconName = String(nature).toLowerCase();
-      const inputId = `noe35-nature-${iconName}`;
-      const invested = clampInvested(box.natures[nature]);
-      const natureId = natureIdFromBaseValue(invested);
+      const info = noe35NatureEffectiveInfo(nature, box);
+      const natureId = natureIdFromBaseValue(info.effective);
       const cell = document.createElement('div');
       cell.className = 'ns35-nature-cell';
       cell.innerHTML = `
         <div class="ns35-nature-row">
           <img src="/assets/natures/${iconName}.svg" alt="${nature}" title="${nature}">
-          <span class="ns35-id-chip">${natureDiceChipMarkup(invested)}</span>
-          <input id="${inputId}" class="num" type="number" min="0" max="${pools.skillCap}" value="${invested}" title="${natureId}">
+          <span class="ns35-id-chip" title="${natureId}">${natureDiceChipMarkup(info.effective)}</span>
         </div>
       `;
+      const row = cell.querySelector('.ns35-nature-row');
+      const investBtn = document.createElement('button');
+      investBtn.type = 'button';
+      investBtn.className = 'btn small ns35-invest-pill ns35-nature-pill';
+      investBtn.textContent = formatNoe35InvestLabel(info.invested, info.effective);
+      investBtn.title = `Click to invest points into ${nature}.`;
+      row?.appendChild(investBtn);
       natureGrid.appendChild(cell);
-      const input = cell.querySelector(`#${inputId}`);
-      const chip = cell.querySelector('.ns35-id-chip');
-      input.addEventListener('input', ()=>{
-        const livePools = currentStatPools();
-        const current = clampInvested(box.natures[nature]);
-        const totalOther = totalNoe35Skills(box) - current;
-        const desired = clampInvested(input.value);
-        const allowed = Math.max(0, livePools.skillPool - totalOther);
-        const val = OVERRIDE_ENABLED ? desired : Math.min(desired, allowed, livePools.skillCap);
-        if (current <= 0 && val > 0){
-          const limit = (typeof natureSlotLimit === 'function')
-            ? natureSlotLimit()
-            : NOE35_NATURES.length;
-          let positiveAfter = 0;
-          NOE35_NATURES.forEach(name=>{
-            const nextVal = name === nature ? val : clampInvested(box.natures[name]);
-            if (nextVal > 0) positiveAfter++;
-          });
-          if (positiveAfter > limit){
-            alert(`Only ${limit} nature${limit === 1 ? '' : 's'} can have invested points at once.`);
-            input.value = current;
-            return;
-          }
-        }
-        if (!OVERRIDE_ENABLED) input.value = val;
-        box.natures[nature] = val;
-        if (chip) chip.innerHTML = natureDiceChipMarkup(val);
-        input.title = natureIdFromBaseValue(val);
-        syncNoe35ToLegacy(box);
-        updatePointCounters();
-        updateDerived();
-        renderAddedSchools();
-        refreshArchetypeAbilities();
-        queueSave();
-      });
+      investBtn.addEventListener('click', ()=> openNoe35InvestOverlay('nature', nature, `${nature} (Nature)`));
     });
     natureBody.appendChild(natureGrid);
     naturePanel.appendChild(natureBody);
