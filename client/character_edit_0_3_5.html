@@ -5267,9 +5267,11 @@ function normalizeSublimations(arr){
 }
 function slotsForLevel(lvl){
   const levelVal = Math.max(1, Math.floor(Number(lvl) || 1));
+  const profile = levelProfile(levelVal);
   const pre = characteristicValueForDerived('presence');
   const prePrestige = prestigeValueForDerived('presence');
-  const base = Math.max(0, Math.floor(levelVal / 2)) + (pre + prePrestige);
+  const baseByLevel = Math.max(0, Math.floor(numOr(profile?.subSlots, 0)));
+  const base = baseByLevel + (2 * (pre + prePrestige));
   const bonus = Math.max(0, Math.floor(LEVEL_REWARD_ALLOCATIONS.sublimation || 0)) * 4;
   return base + bonus;
 }
@@ -16988,7 +16990,7 @@ function updateDerived(){
     fo: [`1 + level + (WIL(${wilVal}) * Prestige WIL(${wilPrestige})) + (PRE(${preVal}) * Prestige PRE(${prePrestige})) = ${base.fo}`],
     mo: [`4 + (DEX(${dexVal}) * Prestige PRE(${prePrestige})) = ${base.mo}`],
     enc: [`10 + 5*(BOD(${bodVal}) + Prestige BOD(${bodPrestige})) + 2*(WIL(${wilVal}) * Prestige WIL(${wilPrestige})) = ${base.enc}`],
-    sublimation_slots: [`floor(level/2) + (PRE(${preVal}) + Prestige PRE(${prePrestige})) + bonus = ${slotsForLevel(lvl)}`],
+    sublimation_slots: [`Level slots(${profile.subSlots}) + 2*(PRE(${preVal}) + Prestige PRE(${prePrestige})) + bonus = ${slotsForLevel(lvl)}`],
     complex_schools: [`MAG + Prestige MAG = ${complexMagValue} -> ${complexSchools}`],
     tx: [`2 + Alchemy(${alchemyVal}) + Resistance(${resistanceVal}) = ${2 + alchemyVal + resistanceVal}`],
     talent_max: [`1 + (WIS(${wisVal}) + Prestige WIS(${wisPrestige})) = ${1 + wisVal + wisPrestige}`],
