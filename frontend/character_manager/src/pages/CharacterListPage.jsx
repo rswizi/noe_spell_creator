@@ -45,9 +45,22 @@ function buildCharacterSheetPath(id, name) {
   return `/${encodeURIComponent(cid)}_${slugifyCharacterName(name || cid)}`;
 }
 
+function normalizeRole(role) {
+  return String(role || "").toLowerCase();
+}
+
+function isPrivilegedRole(role) {
+  return ["admin", "mod", "moderator"].includes(normalizeRole(role));
+}
+
 function CharacterListPage() {
   const navigate = useNavigate();
-  const [me, setMe] = useState({ label: "Checking login...", isAdmin: false });
+  const [me, setMe] = useState({
+    label: "Checking login...",
+    role: "",
+    isAdmin: false,
+    isPrivileged: false,
+  });
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -91,12 +104,15 @@ function CharacterListPage() {
     setError("");
     try {
       const meData = await fetchMe();
+      const role = meData.role || "";
       setMe({
-        label: `${meData.username || "Unknown"} (${meData.role || "user"})`,
-        isAdmin: String(meData.role || "").toLowerCase() === "admin",
+        label: `${meData.username || "Unknown"} (${role || "user"})`,
+        role,
+        isAdmin: normalizeRole(role) === "admin",
+        isPrivileged: isPrivilegedRole(role),
       });
     } catch (err) {
-      setMe({ label: "Not logged in", isAdmin: false });
+      setMe({ label: "Not logged in", role: "", isAdmin: false, isPrivileged: false });
     }
     try {
       await loadCharacters();
@@ -334,6 +350,11 @@ function CharacterListPage() {
           {me.isAdmin && (
             <a className="cm-btn" href="/character_admin.html">
               All Characters
+            </a>
+          )}
+          {me.isPrivileged && (
+            <a className="cm-btn" href="/economy-manager">
+              Economy Manager
             </a>
           )}
         </div>
