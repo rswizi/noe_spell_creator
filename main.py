@@ -433,11 +433,11 @@ def character_manager_fallback(rest: str):
 
 @app.get("/economy-manager", include_in_schema=False)
 def economy_manager_index():
-    if CHAR_MANAGER_INDEX.exists():
-        return _serve_html_file(CHAR_MANAGER_INDEX)
     fallback_page = CLIENT_DIR / "character_manager.html"
     if fallback_page.exists():
         return _serve_html_file(fallback_page)
+    if CHAR_MANAGER_INDEX.exists():
+        return _serve_html_file(CHAR_MANAGER_INDEX)
     return RedirectResponse("/characters.html")
 
 @app.get("/economy-manager/{rest:path}", include_in_schema=False)
@@ -445,11 +445,11 @@ def economy_manager_fallback(rest: str):
     target = CHAR_MANAGER_DIST_DIR / rest
     if target.exists() and target.is_file():
         return _serve_html_file(target)
-    if CHAR_MANAGER_INDEX.exists():
-        return _serve_html_file(CHAR_MANAGER_INDEX)
     fallback_page = CLIENT_DIR / "character_manager.html"
     if fallback_page.exists():
         return _serve_html_file(fallback_page)
+    if CHAR_MANAGER_INDEX.exists():
+        return _serve_html_file(CHAR_MANAGER_INDEX)
     return RedirectResponse("/characters.html")
 
 @app.get("/", include_in_schema=False)

@@ -344,19 +344,6 @@ function CharacterListPage() {
             Portal
           </a>
           <span className="cm-muted cm-right">{me.label}</span>
-          <a className="cm-btn" href="/characters.html">
-            Legacy Character Manager
-          </a>
-          {me.isAdmin && (
-            <a className="cm-btn" href="/character_admin.html">
-              All Characters
-            </a>
-          )}
-          {me.isPrivileged && (
-            <a className="cm-btn" href="/economy-manager">
-              Economy Manager
-            </a>
-          )}
         </div>
 
         <div className="cm-actions">
