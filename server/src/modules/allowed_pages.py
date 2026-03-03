@@ -29,6 +29,8 @@ ALLOWED_PAGES = {
     "character_edit",
     "character_edit_0_3_5",
     "characters",
+    "economy_manager",
+    "economy_manager_0_3_5",
     "equipment_edit",
     "equipment_home",
     "equipment_parse",

@@ -353,7 +353,7 @@ function CharacterListPage() {
             </a>
           )}
           {me.isPrivileged && (
-            <a className="cm-btn" href="/economy-manager">
+            <a className="cm-btn" href="/character-manager/economy-manager">
               Economy Manager
             </a>
           )}
