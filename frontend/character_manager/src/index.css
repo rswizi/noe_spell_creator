@@ -286,6 +286,9 @@ body {
   background: #171722;
   color: var(--text);
   cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
 
 .cm-tab.active {
@@ -464,6 +467,31 @@ body {
 
 .cm-list-item.cm-list-row {
   cursor: default;
+}
+
+.cm-list-main-btn {
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  cursor: pointer;
+}
+
+.cm-danger {
+  border-color: #80313a;
+  color: #ffd8d8;
+  background: #2f171c;
+}
+
+.cm-danger:hover {
+  border-color: #a74450;
+  background: #3a1a21;
 }
 
 .cm-inline {

@@ -93,6 +93,11 @@ def ensure_indexes() -> None:
     db.campaign_chat.create_index([("campaign_id", ASCENDING), ("ts", ASCENDING)])
     db.campaign_combats.create_index("id", unique=True)
     db.campaign_combats.create_index("campaign_id")
+    db.economy_entities_0_3_5.create_index("id", unique=True)
+    db.economy_entities_0_3_5.create_index("name_key")
+    db.economy_services_0_3_5.create_index("id", unique=True)
+    db.economy_services_0_3_5.create_index("name_key")
+    db.economy_item_meta_0_3_5.create_index([("source_kind", ASCENDING), ("source_id", ASCENDING)], unique=True)
 
 
 def next_id_str(sequence_name: str, padding: int = 4) -> str:

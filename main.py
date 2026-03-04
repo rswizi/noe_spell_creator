@@ -86,6 +86,26 @@ from server.src.modules.allowed_pages import ALLOWED_PAGES
 
 AVATAR_KEYS = frozenset({"boon","awakening","talents","expertise","dima","archetype","spells","ammo","gear","tools","consumables","equipment","species","weapon"})
 
+ECONOMY_ENTITIES_0_3_5_COL = "economy_entities_0_3_5"
+ECONOMY_SERVICES_0_3_5_COL = "economy_services_0_3_5"
+ECONOMY_ITEM_META_0_3_5_COL = "economy_item_meta_0_3_5"
+ECONOMY_ITEM_KIND_TO_COLLECTION = {
+    "object": "objects",
+    "equipment": "equipment",
+    "weapon": "weapons",
+    "tool": "tools",
+}
+ECONOMY_AVAILABILITIES = ["Very Common", "Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Unique"]
+ECONOMY_MARKUP_BY_AVAILABILITY = {
+    "Very Common": 5,
+    "Common": 10,
+    "Uncommon": 30,
+    "Rare": 75,
+    "Very Rare": 150,
+    "Legendary": 300,
+    "Unique": 1000,
+}
+
 def _normalize_avatar_key(value: Any) -> str | None:
     raw = (value or "").strip().lower()
     if not raw or raw == "auto":
@@ -5305,6 +5325,167 @@ def _normalize_tags(val):
 def _now_iso():
     return datetime.datetime.utcnow().isoformat() + "Z"
 
+def _economy_allowed_source_kinds() -> set[str]:
+    return {"entity", "service", *ECONOMY_ITEM_KIND_TO_COLLECTION.keys()}
+
+def _economy_allowed_meta_source_kinds() -> set[str]:
+    return {"service", *ECONOMY_ITEM_KIND_TO_COLLECTION.keys()}
+
+def _economy_sanitize_availability(value: Any, allow_empty: bool = False) -> str:
+    raw = str(value or "").strip()
+    if allow_empty and not raw:
+        return ""
+    if raw not in ECONOMY_AVAILABILITIES:
+        if allow_empty:
+            raise HTTPException(status_code=400, detail="Invalid availability")
+        return "Common"
+    return raw
+
+def _economy_entity_from_body(body: dict) -> dict:
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Invalid entity payload")
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Entity name is required")
+    entity_type = str(body.get("type") or "").strip()
+    allowed_types = {"Manpower (hourly)", "Primary Resource", "Manufactured Resource", "Item"}
+    if entity_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid entity type")
+    try:
+        value_per_unit = float(body.get("value_per_unit"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="value_per_unit must be a number")
+    if value_per_unit < 0:
+        raise HTTPException(status_code=400, detail="value_per_unit must be >= 0")
+    availability = _economy_sanitize_availability(body.get("availability"))
+    return {
+        "name": name,
+        "name_key": norm_key(name),
+        "type": entity_type,
+        "value_per_unit": value_per_unit,
+        "availability": availability,
+    }
+
+def _economy_service_from_body(body: dict) -> dict:
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Invalid service payload")
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Service name is required")
+    try:
+        fixed_price = float(body.get("fixed_price"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="fixed_price must be a number")
+    if fixed_price < 0:
+        raise HTTPException(status_code=400, detail="fixed_price must be >= 0")
+    return {
+        "name": name,
+        "name_key": norm_key(name),
+        "fixed_price": fixed_price,
+    }
+
+def _economy_meta_from_body(body: dict) -> dict:
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Invalid metadata payload")
+    requirements = body.get("requirements") or []
+    if not isinstance(requirements, list):
+        raise HTTPException(status_code=400, detail="requirements must be a list")
+
+    normalized_requirements: list[dict[str, Any]] = []
+    allowed_source_kinds = _economy_allowed_source_kinds()
+    for idx, raw in enumerate(requirements):
+        if not isinstance(raw, dict):
+            raise HTTPException(status_code=400, detail=f"requirements[{idx}] must be an object")
+        source_kind = str(raw.get("source_kind") or "").strip().lower()
+        source_id = str(raw.get("source_id") or "").strip()
+        if source_kind not in allowed_source_kinds:
+            raise HTTPException(status_code=400, detail=f"requirements[{idx}] has invalid source_kind")
+        if not source_id:
+            raise HTTPException(status_code=400, detail=f"requirements[{idx}] is missing source_id")
+        try:
+            quantity = float(raw.get("quantity"))
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"requirements[{idx}].quantity must be a number")
+        if quantity <= 0:
+            raise HTTPException(status_code=400, detail=f"requirements[{idx}].quantity must be > 0")
+        normalized_requirements.append(
+            {
+                "source_kind": source_kind,
+                "source_id": source_id,
+                "quantity": quantity,
+            }
+        )
+
+    availability_override = _economy_sanitize_availability(body.get("availability_override"), allow_empty=True)
+
+    markup_raw = body.get("markup_pct_override")
+    if markup_raw in (None, ""):
+        markup_pct_override: float | None = None
+    else:
+        try:
+            markup_pct_override = float(markup_raw)
+        except Exception:
+            raise HTTPException(status_code=400, detail="markup_pct_override must be a number")
+        if markup_pct_override < 0:
+            raise HTTPException(status_code=400, detail="markup_pct_override must be >= 0")
+
+    return {
+        "requirements": normalized_requirements,
+        "availability_override": availability_override,
+        "markup_pct_override": markup_pct_override,
+    }
+
+def _economy_item_exists(source_kind: str, source_id: str) -> bool:
+    if source_kind == "service":
+        return bool(get_col(ECONOMY_SERVICES_0_3_5_COL).find_one({"id": source_id}, {"_id": 1}))
+    collection = ECONOMY_ITEM_KIND_TO_COLLECTION.get(source_kind)
+    if not collection:
+        return False
+    return bool(get_col(collection).find_one({"id": source_id}, {"_id": 1}))
+
+def _economy_catalog_rows(source_kind: str, q: str, per_kind_limit: int) -> list[dict]:
+    if source_kind not in ECONOMY_ITEM_KIND_TO_COLLECTION:
+        return []
+    col = get_col(ECONOMY_ITEM_KIND_TO_COLLECTION[source_kind])
+    filt = {"name": {"$regex": re.escape((q or "").strip()), "$options": "i"}} if (q or "").strip() else {}
+    rows = list(
+        col.find(
+            filt,
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "price": 1,
+                "enc": 1,
+                "category": 1,
+                "slot": 1,
+                "subcategory": 1,
+                "tier": 1,
+                "method": 1,
+            },
+        ).limit(per_kind_limit)
+    )
+    out = []
+    for row in rows:
+        rid = str(row.get("id") or "").strip()
+        if not rid:
+            continue
+        out.append(
+            {
+                "uid": f"{source_kind}:{rid}",
+                "source_kind": source_kind,
+                "source_id": rid,
+                "name": str(row.get("name") or rid),
+                "fixed_price": float(row.get("price") or 0),
+                "enc": float(row.get("enc") or 0),
+                "category": row.get("category") or row.get("subcategory") or "",
+                "slot": row.get("slot") or "",
+                "tier": row.get("tier") or "",
+                "method": row.get("method") or "",
+            }
+        )
+    return out
+
 def _create_pending_submission(submitter: str, role: str, sub_type: str, payload: dict, kind: str | None = None) -> dict:
     doc = {
         "id": next_id_str("pending", padding=5),
@@ -6819,6 +7000,280 @@ def catalog_tools(request: Request, q: str = "", tags: str = "", limit: int = 50
         filt.update(_tags_filter(tags))
     rows = list(col.find(filt, {"_id": 0, "id": 1, "name": 1, "price": 1, "enc": 1, "category": 1}).limit(int(limit)))
     return {"status": "success", "tools": rows}
+
+@app.get("/economy-0-3-5/bootstrap")
+def economy_0_3_5_bootstrap(request: Request):
+    require_auth(request, roles=["moderator", "admin"])
+    entities = list(get_col(ECONOMY_ENTITIES_0_3_5_COL).find({}, {"_id": 0}))
+    services = list(get_col(ECONOMY_SERVICES_0_3_5_COL).find({}, {"_id": 0}))
+    entities.sort(key=lambda row: str(row.get("name") or "").lower())
+    services.sort(key=lambda row: str(row.get("name") or "").lower())
+    return {
+        "status": "success",
+        "entities": entities,
+        "services": services,
+        "availabilities": ECONOMY_AVAILABILITIES,
+        "markup_by_availability": ECONOMY_MARKUP_BY_AVAILABILITY,
+    }
+
+@app.get("/economy-0-3-5/entities")
+def economy_0_3_5_list_entities(request: Request, q: str = ""):
+    require_auth(request, roles=["moderator", "admin"])
+    col = get_col(ECONOMY_ENTITIES_0_3_5_COL)
+    filt = {"name": {"$regex": re.escape((q or "").strip()), "$options": "i"}} if (q or "").strip() else {}
+    rows = list(col.find(filt, {"_id": 0}))
+    rows.sort(key=lambda row: str(row.get("name") or "").lower())
+    return {"status": "success", "entities": rows}
+
+@app.post("/economy-0-3-5/entities")
+def economy_0_3_5_create_entity(request: Request, body: dict = Body(...)):
+    username, _role = require_auth(request, roles=["moderator", "admin"])
+    col = get_col(ECONOMY_ENTITIES_0_3_5_COL)
+    doc = _economy_entity_from_body(body)
+    if col.find_one({"name_key": doc["name_key"], "type": doc["type"]}):
+        raise HTTPException(status_code=409, detail="Duplicate economy entity")
+    now = _now_iso()
+    doc["id"] = next_id_str(ECONOMY_ENTITIES_0_3_5_COL, padding=4)
+    doc["created_at"] = now
+    doc["updated_at"] = now
+    doc["created_by"] = username
+    doc["updated_by"] = username
+    col.insert_one(dict(doc))
+    return {"status": "success", "entity": {k: v for k, v in doc.items() if k != "_id"}}
+
+@app.put("/economy-0-3-5/entities/{entity_id}")
+def economy_0_3_5_update_entity(entity_id: str, request: Request, body: dict = Body(...)):
+    username, _role = require_auth(request, roles=["moderator", "admin"])
+    eid = str(entity_id or "").strip()
+    if not eid:
+        raise HTTPException(status_code=400, detail="entity_id is required")
+    col = get_col(ECONOMY_ENTITIES_0_3_5_COL)
+    before = col.find_one({"id": eid})
+    if not before:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    updates = _economy_entity_from_body(body)
+    if col.find_one({"id": {"$ne": eid}, "name_key": updates["name_key"], "type": updates["type"]}):
+        raise HTTPException(status_code=409, detail="Duplicate economy entity")
+    updates["updated_at"] = _now_iso()
+    updates["updated_by"] = username
+    col.update_one({"id": eid}, {"$set": updates})
+    after = col.find_one({"id": eid}, {"_id": 0})
+    return {"status": "success", "entity": after}
+
+@app.delete("/economy-0-3-5/entities/{entity_id}")
+def economy_0_3_5_delete_entity(entity_id: str, request: Request):
+    require_auth(request, roles=["moderator", "admin"])
+    eid = str(entity_id or "").strip()
+    if not eid:
+        raise HTTPException(status_code=400, detail="entity_id is required")
+    col = get_col(ECONOMY_ENTITIES_0_3_5_COL)
+    res = col.delete_one({"id": eid})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    get_col(ECONOMY_ITEM_META_0_3_5_COL).update_many(
+        {},
+        {"$pull": {"requirements": {"source_kind": "entity", "source_id": eid}}},
+    )
+    return {"status": "success", "deleted": eid}
+
+@app.get("/economy-0-3-5/services")
+def economy_0_3_5_list_services(request: Request, q: str = ""):
+    require_auth(request, roles=["moderator", "admin"])
+    col = get_col(ECONOMY_SERVICES_0_3_5_COL)
+    filt = {"name": {"$regex": re.escape((q or "").strip()), "$options": "i"}} if (q or "").strip() else {}
+    rows = list(col.find(filt, {"_id": 0}))
+    rows.sort(key=lambda row: str(row.get("name") or "").lower())
+    return {"status": "success", "services": rows}
+
+@app.post("/economy-0-3-5/services")
+def economy_0_3_5_create_service(request: Request, body: dict = Body(...)):
+    username, _role = require_auth(request, roles=["moderator", "admin"])
+    col = get_col(ECONOMY_SERVICES_0_3_5_COL)
+    doc = _economy_service_from_body(body)
+    if col.find_one({"name_key": doc["name_key"]}):
+        raise HTTPException(status_code=409, detail="Duplicate service")
+    now = _now_iso()
+    doc["id"] = next_id_str(ECONOMY_SERVICES_0_3_5_COL, padding=4)
+    doc["created_at"] = now
+    doc["updated_at"] = now
+    doc["created_by"] = username
+    doc["updated_by"] = username
+    col.insert_one(dict(doc))
+    return {"status": "success", "service": {k: v for k, v in doc.items() if k != "_id"}}
+
+@app.put("/economy-0-3-5/services/{service_id}")
+def economy_0_3_5_update_service(service_id: str, request: Request, body: dict = Body(...)):
+    username, _role = require_auth(request, roles=["moderator", "admin"])
+    sid = str(service_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="service_id is required")
+    col = get_col(ECONOMY_SERVICES_0_3_5_COL)
+    before = col.find_one({"id": sid})
+    if not before:
+        raise HTTPException(status_code=404, detail="Service not found")
+    updates = _economy_service_from_body(body)
+    if col.find_one({"id": {"$ne": sid}, "name_key": updates["name_key"]}):
+        raise HTTPException(status_code=409, detail="Duplicate service")
+    updates["updated_at"] = _now_iso()
+    updates["updated_by"] = username
+    col.update_one({"id": sid}, {"$set": updates})
+    after = col.find_one({"id": sid}, {"_id": 0})
+    return {"status": "success", "service": after}
+
+@app.delete("/economy-0-3-5/services/{service_id}")
+def economy_0_3_5_delete_service(service_id: str, request: Request):
+    require_auth(request, roles=["moderator", "admin"])
+    sid = str(service_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="service_id is required")
+    col = get_col(ECONOMY_SERVICES_0_3_5_COL)
+    res = col.delete_one({"id": sid})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Service not found")
+    meta_col = get_col(ECONOMY_ITEM_META_0_3_5_COL)
+    meta_col.delete_one({"source_kind": "service", "source_id": sid})
+    meta_col.update_many({}, {"$pull": {"requirements": {"source_kind": "service", "source_id": sid}}})
+    return {"status": "success", "deleted": sid}
+
+@app.get("/economy-0-3-5/item-meta")
+def economy_0_3_5_list_item_meta(
+    request: Request,
+    source_kind: str | None = Query(default=None),
+    source_id: str | None = Query(default=None),
+):
+    require_auth(request, roles=["moderator", "admin"])
+    allowed_meta_sources = _economy_allowed_meta_source_kinds()
+    filt: dict[str, Any] = {}
+    if source_kind is not None:
+        sk = str(source_kind).strip().lower()
+        if sk not in allowed_meta_sources:
+            raise HTTPException(status_code=400, detail="Invalid source_kind")
+        filt["source_kind"] = sk
+    if source_id is not None:
+        sid = str(source_id).strip()
+        if not sid:
+            raise HTTPException(status_code=400, detail="source_id cannot be empty")
+        filt["source_id"] = sid
+    rows = list(get_col(ECONOMY_ITEM_META_0_3_5_COL).find(filt, {"_id": 0}))
+    return {"status": "success", "meta": rows}
+
+@app.put("/economy-0-3-5/item-meta/{source_kind}/{source_id}")
+def economy_0_3_5_upsert_item_meta(source_kind: str, source_id: str, request: Request, body: dict = Body(...)):
+    username, _role = require_auth(request, roles=["moderator", "admin"])
+    sk = str(source_kind or "").strip().lower()
+    sid = str(source_id or "").strip()
+    if sk not in _economy_allowed_meta_source_kinds():
+        raise HTTPException(status_code=400, detail="Invalid source_kind")
+    if not sid:
+        raise HTTPException(status_code=400, detail="source_id is required")
+    if not _economy_item_exists(sk, sid):
+        raise HTTPException(status_code=404, detail="Source item/service not found")
+
+    payload = _economy_meta_from_body(body)
+    now = _now_iso()
+    col = get_col(ECONOMY_ITEM_META_0_3_5_COL)
+    col.update_one(
+        {"source_kind": sk, "source_id": sid},
+        {
+            "$set": {
+                "source_kind": sk,
+                "source_id": sid,
+                "requirements": payload["requirements"],
+                "availability_override": payload["availability_override"],
+                "markup_pct_override": payload["markup_pct_override"],
+                "updated_at": now,
+                "updated_by": username,
+            },
+            "$setOnInsert": {"created_at": now, "created_by": username},
+        },
+        upsert=True,
+    )
+    doc = col.find_one({"source_kind": sk, "source_id": sid}, {"_id": 0})
+    return {"status": "success", "meta": doc}
+
+@app.delete("/economy-0-3-5/item-meta/{source_kind}/{source_id}")
+def economy_0_3_5_delete_item_meta(source_kind: str, source_id: str, request: Request):
+    require_auth(request, roles=["moderator", "admin"])
+    sk = str(source_kind or "").strip().lower()
+    sid = str(source_id or "").strip()
+    if sk not in _economy_allowed_meta_source_kinds():
+        raise HTTPException(status_code=400, detail="Invalid source_kind")
+    if not sid:
+        raise HTTPException(status_code=400, detail="source_id is required")
+    res = get_col(ECONOMY_ITEM_META_0_3_5_COL).delete_one({"source_kind": sk, "source_id": sid})
+    return {"status": "success", "deleted": sid, "removed": int(res.deleted_count)}
+
+@app.get("/economy-0-3-5/catalog")
+def economy_0_3_5_catalog(request: Request, q: str = "", item_type: str = "all", limit: int = 200):
+    require_auth(request, roles=["moderator", "admin"])
+    kind = str(item_type or "all").strip().lower() or "all"
+    allowed_types = {"all", "object", "equipment", "weapon", "tool", "service"}
+    if kind not in allowed_types:
+        raise HTTPException(status_code=400, detail="item_type must be one of all/object/equipment/weapon/tool/service")
+    try:
+        limit_int = int(limit)
+    except Exception:
+        limit_int = 200
+    limit_int = max(1, min(limit_int, 500))
+
+    item_kinds: list[str] = []
+    if kind == "all":
+        item_kinds = ["object", "equipment", "weapon", "tool"]
+    elif kind in ECONOMY_ITEM_KIND_TO_COLLECTION:
+        item_kinds = [kind]
+
+    per_kind_limit = max(1, min(250, int(math.ceil(limit_int / max(1, len(item_kinds) or 1)) * 2)))
+    rows: list[dict[str, Any]] = []
+    for source_kind in item_kinds:
+        rows.extend(_economy_catalog_rows(source_kind, q, per_kind_limit))
+
+    if kind in ("all", "service"):
+        service_col = get_col(ECONOMY_SERVICES_0_3_5_COL)
+        service_filter = {"name": {"$regex": re.escape((q or "").strip()), "$options": "i"}} if (q or "").strip() else {}
+        service_rows = list(
+            service_col.find(service_filter, {"_id": 0, "id": 1, "name": 1, "fixed_price": 1}).limit(per_kind_limit)
+        )
+        for row in service_rows:
+            sid = str(row.get("id") or "").strip()
+            if not sid:
+                continue
+            rows.append(
+                {
+                    "uid": f"service:{sid}",
+                    "source_kind": "service",
+                    "source_id": sid,
+                    "name": str(row.get("name") or sid),
+                    "fixed_price": float(row.get("fixed_price") or 0),
+                    "enc": 0,
+                    "category": "",
+                    "slot": "",
+                    "tier": "",
+                    "method": "",
+                }
+            )
+
+    rows.sort(key=lambda row: (str(row.get("name") or "").lower(), str(row.get("source_kind") or "")))
+    rows = rows[:limit_int]
+
+    meta_map: dict[tuple[str, str], dict] = {}
+    if rows:
+        meta_col = get_col(ECONOMY_ITEM_META_0_3_5_COL)
+        lookups = [{"source_kind": row["source_kind"], "source_id": row["source_id"]} for row in rows]
+        meta_docs = list(meta_col.find({"$or": lookups}, {"_id": 0}))
+        meta_map = {
+            (str(doc.get("source_kind") or ""), str(doc.get("source_id") or "")): doc
+            for doc in meta_docs
+        }
+
+    for row in rows:
+        doc = meta_map.get((row["source_kind"], row["source_id"])) or {}
+        row["meta"] = {
+            "requirements": doc.get("requirements") or [],
+            "availability_override": doc.get("availability_override") or "",
+            "markup_pct_override": doc.get("markup_pct_override"),
+        }
+
+    return {"status": "success", "items": rows}
 
 @app.get("/moderator/spells")
 def moderator_list_spells(request: Request, name: str = "", status: str = "", unassigned: str = ""):

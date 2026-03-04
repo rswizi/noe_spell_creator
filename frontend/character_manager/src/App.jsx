@@ -4,18 +4,19 @@ import CharacterListPage from "./pages/CharacterListPage";
 import CharacterEditPage from "./pages/CharacterEditPage";
 import EconomyManagerPage from "./pages/EconomyManagerPage";
 
-function RootRoute() {
-  if (window.location.pathname.startsWith("/economy-manager")) {
-    return <EconomyManagerPage />;
-  }
-  return <CharacterListPage />;
-}
-
 function App() {
+  const isEconomyApp = window.location.pathname.startsWith("/economy-manager");
+  if (isEconomyApp) {
+    return (
+      <Routes>
+        <Route path="/*" element={<EconomyManagerPage />} />
+      </Routes>
+    );
+  }
+
   return (
     <Routes>
-      <Route path="/" element={<RootRoute />} />
-      <Route path="/economy-manager/*" element={<EconomyManagerPage />} />
+      <Route path="/" element={<CharacterListPage />} />
       <Route path="/edit/:id" element={<CharacterEditPage />} />
       <Route path="/:characterSlug" element={<CharacterEditPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />

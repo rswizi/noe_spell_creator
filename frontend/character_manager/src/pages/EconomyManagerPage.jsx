@@ -1,8 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { fetchMe } from "../api";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import {
+  createEconomyEntity,
+  createEconomyService,
+  deleteEconomyEntity,
+  deleteEconomyService,
+  fetchEconomyBootstrap,
+  fetchEconomyCatalog,
+  fetchMe,
+  updateEconomyEntity,
+  updateEconomyService,
+  upsertEconomyItemMeta,
+} from "../api";
 
-const ECONOMY_TYPES = ["Manpower (hourly)", "Primary Resource", "Manufactured Resource", "Item"];
-const AVAILABILITIES = [
+const DEFAULT_AVAILABILITIES = [
   "Very Common",
   "Common",
   "Uncommon",
@@ -11,7 +22,8 @@ const AVAILABILITIES = [
   "Legendary",
   "Unique",
 ];
-const MARKUP_BY_AVAILABILITY = {
+
+const DEFAULT_MARKUP_BY_AVAILABILITY = {
   "Very Common": 5,
   Common: 10,
   Uncommon: 30,
@@ -20,7 +32,8 @@ const MARKUP_BY_AVAILABILITY = {
   Legendary: 300,
   Unique: 1000,
 };
-const DEFAULT_AVAILABILITY = "Common";
+
+const ECONOMY_TYPES = ["Manpower (hourly)", "Primary Resource", "Manufactured Resource", "Item"];
 
 function normalizeRole(role) {
   return String(role || "").toLowerCase();
@@ -30,314 +43,433 @@ function isPrivilegedRole(role) {
   return ["admin", "mod", "moderator"].includes(normalizeRole(role));
 }
 
-function createId() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
-}
-
-function availabilityRank(value) {
-  const idx = AVAILABILITIES.indexOf(value);
+function availabilityRank(value, availabilities) {
+  const idx = availabilities.indexOf(value);
   return idx === -1 ? 0 : idx;
 }
 
-function getRarestAvailability(requirements, entitiesById) {
-  let rarest = "";
-  let rank = -1;
-  for (const entry of requirements) {
-    const entity = entitiesById[entry.entityId];
-    if (!entity?.availability) continue;
-    const currentRank = availabilityRank(entity.availability);
-    if (currentRank > rank) {
-      rank = currentRank;
-      rarest = entity.availability;
-    }
-  }
-  return rarest || DEFAULT_AVAILABILITY;
+function sourceKindLabel(kind) {
+  const value = String(kind || "").toLowerCase();
+  if (value === "object") return "Object";
+  if (value === "equipment") return "Equipment";
+  if (value === "weapon") return "Weapon";
+  if (value === "tool") return "Tool";
+  if (value === "service") return "Service";
+  if (value === "entity") return "Economy Entity";
+  return kind || "Unknown";
+}
+
+function splitSourceKey(key) {
+  const raw = String(key || "");
+  const [kind, ...rest] = raw.split(":");
+  return { source_kind: kind || "", source_id: rest.join(":") || "" };
+}
+
+function economySourceKey(sourceKind, sourceId) {
+  return `${String(sourceKind || "").toLowerCase()}:${String(sourceId || "").trim()}`;
 }
 
 function EconomyManagerPage() {
+  const location = useLocation();
   const [me, setMe] = useState({
     label: "Checking login...",
     role: "",
-    isAdmin: false,
     isPrivileged: false,
   });
-  const [tab, setTab] = useState("configure");
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState("");
+
   const [entities, setEntities] = useState([]);
+  const [availabilities, setAvailabilities] = useState(DEFAULT_AVAILABILITIES);
+  const [markupByAvailability, setMarkupByAvailability] = useState(DEFAULT_MARKUP_BY_AVAILABILITY);
+
   const [entityForm, setEntityForm] = useState({
     id: "",
     name: "",
     type: ECONOMY_TYPES[0],
-    valuePerUnit: "",
-    availability: AVAILABILITIES[0],
+    value_per_unit: "",
+    availability: DEFAULT_AVAILABILITIES[0],
   });
   const [entityError, setEntityError] = useState("");
-  const [services, setServices] = useState([]);
-  const [serviceFormOpen, setServiceFormOpen] = useState(false);
-  const [serviceForm, setServiceForm] = useState({ name: "", fixedPrice: "" });
-  const [dynamicMeta, setDynamicMeta] = useState({});
-  const [selectedDynamicId, setSelectedDynamicId] = useState("");
+
   const [dynamicSearch, setDynamicSearch] = useState("");
-  const [dynamicFilter, setDynamicFilter] = useState("all");
-  const [requirementDraft, setRequirementDraft] = useState({ entityId: "", quantity: 1 });
+  const [dynamicType, setDynamicType] = useState("all");
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogItems, setCatalogItems] = useState([]);
+  const [allCatalogItems, setAllCatalogItems] = useState([]);
+  const [selectedKey, setSelectedKey] = useState("");
+  const [serviceFormOpen, setServiceFormOpen] = useState(false);
+  const [serviceForm, setServiceForm] = useState({ name: "", fixed_price: "" });
+  const [dynamicSaveBusy, setDynamicSaveBusy] = useState(false);
+  const [dynamicSaveError, setDynamicSaveError] = useState("");
+  const [dynamicSaveMessage, setDynamicSaveMessage] = useState("");
+
+  const [editorMeta, setEditorMeta] = useState({
+    requirements: [],
+    availability_override: "",
+    markup_pct_override: "",
+  });
+  const [servicePriceDraft, setServicePriceDraft] = useState("");
+  const [requirementDraft, setRequirementDraft] = useState({ key: "", quantity: 1 });
+
+  const loadBootstrap = useCallback(async () => {
+    const meData = await fetchMe();
+    const role = meData.role || "";
+    const privileged = isPrivilegedRole(role);
+    setMe({
+      label: `${meData.username || "Unknown"} (${role || "user"})`,
+      role,
+      isPrivileged: privileged,
+    });
+    if (!privileged) {
+      setEntities([]);
+      return false;
+    }
+    const bootstrap = await fetchEconomyBootstrap();
+    setEntities(bootstrap.entities || []);
+    if (Array.isArray(bootstrap.availabilities) && bootstrap.availabilities.length) {
+      setAvailabilities(bootstrap.availabilities);
+    }
+    if (bootstrap.markup_by_availability && typeof bootstrap.markup_by_availability === "object") {
+      setMarkupByAvailability(bootstrap.markup_by_availability);
+    }
+    return true;
+  }, []);
+
+  const loadCatalog = useCallback(async (searchValue, typeValue) => {
+    setCatalogBusy(true);
+    setCatalogError("");
+    try {
+      const result = await fetchEconomyCatalog({ q: searchValue || "", itemType: typeValue || "all", limit: 250 });
+      setCatalogItems(result.items || []);
+    } catch (err) {
+      setCatalogError(err instanceof Error ? err.message : "Failed to load item catalog.");
+    } finally {
+      setCatalogBusy(false);
+    }
+  }, []);
+
+  const loadAllCatalog = useCallback(async () => {
+    try {
+      const result = await fetchEconomyCatalog({ q: "", itemType: "all", limit: 500 });
+      setAllCatalogItems(result.items || []);
+    } catch (_) {
+      setAllCatalogItems([]);
+    }
+  }, []);
+
+  const reloadEconomyData = useCallback(async () => {
+    const privileged = await loadBootstrap();
+    if (!privileged) {
+      setCatalogItems([]);
+      setAllCatalogItems([]);
+      return;
+    }
+    await Promise.all([loadCatalog(dynamicSearch, dynamicType), loadAllCatalog()]);
+  }, [dynamicSearch, dynamicType, loadAllCatalog, loadBootstrap, loadCatalog]);
 
   useEffect(() => {
     let active = true;
-    fetchMe()
-      .then((meData) => {
+    setBusy(true);
+    setError("");
+    reloadEconomyData()
+      .catch((err) => {
         if (!active) return;
-        const role = meData.role || "";
-        const isAdmin = normalizeRole(role) === "admin";
-        setMe({
-          label: `${meData.username || "Unknown"} (${role || "user"})`,
-          role,
-          isAdmin,
-          isPrivileged: isPrivilegedRole(role),
-        });
+        setError(err instanceof Error ? err.message : "Failed to load economy manager data.");
       })
-      .catch(() => {
+      .finally(() => {
         if (!active) return;
-        setMe({ label: "Not logged in", role: "", isAdmin: false, isPrivileged: false });
+        setBusy(false);
       });
     return () => {
       active = false;
     };
-  }, []);
-
-  const entitiesById = useMemo(() => {
-    const map = {};
-    entities.forEach((entity) => {
-      map[entity.id] = entity;
-    });
-    return map;
-  }, [entities]);
-
-  const catalogItems = useMemo(() => {
-    return entities
-      .filter((entity) => entity.type === "Item")
-      .map((entity) => ({
-        id: entity.id,
-        name: entity.name,
-        type: "Item",
-        fixedPrice: Number(entity.valuePerUnit) || 0,
-      }));
-  }, [entities]);
-
-  const dynamicEntries = useMemo(() => {
-    return [
-      ...catalogItems,
-      ...services.map((service) => ({
-        id: service.id,
-        name: service.name,
-        type: "Service",
-        fixedPrice: Number(service.fixedPrice) || 0,
-      })),
-    ];
-  }, [catalogItems, services]);
-
-  const filteredDynamicEntries = useMemo(() => {
-    const query = String(dynamicSearch || "").toLowerCase();
-    return dynamicEntries.filter((entry) => {
-      if (dynamicFilter !== "all" && entry.type !== dynamicFilter) return false;
-      if (!query) return true;
-      return String(entry.name || "").toLowerCase().includes(query);
-    });
-  }, [dynamicEntries, dynamicFilter, dynamicSearch]);
-
-  const selectedEntry = dynamicEntries.find((entry) => entry.id === selectedDynamicId) || null;
-  const selectedMeta = selectedEntry ? dynamicMeta[selectedEntry.id] || null : null;
+  }, [reloadEconomyData]);
 
   useEffect(() => {
-    if (!selectedEntry) return;
-    setDynamicMeta((prev) => {
-      if (prev[selectedEntry.id]) return prev;
-      return {
-        ...prev,
-        [selectedEntry.id]: {
-          requirements: [],
-          availability: "",
-          markupPct: "",
-        },
-      };
-    });
-  }, [selectedEntry]);
+    if (!me.isPrivileged) return;
+    const timer = setTimeout(() => {
+      void loadCatalog(dynamicSearch, dynamicType);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [dynamicSearch, dynamicType, loadCatalog, me.isPrivileged]);
 
+  const selectedItem = useMemo(
+    () => catalogItems.find((entry) => economySourceKey(entry.source_kind, entry.source_id) === selectedKey) || null,
+    [catalogItems, selectedKey]
+  );
+
+  useEffect(() => {
+    if (!selectedItem) return;
+    const meta = selectedItem.meta || {};
+    setEditorMeta({
+      requirements: Array.isArray(meta.requirements) ? meta.requirements : [],
+      availability_override: meta.availability_override || "",
+      markup_pct_override: meta.markup_pct_override === undefined || meta.markup_pct_override === null ? "" : String(meta.markup_pct_override),
+    });
+    setServicePriceDraft(String(selectedItem.fixed_price ?? ""));
+    setRequirementDraft({ key: "", quantity: 1 });
+    setDynamicSaveError("");
+    setDynamicSaveMessage("");
+  }, [selectedItem]);
   const requirementOptions = useMemo(() => {
-    return entities
-      .filter((entity) => ECONOMY_TYPES.includes(entity.type))
-      .map((entity) => ({
-        id: entity.id,
-        label: `${entity.name} (${entity.type})`,
-        availability: entity.availability,
-        valuePerUnit: Number(entity.valuePerUnit) || 0,
-      }));
-  }, [entities]);
+    const entityOptions = (entities || []).map((entry) => ({
+      key: economySourceKey("entity", entry.id),
+      source_kind: "entity",
+      source_id: entry.id,
+      label: `${entry.name} (${entry.type})`,
+      fixed_price: Number(entry.value_per_unit) || 0,
+      availability: entry.availability || "Common",
+      type_label: "Economy Entity",
+    }));
+    const itemOptions = (allCatalogItems || []).map((entry) => ({
+      key: economySourceKey(entry.source_kind, entry.source_id),
+      source_kind: entry.source_kind,
+      source_id: entry.source_id,
+      label: `${entry.name} (${sourceKindLabel(entry.source_kind)})`,
+      fixed_price: Number(entry.fixed_price) || 0,
+      availability: entry.meta?.availability_override || "Common",
+      type_label: sourceKindLabel(entry.source_kind),
+    }));
+
+    const merged = [...entityOptions, ...itemOptions];
+    const selectedSource = selectedItem ? economySourceKey(selectedItem.source_kind, selectedItem.source_id) : "";
+    return merged
+      .filter((entry) => entry.key !== selectedSource)
+      .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+  }, [allCatalogItems, entities, selectedItem]);
 
   const requirementMap = useMemo(() => {
     const map = {};
     requirementOptions.forEach((entry) => {
-      map[entry.id] = entry;
+      map[entry.key] = entry;
     });
     return map;
   }, [requirementOptions]);
 
   const defaultAvailability = useMemo(() => {
-    if (!selectedMeta) return DEFAULT_AVAILABILITY;
-    return getRarestAvailability(selectedMeta.requirements || [], entitiesById);
-  }, [entitiesById, selectedMeta]);
+    const requirements = editorMeta.requirements || [];
+    if (!requirements.length) return availabilities[1] || availabilities[0] || "Common";
+    let best = availabilities[1] || availabilities[0] || "Common";
+    let bestRank = availabilityRank(best, availabilities);
+    requirements.forEach((entry) => {
+      const opt = requirementMap[economySourceKey(entry.source_kind, entry.source_id)];
+      const current = opt?.availability || "Common";
+      const currentRank = availabilityRank(current, availabilities);
+      if (currentRank > bestRank) {
+        best = current;
+        bestRank = currentRank;
+      }
+    });
+    return best;
+  }, [availabilities, editorMeta.requirements, requirementMap]);
 
-  const effectiveAvailability = selectedMeta?.availability || defaultAvailability;
-  const defaultMarkupPct = MARKUP_BY_AVAILABILITY[effectiveAvailability] ?? 0;
+  const effectiveAvailability = editorMeta.availability_override || defaultAvailability;
+  const defaultMarkupPct = Number(markupByAvailability[effectiveAvailability] ?? 0);
   const effectiveMarkupPct =
-    selectedMeta?.markupPct === "" || selectedMeta?.markupPct === undefined || selectedMeta?.markupPct === null
+    editorMeta.markup_pct_override === "" || editorMeta.markup_pct_override === null
       ? defaultMarkupPct
-      : Number(selectedMeta?.markupPct) || 0;
+      : Number(editorMeta.markup_pct_override) || 0;
 
-  const requirementCost = useMemo(() => {
-    if (!selectedMeta) return 0;
-    return (selectedMeta.requirements || []).reduce((sum, entry) => {
-      const source = entitiesById[entry.entityId];
-      if (!source) return sum;
-      const unit = Number(source.valuePerUnit) || 0;
-      const qty = Number(entry.quantity) || 0;
-      return sum + unit * qty;
-    }, 0);
-  }, [entitiesById, selectedMeta]);
+  const requirementCost = useMemo(
+    () =>
+      (editorMeta.requirements || []).reduce((total, entry) => {
+        const option = requirementMap[economySourceKey(entry.source_kind, entry.source_id)];
+        const unitPrice = Number(option?.fixed_price) || 0;
+        const qty = Number(entry.quantity) || 0;
+        return total + unitPrice * qty;
+      }, 0),
+    [editorMeta.requirements, requirementMap]
+  );
 
   const markupValue = requirementCost * (effectiveMarkupPct / 100);
   const dynamicPrice = Math.round(requirementCost + markupValue);
 
-  function resetEntityForm() {
-    setEntityForm({
-      id: "",
-      name: "",
-      type: ECONOMY_TYPES[0],
-      valuePerUnit: "",
-      availability: AVAILABILITIES[0],
-    });
-  }
-
-  function handleEntitySubmit(event) {
+  async function submitEntity(event) {
     event.preventDefault();
     setEntityError("");
     const name = String(entityForm.name || "").trim();
+    const value = Number(entityForm.value_per_unit);
     if (!name) {
       setEntityError("Name is required.");
       return;
     }
-    const value = Number(entityForm.valuePerUnit);
-    if (Number.isNaN(value)) {
-      setEntityError("Value per unit must be a number.");
+    if (Number.isNaN(value) || value < 0) {
+      setEntityError("Value per unit must be a valid number >= 0.");
       return;
     }
-    if (entityForm.id) {
-      setEntities((prev) =>
-        prev.map((entity) =>
-          entity.id === entityForm.id
-            ? { ...entity, name, type: entityForm.type, valuePerUnit: value, availability: entityForm.availability }
-            : entity
-        )
-      );
-    } else {
-      const newEntity = {
-        id: createId(),
-        name,
-        type: entityForm.type,
-        valuePerUnit: value,
-        availability: entityForm.availability,
-      };
-      setEntities((prev) => [...prev, newEntity]);
-    }
-    resetEntityForm();
-  }
 
-  function handleEntityEdit(entity) {
-    setEntityForm({
-      id: entity.id,
-      name: entity.name,
-      type: entity.type,
-      valuePerUnit: entity.valuePerUnit,
-      availability: entity.availability,
-    });
-  }
+    const payload = {
+      name,
+      type: entityForm.type,
+      value_per_unit: value,
+      availability: entityForm.availability,
+    };
 
-  function handleEntityDelete(entityId) {
-    setEntities((prev) => prev.filter((entity) => entity.id !== entityId));
-    setDynamicMeta((prev) => {
-      if (!prev[entityId]) return prev;
-      const next = { ...prev };
-      delete next[entityId];
-      return next;
-    });
-    if (selectedDynamicId === entityId) {
-      setSelectedDynamicId("");
+    try {
+      if (entityForm.id) {
+        await updateEconomyEntity(entityForm.id, payload);
+      } else {
+        await createEconomyEntity(payload);
+      }
+      setEntityForm({
+        id: "",
+        name: "",
+        type: ECONOMY_TYPES[0],
+        value_per_unit: "",
+        availability: availabilities[0] || "Very Common",
+      });
+      await reloadEconomyData();
+    } catch (err) {
+      setEntityError(err instanceof Error ? err.message : "Unable to save entity.");
     }
   }
 
-  function updateSelectedMeta(patch) {
-    if (!selectedEntry) return;
-    setDynamicMeta((prev) => ({
-      ...prev,
-      [selectedEntry.id]: { ...prev[selectedEntry.id], ...patch },
-    }));
-  }
-
-  function handleRequirementAdd(event) {
-    event.preventDefault();
-    if (!selectedMeta || !selectedEntry) return;
-    const entityId = requirementDraft.entityId;
-    const qty = Number(requirementDraft.quantity);
-    if (!entityId || Number.isNaN(qty) || qty <= 0) {
-      return;
-    }
-    if (selectedMeta.requirements.some((entry) => entry.entityId === entityId)) {
-      return;
-    }
-    updateSelectedMeta({
-      requirements: [...selectedMeta.requirements, { entityId, quantity: qty }],
-    });
-    setRequirementDraft({ entityId: "", quantity: 1 });
-  }
-
-  function handleRequirementRemove(entityId) {
-    if (!selectedMeta) return;
-    updateSelectedMeta({
-      requirements: selectedMeta.requirements.filter((entry) => entry.entityId !== entityId),
-    });
-  }
-
-  function handleFixedPriceChange(value) {
-    const nextValue = Number(value);
-    if (!selectedEntry) return;
-    if (selectedEntry.type === "Item") {
-      setEntities((prev) =>
-        prev.map((entity) =>
-          entity.id === selectedEntry.id ? { ...entity, valuePerUnit: Number.isNaN(nextValue) ? 0 : nextValue } : entity
-        )
-      );
-    } else {
-      setServices((prev) =>
-        prev.map((service) =>
-          service.id === selectedEntry.id ? { ...service, fixedPrice: Number.isNaN(nextValue) ? 0 : nextValue } : service
-        )
-      );
+  async function onDeleteEntity(entityId) {
+    if (!window.confirm("Delete this entity?")) return;
+    try {
+      await deleteEconomyEntity(entityId);
+      if (entityForm.id === entityId) {
+        setEntityForm({
+          id: "",
+          name: "",
+          type: ECONOMY_TYPES[0],
+          value_per_unit: "",
+          availability: availabilities[0] || "Very Common",
+        });
+      }
+      await reloadEconomyData();
+    } catch (err) {
+      setEntityError(err instanceof Error ? err.message : "Unable to delete entity.");
     }
   }
 
-  function handleCreateService(event) {
+  async function onCreateService(event) {
     event.preventDefault();
     const name = String(serviceForm.name || "").trim();
-    const fixedPrice = Number(serviceForm.fixedPrice);
-    if (!name || Number.isNaN(fixedPrice)) {
+    const fixedPrice = Number(serviceForm.fixed_price);
+    if (!name || Number.isNaN(fixedPrice) || fixedPrice < 0) {
+      setDynamicSaveError("Service name and valid fixed price are required.");
       return;
     }
-    const newService = { id: createId(), name, fixedPrice };
-    setServices((prev) => [...prev, newService]);
-    setServiceForm({ name: "", fixedPrice: "" });
-    setServiceFormOpen(false);
-    setSelectedDynamicId(newService.id);
+
+    try {
+      const created = await createEconomyService({ name, fixed_price: fixedPrice });
+      setServiceForm({ name: "", fixed_price: "" });
+      setServiceFormOpen(false);
+      await reloadEconomyData();
+      const serviceId = created.service?.id || "";
+      if (serviceId) {
+        setSelectedKey(economySourceKey("service", serviceId));
+      }
+    } catch (err) {
+      setDynamicSaveError(err instanceof Error ? err.message : "Unable to create service.");
+    }
+  }
+
+  async function onDeleteService(serviceId) {
+    if (!window.confirm("Delete this service?")) return;
+    try {
+      await deleteEconomyService(serviceId);
+      if (selectedKey === economySourceKey("service", serviceId)) {
+        setSelectedKey("");
+      }
+      await reloadEconomyData();
+    } catch (err) {
+      setDynamicSaveError(err instanceof Error ? err.message : "Unable to delete service.");
+    }
+  }
+
+  function onAddRequirement(event) {
+    event.preventDefault();
+    if (!selectedItem) return;
+    const source = splitSourceKey(requirementDraft.key);
+    const quantity = Number(requirementDraft.quantity);
+    if (!source.source_kind || !source.source_id || Number.isNaN(quantity) || quantity <= 0) return;
+
+    const exists = (editorMeta.requirements || []).some(
+      (entry) => entry.source_kind === source.source_kind && entry.source_id === source.source_id
+    );
+    if (exists) return;
+
+    setEditorMeta((prev) => ({
+      ...prev,
+      requirements: [...(prev.requirements || []), { ...source, quantity }],
+    }));
+    setRequirementDraft({ key: "", quantity: 1 });
+  }
+
+  function onRemoveRequirement(sourceKind, sourceId) {
+    setEditorMeta((prev) => ({
+      ...prev,
+      requirements: (prev.requirements || []).filter(
+        (entry) => !(entry.source_kind === sourceKind && entry.source_id === sourceId)
+      ),
+    }));
+  }
+  async function saveDynamicConfiguration() {
+    if (!selectedItem) return;
+    setDynamicSaveBusy(true);
+    setDynamicSaveError("");
+    setDynamicSaveMessage("");
+    try {
+      if (selectedItem.source_kind === "service") {
+        const nextPrice = Number(servicePriceDraft);
+        if (Number.isNaN(nextPrice) || nextPrice < 0) {
+          throw new Error("Service fixed price must be a number >= 0.");
+        }
+        await updateEconomyService(selectedItem.source_id, {
+          name: selectedItem.name,
+          fixed_price: nextPrice,
+        });
+      }
+
+      await upsertEconomyItemMeta(selectedItem.source_kind, selectedItem.source_id, {
+        requirements: editorMeta.requirements || [],
+        availability_override: editorMeta.availability_override || "",
+        markup_pct_override: editorMeta.markup_pct_override === "" ? null : Number(editorMeta.markup_pct_override) || 0,
+      });
+
+      await reloadEconomyData();
+      setDynamicSaveMessage("Dynamic pricing configuration saved.");
+    } catch (err) {
+      setDynamicSaveError(err instanceof Error ? err.message : "Unable to save dynamic pricing.");
+    } finally {
+      setDynamicSaveBusy(false);
+    }
+  }
+
+  const configurePath = "configure-economy";
+  const dynamicPath = "dynamic-price";
+  const currentPath = String(location.pathname || "").toLowerCase();
+  const configureActive = !currentPath.includes(dynamicPath);
+  const dynamicActive = currentPath.includes(dynamicPath);
+
+  if (busy) {
+    return (
+      <div className="cm-page">
+        <div className="cm-wrap">
+          <p className="cm-muted">Loading economy manager...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="cm-page">
+        <div className="cm-wrap">
+          <div className="cm-topbar">
+            <h1>Economy Manager</h1>
+            <a className="cm-btn" href="/character-manager">
+              Back to Manager
+            </a>
+          </div>
+          <p className="cm-error">{error}</p>
+        </div>
+      </div>
+    );
   }
 
   if (!me.isPrivileged) {
@@ -369,335 +501,389 @@ function EconomyManagerPage() {
         </div>
 
         <div className="cm-tabs">
-          <button className={`cm-tab ${tab === "configure" ? "active" : ""}`} onClick={() => setTab("configure")}>
+          <Link className={`cm-tab ${configureActive ? "active" : ""}`} to={configurePath}>
             Configure Economy
-          </button>
-          <button className={`cm-tab ${tab === "dynamic" ? "active" : ""}`} onClick={() => setTab("dynamic")}>
+          </Link>
+          <Link className={`cm-tab ${dynamicActive ? "active" : ""}`} to={dynamicPath}>
             Dynamic Item Price
-          </button>
+          </Link>
         </div>
 
-        {tab === "configure" && (
-          <div className="cm-economy-layout">
-            <div className="cm-panel">
-              <h2>{entityForm.id ? "Update Entity" : "Create Entity"}</h2>
-              <form className="cm-field-grid" onSubmit={handleEntitySubmit}>
-                <label>
-                  Name
-                  <input
-                    type="text"
-                    value={entityForm.name}
-                    onChange={(event) => setEntityForm((prev) => ({ ...prev, name: event.target.value }))}
-                    placeholder="Entity name"
-                  />
-                </label>
-                <label>
-                  Type
-                  <select
-                    value={entityForm.type}
-                    onChange={(event) => setEntityForm((prev) => ({ ...prev, type: event.target.value }))}
-                  >
-                    {ECONOMY_TYPES.map((entry) => (
-                      <option key={entry} value={entry}>
-                        {entry}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Value per Unit (Jelly)
-                  <input
-                    type="number"
-                    value={entityForm.valuePerUnit}
-                    onChange={(event) => setEntityForm((prev) => ({ ...prev, valuePerUnit: event.target.value }))}
-                    placeholder="0"
-                  />
-                </label>
-                <label>
-                  Availability
-                  <select
-                    value={entityForm.availability}
-                    onChange={(event) => setEntityForm((prev) => ({ ...prev, availability: event.target.value }))}
-                  >
-                    {AVAILABILITIES.map((entry) => (
-                      <option key={entry} value={entry}>
-                        {entry}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {entityError && <div className="cm-error">{entityError}</div>}
-                <div className="cm-row">
-                  <button className="cm-btn cm-primary" type="submit">
-                    {entityForm.id ? "Update Entity" : "Create Entity"}
-                  </button>
-                  {entityForm.id && (
-                    <button className="cm-btn" type="button" onClick={resetEntityForm}>
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
-
-            <div className="cm-panel">
-              <h2>Existing Entities</h2>
-              {!entities.length && <p className="cm-muted">No entities yet.</p>}
-              {!!entities.length && (
-                <table className="cm-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Type</th>
-                      <th>Value</th>
-                      <th>Availability</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entities.map((entity) => (
-                      <tr key={entity.id}>
-                        <td>{entity.name}</td>
-                        <td>{entity.type}</td>
-                        <td>{entity.valuePerUnit}</td>
-                        <td>{entity.availability}</td>
-                        <td className="cm-table-actions">
-                          <button type="button" className="cm-btn" onClick={() => handleEntityEdit(entity)}>
-                            Edit
-                          </button>
-                          <button type="button" className="cm-btn" onClick={() => handleEntityDelete(entity.id)}>
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
-
-        {tab === "dynamic" && (
-          <div className="cm-economy-layout">
-            <div className="cm-panel">
-              <h2>Items & Services</h2>
-              <div className="cm-field-grid">
-                <label>
-                  Search
-                  <input
-                    type="text"
-                    value={dynamicSearch}
-                    onChange={(event) => setDynamicSearch(event.target.value)}
-                    placeholder="Search by name"
-                  />
-                </label>
-                <label>
-                  Type
-                  <select value={dynamicFilter} onChange={(event) => setDynamicFilter(event.target.value)}>
-                    <option value="all">All</option>
-                    <option value="Item">Items</option>
-                    <option value="Service">Services</option>
-                  </select>
-                </label>
-                <button type="button" className="cm-btn cm-primary" onClick={() => setServiceFormOpen((v) => !v)}>
-                  {serviceFormOpen ? "Close Service Form" : "Create Service"}
-                </button>
-                {serviceFormOpen && (
-                  <form className="cm-inline cm-service-form" onSubmit={handleCreateService}>
-                    <input
-                      type="text"
-                      value={serviceForm.name}
-                      placeholder="Service name"
-                      onChange={(event) => setServiceForm((prev) => ({ ...prev, name: event.target.value }))}
-                    />
-                    <input
-                      type="number"
-                      value={serviceForm.fixedPrice}
-                      placeholder="Fixed price"
-                      onChange={(event) => setServiceForm((prev) => ({ ...prev, fixedPrice: event.target.value }))}
-                    />
-                    <button className="cm-btn cm-primary" type="submit">
-                      Add
-                    </button>
-                  </form>
-                )}
-              </div>
-
-              <div className="cm-list">
-                {!filteredDynamicEntries.length && <p className="cm-muted">No matching items yet.</p>}
-                {filteredDynamicEntries.map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    className={`cm-list-item ${selectedDynamicId === entry.id ? "active" : ""}`}
-                    onClick={() => setSelectedDynamicId(entry.id)}
-                  >
-                    <div>
-                      <strong>{entry.name}</strong>
-                      <div className="cm-muted">{entry.type}</div>
-                    </div>
-                    <span className="cm-pill">{entry.fixedPrice} Jelly</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="cm-panel">
-              <h2>Dynamic Pricing</h2>
-              {!selectedEntry && <p className="cm-muted">Select an item or service to configure.</p>}
-              {selectedEntry && selectedMeta && (
-                <div className="cm-field-grid">
-                  <div className="cm-inline cm-inline-space">
-                    <div>
-                      <strong>{selectedEntry.name}</strong>
-                      <div className="cm-muted">{selectedEntry.type}</div>
-                    </div>
-                    <span className="cm-badge">Dynamic price: {dynamicPrice} Jelly</span>
-                  </div>
-
-                  <label>
-                    Fixed Price (Jelly)
-                    <input
-                      type="number"
-                      value={selectedEntry.fixedPrice}
-                      onChange={(event) => handleFixedPriceChange(event.target.value)}
-                    />
-                  </label>
-
-                  <label>
-                    Availability
-                    <select
-                      value={effectiveAvailability}
-                      onChange={(event) => updateSelectedMeta({ availability: event.target.value })}
-                    >
-                      {AVAILABILITIES.map((entry) => (
-                        <option key={entry} value={entry}>
-                          {entry}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="cm-muted cm-subtle">
-                      Suggested availability: {defaultAvailability} (from prerequisites)
-                    </div>
-                    {selectedMeta.availability && (
-                      <button
-                        type="button"
-                        className="cm-btn"
-                        onClick={() => updateSelectedMeta({ availability: "" })}
-                      >
-                        Use Suggested
-                      </button>
-                    )}
-                  </label>
-
-                  <label>
-                    Markup (%)
-                    <input
-                      type="number"
-                      value={effectiveMarkupPct}
-                      onChange={(event) => updateSelectedMeta({ markupPct: event.target.value })}
-                    />
-                    <div className="cm-muted cm-subtle">Suggested markup: {defaultMarkupPct}%</div>
-                    {selectedMeta.markupPct !== "" && (
-                      <button
-                        type="button"
-                        className="cm-btn"
-                        onClick={() => updateSelectedMeta({ markupPct: "" })}
-                      >
-                        Use Suggested
-                      </button>
-                    )}
-                  </label>
-
-                  <div className="cm-panel cm-panel-lite">
-                    <div className="cm-inline cm-inline-space">
-                      <strong>Requirements</strong>
-                      <span className="cm-muted">Base cost: {requirementCost} Jelly</span>
-                    </div>
-
-                    <form className="cm-inline" onSubmit={handleRequirementAdd}>
+        <Routes>
+          <Route path="/" element={<Navigate to={configurePath} replace />} />
+          <Route
+            path={configurePath}
+            element={
+              <div className="cm-economy-layout">
+                <div className="cm-panel">
+                  <h2>{entityForm.id ? "Update Entity" : "Create Entity"}</h2>
+                  <form className="cm-field-grid" onSubmit={submitEntity}>
+                    <label>
+                      Name
+                      <input
+                        type="text"
+                        value={entityForm.name}
+                        onChange={(event) => setEntityForm((prev) => ({ ...prev, name: event.target.value }))}
+                        placeholder="Entity name"
+                      />
+                    </label>
+                    <label>
+                      Type
                       <select
-                        value={requirementDraft.entityId}
-                        onChange={(event) =>
-                          setRequirementDraft((prev) => ({ ...prev, entityId: event.target.value }))
-                        }
+                        value={entityForm.type}
+                        onChange={(event) => setEntityForm((prev) => ({ ...prev, type: event.target.value }))}
                       >
-                        <option value="">-- Select requirement --</option>
-                        {requirementOptions.map((entry) => (
-                          <option key={entry.id} value={entry.id}>
-                            {entry.label}
+                        {ECONOMY_TYPES.map((entry) => (
+                          <option key={entry} value={entry}>
+                            {entry}
                           </option>
                         ))}
                       </select>
+                    </label>
+                    <label>
+                      Value per Unit (Jelly)
                       <input
                         type="number"
-                        min={1}
-                        value={requirementDraft.quantity}
-                        onChange={(event) =>
-                          setRequirementDraft((prev) => ({ ...prev, quantity: event.target.value }))
-                        }
+                        value={entityForm.value_per_unit}
+                        onChange={(event) => setEntityForm((prev) => ({ ...prev, value_per_unit: event.target.value }))}
+                        placeholder="0"
                       />
+                    </label>
+                    <label>
+                      Availability
+                      <select
+                        value={entityForm.availability}
+                        onChange={(event) => setEntityForm((prev) => ({ ...prev, availability: event.target.value }))}
+                      >
+                        {availabilities.map((entry) => (
+                          <option key={entry} value={entry}>
+                            {entry}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {entityError && <div className="cm-error">{entityError}</div>}
+                    <div className="cm-row">
                       <button className="cm-btn cm-primary" type="submit">
-                        Add
+                        {entityForm.id ? "Update Entity" : "Create Entity"}
                       </button>
-                    </form>
+                      {entityForm.id && (
+                        <button
+                          className="cm-btn"
+                          type="button"
+                          onClick={() =>
+                            setEntityForm({
+                              id: "",
+                              name: "",
+                              type: ECONOMY_TYPES[0],
+                              value_per_unit: "",
+                              availability: availabilities[0] || "Very Common",
+                            })
+                          }
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                </div>
 
-                    {!selectedMeta.requirements.length && <p className="cm-muted">No requirements yet.</p>}
-                    {!!selectedMeta.requirements.length && (
-                      <div className="cm-list">
-                        {selectedMeta.requirements.map((entry) => {
-                          const info = requirementMap[entry.entityId];
-                          return (
-                            <div key={entry.entityId} className="cm-list-item cm-list-row">
-                              <div>
-                                <strong>{info?.label || "Unknown"}</strong>
-                                <div className="cm-muted">
-                                  {info?.valuePerUnit || 0} Jelly per unit · {info?.availability || "n/a"}
-                                </div>
-                              </div>
-                              <div className="cm-inline">
-                                <span className="cm-pill">x {entry.quantity}</span>
-                                <button
-                                  type="button"
-                                  className="cm-btn"
-                                  onClick={() => handleRequirementRemove(entry.entityId)}
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                <div className="cm-panel">
+                  <h2>Existing Entities</h2>
+                  {!entities.length && <p className="cm-muted">No entities yet.</p>}
+                  {!!entities.length && (
+                    <table className="cm-table">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Type</th>
+                          <th>Value</th>
+                          <th>Availability</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {entities.map((entity) => (
+                          <tr key={entity.id}>
+                            <td>{entity.name}</td>
+                            <td>{entity.type}</td>
+                            <td>{entity.value_per_unit}</td>
+                            <td>{entity.availability}</td>
+                            <td className="cm-table-actions">
+                              <button
+                                type="button"
+                                className="cm-btn"
+                                onClick={() =>
+                                  setEntityForm({
+                                    id: entity.id,
+                                    name: entity.name,
+                                    type: entity.type,
+                                    value_per_unit: String(entity.value_per_unit ?? ""),
+                                    availability: entity.availability || availabilities[0] || "Very Common",
+                                  })
+                                }
+                              >
+                                Edit
+                              </button>
+                              <button type="button" className="cm-btn cm-danger" onClick={() => onDeleteEntity(entity.id)}>
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            }
+          />
+          <Route
+            path={dynamicPath}
+            element={
+              <div className="cm-economy-layout">
+                <div className="cm-panel">
+                  <h2>Items & Services</h2>
+                  <div className="cm-field-grid">
+                    <label>
+                      Search
+                      <input
+                        type="text"
+                        value={dynamicSearch}
+                        onChange={(event) => setDynamicSearch(event.target.value)}
+                        placeholder="Search by name"
+                      />
+                    </label>
+                    <label>
+                      Type
+                      <select value={dynamicType} onChange={(event) => setDynamicType(event.target.value)}>
+                        <option value="all">All</option>
+                        <option value="object">Object</option>
+                        <option value="equipment">Equipment</option>
+                        <option value="weapon">Weapon</option>
+                        <option value="tool">Tool</option>
+                        <option value="service">Service</option>
+                      </select>
+                    </label>
+                    <button type="button" className="cm-btn cm-primary" onClick={() => setServiceFormOpen((value) => !value)}>
+                      {serviceFormOpen ? "Close Service Form" : "Create Service"}
+                    </button>
+                    {serviceFormOpen && (
+                      <form className="cm-inline cm-service-form" onSubmit={onCreateService}>
+                        <input
+                          type="text"
+                          value={serviceForm.name}
+                          placeholder="Service name"
+                          onChange={(event) => setServiceForm((prev) => ({ ...prev, name: event.target.value }))}
+                        />
+                        <input
+                          type="number"
+                          value={serviceForm.fixed_price}
+                          placeholder="Fixed price"
+                          onChange={(event) => setServiceForm((prev) => ({ ...prev, fixed_price: event.target.value }))}
+                        />
+                        <button className="cm-btn cm-primary" type="submit">
+                          Add
+                        </button>
+                      </form>
                     )}
                   </div>
 
-                  <div className="cm-panel cm-panel-lite">
-                    <div className="cm-inline cm-inline-space">
-                      <strong>Dynamic Price Breakdown</strong>
-                      <span className="cm-badge">{dynamicPrice} Jelly</span>
-                    </div>
-                    <div className="cm-stack">
-                      <div className="cm-inline cm-inline-space">
-                        <span>Requirements cost</span>
-                        <span>{requirementCost} Jelly</span>
-                      </div>
-                      <div className="cm-inline cm-inline-space">
-                        <span>Markup ({effectiveMarkupPct}%)</span>
-                        <span>{Math.round(markupValue)} Jelly</span>
-                      </div>
-                      <div className="cm-inline cm-inline-space">
-                        <strong>Total</strong>
-                        <strong>{dynamicPrice} Jelly</strong>
-                      </div>
-                    </div>
+                  {catalogBusy && <p className="cm-muted">Loading catalog...</p>}
+                  {catalogError && <p className="cm-error">{catalogError}</p>}
+
+                  <div className="cm-list">
+                    {!catalogBusy && !catalogItems.length && <p className="cm-muted">No matching items found.</p>}
+                    {catalogItems.map((entry) => {
+                      const key = economySourceKey(entry.source_kind, entry.source_id);
+                      return (
+                        <div key={key} className={`cm-list-item ${selectedKey === key ? "active" : ""}`}>
+                          <button type="button" className="cm-list-main-btn" onClick={() => setSelectedKey(key)}>
+                            <div>
+                              <strong>{entry.name}</strong>
+                              <div className="cm-muted">{sourceKindLabel(entry.source_kind)}</div>
+                            </div>
+                            <span className="cm-pill">{entry.fixed_price} Jelly</span>
+                          </button>
+                          {entry.source_kind === "service" && (
+                            <button type="button" className="cm-btn cm-danger" onClick={() => onDeleteService(entry.source_id)}>
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-        )}
+
+                <div className="cm-panel">
+                  <h2>Dynamic Pricing</h2>
+                  {!selectedItem && <p className="cm-muted">Select an item or service to configure.</p>}
+                  {selectedItem && (
+                    <div className="cm-field-grid">
+                      <div className="cm-inline cm-inline-space">
+                        <div>
+                          <strong>{selectedItem.name}</strong>
+                          <div className="cm-muted">{sourceKindLabel(selectedItem.source_kind)}</div>
+                        </div>
+                        <span className="cm-badge">Dynamic price: {dynamicPrice} Jelly</span>
+                      </div>
+
+                      {selectedItem.source_kind === "service" ? (
+                        <label>
+                          Fixed Price (Jelly)
+                          <input type="number" value={servicePriceDraft} onChange={(event) => setServicePriceDraft(event.target.value)} />
+                        </label>
+                      ) : (
+                        <label>
+                          Fixed Price (Jelly)
+                          <input type="number" value={selectedItem.fixed_price} disabled />
+                        </label>
+                      )}
+
+                      <label>
+                        Availability
+                        <select
+                          value={editorMeta.availability_override || defaultAvailability}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            const shouldUseSuggested = value === defaultAvailability;
+                            setEditorMeta((prev) => ({ ...prev, availability_override: shouldUseSuggested ? "" : value }));
+                          }}
+                        >
+                          {availabilities.map((entry) => (
+                            <option key={entry} value={entry}>
+                              {entry}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="cm-muted cm-subtle">Suggested availability: {defaultAvailability} (based on prerequisites)</div>
+                        {editorMeta.availability_override && (
+                          <button
+                            type="button"
+                            className="cm-btn"
+                            onClick={() => setEditorMeta((prev) => ({ ...prev, availability_override: "" }))}
+                          >
+                            Use Suggested
+                          </button>
+                        )}
+                      </label>
+
+                      <label>
+                        Markup (%)
+                        <input
+                          type="number"
+                          value={editorMeta.markup_pct_override === "" ? defaultMarkupPct : editorMeta.markup_pct_override}
+                          onChange={(event) => setEditorMeta((prev) => ({ ...prev, markup_pct_override: event.target.value }))}
+                        />
+                        <div className="cm-muted cm-subtle">Suggested markup: {defaultMarkupPct}%</div>
+                        {editorMeta.markup_pct_override !== "" && (
+                          <button
+                            type="button"
+                            className="cm-btn"
+                            onClick={() => setEditorMeta((prev) => ({ ...prev, markup_pct_override: "" }))}
+                          >
+                            Use Suggested
+                          </button>
+                        )}
+                      </label>
+
+                      <div className="cm-panel cm-panel-lite">
+                        <div className="cm-inline cm-inline-space">
+                          <strong>Requirements</strong>
+                          <span className="cm-muted">Base cost: {requirementCost} Jelly</span>
+                        </div>
+                        <form className="cm-inline" onSubmit={onAddRequirement}>
+                          <select
+                            value={requirementDraft.key}
+                            onChange={(event) => setRequirementDraft((prev) => ({ ...prev, key: event.target.value }))}
+                          >
+                            <option value="">-- Select requirement --</option>
+                            {requirementOptions.map((entry) => (
+                              <option key={entry.key} value={entry.key}>
+                                {entry.label}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min={0.01}
+                            step="0.01"
+                            value={requirementDraft.quantity}
+                            onChange={(event) => setRequirementDraft((prev) => ({ ...prev, quantity: event.target.value }))}
+                          />
+                          <button className="cm-btn cm-primary" type="submit">
+                            Add
+                          </button>
+                        </form>
+
+                        {!editorMeta.requirements.length && <p className="cm-muted">No requirements yet.</p>}
+                        {!!editorMeta.requirements.length && (
+                          <div className="cm-list">
+                            {editorMeta.requirements.map((entry) => {
+                              const key = economySourceKey(entry.source_kind, entry.source_id);
+                              const info = requirementMap[key];
+                              return (
+                                <div key={key} className="cm-list-item cm-list-row">
+                                  <div>
+                                    <strong>{info?.label || `${entry.source_kind}:${entry.source_id}`}</strong>
+                                    <div className="cm-muted">
+                                      {(Number(info?.fixed_price) || 0).toFixed(2)} Jelly per unit | {info?.availability || "Common"}
+                                    </div>
+                                  </div>
+                                  <div className="cm-inline">
+                                    <span className="cm-pill">x {entry.quantity}</span>
+                                    <button
+                                      type="button"
+                                      className="cm-btn"
+                                      onClick={() => onRemoveRequirement(entry.source_kind, entry.source_id)}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="cm-panel cm-panel-lite">
+                        <div className="cm-inline cm-inline-space">
+                          <strong>Dynamic Price Breakdown</strong>
+                          <span className="cm-badge">{dynamicPrice} Jelly</span>
+                        </div>
+                        <div className="cm-stack">
+                          <div className="cm-inline cm-inline-space">
+                            <span>Requirements cost</span>
+                            <span>{requirementCost.toFixed(2)} Jelly</span>
+                          </div>
+                          <div className="cm-inline cm-inline-space">
+                            <span>Markup ({effectiveMarkupPct}%)</span>
+                            <span>{Math.round(markupValue)} Jelly</span>
+                          </div>
+                          <div className="cm-inline cm-inline-space">
+                            <strong>Total</strong>
+                            <strong>{dynamicPrice} Jelly</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {dynamicSaveError && <div className="cm-error">{dynamicSaveError}</div>}
+                      {dynamicSaveMessage && <div className="cm-muted">{dynamicSaveMessage}</div>}
+                      <div className="cm-row">
+                        <button className="cm-btn cm-primary" type="button" onClick={saveDynamicConfiguration} disabled={dynamicSaveBusy}>
+                          {dynamicSaveBusy ? "Saving..." : "Save Dynamic Config"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            }
+          />
+          <Route path="*" element={<Navigate to={configurePath} replace />} />
+        </Routes>
       </div>
     </div>
   );

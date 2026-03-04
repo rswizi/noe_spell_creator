@@ -99,3 +99,84 @@ export async function uploadCharacterAvatar(id, file) {
   }
   return payload;
 }
+
+export async function fetchEconomyBootstrap() {
+  return api("/economy-0-3-5/bootstrap");
+}
+
+export async function fetchEconomyEntities(q = "") {
+  const query = q ? `?q=${encodeURIComponent(q)}` : "";
+  return api(`/economy-0-3-5/entities${query}`);
+}
+
+export async function createEconomyEntity(payload) {
+  return api("/economy-0-3-5/entities", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export async function updateEconomyEntity(entityId, payload) {
+  return api(`/economy-0-3-5/entities/${encodeURIComponent(entityId)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export async function deleteEconomyEntity(entityId) {
+  return api(`/economy-0-3-5/entities/${encodeURIComponent(entityId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchEconomyServices(q = "") {
+  const query = q ? `?q=${encodeURIComponent(q)}` : "";
+  return api(`/economy-0-3-5/services${query}`);
+}
+
+export async function createEconomyService(payload) {
+  return api("/economy-0-3-5/services", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export async function updateEconomyService(serviceId, payload) {
+  return api(`/economy-0-3-5/services/${encodeURIComponent(serviceId)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export async function deleteEconomyService(serviceId) {
+  return api(`/economy-0-3-5/services/${encodeURIComponent(serviceId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchEconomyCatalog({ q = "", itemType = "all", limit = 200 } = {}) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (itemType) params.set("item_type", itemType);
+  if (limit) params.set("limit", String(limit));
+  const query = params.toString();
+  return api(`/economy-0-3-5/catalog${query ? `?${query}` : ""}`);
+}
+
+export async function upsertEconomyItemMeta(sourceKind, sourceId, payload) {
+  return api(`/economy-0-3-5/item-meta/${encodeURIComponent(sourceKind)}/${encodeURIComponent(sourceId)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export async function deleteEconomyItemMeta(sourceKind, sourceId) {
+  return api(`/economy-0-3-5/item-meta/${encodeURIComponent(sourceKind)}/${encodeURIComponent(sourceId)}`, {
+    method: "DELETE",
+  });
+}
