@@ -675,13 +675,6 @@
         );
       }
 
-      if (
-        window.location.pathname.includes("/character-manager/economy-manager") ||
-        window.location.pathname.startsWith("/economy-manager")
-      ) {
-        return <EconomyManagerPage />;
-      }
-
       return (
         <div className="cm-page">
           <div className="cm-wrap">
@@ -1251,6 +1244,13 @@
           setQuickBusy(false);
         }
       }, [quickData.armorBySlot, quickForm, weaponLookup]);
+
+      const isEconomyRoute =
+        window.location.pathname.includes("/character-manager/economy-manager") ||
+        window.location.pathname.startsWith("/economy-manager");
+      if (isEconomyRoute) {
+        return <EconomyManagerPage />;
+      }
 
       return (
         <div className="cm-page">
