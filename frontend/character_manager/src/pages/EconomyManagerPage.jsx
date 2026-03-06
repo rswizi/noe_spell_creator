@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
 import {
   createEconomyEntity,
   createEconomyService,
@@ -70,7 +70,6 @@ function economySourceKey(sourceKind, sourceId) {
 }
 
 function EconomyManagerPage() {
-  const location = useLocation();
   const [me, setMe] = useState({
     label: "Checking login...",
     role: "",
@@ -440,16 +439,27 @@ function EconomyManagerPage() {
     }
   }
 
-  const configurePath = "configure-economy";
-  const dynamicPath = "dynamic-price";
-  const currentPath = String(location.pathname || "").toLowerCase();
-  const configureActive = !currentPath.includes(dynamicPath);
-  const dynamicActive = currentPath.includes(dynamicPath);
+  const portalPath = "/";
+  const configurePath = "economy-tab";
+  const dynamicPath = "dynamic-pricing";
+  function goBack(fallback = "/character-manager") {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.assign(fallback);
+  }
 
   if (busy) {
     return (
       <div className="cm-page">
         <div className="cm-wrap">
+          <div className="cm-topbar">
+            <h1>Economy Manager</h1>
+            <button className="cm-btn" type="button" onClick={() => goBack("/character-manager")}>
+              Back
+            </button>
+          </div>
           <p className="cm-muted">Loading economy manager...</p>
         </div>
       </div>
@@ -462,9 +472,9 @@ function EconomyManagerPage() {
         <div className="cm-wrap">
           <div className="cm-topbar">
             <h1>Economy Manager</h1>
-            <a className="cm-btn" href="/character-manager">
-              Back to Manager
-            </a>
+            <button className="cm-btn" type="button" onClick={() => goBack("/character-manager")}>
+              Back
+            </button>
           </div>
           <p className="cm-error">{error}</p>
         </div>
@@ -478,9 +488,9 @@ function EconomyManagerPage() {
         <div className="cm-wrap">
           <div className="cm-topbar">
             <h1>Economy Manager</h1>
-            <a className="cm-btn" href="/character-manager">
-              Back to Manager
-            </a>
+            <button className="cm-btn" type="button" onClick={() => goBack("/character-manager")}>
+              Back
+            </button>
             <span className="cm-muted cm-right">{me.label}</span>
           </div>
           <p>Admin or moderator access required.</p>
@@ -494,27 +504,49 @@ function EconomyManagerPage() {
       <div className="cm-wrap">
         <div className="cm-topbar">
           <h1>Economy Manager</h1>
-          <a className="cm-btn" href="/character-manager">
-            Back to Manager
-          </a>
+          <button className="cm-btn" type="button" onClick={() => goBack("/character-manager")}>
+            Back
+          </button>
           <span className="cm-muted cm-right">{me.label}</span>
         </div>
 
-        <div className="cm-tabs">
-          <Link className={`cm-tab ${configureActive ? "active" : ""}`} to={configurePath}>
-            Configure Economy
-          </Link>
-          <Link className={`cm-tab ${dynamicActive ? "active" : ""}`} to={dynamicPath}>
-            Dynamic Item Price
-          </Link>
-        </div>
-
         <Routes>
-          <Route path="/" element={<Navigate to={configurePath} replace />} />
+          <Route
+            path={portalPath}
+            element={
+              <div className="cm-panel">
+                <h2>Economy Manager Portal</h2>
+                <p className="cm-muted">Choose the page you want to manage.</p>
+                <div className="cm-grid">
+                  <Link className="cm-card" to={configurePath}>
+                    <div className="cm-meta">
+                      <strong>Configure Economy</strong>
+                      <span className="cm-muted">Manage economy entities, value per unit, and availability.</span>
+                    </div>
+                  </Link>
+                  <Link className="cm-card" to={dynamicPath}>
+                    <div className="cm-meta">
+                      <strong>Dynamic Pricing</strong>
+                      <span className="cm-muted">Configure requirements, markup, and computed item prices.</span>
+                    </div>
+                  </Link>
+                </div>
+              </div>
+            }
+          />
           <Route
             path={configurePath}
             element={
-              <div className="cm-economy-layout">
+              <div className="cm-field-grid">
+                <div className="cm-row">
+                  <button className="cm-btn" type="button" onClick={() => goBack("/economy-manager")}>
+                    Back to Previous Page
+                  </button>
+                  <Link className="cm-btn" to={portalPath}>
+                    Economy Portal
+                  </Link>
+                </div>
+                <div className="cm-economy-layout">
                 <div className="cm-panel">
                   <h2>{entityForm.id ? "Update Entity" : "Create Entity"}</h2>
                   <form className="cm-field-grid" onSubmit={submitEntity}>
@@ -636,12 +668,22 @@ function EconomyManagerPage() {
                   )}
                 </div>
               </div>
+              </div>
             }
           />
           <Route
             path={dynamicPath}
             element={
-              <div className="cm-economy-layout">
+              <div className="cm-field-grid">
+                <div className="cm-row">
+                  <button className="cm-btn" type="button" onClick={() => goBack("/economy-manager")}>
+                    Back to Previous Page
+                  </button>
+                  <Link className="cm-btn" to={portalPath}>
+                    Economy Portal
+                  </Link>
+                </div>
+                <div className="cm-economy-layout">
                 <div className="cm-panel">
                   <h2>Items & Services</h2>
                   <div className="cm-field-grid">
@@ -880,9 +922,12 @@ function EconomyManagerPage() {
                   )}
                 </div>
               </div>
+              </div>
             }
           />
-          <Route path="*" element={<Navigate to={configurePath} replace />} />
+          <Route path="configure-economy" element={<Navigate to={configurePath} replace />} />
+          <Route path="dynamic-price" element={<Navigate to={dynamicPath} replace />} />
+          <Route path="*" element={<Navigate to={portalPath} replace />} />
         </Routes>
       </div>
     </div>
