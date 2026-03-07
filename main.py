@@ -5329,7 +5329,7 @@ def _economy_allowed_source_kinds() -> set[str]:
     return {"entity", "service", *ECONOMY_ITEM_KIND_TO_COLLECTION.keys()}
 
 def _economy_allowed_meta_source_kinds() -> set[str]:
-    return {"service", *ECONOMY_ITEM_KIND_TO_COLLECTION.keys()}
+    return {"entity", "service", *ECONOMY_ITEM_KIND_TO_COLLECTION.keys()}
 
 def _economy_sanitize_availability(value: Any, allow_empty: bool = False) -> str:
     raw = str(value or "").strip()
@@ -5436,6 +5436,8 @@ def _economy_meta_from_body(body: dict) -> dict:
     }
 
 def _economy_item_exists(source_kind: str, source_id: str) -> bool:
+    if source_kind == "entity":
+        return bool(get_col(ECONOMY_ENTITIES_0_3_5_COL).find_one({"id": source_id}, {"_id": 1}))
     if source_kind == "service":
         return bool(get_col(ECONOMY_SERVICES_0_3_5_COL).find_one({"id": source_id}, {"_id": 1}))
     collection = ECONOMY_ITEM_KIND_TO_COLLECTION.get(source_kind)
@@ -5482,6 +5484,47 @@ def _economy_catalog_rows(source_kind: str, q: str, per_kind_limit: int) -> list
                 "slot": row.get("slot") or "",
                 "tier": row.get("tier") or "",
                 "method": row.get("method") or "",
+            }
+        )
+    return out
+
+def _economy_primary_resource_catalog_rows(q: str, per_kind_limit: int) -> list[dict]:
+    col = get_col(ECONOMY_ENTITIES_0_3_5_COL)
+    filt: dict[str, Any] = {"type": "Primary Resource"}
+    if (q or "").strip():
+        filt["name"] = {"$regex": re.escape((q or "").strip()), "$options": "i"}
+    rows = list(
+        col.find(
+            filt,
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "value_per_unit": 1,
+                "availability": 1,
+                "type": 1,
+            },
+        ).limit(per_kind_limit)
+    )
+    out = []
+    for row in rows:
+        rid = str(row.get("id") or "").strip()
+        if not rid:
+            continue
+        out.append(
+            {
+                "uid": f"entity:{rid}",
+                "source_kind": "entity",
+                "source_id": rid,
+                "name": str(row.get("name") or rid),
+                "fixed_price": float(row.get("value_per_unit") or 0),
+                "enc": 0,
+                "category": "Primary Resource",
+                "slot": "",
+                "tier": "",
+                "method": "",
+                "entity_type": str(row.get("type") or "Primary Resource"),
+                "entity_availability": str(row.get("availability") or "Common"),
             }
         )
     return out
@@ -7207,9 +7250,12 @@ def economy_0_3_5_delete_item_meta(source_kind: str, source_id: str, request: Re
 def economy_0_3_5_catalog(request: Request, q: str = "", item_type: str = "all", limit: int = 200):
     require_auth(request, roles=["moderator", "admin"])
     kind = str(item_type or "all").strip().lower() or "all"
-    allowed_types = {"all", "object", "equipment", "weapon", "tool", "service"}
+    allowed_types = {"all", "object", "equipment", "weapon", "tool", "service", "primary_resource"}
     if kind not in allowed_types:
-        raise HTTPException(status_code=400, detail="item_type must be one of all/object/equipment/weapon/tool/service")
+        raise HTTPException(
+            status_code=400,
+            detail="item_type must be one of all/object/equipment/weapon/tool/service/primary_resource",
+        )
     try:
         limit_int = int(limit)
     except Exception:
@@ -7222,7 +7268,8 @@ def economy_0_3_5_catalog(request: Request, q: str = "", item_type: str = "all",
     elif kind in ECONOMY_ITEM_KIND_TO_COLLECTION:
         item_kinds = [kind]
 
-    per_kind_limit = max(1, min(250, int(math.ceil(limit_int / max(1, len(item_kinds) or 1)) * 2)))
+    dynamic_group_count = max(1, len(item_kinds) + (1 if kind in ("all", "service") else 0) + (1 if kind in ("all", "primary_resource") else 0))
+    per_kind_limit = max(1, min(250, int(math.ceil(limit_int / dynamic_group_count) * 2)))
     rows: list[dict[str, Any]] = []
     for source_kind in item_kinds:
         rows.extend(_economy_catalog_rows(source_kind, q, per_kind_limit))
@@ -7251,6 +7298,9 @@ def economy_0_3_5_catalog(request: Request, q: str = "", item_type: str = "all",
                     "method": "",
                 }
             )
+
+    if kind in ("all", "primary_resource"):
+        rows.extend(_economy_primary_resource_catalog_rows(q, per_kind_limit))
 
     rows.sort(key=lambda row: (str(row.get("name") or "").lower(), str(row.get("source_kind") or "")))
     rows = rows[:limit_int]
