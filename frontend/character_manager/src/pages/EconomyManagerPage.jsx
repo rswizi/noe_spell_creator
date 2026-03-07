@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import {
@@ -203,19 +204,28 @@ function EconomyManagerPage() {
     let active = true;
     setBusy(true);
     setError("");
-    reloadEconomyData()
-      .catch((err) => {
+    (async () => {
+      try {
+        const privileged = await loadBootstrap();
+        if (!active) return;
+        if (!privileged) {
+          setCatalogItems([]);
+          setAllCatalogItems([]);
+          return;
+        }
+        await Promise.all([loadCatalog("", "all"), loadAllCatalog()]);
+      } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : "Failed to load economy manager data.");
-      })
-      .finally(() => {
+      } finally {
         if (!active) return;
         setBusy(false);
-      });
+      }
+    })();
     return () => {
       active = false;
     };
-  }, [reloadEconomyData]);
+  }, [loadAllCatalog, loadBootstrap, loadCatalog]);
 
   useEffect(() => {
     if (!me.isPrivileged) return;
