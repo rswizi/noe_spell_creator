@@ -80,10 +80,16 @@ function economySourceKey(sourceKind, sourceId) {
   return `${String(sourceKind || "").toLowerCase()}:${String(sourceId || "").trim()}`;
 }
 
-function roundUpToFirstDecimal(value) {
+function roundToFirstDecimal(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return 0;
-  return Math.ceil(numeric * 10) / 10;
+  return Math.round(numeric * 10) / 10;
+}
+
+function formatJellyTenth(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return "0.0";
+  return numeric.toFixed(1);
 }
 
 function Icon({ name, label }) {
@@ -445,7 +451,7 @@ function EconomyManagerPage() {
       }, 0);
       const markupPct = resolveMarkupPctByKey(sourceKey, nextPath);
       const computed = sum * (1 + markupPct / 100);
-      const resolved = Number.isFinite(computed) ? roundUpToFirstDecimal(computed) : fixed;
+      const resolved = Number.isFinite(computed) ? roundToFirstDecimal(computed) : fixed;
       priceCache.set(sourceKey, resolved);
       return resolved;
     }
@@ -511,10 +517,11 @@ function EconomyManagerPage() {
   const hasDynamicPricing = (editorMeta.requirements || []).length > 0;
   const dynamicPriceRaw = hasDynamicPricing ? requirementCost * markupMultiplier : selectedFixedPrice;
   const dynamicPrice = hasDynamicPricing
-    ? roundUpToFirstDecimal(dynamicPriceRaw)
+    ? roundToFirstDecimal(dynamicPriceRaw)
     : Number.isFinite(dynamicPriceRaw)
       ? dynamicPriceRaw
       : 0;
+  const dynamicPriceLabel = formatJellyTenth(dynamicPrice);
 
   function goBack(fallback = "/character-manager") {
     if (window.history.length > 1) {
@@ -890,7 +897,7 @@ function EconomyManagerPage() {
                             <strong>{selectedItem.name}</strong>
                             <div className="cm-muted">{sourceKindLabel(selectedItem.source_kind, selectedItem)}</div>
                           </div>
-                          <span className="cm-badge">Dynamic price: {dynamicPrice} Jelly</span>
+                          <span className="cm-badge">Dynamic price: {dynamicPriceLabel} Jelly</span>
                         </div>
 
                         {selectedItem.source_kind === "service" || selectedItem.source_kind === "entity" ? (
@@ -1035,7 +1042,7 @@ function EconomyManagerPage() {
                         <div className="cm-panel cm-panel-lite">
                           <div className="cm-inline cm-inline-space">
                             <strong>Dynamic Price Breakdown</strong>
-                            <span className="cm-badge">{dynamicPrice} Jelly</span>
+                            <span className="cm-badge">{dynamicPriceLabel} Jelly</span>
                           </div>
                           {!hasDynamicPricing && (
                             <div className="cm-muted">
@@ -1057,7 +1064,7 @@ function EconomyManagerPage() {
                             </div>
                             <div className="cm-inline cm-inline-space">
                               <strong>Total</strong>
-                              <strong>{dynamicPrice} Jelly</strong>
+                              <strong>{dynamicPriceLabel} Jelly</strong>
                             </div>
                           </div>
                         </div>
