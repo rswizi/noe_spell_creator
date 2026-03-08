@@ -80,6 +80,12 @@ function economySourceKey(sourceKind, sourceId) {
   return `${String(sourceKind || "").toLowerCase()}:${String(sourceId || "").trim()}`;
 }
 
+function roundUpToNearestTen(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return Math.ceil(numeric / 10) * 10;
+}
+
 function Icon({ name, label }) {
   return (
     <>
@@ -302,14 +308,168 @@ function EconomyManagerPage() {
     return map;
   }, [requirementOptions]);
 
+  const dynamicPricingEngine = useMemo(() => {
+    const itemByKey = {};
+    (allCatalogItems || []).forEach((entry) => {
+      const key = economySourceKey(entry.source_kind, entry.source_id);
+      itemByKey[key] = {
+        ...entry,
+        meta: {
+          ...(entry.meta || {}),
+          requirements: Array.isArray(entry.meta?.requirements) ? entry.meta.requirements : [],
+        },
+      };
+    });
+
+    if (selectedItem) {
+      const selectedSourceKey = economySourceKey(selectedItem.source_kind, selectedItem.source_id);
+      const nextFixedPrice =
+        selectedItem.source_kind === "service" || selectedItem.source_kind === "entity"
+          ? Math.max(0, Number(priceDraft) || 0)
+          : Number(selectedItem.fixed_price) || 0;
+      itemByKey[selectedSourceKey] = {
+        ...(itemByKey[selectedSourceKey] || selectedItem),
+        fixed_price: nextFixedPrice,
+        meta: {
+          ...((itemByKey[selectedSourceKey] || selectedItem).meta || {}),
+          requirements: Array.isArray(editorMeta.requirements) ? editorMeta.requirements : [],
+          availability_override: editorMeta.availability_override || "",
+          markup_pct_override:
+            editorMeta.markup_pct_override === "" || editorMeta.markup_pct_override === null
+              ? null
+              : Number(editorMeta.markup_pct_override) || 0,
+        },
+      };
+    }
+
+    const priceCache = new Map();
+    const availabilityCache = new Map();
+    const cycleWarnings = new Set();
+
+    function fixedPriceForKey(sourceKey) {
+      const item = itemByKey[sourceKey];
+      return Math.max(0, Number(item?.fixed_price) || 0);
+    }
+
+    function cycleFallbackAvailability(sourceKey) {
+      const item = itemByKey[sourceKey];
+      const override = String(item?.meta?.availability_override || "").trim();
+      if (override && availabilities.includes(override)) return override;
+      const base = String(item?.entity_availability || "Common");
+      return availabilities.includes(base) ? base : "Common";
+    }
+
+    function resolveAvailabilityByKey(sourceKey, path = []) {
+      if (availabilityCache.has(sourceKey)) return availabilityCache.get(sourceKey);
+      const item = itemByKey[sourceKey];
+      if (!item) return "Common";
+      const cycleIndex = path.indexOf(sourceKey);
+      if (cycleIndex !== -1) {
+        const cyclePath = [...path.slice(cycleIndex), sourceKey].join(" -> ");
+        cycleWarnings.add(cyclePath);
+        return cycleFallbackAvailability(sourceKey);
+      }
+
+      const override = String(item.meta?.availability_override || "").trim();
+      if (override && availabilities.includes(override)) {
+        availabilityCache.set(sourceKey, override);
+        return override;
+      }
+
+      const requirements = Array.isArray(item.meta?.requirements) ? item.meta.requirements : [];
+      if (!requirements.length) {
+        const base = cycleFallbackAvailability(sourceKey);
+        availabilityCache.set(sourceKey, base);
+        return base;
+      }
+
+      let best = availabilities[1] || availabilities[0] || "Common";
+      let bestRank = availabilityRank(best, availabilities);
+      const nextPath = [...path, sourceKey];
+      requirements.forEach((requirement) => {
+        const reqKey = economySourceKey(requirement.source_kind, requirement.source_id);
+        const current = resolveAvailabilityByKey(reqKey, nextPath);
+        const currentRank = availabilityRank(current, availabilities);
+        if (currentRank > bestRank) {
+          best = current;
+          bestRank = currentRank;
+        }
+      });
+      availabilityCache.set(sourceKey, best);
+      return best;
+    }
+
+    function resolveMarkupPctByKey(sourceKey, path = []) {
+      const item = itemByKey[sourceKey];
+      if (!item) return 0;
+      const rawOverride = item.meta?.markup_pct_override;
+      if (rawOverride !== undefined && rawOverride !== null && rawOverride !== "") {
+        const override = Number(rawOverride);
+        if (Number.isFinite(override) && override >= 0) return override;
+      }
+      const availability = resolveAvailabilityByKey(sourceKey, path);
+      const suggested = Number(markupByAvailability[availability] ?? 0);
+      return Number.isFinite(suggested) && suggested >= 0 ? suggested : 0;
+    }
+
+    function resolvePriceByKey(sourceKey, path = []) {
+      if (priceCache.has(sourceKey)) return priceCache.get(sourceKey);
+      const item = itemByKey[sourceKey];
+      const fixed = fixedPriceForKey(sourceKey);
+      if (!item) {
+        priceCache.set(sourceKey, 0);
+        return 0;
+      }
+
+      const cycleIndex = path.indexOf(sourceKey);
+      if (cycleIndex !== -1) {
+        const cyclePath = [...path.slice(cycleIndex), sourceKey].join(" -> ");
+        cycleWarnings.add(cyclePath);
+        priceCache.set(sourceKey, fixed);
+        return fixed;
+      }
+
+      const requirements = Array.isArray(item.meta?.requirements) ? item.meta.requirements : [];
+      if (!requirements.length) {
+        priceCache.set(sourceKey, fixed);
+        return fixed;
+      }
+
+      const nextPath = [...path, sourceKey];
+      const sum = requirements.reduce((total, requirement) => {
+        const qty = Number(requirement.quantity) || 0;
+        if (qty <= 0) return total;
+        const reqKey = economySourceKey(requirement.source_kind, requirement.source_id);
+        const reqUnitPrice = resolvePriceByKey(reqKey, nextPath);
+        return total + reqUnitPrice * qty;
+      }, 0);
+      const markupPct = resolveMarkupPctByKey(sourceKey, nextPath);
+      const computed = sum * (1 + markupPct / 100);
+      const resolved = Number.isFinite(computed) ? roundUpToNearestTen(computed) : fixed;
+      priceCache.set(sourceKey, resolved);
+      return resolved;
+    }
+
+    return {
+      resolvePriceForSource(sourceKind, sourceId) {
+        return resolvePriceByKey(economySourceKey(sourceKind, sourceId), []);
+      },
+      resolveAvailabilityForSource(sourceKind, sourceId) {
+        return resolveAvailabilityByKey(economySourceKey(sourceKind, sourceId), []);
+      },
+      getCycleWarnings() {
+        return Array.from(cycleWarnings);
+      },
+    };
+  }, [allCatalogItems, availabilities, editorMeta, markupByAvailability, priceDraft, selectedItem]);
+
   const defaultAvailability = useMemo(() => {
     const requirements = editorMeta.requirements || [];
     if (!requirements.length) return availabilities[1] || availabilities[0] || "Common";
     let best = availabilities[1] || availabilities[0] || "Common";
     let bestRank = availabilityRank(best, availabilities);
     requirements.forEach((entry) => {
-      const opt = requirementMap[economySourceKey(entry.source_kind, entry.source_id)];
-      const current = opt?.availability || "Common";
+      const current = dynamicPricingEngine.resolveAvailabilityForSource(entry.source_kind, entry.source_id);
       const currentRank = availabilityRank(current, availabilities);
       if (currentRank > bestRank) {
         best = current;
@@ -317,7 +477,7 @@ function EconomyManagerPage() {
       }
     });
     return best;
-  }, [availabilities, editorMeta.requirements, requirementMap]);
+  }, [availabilities, dynamicPricingEngine, editorMeta.requirements]);
 
   const effectiveAvailability = editorMeta.availability_override || defaultAvailability;
   const defaultMarkupPct = Number(markupByAvailability[effectiveAvailability] ?? 0);
@@ -329,17 +489,32 @@ function EconomyManagerPage() {
   const requirementCost = useMemo(
     () =>
       (editorMeta.requirements || []).reduce((total, entry) => {
-        const option = requirementMap[economySourceKey(entry.source_kind, entry.source_id)];
-        const unitPrice = Number(option?.fixed_price) || 0;
+        const unitPrice = dynamicPricingEngine.resolvePriceForSource(entry.source_kind, entry.source_id);
         const qty = Number(entry.quantity) || 0;
         return total + unitPrice * qty;
       }, 0),
-    [editorMeta.requirements, requirementMap]
+    [dynamicPricingEngine, editorMeta.requirements]
   );
 
+  const cycleWarnings = useMemo(() => dynamicPricingEngine.getCycleWarnings(), [dynamicPricingEngine, requirementCost]);
+
+  const selectedFixedPrice = useMemo(() => {
+    if (!selectedItem) return 0;
+    if (selectedItem.source_kind === "service" || selectedItem.source_kind === "entity") {
+      const value = Number(priceDraft);
+      return Number.isFinite(value) && value >= 0 ? value : 0;
+    }
+    return Math.max(0, Number(selectedItem.fixed_price) || 0);
+  }, [priceDraft, selectedItem]);
+
   const markupMultiplier = 1 + effectiveMarkupPct / 100;
-  const dynamicPriceRaw = requirementCost * markupMultiplier;
-  const dynamicPrice = Number.isFinite(dynamicPriceRaw) ? Math.round(dynamicPriceRaw) : 0;
+  const hasDynamicPricing = (editorMeta.requirements || []).length > 0;
+  const dynamicPriceRaw = hasDynamicPricing ? requirementCost * markupMultiplier : selectedFixedPrice;
+  const dynamicPrice = hasDynamicPricing
+    ? roundUpToNearestTen(dynamicPriceRaw)
+    : Number.isFinite(dynamicPriceRaw)
+      ? dynamicPriceRaw
+      : 0;
 
   function goBack(fallback = "/character-manager") {
     if (window.history.length > 1) {
@@ -676,6 +851,7 @@ function EconomyManagerPage() {
                       {!catalogBusy && !catalogItems.length && <p className="cm-muted">No matching entities found.</p>}
                       {catalogItems.map((entry) => {
                         const key = economySourceKey(entry.source_kind, entry.source_id);
+                        const effectiveUnitPrice = dynamicPricingEngine.resolvePriceForSource(entry.source_kind, entry.source_id);
                         const onSelect = () => setSelectedKey(key);
                         const onKeyDown = (event) => {
                           if (event.key === "Enter" || event.key === " ") {
@@ -697,7 +873,7 @@ function EconomyManagerPage() {
                               <strong>{entry.name}</strong>
                               <div className="cm-muted">{sourceKindLabel(entry.source_kind, entry)}</div>
                             </div>
-                            <span className="cm-pill">{Number(entry.fixed_price || 0).toFixed(2)} Jelly</span>
+                            <span className="cm-pill">{Number(effectiveUnitPrice || 0).toFixed(2)} Jelly</span>
                           </div>
                         );
                       })}
@@ -820,12 +996,21 @@ function EconomyManagerPage() {
                               {editorMeta.requirements.map((entry) => {
                                 const key = economySourceKey(entry.source_kind, entry.source_id);
                                 const info = requirementMap[key];
+                                const effectiveUnitPrice = dynamicPricingEngine.resolvePriceForSource(
+                                  entry.source_kind,
+                                  entry.source_id
+                                );
+                                const effectiveRequirementAvailability = dynamicPricingEngine.resolveAvailabilityForSource(
+                                  entry.source_kind,
+                                  entry.source_id
+                                );
                                 return (
                                   <div key={key} className="cm-list-item cm-list-row">
                                     <div>
                                       <strong>{info?.label || `${entry.source_kind}:${entry.source_id}`}</strong>
                                       <div className="cm-muted">
-                                        {(Number(info?.fixed_price) || 0).toFixed(2)} Jelly per unit | {info?.availability || "Common"}
+                                        {(Number(effectiveUnitPrice) || 0).toFixed(2)} Jelly per unit |{" "}
+                                        {effectiveRequirementAvailability || "Common"}
                                       </div>
                                     </div>
                                     <div className="cm-inline">
@@ -852,6 +1037,11 @@ function EconomyManagerPage() {
                             <strong>Dynamic Price Breakdown</strong>
                             <span className="cm-badge">{dynamicPrice} Jelly</span>
                           </div>
+                          {!hasDynamicPricing && (
+                            <div className="cm-muted">
+                              No dynamic configuration for this item. Fixed/base price fallback is being used.
+                            </div>
+                          )}
                           <div className="cm-stack">
                             <div className="cm-inline cm-inline-space">
                               <span>Sum(price x qty)</span>
@@ -859,11 +1049,11 @@ function EconomyManagerPage() {
                             </div>
                             <div className="cm-inline cm-inline-space">
                               <span>Markup multiplier</span>
-                              <span>x {markupMultiplier.toFixed(2)}</span>
+                              <span>{hasDynamicPricing ? `x ${markupMultiplier.toFixed(2)}` : "x 1.00"}</span>
                             </div>
                             <div className="cm-inline cm-inline-space">
                               <span>Markup ({effectiveMarkupPct}%)</span>
-                              <span>{(dynamicPriceRaw - requirementCost).toFixed(2)} Jelly</span>
+                              <span>{hasDynamicPricing ? (dynamicPriceRaw - requirementCost).toFixed(2) : "0.00"} Jelly</span>
                             </div>
                             <div className="cm-inline cm-inline-space">
                               <strong>Total</strong>
@@ -872,6 +1062,13 @@ function EconomyManagerPage() {
                           </div>
                         </div>
 
+                        {!!cycleWarnings.length && (
+                          <div className="cm-error">
+                            Circular dynamic-pricing dependency detected. Fixed price fallback applied for:{" "}
+                            {cycleWarnings.slice(0, 3).join(" | ")}
+                            {cycleWarnings.length > 3 ? " ..." : ""}
+                          </div>
+                        )}
                         {dynamicSaveError && <div className="cm-error">{dynamicSaveError}</div>}
                         {dynamicSaveMessage && <div className="cm-muted">{dynamicSaveMessage}</div>}
                         <div className="cm-row">
