@@ -180,3 +180,28 @@ export async function deleteEconomyItemMeta(sourceKind, sourceId) {
     method: "DELETE",
   });
 }
+
+export async function fetchItemWeapons({ q = "", scope = "all", limit = 300 } = {}) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (scope) params.set("scope", scope);
+  if (limit) params.set("limit", String(limit));
+  const query = params.toString();
+  return api(`/items-0-3-5/weapons${query ? `?${query}` : ""}`);
+}
+
+export async function createItemWeapon(payload) {
+  return api("/items-0-3-5/weapons", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export async function importItemWeapons(payload) {
+  return api("/items-0-3-5/weapons/import", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+}

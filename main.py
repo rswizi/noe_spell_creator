@@ -89,6 +89,7 @@ AVATAR_KEYS = frozenset({"boon","awakening","talents","expertise","dima","archet
 ECONOMY_ENTITIES_0_3_5_COL = "economy_entities_0_3_5"
 ECONOMY_SERVICES_0_3_5_COL = "economy_services_0_3_5"
 ECONOMY_ITEM_META_0_3_5_COL = "economy_item_meta_0_3_5"
+ITEM_WEAPONS_0_3_5_COL = "item_weapons_0_3_5"
 ECONOMY_ITEM_KIND_TO_COLLECTION = {
     "object": "objects",
     "equipment": "equipment",
@@ -104,6 +105,33 @@ ECONOMY_MARKUP_BY_AVAILABILITY = {
     "Very Rare": 150,
     "Legendary": 300,
     "Unique": 1000,
+}
+ITEM_WEAPON_TRAITS_POSITIVE = {
+    "accurate",
+    "defensive",
+    "concealable",
+    "reach",
+    "chain/cord",
+    "free hand",
+    "heavy",
+    "shooting",
+    "melee shot",
+    "dual-damage",
+    "versatile",
+    "throwable",
+}
+ITEM_WEAPON_TRAITS_NEGATIVE = {"ammo", "reload", "solo-damage"}
+ITEM_WEAPON_SKILLS_ALLOWED = {"Brutality", "Accuracy", "Technicity"}
+ITEM_WEAPON_CHARACTERISTICS_ALLOWED = {"AGI", "BOD", "DEX"}
+ITEM_WEAPON_DEFAULT_SKILL_BY_CHARACTERISTIC = {
+    "AGI": "Technicity",
+    "BOD": "Brutality",
+    "DEX": "Accuracy",
+}
+ITEM_WEAPON_DEFAULT_CHARACTERISTIC_BY_SKILL = {
+    "Technicity": "AGI",
+    "Brutality": "BOD",
+    "Accuracy": "DEX",
 }
 
 def _normalize_avatar_key(value: Any) -> str | None:
@@ -465,6 +493,27 @@ def economy_manager_index():
 
 @app.get("/economy-manager/{rest:path}", include_in_schema=False)
 def economy_manager_fallback(rest: str):
+    target = CHAR_MANAGER_DIST_DIR / rest
+    if target.exists() and target.is_file():
+        return _serve_html_file(target)
+    if CHAR_MANAGER_INDEX.exists():
+        return _serve_html_file(CHAR_MANAGER_INDEX)
+    fallback_page = CLIENT_DIR / "character_manager.html"
+    if fallback_page.exists():
+        return _serve_html_file(fallback_page)
+    return RedirectResponse("/characters.html")
+
+@app.get("/item-manager", include_in_schema=False)
+def item_manager_index():
+    if CHAR_MANAGER_INDEX.exists():
+        return _serve_html_file(CHAR_MANAGER_INDEX)
+    fallback_page = CLIENT_DIR / "character_manager.html"
+    if fallback_page.exists():
+        return _serve_html_file(fallback_page)
+    return RedirectResponse("/characters.html")
+
+@app.get("/item-manager/{rest:path}", include_in_schema=False)
+def item_manager_fallback(rest: str):
     target = CHAR_MANAGER_DIST_DIR / rest
     if target.exists() and target.is_file():
         return _serve_html_file(target)
@@ -5532,6 +5581,244 @@ def _economy_primary_resource_catalog_rows(q: str, per_kind_limit: int) -> list[
         )
     return out
 
+def _sanitize_rich_text_html(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    raw = re.sub(r"(?is)<(script|style).*?>.*?</\1>", "", raw)
+    raw = re.sub(r"(?i)\son\w+\s*=\s*(\".*?\"|'.*?')", "", raw)
+    raw = re.sub(r"(?i)javascript:", "", raw)
+    return raw
+
+def _html_to_plain_text(value: Any) -> str:
+    raw = str(value or "")
+    if not raw:
+        return ""
+    text = re.sub(r"(?is)<br\s*/?>", "\n", raw)
+    text = re.sub(r"(?is)<[^>]+>", "", text)
+    text = re.sub(r"\r\n?", "\n", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+def _normalize_item_weapon_trait_label(value: Any) -> str:
+    trait = str(value or "").strip()
+    trait = re.sub(r"\s+", " ", trait)
+    return trait
+
+def _item_weapon_trait_score(trait_label: str) -> int | None:
+    key = _normalize_item_weapon_trait_label(trait_label).lower()
+    key = key.replace("—", "-").replace("–", "-").replace("_", "-")
+    key = re.sub(r"\s+", " ", key).strip()
+    if not key:
+        return None
+    if key.startswith("shooting"):
+        return 1
+    if key.startswith("reload"):
+        return -1
+    compact = key.replace(" ", "")
+    if compact == "solodamage":
+        key = "solo-damage"
+    if key in ITEM_WEAPON_TRAITS_POSITIVE:
+        return 1
+    if key in ITEM_WEAPON_TRAITS_NEGATIVE:
+        return -1
+    return None
+
+def _item_weapon_trait_value(trait_label: str, trait_kind: str) -> int | None:
+    label = _normalize_item_weapon_trait_label(trait_label)
+    kind = str(trait_kind or "").strip().lower()
+    if kind not in {"shooting", "reload"}:
+        return None
+    m = re.match(rf"(?i)^{re.escape(kind)}\s*\(\s*(\d+)\s*\)\s*$", label)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except Exception:
+        return None
+
+def _item_weapon_auto_stats_from_traits(traits: list[str], body: dict) -> tuple[list[str], int, int]:
+    has_shooting = False
+    has_reload = False
+    shooting_values: list[int] = []
+    reload_values: list[int] = []
+
+    for trait in traits:
+        key = _normalize_item_weapon_trait_label(trait).lower()
+        if key.startswith("shooting"):
+            has_shooting = True
+            val = _item_weapon_trait_value(trait, "shooting")
+            if val is not None:
+                if val <= 0:
+                    raise HTTPException(status_code=400, detail="Shooting (X) requires X > 0")
+                shooting_values.append(val)
+        if key.startswith("reload"):
+            has_reload = True
+            val = _item_weapon_trait_value(trait, "reload")
+            if val is not None:
+                if val <= 0:
+                    raise HTTPException(status_code=400, detail="Reload (X) requires X > 0")
+                reload_values.append(val)
+
+    shooting_x = shooting_values[0] if shooting_values else 0
+    if has_shooting and not shooting_x:
+        shooting_x = _safe_int(body.get("shooting_range") or body.get("range"), 0)
+    if has_shooting and shooting_x <= 0:
+        raise HTTPException(status_code=400, detail="Shooting (X) requires a numeric X > 0")
+
+    reload_x = reload_values[0] if reload_values else 0
+    if has_reload and not reload_x:
+        reload_x = _safe_int(body.get("reload_x") or body.get("magazine_size") or body.get("magazine"), 0)
+    if has_reload and reload_x <= 0:
+        raise HTTPException(status_code=400, detail="Reload (X) requires a numeric X > 0")
+
+    if len(set(shooting_values)) > 1:
+        raise HTTPException(status_code=400, detail="Shooting (X) traits must use the same X value")
+    if len(set(reload_values)) > 1:
+        raise HTTPException(status_code=400, detail="Reload (X) traits must use the same X value")
+
+    normalized_traits: list[str] = []
+    for trait in traits:
+        key = _normalize_item_weapon_trait_label(trait).lower()
+        if key.startswith("shooting"):
+            normalized_traits.append(f"Shooting ({shooting_x})")
+            continue
+        if key.startswith("reload"):
+            normalized_traits.append(f"Reload ({reload_x})")
+            continue
+        if key.replace(" ", "") == "solodamage":
+            normalized_traits.append("Solo-Damage")
+            continue
+        normalized_traits.append(_normalize_item_weapon_trait_label(trait))
+
+    return normalized_traits, (shooting_x if has_shooting else 0), (reload_x if has_reload else 0)
+
+def _item_weapon_traits_from_body(body: dict) -> tuple[list[str], int]:
+    raw = body.get("traits")
+    if isinstance(raw, str):
+        traits = [part.strip() for part in raw.split(",") if part.strip()]
+    elif isinstance(raw, list):
+        traits = [_normalize_item_weapon_trait_label(part) for part in raw if str(part or "").strip()]
+    else:
+        traits = []
+    if not traits:
+        raise HTTPException(status_code=400, detail="At least one trait is required")
+    net = 0
+    for trait in traits:
+        score = _item_weapon_trait_score(trait)
+        if score is None:
+            raise HTTPException(status_code=400, detail=f"Unknown trait: {trait}")
+        net += score
+    return traits, net
+
+def _item_weapon_examples_from_body(body: dict) -> list[str]:
+    raw = body.get("examples")
+    if isinstance(raw, str):
+        vals = [part.strip() for part in raw.split(",") if part.strip()]
+    elif isinstance(raw, list):
+        vals = [str(part or "").strip() for part in raw if str(part or "").strip()]
+    else:
+        vals = []
+    deduped: list[str] = []
+    seen = set()
+    for entry in vals:
+        key = entry.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(entry)
+    return deduped
+
+def _item_weapon_scope_from_body(body: dict, allow_general: bool) -> str:
+    raw = str((body or {}).get("visibility") or "").strip().lower()
+    if allow_general and raw == "general":
+        return "general"
+    return "user"
+
+def _item_weapon_from_body(body: dict, allow_general: bool = False) -> dict:
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Invalid weapon payload")
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Weapon name is required")
+    hands = _safe_int(body.get("hands"), 1)
+    if hands not in (1, 2):
+        raise HTTPException(status_code=400, detail="hands must be 1 or 2")
+    preferred_damage_type = str(
+        body.get("preferred_damage_type")
+        or body.get("damage_type")
+        or "Rending"
+    ).strip()
+    if not preferred_damage_type:
+        preferred_damage_type = "Rending"
+
+    traits, trait_net = _item_weapon_traits_from_body(body)
+    traits, auto_range, auto_magazine = _item_weapon_auto_stats_from_traits(traits, body)
+    bonus_damage_from_trait_sacrifice = bool(body.get("bonus_damage_from_trait_sacrifice") or body.get("sacrifice_trait_for_damage"))
+    expected_net = 2 if hands == 1 else 3
+    if bonus_damage_from_trait_sacrifice:
+        expected_net -= 1
+    if trait_net != expected_net:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Trait balance mismatch: got {trait_net}, expected {expected_net} for {hands}-hand weapon",
+        )
+
+    skill_raw = str(body.get("skill_used") or body.get("skill") or "").strip().title()
+    characteristic_raw = str(body.get("characteristic") or "").strip().upper()
+
+    if characteristic_raw and characteristic_raw not in ITEM_WEAPON_CHARACTERISTICS_ALLOWED:
+        raise HTTPException(status_code=400, detail="characteristic must be AGI, BOD, or DEX")
+    if skill_raw and skill_raw not in ITEM_WEAPON_SKILLS_ALLOWED:
+        raise HTTPException(status_code=400, detail="skill_used must be Brutality, Accuracy, or Technicity")
+
+    if not characteristic_raw and skill_raw:
+        characteristic_raw = ITEM_WEAPON_DEFAULT_CHARACTERISTIC_BY_SKILL.get(skill_raw, "AGI")
+    if not skill_raw and characteristic_raw:
+        skill_raw = ITEM_WEAPON_DEFAULT_SKILL_BY_CHARACTERISTIC.get(characteristic_raw, "Technicity")
+    if not characteristic_raw:
+        characteristic_raw = "AGI"
+    if not skill_raw:
+        skill_raw = ITEM_WEAPON_DEFAULT_SKILL_BY_CHARACTERISTIC.get(characteristic_raw, "Technicity")
+
+    desc_html = _sanitize_rich_text_html(body.get("description_html") or body.get("description") or "")
+    desc_text = str(body.get("description_text") or "").strip() or _html_to_plain_text(desc_html)
+    if len(desc_text) > 5000:
+        raise HTTPException(status_code=400, detail="description is too long")
+
+    examples = _item_weapon_examples_from_body(body)
+    visibility = _item_weapon_scope_from_body(body, allow_general=allow_general)
+
+    damage_formula = f"2d6 + Lvl + {characteristic_raw}"
+    if bonus_damage_from_trait_sacrifice:
+        damage_formula = f"{damage_formula} + 2"
+
+    return {
+        "name": name,
+        "name_key": norm_key(name),
+        "hands": hands,
+        "preferred_damage_type": preferred_damage_type,
+        "range": auto_range,
+        "magazine_size": auto_magazine,
+        "traits": traits,
+        "trait_net": trait_net,
+        "required_trait_net": expected_net,
+        "bonus_damage_from_trait_sacrifice": bonus_damage_from_trait_sacrifice,
+        "skill_used": skill_raw,
+        "characteristic": characteristic_raw,
+        "damage_formula": damage_formula,
+        "description_html": desc_html,
+        "description_text": desc_text,
+        "examples": examples,
+        "visibility": visibility,
+    }
+
+def _item_weapon_view(doc: dict) -> dict:
+    out = dict(doc or {})
+    out.pop("_id", None)
+    return out
+
 def _create_pending_submission(submitter: str, role: str, sub_type: str, payload: dict, kind: str | None = None) -> dict:
     doc = {
         "id": next_id_str("pending", padding=5),
@@ -7327,6 +7614,114 @@ def economy_0_3_5_catalog(request: Request, q: str = "", item_type: str = "all",
         }
 
     return {"status": "success", "items": rows}
+
+@app.get("/items-0-3-5/weapons")
+def items_0_3_5_list_weapons(request: Request, q: str = "", scope: str = "all", limit: int = 300):
+    username, _role = require_auth(request, roles=["user", "moderator", "admin"])
+    scope_clean = str(scope or "all").strip().lower() or "all"
+    if scope_clean not in {"all", "mine"}:
+        raise HTTPException(status_code=400, detail="scope must be all or mine")
+    try:
+        limit_int = int(limit)
+    except Exception:
+        limit_int = 300
+    limit_int = max(1, min(limit_int, 500))
+
+    filt: dict[str, Any] = {}
+    if scope_clean == "mine":
+        filt["owner"] = username
+    else:
+        filt["$or"] = [{"visibility": "general"}, {"owner": username}]
+    q_clean = str(q or "").strip()
+    if q_clean:
+        filt["name_key"] = {"$regex": re.escape(norm_key(q_clean))}
+
+    col = get_col(ITEM_WEAPONS_0_3_5_COL)
+    rows = list(col.find(filt, {"_id": 0}).sort("name_key", 1).limit(limit_int))
+    for row in rows:
+        row["is_mine"] = str(row.get("owner") or "") == username
+    return {"status": "success", "weapons": rows}
+
+@app.post("/items-0-3-5/weapons")
+def items_0_3_5_create_weapon(request: Request, body: dict = Body(...)):
+    username, _role = require_auth(request, roles=["user", "moderator", "admin"])
+    col = get_col(ITEM_WEAPONS_0_3_5_COL)
+    doc = _item_weapon_from_body(body, allow_general=False)
+    if col.find_one({"owner": username, "name_key": doc["name_key"]}, {"_id": 1}):
+        raise HTTPException(status_code=409, detail="You already created a weapon with this name")
+    now = _now_iso()
+    doc["id"] = next_id_str(ITEM_WEAPONS_0_3_5_COL, padding=4)
+    doc["owner"] = username
+    doc["created_by"] = username
+    doc["updated_by"] = username
+    doc["created_at"] = now
+    doc["updated_at"] = now
+    doc["source"] = "user"
+    doc["visibility"] = "user"
+    col.insert_one(dict(doc))
+    return {"status": "success", "weapon": _item_weapon_view(doc)}
+
+@app.post("/items-0-3-5/weapons/import")
+def items_0_3_5_import_weapons(request: Request, body: dict = Body(...)):
+    username, _role = require_auth(request, roles=["moderator", "admin"])
+    payload = body if isinstance(body, dict) else {}
+    raw_items = payload.get("weapons")
+    if isinstance(raw_items, dict):
+        raw_items = [raw_items]
+    if not isinstance(raw_items, list) or not raw_items:
+        raise HTTPException(status_code=400, detail="weapons must be a non-empty list")
+    replace_duplicates = bool(payload.get("replace_duplicates") or False)
+
+    col = get_col(ITEM_WEAPONS_0_3_5_COL)
+    now = _now_iso()
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+
+    for idx, raw in enumerate(raw_items):
+        if not isinstance(raw, dict):
+            errors.append({"index": idx, "message": "weapon payload must be an object"})
+            continue
+        try:
+            doc = _item_weapon_from_body(raw, allow_general=True)
+            doc["visibility"] = "general"
+            doc["owner"] = ""
+            doc["source"] = "import"
+            doc["imported_by"] = username
+            doc["updated_by"] = username
+            doc["updated_at"] = now
+        except HTTPException as exc:
+            errors.append({"index": idx, "message": str(exc.detail)})
+            continue
+
+        existing = col.find_one({"name_key": doc["name_key"], "visibility": "general"})
+        if existing:
+            if not replace_duplicates:
+                skipped.append({"index": idx, "name": doc["name"], "reason": "duplicate"})
+                continue
+            col.update_one(
+                {"_id": existing["_id"]},
+                {"$set": doc, "$setOnInsert": {"created_at": now, "created_by": username}},
+                upsert=False,
+            )
+            merged = dict(existing)
+            merged.update(doc)
+            merged["id"] = existing.get("id")
+            created.append(_item_weapon_view(merged))
+            continue
+
+        doc["id"] = next_id_str(ITEM_WEAPONS_0_3_5_COL, padding=4)
+        doc["created_at"] = now
+        doc["created_by"] = username
+        col.insert_one(dict(doc))
+        created.append(_item_weapon_view(doc))
+
+    return {
+        "status": "success",
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+    }
 
 @app.get("/moderator/spells")
 def moderator_list_spells(request: Request, name: str = "", status: str = "", unassigned: str = ""):
