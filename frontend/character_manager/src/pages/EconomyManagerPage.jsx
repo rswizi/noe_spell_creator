@@ -451,7 +451,9 @@ function EconomyManagerPage() {
         const reqUnitPrice = resolvePriceByKey(reqKey, nextPath);
         return total + reqUnitPrice * qty;
       }, 0);
-      const markupPct = resolveMarkupPctByKey(sourceKey, nextPath);
+      // Do not include the current source key in the markup/availability path.
+      // Passing nextPath here creates a false self-cycle warning (source -> source).
+      const markupPct = resolveMarkupPctByKey(sourceKey, path);
       const computed = sum * (1 + markupPct / 100);
       const resolved = Number.isFinite(computed) ? roundToFirstDecimal(computed) : fixed;
       priceCache.set(sourceKey, resolved);
