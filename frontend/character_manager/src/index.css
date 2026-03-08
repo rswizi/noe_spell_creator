@@ -470,6 +470,12 @@ body {
   gap: 8px;
 }
 
+.cm-scroll-y {
+  max-height: min(62vh, 720px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .cm-list-item {
   display: flex;
   justify-content: space-between;

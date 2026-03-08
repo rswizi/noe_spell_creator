@@ -858,7 +858,7 @@ function EconomyManagerPage() {
                     {catalogBusy && <p className="cm-muted">Loading catalog...</p>}
                     {catalogError && <p className="cm-error">{catalogError}</p>}
 
-                    <div className="cm-list">
+                    <div className="cm-list cm-scroll-y">
                       {!catalogBusy && !catalogItems.length && <p className="cm-muted">No matching entities found.</p>}
                       {catalogItems.map((entry) => {
                         const key = economySourceKey(entry.source_kind, entry.source_id);

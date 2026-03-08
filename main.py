@@ -93,7 +93,7 @@ ITEM_WEAPONS_0_3_5_COL = "item_weapons_0_3_5"
 ECONOMY_ITEM_KIND_TO_COLLECTION = {
     "object": "objects",
     "equipment": "equipment",
-    "weapon": "weapons",
+    "weapon": ITEM_WEAPONS_0_3_5_COL,
     "tool": "tools",
 }
 ECONOMY_AVAILABILITIES = ["Very Common", "Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Unique"]
@@ -5500,23 +5500,38 @@ def _economy_item_exists(source_kind: str, source_id: str) -> bool:
 def _economy_catalog_rows(source_kind: str, q: str, per_kind_limit: int) -> list[dict]:
     if source_kind not in ECONOMY_ITEM_KIND_TO_COLLECTION:
         return []
-    col = get_col(ECONOMY_ITEM_KIND_TO_COLLECTION[source_kind])
+    target_collection = ECONOMY_ITEM_KIND_TO_COLLECTION[source_kind]
+    col = get_col(target_collection)
     filt = {"name": {"$regex": re.escape((q or "").strip()), "$options": "i"}} if (q or "").strip() else {}
+    projection = {
+        "_id": 0,
+        "id": 1,
+        "name": 1,
+        "price": 1,
+        "enc": 1,
+        "category": 1,
+        "slot": 1,
+        "subcategory": 1,
+        "tier": 1,
+        "method": 1,
+    }
+    if source_kind == "weapon" and target_collection == ITEM_WEAPONS_0_3_5_COL:
+        projection = {
+            "_id": 0,
+            "id": 1,
+            "name": 1,
+            "fixed_price": 1,
+            "price": 1,
+            "hands": 1,
+            "preferred_damage_type": 1,
+            "skill_used": 1,
+            "range": 1,
+            "magazine_size": 1,
+        }
     rows = list(
         col.find(
             filt,
-            {
-                "_id": 0,
-                "id": 1,
-                "name": 1,
-                "price": 1,
-                "enc": 1,
-                "category": 1,
-                "slot": 1,
-                "subcategory": 1,
-                "tier": 1,
-                "method": 1,
-            },
+            projection,
         ).limit(per_kind_limit)
     )
     out = []
@@ -5530,7 +5545,7 @@ def _economy_catalog_rows(source_kind: str, q: str, per_kind_limit: int) -> list
                 "source_kind": source_kind,
                 "source_id": rid,
                 "name": str(row.get("name") or rid),
-                "fixed_price": float(row.get("price") or 0),
+                "fixed_price": float(row.get("fixed_price") if row.get("fixed_price") is not None else row.get("price") or 0),
                 "enc": float(row.get("enc") or 0),
                 "category": row.get("category") or row.get("subcategory") or "",
                 "slot": row.get("slot") or "",
@@ -5538,6 +5553,13 @@ def _economy_catalog_rows(source_kind: str, q: str, per_kind_limit: int) -> list
                 "method": row.get("method") or "",
             }
         )
+        if source_kind == "weapon" and target_collection == ITEM_WEAPONS_0_3_5_COL:
+            out[-1]["category"] = out[-1]["category"] or "Weapon 0.3.5"
+            out[-1]["method"] = str(row.get("skill_used") or "")
+            out[-1]["hands"] = _safe_int(row.get("hands"), 0)
+            out[-1]["preferred_damage_type"] = str(row.get("preferred_damage_type") or "")
+            out[-1]["range"] = _safe_int(row.get("range"), 0)
+            out[-1]["magazine_size"] = _safe_int(row.get("magazine_size"), 0)
     return out
 
 def _economy_primary_resource_catalog_rows(q: str, per_kind_limit: int) -> list[dict]:
