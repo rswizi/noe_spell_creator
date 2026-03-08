@@ -80,10 +80,10 @@ function economySourceKey(sourceKind, sourceId) {
   return `${String(sourceKind || "").toLowerCase()}:${String(sourceId || "").trim()}`;
 }
 
-function roundUpToNearestTen(value) {
+function roundUpToFirstDecimal(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return 0;
-  return Math.ceil(numeric / 10) * 10;
+  return Math.ceil(numeric * 10) / 10;
 }
 
 function Icon({ name, label }) {
@@ -445,7 +445,7 @@ function EconomyManagerPage() {
       }, 0);
       const markupPct = resolveMarkupPctByKey(sourceKey, nextPath);
       const computed = sum * (1 + markupPct / 100);
-      const resolved = Number.isFinite(computed) ? roundUpToNearestTen(computed) : fixed;
+      const resolved = Number.isFinite(computed) ? roundUpToFirstDecimal(computed) : fixed;
       priceCache.set(sourceKey, resolved);
       return resolved;
     }
@@ -511,7 +511,7 @@ function EconomyManagerPage() {
   const hasDynamicPricing = (editorMeta.requirements || []).length > 0;
   const dynamicPriceRaw = hasDynamicPricing ? requirementCost * markupMultiplier : selectedFixedPrice;
   const dynamicPrice = hasDynamicPricing
-    ? roundUpToNearestTen(dynamicPriceRaw)
+    ? roundUpToFirstDecimal(dynamicPriceRaw)
     : Number.isFinite(dynamicPriceRaw)
       ? dynamicPriceRaw
       : 0;

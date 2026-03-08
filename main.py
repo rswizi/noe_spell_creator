@@ -341,8 +341,9 @@ BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR / "client"
 ASSETS_DIR = BASE_DIR / "assets"
 
-GLOBAL_PORTAL_BUTTON_INJECT = (
-    '<script defer src="/static/global-portal-button.js"></script>'
+GLOBAL_SHARED_UI_INJECTS = (
+    '<script defer src="/static/global-auth-module.js"></script>',
+    '<script defer src="/static/global-portal-button.js"></script>',
 )
 
 
@@ -355,13 +356,15 @@ def _serve_html_file(path: Path):
         html = path.read_text(encoding="utf-8")
     except Exception:
         return FileResponse(path)
-    if "/static/global-portal-button.js" not in html:
+    missing_injects = [inject for inject in GLOBAL_SHARED_UI_INJECTS if inject not in html]
+    if missing_injects:
+        inject_block = "\n".join(missing_injects)
         if "</body>" in html:
-            html = html.replace("</body>", f"{GLOBAL_PORTAL_BUTTON_INJECT}\n</body>", 1)
+            html = html.replace("</body>", f"{inject_block}\n</body>", 1)
         elif "</html>" in html:
-            html = html.replace("</html>", f"{GLOBAL_PORTAL_BUTTON_INJECT}\n</html>", 1)
+            html = html.replace("</html>", f"{inject_block}\n</html>", 1)
         else:
-            html = f"{html}\n{GLOBAL_PORTAL_BUTTON_INJECT}\n"
+            html = f"{html}\n{inject_block}\n"
     return HTMLResponse(content=html)
 
 
