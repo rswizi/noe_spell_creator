@@ -4,3 +4,4 @@ __pycache__
 *.env
 .env.*
 frontend/wiki/dist
+frontend/character_manager/node_modules

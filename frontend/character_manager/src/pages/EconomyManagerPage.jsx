@@ -80,10 +80,12 @@ function economySourceKey(sourceKind, sourceId) {
   return `${String(sourceKind || "").toLowerCase()}:${String(sourceId || "").trim()}`;
 }
 
+const JELLY_ROUNDING_STEP = 0.1;
+
 function roundToFirstDecimal(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return 0;
-  return Math.round(numeric * 10) / 10;
+  return Math.round((numeric + Number.EPSILON) / JELLY_ROUNDING_STEP) * JELLY_ROUNDING_STEP;
 }
 
 function formatJellyTenth(value) {
