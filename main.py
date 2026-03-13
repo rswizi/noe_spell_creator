@@ -3162,7 +3162,15 @@ async def update_apotheosis(aid: str, request: Request):
 
 # ---------- Spell Lists ----------
 def _can_access_list(doc, username, role):
-    return (doc and (doc.get("owner") == username or role in ("admin","moderator")))
+    if not doc:
+        return False
+    normalized_role = (role or "").lower()
+    if normalized_role in ("admin", "moderator"):
+        return True
+    if doc.get("owner") == username:
+        return True
+    list_id = str(doc.get("id") or "").strip()
+    return _claim_linked_resource_owner("spell_lists", "spell_list_id", list_id, username)
 
 def _can_view_list(doc, username, role):
     if _can_access_list(doc, username, role):
@@ -3201,6 +3209,7 @@ async def create_spell_list(request: Request):
 @app.get("/spell_lists/mine")
 def my_spell_lists(request: Request):
     username, _ = require_auth(request, roles=["user","moderator","admin"])
+    _claim_linked_resource_owner_bulk("spell_lists", "spell_list_id", username)
     docs = list(get_col("spell_lists").find({"owner": username}, {"_id":0}))
     docs.sort(key=lambda d: d.get("created_at",""))
     return {"status":"success","lists":docs}
@@ -5025,6 +5034,7 @@ def create_inventory(request: Request, payload: dict = Body(...)):
 def list_inventories(request: Request):
     user, role = require_auth(request)
     db = get_db()
+    _claim_linked_resource_owner_bulk("inventories", "inventory_id", user)
     invs = []
     for inv in db.inventories.find({"owner": user}, {"_id":0}):
         if not isinstance(inv, dict):
@@ -5050,6 +5060,8 @@ def read_inventory(request: Request, inv_id: str):
     inv = None
     if user:
         inv = db.inventories.find_one({"id": inv_id, "owner": user}, {"_id":0})
+        if not inv and _claim_linked_resource_owner("inventories", "inventory_id", inv_id, user):
+            inv = db.inventories.find_one({"id": inv_id, "owner": user}, {"_id":0})
     if not inv and _public_character_ref("inventory_id", inv_id):
         inv = db.inventories.find_one({"id": inv_id}, {"_id":0})
     if not inv:
@@ -7825,11 +7837,66 @@ def _optional_auth(request: Request):
         return username, role
     return None, None
 
+_CHARACTER_REF_COLLECTIONS = ("characters", "characters_0_3_5")
+
 def _public_character_ref(field: str, value: str) -> bool:
-    if not value:
+    ref_value = str(value or "").strip()
+    if not ref_value:
         return False
-    hit = get_col("characters").find_one({field: value, "public": True}, {"_id": 1})
-    return bool(hit)
+    for collection_name in _CHARACTER_REF_COLLECTIONS:
+        hit = get_col(collection_name).find_one({field: ref_value, "public": True}, {"_id": 1})
+        if hit:
+            return True
+    return False
+
+def _owned_character_ref(username: str | None, field: str, value: str) -> bool:
+    user = str(username or "").strip()
+    ref_value = str(value or "").strip()
+    if not user or not ref_value:
+        return False
+    for collection_name in _CHARACTER_REF_COLLECTIONS:
+        hit = get_col(collection_name).find_one({"owner": user, field: ref_value}, {"_id": 1})
+        if hit:
+            return True
+    return False
+
+def _claim_linked_resource_owner(resource_collection: str, character_field: str, resource_id: str, username: str | None) -> bool:
+    user = str(username or "").strip()
+    ref_id = str(resource_id or "").strip()
+    if not user or not ref_id:
+        return False
+    if not _owned_character_ref(user, character_field, ref_id):
+        return False
+    col = get_col(resource_collection)
+    doc = col.find_one({"id": ref_id}, {"_id": 1, "owner": 1})
+    if not doc:
+        return False
+    if str(doc.get("owner") or "").strip() == user:
+        return True
+    col.update_one({"id": ref_id}, {"$set": {"owner": user}})
+    return True
+
+def _claim_linked_resource_owner_bulk(resource_collection: str, character_field: str, username: str | None) -> int:
+    user = str(username or "").strip()
+    if not user:
+        return 0
+    linked_ids = set()
+    for collection_name in _CHARACTER_REF_COLLECTIONS:
+        cursor = get_col(collection_name).find(
+            {"owner": user, character_field: {"$exists": True, "$nin": [None, ""]}},
+            {"_id": 0, character_field: 1},
+        )
+        for row in cursor:
+            ref_id = str((row or {}).get(character_field) or "").strip()
+            if ref_id:
+                linked_ids.add(ref_id)
+    if not linked_ids:
+        return 0
+    result = get_col(resource_collection).update_many(
+        {"id": {"$in": list(linked_ids)}, "owner": {"$ne": user}},
+        {"$set": {"owner": user}},
+    )
+    return int(getattr(result, "modified_count", 0) or 0)
 
 def _can_view(doc, username, role):
     if doc.get("public"):
@@ -8095,6 +8162,7 @@ async def _update_character_common(
     if "inventory_id" in body:
         inv_id = str(body.get("inventory_id") or "").strip()
         if inv_id:
+            _claim_linked_resource_owner("inventories", "inventory_id", inv_id, before.get("owner"))
             inv = get_col("inventories").find_one({"id": inv_id, "owner": before.get("owner")}, {"_id": 1})
             if not inv:
                 return JSONResponse({"status": "error", "message": "Inventory not found or not owned by you"}, status_code=400)
@@ -8103,6 +8171,7 @@ async def _update_character_common(
     if "spell_list_id" in body:
         sl_id = str(body.get("spell_list_id") or "").strip()
         if sl_id:
+            _claim_linked_resource_owner("spell_lists", "spell_list_id", sl_id, before.get("owner"))
             sl = get_col("spell_lists").find_one({"id": sl_id, "owner": before.get("owner")}, {"_id": 1})
             if not sl:
                 return JSONResponse({"status": "error", "message": "Spell list not found or not owned by you"}, status_code=400)
